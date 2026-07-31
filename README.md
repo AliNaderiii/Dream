@@ -37,6 +37,14 @@ python doctor.py                     # verify the local installation
 For an interactive offline session, use `dream --backend echo`. Configure a
 provider only when needed; see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
+### Windows
+
+Double-click `run.bat` to start Dream against a local Ollama server: it
+activates `.venv`, clears any OpenAI credentials, lets you pick between
+`qwen2.5:7b` (default) and `qwen2.5:3b`, and launches the interactive CLI.
+`check.bat` runs the offline diagnostics with `doctor.py --backend ollama`.
+Both scripts pause on exit so error messages stay readable.
+
 ## Demo transcript
 
 The following is a transcript captured by running `python cli.py --demo` in

@@ -311,11 +311,7 @@ class Dream:
         self.history.clear()
 
     def _system_message(self, memories: list[Memory]) -> dict[str, str]:
-        prompt = (
-            "تو Dream هستی: دقیق، آرام و مستقیم. به زبان کاربر پاسخ بده. "
-            "اگر چیزی را نمی‌دانی، صریح بگو و حدس نزن. با احترام مخالفت کن؛ "
-            "صرفاً برای موافقت پاسخ نده. از خاطره‌ها طبیعی استفاده کن، نه به شکل فهرست."
-        )
+        prompt = _BASE_PROMPT + _MEMORY_POLICY + _MEMORY_EXAMPLE
         if memories:
             lines = [
                 f"- [{_relative_age(memory.created_at)}] {memory.content}" for memory in memories
@@ -378,3 +374,47 @@ def _relative_age(timestamp: float) -> str:
     if days == 1:
         return "1 day ago"
     return f"{days} days ago"
+
+
+# The language rule is unconditional, so a small model cannot drift away from
+# the user's language: reply in the language of the most recent message, reply
+# in Persian to Persian input, and never switch to a third language.
+_LANGUAGE_RULE = (
+    " همیشه به زبان آخرین پیام کاربر پاسخ بده؛ اگر کاربر فارسی نوشت، حتماً فارسی "
+    "پاسخ بده؛ هرگز به زبان سومی تغییر نکن."
+)
+
+_BASE_PROMPT = (
+    "تو Dream هستی: دقیق، آرام و مستقیم."
+    + _LANGUAGE_RULE
+    + " اگر چیزی را نمی‌دانی، صریح بگو و حدس نزن. با احترام مخالفت کن؛ "
+    "صرفاً برای موافقت پاسخ نده. از خاطره‌ها طبیعی استفاده کن، نه به شکل فهرست."
+)
+
+# The memory policy tells the model *when* to call remember_fact. Without it a
+# small model treats the registered tool as decoration and never stores
+# anything, leaving the session with zero persistent memory.
+_MEMORY_POLICY = (
+    "\n\nسیاست حافظه:\n"
+    "- وقتی کاربر یک واقعیت ماندگار درباره خودش می‌گوید — نام، شغل، پروژه‌ها، "
+    "ترجیحات، محدودیت‌ها یا تصمیمی که گرفته — ابزار remember_fact را فراخوانی کن.\n"
+    "- حرف‌های گذرای گفتگو، سلام‌ها و سؤال‌ها را ذخیره نکن.\n"
+    "- در هر فراخوانی فقط یک واقعیت مستقل ذخیره کن، طوری نوشته شود که ماه‌ها بعد "
+    "بدون گفتگوی اطرافش معنا بدهد.\n"
+    "- kind را آگاهانه انتخاب کن: semantic برای واقعیت‌ها و ترجیحات ماندگار، "
+    "episodic برای رویدادهای تاریخ‌دار، procedural برای دستورالعمل‌های رفتاری.\n"
+    "- importance را بر اساس مرکزی بودن واقعیت تنظیم کن، نه تازگی آن.\n"
+    "- ذخیره‌سازی بی‌صدا است؛ آن را اعلام نکن و اجازه نپرس؛ فقط طبیعی به کاربر پاسخ بده."
+)
+
+# Small local models follow a demonstrated pattern far more reliably than a
+# described one, so the policy ends with one compact worked example.
+_MEMORY_EXAMPLE = (
+    "\n\nمثال:\n"
+    "کاربر: «من علی هستم و روی پروژه‌ای به نام Dream کار می‌کنم.»\n"
+    "این پیام دو واقعیت ماندگار دارد؛ هر کدام را جداگانه ذخیره کن:\n"
+    'remember_fact(content="کاربر علی نام دارد", kind="semantic", importance=0.9)\n'
+    'remember_fact(content="کاربر روی پروژه‌ای به نام Dream کار می‌کند", '
+    'kind="semantic", importance=0.9)\n'
+    "سپس بدون اعلام ذخیره‌سازی، عادی پاسخ بده: «سلام علی! چطور می‌توانم کمک کنم؟»"
+)
