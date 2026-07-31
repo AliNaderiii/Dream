@@ -67,3 +67,16 @@ Backends expose `chat(messages, tools) -> {"content", "tool_calls"}`.
 deterministic offline time and arithmetic tool calls for tests and demos. The
 backend boundary leaves memory files and tool schemas independent of any
 particular model vendor.
+
+A tool call crosses that boundary in two shapes. Inside Dream it is the flat
+`{"id", "name", "arguments": {...}}` mapping that the approval policy and
+`execute` consume. On the wire it must be `{"id", "type": "function",
+"function": {"name", "arguments": "<json string>"}}`, so the agent converts
+each call before appending it to conversation history; history is replayed
+verbatim on every later request, and a flat call there is rejected with HTTP
+400 from the second turn onwards.
+
+When a request fails, the backend reports the server's response body alongside
+the status code, because `HTTP Error 400: Bad Request` alone never names the
+field that was rejected. Bodies are whitespace-collapsed and truncated, and the
+configured API key and any bearer token are redacted before the text is shown.

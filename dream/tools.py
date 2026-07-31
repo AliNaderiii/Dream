@@ -17,7 +17,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal, get_args, get_origin, get_type_hints
+from types import UnionType
+from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
 from zoneinfo import ZoneInfo
 
 from dream.memory import normalize_fa
@@ -70,9 +71,25 @@ def _param_descriptions(docstring: str) -> dict[str, str]:
     return descriptions
 
 
+def _union_json_type(args: tuple[Any, ...]) -> dict[str, Any]:
+    """Describe a union, unwrapping ``X | None`` to the schema for ``X``.
+
+    An optional parameter is still the type it wraps: ``list | None`` accepts a
+    list, so a model told it is a ``string`` will send the wrong thing.
+    """
+    members = [arg for arg in args if arg is not type(None)]
+    if not members:
+        return {"type": "null"}
+    if len(members) == 1:
+        return _json_type(members[0])
+    return {"anyOf": [_json_type(member) for member in members]}
+
+
 def _json_type(annotation: Any) -> dict[str, Any]:
     """Translate the supported Python annotations to JSON Schema."""
     origin = get_origin(annotation)
+    if origin is Union or origin is UnionType:
+        return _union_json_type(get_args(annotation))
     if origin is Literal:
         values = list(get_args(annotation))
         schema: dict[str, Any] = {"enum": values}

@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import io
+import json
+from typing import Optional
+from urllib.error import HTTPError, URLError
+
 import pytest
 
 import cli
 import doctor
 from dream import tools
-from dream.agent import ApprovalPolicy, Dream, EchoBackend
+from dream.agent import ApprovalPolicy, Dream, EchoBackend, OpenAIBackend
 from dream.memory import KINDS, MemoryStore, _stem_fa, normalize_fa
 
 
@@ -499,3 +504,249 @@ def test_cli_yolo_is_not_default_and_warns(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda prompt: (_ for _ in ()).throw(EOFError))
     assert cli.main(["--yolo", "--db", str(tmp_path / "yolo.db")]) == 0
     assert "WARNING: --yolo auto-approves dangerous tools." in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------
+# Chat-completions wire format
+# --------------------------------------------------------------------------
+
+
+class _FakeResponse:
+    """Stand-in for the file-like object ``urlopen`` returns on success."""
+
+    def __init__(self, payload: dict) -> None:
+        self._body = json.dumps(payload).encode("utf-8")
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> _FakeResponse:
+        return self
+
+    def __exit__(self, *exc_info: object) -> bool:
+        return False
+
+
+def _http_error(code: int, body: str) -> HTTPError:
+    """Build an HTTPError carrying a readable response body, as urllib does."""
+    return HTTPError(
+        "http://model.test/v1/chat/completions",
+        code,
+        "Bad Request",
+        {},
+        io.BytesIO(body.encode("utf-8")),
+    )
+
+
+def _reply(content: str | None = None, tool_calls: list[dict] | None = None) -> dict:
+    """Build a chat-completions response body."""
+    message: dict = {"role": "assistant", "content": content}
+    if tool_calls is not None:
+        message["tool_calls"] = tool_calls
+    return {"choices": [{"message": message}]}
+
+
+class StrictChatServer:
+    """A mock endpoint that rejects malformed assistant tool calls.
+
+    It applies the validation a real chat-completions server applies: every
+    tool call must carry ``"type": "function"``, must nest ``name`` and
+    ``arguments`` under ``function``, and ``arguments`` must be a JSON string.
+    """
+
+    def __init__(self, *replies: dict) -> None:
+        self.replies = list(replies)
+        self.requests: list[dict] = []
+
+    def __call__(self, request, timeout: int | None = None) -> _FakeResponse:
+        payload = json.loads(request.data.decode("utf-8"))
+        self.requests.append(payload)
+        for message in payload["messages"]:
+            for call in message.get("tool_calls") or []:
+                self._validate(call)
+        return _FakeResponse(self.replies.pop(0))
+
+    @staticmethod
+    def _validate(call: dict) -> None:
+        if call.get("type") != "function":
+            raise _http_error(400, '{"error": {"message": "tool_calls.0.type must be function"}}')
+        function = call.get("function")
+        if not isinstance(function, dict) or not function.get("name"):
+            raise _http_error(400, '{"error": {"message": "tool_calls.0.function is missing"}}')
+        if not isinstance(function.get("arguments"), str):
+            raise _http_error(
+                400, '{"error": {"message": "tool_calls.0.function.arguments must be a string"}}'
+            )
+        if not call.get("id"):
+            raise _http_error(400, '{"error": {"message": "tool_calls.0.id must not be empty"}}')
+
+
+def _assistant_tool_message(history: list[dict]) -> dict:
+    return next(message for message in history if message.get("tool_calls"))
+
+
+def test_assistant_tool_call_is_written_in_wire_format(tmp_path):
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        dream = Dream(store, EchoBackend())
+        dream.run("What time is it?")
+        call = _assistant_tool_message(dream.history)["tool_calls"][0]
+        assert call["type"] == "function"
+        assert isinstance(call["function"], dict)
+        assert call["function"]["name"] == "get_datetime"
+        assert "name" not in call
+
+
+def test_assistant_tool_call_arguments_are_a_json_string(tmp_path):
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        dream = Dream(store, EchoBackend())
+        dream.run("What is 12 × 3?")
+        arguments = _assistant_tool_message(dream.history)["tool_calls"][0]["function"]["arguments"]
+        assert isinstance(arguments, str), "arguments must be a JSON string, not an object"
+        assert json.loads(arguments) == {"expression": "12 × 3"}
+
+
+def test_tool_result_is_linked_to_the_tool_call_id(tmp_path):
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        dream = Dream(store, EchoBackend())
+        dream.run("What time is it?")
+        call = _assistant_tool_message(dream.history)["tool_calls"][0]
+        result = next(message for message in dream.history if message.get("role") == "tool")
+        assert call["id"]
+        assert result["tool_call_id"] == call["id"]
+
+
+def test_second_turn_replays_history_the_server_accepts(tmp_path, monkeypatch):
+    server = StrictChatServer(
+        _reply(
+            tool_calls=[{"id": "call_1", "function": {"name": "get_datetime", "arguments": "{}"}}]
+        ),
+        _reply("It is noon."),
+        _reply("Anything else?"),
+    )
+    monkeypatch.setattr("dream.agent.urlopen", server)
+    backend = OpenAIBackend(model="test-model", api_key="", base_url="http://model.test/v1")
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        dream = Dream(store, backend)
+        first = dream.run("What time is it?")
+        second = dream.run("And in Tehran?")
+
+    assert first.reply == "It is noon."
+    assert second.reply == "Anything else?", "the second turn must not fail on replayed history"
+    assert len(server.requests) == 3
+    replayed = _assistant_tool_message(server.requests[2]["messages"])["tool_calls"][0]
+    assert replayed["type"] == "function"
+    assert replayed["function"]["name"] == "get_datetime"
+    assert isinstance(replayed["function"]["arguments"], str)
+
+
+def test_mock_server_rejects_dreams_internal_tool_call_shape(monkeypatch):
+    """The guard above has teeth: the pre-fix shape is refused with HTTP 400."""
+    server = StrictChatServer(_reply("unreachable"))
+    monkeypatch.setattr("dream.agent.urlopen", server)
+    backend = OpenAIBackend(model="test-model", api_key="", base_url="http://model.test/v1")
+    malformed = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [{"id": "call_1", "name": "get_datetime", "arguments": {}}],
+    }
+    response = backend.chat([{"role": "user", "content": "hi"}, malformed])
+    assert response["tool_calls"] == []
+    assert "tool_calls.0.type must be function" in response["content"]
+
+
+# --------------------------------------------------------------------------
+# Schemas for optional parameters
+# --------------------------------------------------------------------------
+
+
+def test_json_type_unwraps_optional_list():
+    assert tools._json_type(list | None) == {"type": "array"}
+
+
+def test_json_type_unwraps_optional_str():
+    assert tools._json_type(str | None) == {"type": "string"}
+
+
+def test_json_type_unwraps_typing_optional():
+    # The legacy ``typing.Optional`` spelling must resolve exactly like ``int | None``.
+    assert tools._json_type(Optional[int]) == {"type": "integer"}  # noqa: UP045
+
+
+def test_json_type_keeps_plain_annotations_unchanged():
+    assert tools._json_type(list) == {"type": "array"}
+    assert tools._json_type(dict | None) == {"type": "object"}
+
+
+def test_json_type_describes_a_multi_member_union():
+    assert tools._json_type(int | str) == {"anyOf": [{"type": "integer"}, {"type": "string"}]}
+
+
+def test_remember_fact_declares_tags_as_an_array(tmp_path):
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        Dream(store, EchoBackend())
+        tags = tools.REGISTRY["remember_fact"].schema["properties"]["tags"]
+        assert tags["type"] == "array", "tags is list | None; the model must be told it is a list"
+
+
+# --------------------------------------------------------------------------
+# Backend error reporting
+# --------------------------------------------------------------------------
+
+
+def _raise(exc: Exception):
+    def fail(request, timeout: int | None = None):
+        raise exc
+
+    return fail
+
+
+def test_http_error_message_includes_the_response_body(monkeypatch):
+    body = '{"error": {"message": "invalid_request: tool_calls.0.function.arguments"}}'
+    monkeypatch.setattr("dream.agent.urlopen", _raise(_http_error(400, body)))
+    backend = OpenAIBackend(model="test-model", api_key="", base_url="http://model.test/v1")
+    content = backend.chat([{"role": "user", "content": "hi"}])["content"]
+    assert "HTTP 400" in content
+    assert "invalid_request: tool_calls.0.function.arguments" in content
+
+
+def test_error_message_never_contains_the_api_key(monkeypatch):
+    key = "sk-very-secret-key-value"
+    body = json.dumps({"error": {"message": f"Incorrect API key provided: {key}"}})
+    monkeypatch.setattr("dream.agent.urlopen", _raise(_http_error(401, body)))
+    backend = OpenAIBackend(model="test-model", api_key=key, base_url="http://model.test/v1")
+    content = backend.chat([{"role": "user", "content": "hi"}])["content"]
+    assert key not in content
+    assert "Incorrect API key provided" in content
+
+
+def test_bearer_credentials_are_stripped_from_error_bodies(monkeypatch):
+    body = "upstream rejected header Authorization: Bearer sk-leaked-token-value"
+    monkeypatch.setattr("dream.agent.urlopen", _raise(_http_error(403, body)))
+    backend = OpenAIBackend(model="test-model", api_key="", base_url="http://model.test/v1")
+    content = backend.chat([{"role": "user", "content": "hi"}])["content"]
+    assert "sk-leaked-token-value" not in content
+
+
+def test_long_error_body_is_truncated(monkeypatch):
+    monkeypatch.setattr("dream.agent.urlopen", _raise(_http_error(500, "x" * 5000)))
+    backend = OpenAIBackend(model="test-model", api_key="", base_url="http://model.test/v1")
+    content = backend.chat([{"role": "user", "content": "hi"}])["content"]
+    assert "truncated" in content
+    assert len(content) < 700
+
+
+def test_bodyless_http_error_still_names_the_status(monkeypatch):
+    monkeypatch.setattr(
+        "dream.agent.urlopen",
+        _raise(HTTPError("http://model.test/v1/chat/completions", 502, "Bad Gateway", {}, None)),
+    )
+    backend = OpenAIBackend(model="test-model", api_key="", base_url="http://model.test/v1")
+    assert "HTTP 502 Bad Gateway" in backend.chat([{"role": "user", "content": "hi"}])["content"]
+
+
+def test_connection_failure_names_the_error_type(monkeypatch):
+    monkeypatch.setattr("dream.agent.urlopen", _raise(URLError("connection refused")))
+    backend = OpenAIBackend(model="test-model", api_key="", base_url="http://model.test/v1")
+    content = backend.chat([{"role": "user", "content": "hi"}])["content"]
+    assert "URLError" in content
+    assert "connection refused" in content
