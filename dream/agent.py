@@ -56,8 +56,18 @@ class OpenAIBackend:
                 for call in message.get("tool_calls", [])
             ]
             return {"content": message.get("content"), "tool_calls": calls}
-        except (HTTPError, URLError, OSError, KeyError, IndexError, TypeError, ValueError) as exc:
-            return {"content": f"Model request failed: {exc}", "tool_calls": []}
+        except HTTPError as exc:
+            # The body is where the server says what it rejected; keep it.
+            return self._failure(_describe_http_error(exc))
+        except (URLError, OSError, KeyError, IndexError, TypeError, ValueError) as exc:
+            return self._failure(f"{type(exc).__name__}: {exc}")
+
+    def _failure(self, detail: str) -> dict[str, Any]:
+        """Report a failed request without ever echoing the credential."""
+        return {
+            "content": f"Model request failed: {_redact(detail, self.api_key)}",
+            "tool_calls": [],
+        }
 
 
 class OllamaBackend(OpenAIBackend):
@@ -128,6 +138,67 @@ def _arguments(value: str | dict[str, Any]) -> dict[str, Any]:
     except (TypeError, ValueError):
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+ERROR_BODY_LIMIT = 500
+_BEARER = re.compile(r"[Bb]earer\s+\S+")
+
+
+def _error_body(exc: HTTPError, limit: int = ERROR_BODY_LIMIT) -> str:
+    """Return an HTTP error's response body, whitespace-collapsed and truncated."""
+    try:
+        raw = exc.read()
+    except (AttributeError, OSError, ValueError):
+        return ""
+    text = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else str(raw)
+    text = " ".join(text.split())
+    return text if len(text) <= limit else f"{text[:limit]} ... (truncated)"
+
+
+def _describe_http_error(exc: HTTPError) -> str:
+    """Describe an HTTP failure, including the explanation the server sent.
+
+    ``str(HTTPError)`` is only ``HTTP Error 400: Bad Request``, which names the
+    status and nothing about the cause. The body carries the reason.
+    """
+    detail = f"HTTP {exc.code} {exc.reason}".strip()
+    body = _error_body(exc)
+    return f"{detail}: {body}" if body else detail
+
+
+def _redact(text: str, *secrets: str) -> str:
+    """Strip credentials from text before it reaches a user or a log."""
+    for secret in secrets:
+        if len(secret) >= 4:
+            text = text.replace(secret, "***")
+    return _BEARER.sub("Bearer ***", text)
+
+
+def _wire_tool_calls(calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert Dream's internal tool calls to chat-completions wire format.
+
+    Internally a call is ``{"id", "name", "arguments": {...}}``. The API expects
+    ``{"id", "type": "function", "function": {"name", "arguments": "<json>"}}``.
+    Replaying the internal shape in history makes every request after the first
+    tool call a 400, which is why the first turn works and the second does not.
+    """
+    wire: list[dict[str, Any]] = []
+    for index, call in enumerate(calls):
+        nested = call.get("function")
+        source = nested if isinstance(nested, dict) else call
+        wire.append(
+            {
+                "id": str(call.get("id") or f"call_{index}"),
+                "type": "function",
+                "function": {
+                    "name": str(source.get("name", "")),
+                    "arguments": json.dumps(
+                        _arguments(source.get("arguments", {})), ensure_ascii=False
+                    ),
+                },
+            }
+        )
+    return wire
 
 
 def cli_approver(tool_name: str, arguments: dict[str, Any]) -> bool:
@@ -275,10 +346,11 @@ class Dream:
                 self.history.append({"role": "assistant", "content": reply})
                 self.store.log("assistant", reply)
                 break
+            wire_calls = _wire_tool_calls(calls)
             self.history.append(
-                {"role": "assistant", "content": response.get("content"), "tool_calls": calls}
+                {"role": "assistant", "content": response.get("content"), "tool_calls": wire_calls}
             )
-            for call in calls:
+            for call, wire_call in zip(calls, wire_calls, strict=True):
                 name = str(call.get("name", ""))
                 arguments = _arguments(call.get("arguments", {}))
                 allowed, reason = self.approval_policy.allows(name, arguments)
@@ -290,7 +362,7 @@ class Dream:
                     {"name": name, "arguments": arguments, "allowed": allowed, "result": result}
                 )
                 self.history.append(
-                    {"role": "tool", "tool_call_id": call.get("id", ""), "content": result}
+                    {"role": "tool", "tool_call_id": wire_call["id"], "content": result}
                 )
         else:
             self.history.append({"role": "assistant", "content": reply})
