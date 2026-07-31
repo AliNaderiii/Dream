@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+import cli
+import doctor
 from dream import tools
 from dream.agent import ApprovalPolicy, Dream, EchoBackend
 from dream.memory import KINDS, MemoryStore, _stem_fa, normalize_fa
@@ -428,3 +430,72 @@ def test_dangerous_shell_is_blocked_end_to_end(tmp_path):
         assert turn.tool_calls[0]["allowed"] is False
         assert '"blocked": true' in backend.tool_result
         assert "denied" in backend.tool_result
+
+
+# --------------------------------------------------------------------------
+# User-facing entry points
+# --------------------------------------------------------------------------
+
+
+def test_demo_runs_offline_end_to_end(tmp_path):
+    output = []
+    cli.run_demo(str(tmp_path / "demo.db"), output.append)
+    joined = "\n".join(output)
+    assert "1. Seeding" in joined
+    assert "5. Approval gate" in joined
+    assert '"blocked": true' in joined
+
+
+def test_all_slash_commands_dispatch(tmp_path):
+    output = []
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        memory = store.remember("command test")
+        dream = Dream(store, EchoBackend())
+        for command in ("/mem command", "/mems", "/stats", "/tools", "/reset", "/help", "/unknown"):
+            assert cli.dispatch_command(command, dream, output.append) is True
+        assert cli.dispatch_command(f"/forget {memory.id}", dream, output.append) is True
+        assert cli.dispatch_command("/exit", dream, output.append) is False
+    assert any("Unknown command" in line for line in output)
+
+
+def test_forget_non_numeric_argument_is_graceful(tmp_path):
+    output = []
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        assert cli.dispatch_command("/forget nope", Dream(store, EchoBackend()), output.append)
+    assert output == ["Usage: /forget ID — ID must be a number."]
+
+
+def test_colour_is_suppressed_for_non_tty():
+    class PlainStream:
+        def isatty(self):
+            return False
+
+    assert cli._style("hello", "31", PlainStream()) == "hello"
+
+
+def test_doctor_offline_checks_pass():
+    output = []
+    assert doctor.run_checks(output=output.append)
+    assert all(line.startswith("PASS") for line in output)
+
+
+def test_doctor_fails_when_registry_is_empty(monkeypatch):
+    output = []
+    monkeypatch.setattr(doctor, "REGISTRY", {})
+    assert doctor.run_checks(output=output.append) is False
+    assert any(line.startswith("FAIL Tool registry") for line in output)
+
+
+def test_doctor_masks_api_key(monkeypatch):
+    output = []
+    key = "sk-very-secret-key-value"
+    monkeypatch.setenv("OPENAI_API_KEY", key)
+    assert doctor.run_checks(output=output.append)
+    assert key not in "\n".join(output)
+
+
+def test_cli_yolo_is_not_default_and_warns(tmp_path, monkeypatch, capsys):
+    assert cli.build_parser().parse_args([]).yolo is False
+    monkeypatch.setattr("builtins.input", lambda prompt: (_ for _ in ()).throw(EOFError))
+    assert cli.main(["--yolo", "--db", str(tmp_path / "yolo.db")]) == 0
+    assert "WARNING: --yolo auto-approves dangerous tools." in capsys.readouterr().out
