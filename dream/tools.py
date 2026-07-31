@@ -274,16 +274,17 @@ def send_email(to: str, subject: str, body: str) -> dict[str, str]:
     }
 
 
-def execute(name: str, arguments: dict[str, Any]) -> str:
-    """Run a registered non-dangerous tool and JSON-encode its result or error.
+def execute(name: str, arguments: dict[str, Any], *, approved: bool = False) -> str:
+    """Run a registered tool and JSON-encode its result or error.
 
-    Dangerous tools are deliberately blocked here: a future agent loop must add
-    a human approval step before it can invoke them.
+    Dangerous tools remain blocked unless an approval gate explicitly passes
+    ``approved=True``. This keeps direct callers fail-closed while allowing the
+    agent runtime to enforce a human decision on its execution path.
     """
     registered = REGISTRY.get(name)
     if registered is None:
         return json.dumps({"error": {"type": "unknown_tool", "message": f"unknown tool: {name}"}})
-    if registered.risk == "dangerous":
+    if registered.risk == "dangerous" and not approved:
         return json.dumps(
             {"error": {"type": "approval_required", "message": f"{name} requires human approval"}}
         )

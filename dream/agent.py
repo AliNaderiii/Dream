@@ -1,0 +1,308 @@
+"""Provider-neutral Dream agent loop with memory and explicit approval gates."""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+from dream.memory import KINDS, Memory, MemoryStore
+from dream.tools import REGISTRY, execute, openai_schemas, tool
+
+
+class OpenAIBackend:
+    """Client for any endpoint implementing OpenAI's chat-completions API."""
+
+    def __init__(
+        self,
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> None:
+        self.model = model or os.environ.get("DREAM_MODEL", "")
+        self.api_key = api_key if api_key is not None else os.environ.get("OPENAI_API_KEY", "")
+        self.base_url = (
+            base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        ).rstrip("/")
+
+    def chat(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {"model": self.model, "messages": messages}
+        if tools:
+            payload["tools"] = tools
+        request = Request(
+            f"{self.base_url}/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=60) as response:  # nosec B310: configured model endpoint
+                data = json.loads(response.read().decode("utf-8"))
+            message = data["choices"][0]["message"]
+            calls = [
+                {
+                    "id": call.get("id", ""),
+                    "name": call["function"]["name"],
+                    "arguments": _arguments(call["function"].get("arguments", {})),
+                }
+                for call in message.get("tool_calls", [])
+            ]
+            return {"content": message.get("content"), "tool_calls": calls}
+        except (HTTPError, URLError, OSError, KeyError, IndexError, TypeError, ValueError) as exc:
+            return {"content": f"Model request failed: {exc}", "tool_calls": []}
+
+
+class OllamaBackend(OpenAIBackend):
+    """OpenAI-compatible client pointed at a local Ollama server."""
+
+    def __init__(self, model: str | None = None, base_url: str | None = None) -> None:
+        host = base_url or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        super().__init__(
+            model=model or os.environ.get("DREAM_MODEL", "llama3.2"),
+            api_key="",
+            base_url=f"{host.rstrip('/')}" + "/v1",
+        )
+
+
+class EchoBackend:
+    """Offline deterministic backend used for tests and local demos."""
+
+    _MATH = re.compile(r"[0-9۰-۹٠-٩][0-9۰-۹٠-٩\s+\-*/×÷().]*[+\-*/×÷]")
+
+    def chat(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
+        del tools
+        if messages and messages[-1].get("role") == "tool":
+            result = messages[-1].get("content", "")
+            return {"content": f"Result: {result}", "tool_calls": []}
+        text = next(
+            (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"), ""
+        )
+        lowered = text.lower()
+        if any(word in lowered for word in ("time", "date", "ساعت", "زمان")):
+            return {
+                "content": None,
+                "tool_calls": [{"id": "echo-time", "name": "get_datetime", "arguments": {}}],
+            }
+        if self._MATH.search(text):
+            expression = re.sub(r"[^0-9۰-۹٠-٩\s+\-*/×÷().]", "", text).strip()
+            return {
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "echo-calculate",
+                        "name": "calculate",
+                        "arguments": {"expression": expression},
+                    }
+                ],
+            }
+        return {"content": f"Echo: {text}", "tool_calls": []}
+
+
+def build_backend(kind: str | None = None) -> OpenAIBackend | OllamaBackend | EchoBackend:
+    """Select a backend, defaulting to ``DREAM_BACKEND`` or offline echo."""
+    selected = (kind or os.environ.get("DREAM_BACKEND", "echo")).lower()
+    if selected == "openai":
+        return OpenAIBackend()
+    if selected == "ollama":
+        return OllamaBackend()
+    if selected == "echo":
+        return EchoBackend()
+    raise ValueError(f"unknown backend: {selected}")
+
+
+def _arguments(value: str | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def cli_approver(tool_name: str, arguments: dict[str, Any]) -> bool:
+    """Ask on the terminal, treating interrupted input as a denial."""
+    try:
+        answer = input(f"Allow {tool_name}({json.dumps(arguments, ensure_ascii=False)})? [y/N] ")
+    except (EOFError, KeyboardInterrupt):
+        return False
+    return answer.strip().lower() in {"y", "yes"}
+
+
+@dataclass(slots=True)
+class ApprovalPolicy:
+    """Approval rules based exclusively on each registered tool's real risk."""
+
+    auto_approve: set[str] = field(default_factory=lambda: {"safe", "guarded"})
+    always_ask: set[str] = field(default_factory=lambda: {"dangerous"})
+    ask: Callable[[str, dict[str, Any]], bool] | None = None
+
+    def allows(self, tool_name: str, arguments: dict[str, Any]) -> tuple[bool, str]:
+        registered = REGISTRY.get(tool_name)
+        if registered is None:
+            return False, "unknown tool"
+        risk = registered.risk
+        if risk in self.always_ask:
+            if self.ask is None:
+                return False, f"{risk} tool denied: no approver configured"
+            return (
+                (True, f"{risk} tool approved")
+                if self.ask(tool_name, arguments)
+                else (False, f"{risk} tool denied by approver")
+            )
+        if risk in self.auto_approve:
+            return True, f"{risk} tool auto-approved"
+        return False, f"{risk} tool denied by policy"
+
+
+@dataclass(slots=True)
+class Turn:
+    """Observable record of one user turn through the agent loop."""
+
+    reply: str
+    tool_calls: list[dict[str, Any]]
+    memories_used: list[Memory]
+    memories_created: list[Memory]
+    elapsed_seconds: float
+
+
+class Dream:
+    """An agent runtime that combines durable memory, tools, and approval."""
+
+    def __init__(
+        self,
+        store: MemoryStore,
+        backend: OpenAIBackend | OllamaBackend | EchoBackend | None = None,
+        approval_policy: ApprovalPolicy | None = None,
+        max_iterations: int = 4,
+    ) -> None:
+        self.store = store
+        self.backend = backend or build_backend()
+        self.approval_policy = approval_policy or ApprovalPolicy()
+        self.max_iterations = max_iterations
+        self.history: list[dict[str, Any]] = []
+        self._created: list[Memory] = []
+        self._register_memory_tools()
+
+    def _register_memory_tools(self) -> None:
+        store = self.store
+        created = self._created
+
+        @tool(risk="guarded")
+        def remember_fact(
+            content: str, kind: str = "semantic", importance: float = 0.5, tags: list | None = None
+        ) -> dict[str, Any]:
+            """Store a durable fact in Dream's memory.
+
+            :param content: Fact to remember.
+            :param kind: Memory kind.
+            :param importance: Importance from zero to one.
+            :param tags: Optional labels for retrieval.
+            """
+            if kind not in KINDS:
+                raise ValueError(f"kind must be one of {KINDS}")
+            memory = store.remember(content, kind=kind, importance=importance, tags=tags or [])
+            created.append(memory)
+            return {"id": memory.id, "content": memory.content, "kind": memory.kind}
+
+        @tool(risk="safe")
+        def search_memory(query: str, limit: int = 8) -> list[dict[str, Any]]:
+            """Search durable Dream memory.
+
+            :param query: Text to search for.
+            :param limit: Maximum matching memories.
+            """
+            return [
+                {"id": m.id, "content": m.content, "kind": m.kind}
+                for m in store.recall(query, limit=limit)
+            ]
+
+        @tool(risk="guarded")
+        def forget_memory(memory_id: int) -> bool:
+            """Archive one memory.
+
+            :param memory_id: Identifier of the memory to archive.
+            """
+            return store.forget(memory_id)
+
+    def reset_session(self) -> None:
+        """Discard conversational context without touching durable memory."""
+        self.history.clear()
+
+    def _system_message(self, memories: list[Memory]) -> dict[str, str]:
+        prompt = (
+            "تو Dream هستی: دقیق، آرام و مستقیم. به زبان کاربر پاسخ بده. "
+            "اگر چیزی را نمی‌دانی، صریح بگو و حدس نزن. با احترام مخالفت کن؛ "
+            "صرفاً برای موافقت پاسخ نده. از خاطره‌ها طبیعی استفاده کن، نه به شکل فهرست."
+        )
+        if memories:
+            lines = [
+                f"- [{_relative_age(memory.created_at)}] {memory.content}" for memory in memories
+            ]
+            prompt += (
+                "\n\n[RECALLED MEMORIES — PRIVATE CONTEXT]\n"
+                + "\n".join(lines)
+                + "\n[END MEMORIES]"
+            )
+        return {"role": "system", "content": prompt}
+
+    def run(self, message: str) -> Turn:
+        """Run one complete user turn, including any model-requested tools."""
+        started = time.monotonic()
+        self._created.clear()
+        self.store.log("user", message)
+        memories = self.store.recall(message, reinforce=True)
+        self.history.append({"role": "user", "content": message})
+        calls_made: list[dict[str, Any]] = []
+        reply = "I could not produce an answer."
+
+        for _ in range(self.max_iterations):
+            messages = [self._system_message(memories), *self.history]
+            response = self.backend.chat(messages, tools=openai_schemas())
+            calls = response.get("tool_calls", [])
+            if not calls:
+                reply = response.get("content") or reply
+                self.history.append({"role": "assistant", "content": reply})
+                self.store.log("assistant", reply)
+                break
+            self.history.append(
+                {"role": "assistant", "content": response.get("content"), "tool_calls": calls}
+            )
+            for call in calls:
+                name = str(call.get("name", ""))
+                arguments = _arguments(call.get("arguments", {}))
+                allowed, reason = self.approval_policy.allows(name, arguments)
+                if allowed:
+                    result = execute(name, arguments, approved=REGISTRY[name].risk == "dangerous")
+                else:
+                    result = json.dumps({"blocked": True, "reason": reason}, ensure_ascii=False)
+                calls_made.append(
+                    {"name": name, "arguments": arguments, "allowed": allowed, "result": result}
+                )
+                self.history.append(
+                    {"role": "tool", "tool_call_id": call.get("id", ""), "content": result}
+                )
+        else:
+            self.history.append({"role": "assistant", "content": reply})
+            self.store.log("assistant", reply)
+
+        return Turn(reply, calls_made, memories, list(self._created), time.monotonic() - started)
+
+
+def _relative_age(timestamp: float) -> str:
+    days = max(0, int((time.time() - timestamp) // 86400))
+    if days == 0:
+        return "today"
+    if days == 1:
+        return "1 day ago"
+    return f"{days} days ago"

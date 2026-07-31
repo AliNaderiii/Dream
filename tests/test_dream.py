@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from dream import tools
+from dream.agent import ApprovalPolicy, Dream, EchoBackend
 from dream.memory import KINDS, MemoryStore, _stem_fa, normalize_fa
 
 
@@ -318,3 +319,112 @@ def test_execute_logs_guarded_tool(tmp_path, monkeypatch, caplog):
     with caplog.at_level("INFO", logger="dream.tools"):
         tools.execute("write_note", {"filename": "note.txt", "content": "logged"})
     assert "executing guarded tool: write_note" in caplog.text
+
+
+# --------------------------------------------------------------------------
+# Agent runtime
+# --------------------------------------------------------------------------
+
+
+def test_approval_policy_auto_approves_safe_and_guarded():
+    policy = ApprovalPolicy()
+    assert policy.allows("calculate", {})[0] is True
+    assert policy.allows("write_note", {})[0] is True
+
+
+def test_approval_policy_blocks_dangerous_without_approver():
+    assert ApprovalPolicy().allows("run_shell", {"command": "echo no"})[0] is False
+
+
+def test_approval_policy_allows_dangerous_with_approver():
+    policy = ApprovalPolicy(ask=lambda name, arguments: True)
+    assert policy.allows("run_shell", {"command": "echo yes"})[0] is True
+
+
+def test_approval_policy_respects_denial():
+    policy = ApprovalPolicy(ask=lambda name, arguments: False)
+    assert policy.allows("run_shell", {"command": "echo no"})[0] is False
+
+
+def test_approval_policy_uses_registry_risk_not_arguments():
+    policy = ApprovalPolicy()
+    assert policy.allows("run_shell", {"risk": "safe"})[0] is False
+
+
+def test_dream_registers_store_memory_tools(tmp_path):
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        Dream(store, EchoBackend())
+        assert {"remember_fact", "search_memory", "forget_memory"} <= tools.REGISTRY.keys()
+        tools.execute("remember_fact", {"content": "bound to this store"})
+        assert store.recall("bound")
+
+
+def test_agent_invokes_datetime_tool(tmp_path):
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        turn = Dream(store, EchoBackend()).run("What time is it?")
+        assert turn.tool_calls[0]["name"] == "get_datetime"
+        assert "Result:" in turn.reply
+
+
+def test_agent_invokes_calculate_tool(tmp_path):
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        turn = Dream(store, EchoBackend()).run("What is 12 × 3?")
+        assert turn.tool_calls[0]["name"] == "calculate"
+        assert "36" in turn.reply
+
+
+def test_recalled_memory_is_injected_into_backend_messages(tmp_path):
+    class CaptureBackend(EchoBackend):
+        def __init__(self):
+            self.messages = []
+
+        def chat(self, messages, tools=None):
+            self.messages = messages
+            return {"content": "done", "tool_calls": []}
+
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        store.remember("My favorite drink is coffee")
+        backend = CaptureBackend()
+        Dream(store, backend).run("What is my favorite drink?")
+        assert "My favorite drink is coffee" in backend.messages[0]["content"]
+        assert "RECALLED MEMORIES" in backend.messages[0]["content"]
+
+
+def test_agent_journal_records_user_and_assistant(tmp_path):
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        Dream(store, EchoBackend()).run("hello")
+        assert [entry["role"] for entry in store.recent_journal()] == ["user", "assistant"]
+
+
+def test_reset_session_keeps_durable_memory(tmp_path):
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        store.remember("persistent fact")
+        dream = Dream(store, EchoBackend())
+        dream.run("hello")
+        dream.reset_session()
+        assert dream.history == []
+        assert store.recall("persistent")
+
+
+def test_dangerous_shell_is_blocked_end_to_end(tmp_path):
+    class ShellBackend:
+        def __init__(self):
+            self.tool_result = ""
+
+        def chat(self, messages, tools=None):
+            if messages[-1]["role"] == "tool":
+                self.tool_result = messages[-1]["content"]
+                return {"content": "I cannot run that.", "tool_calls": []}
+            return {
+                "content": None,
+                "tool_calls": [
+                    {"id": "shell", "name": "run_shell", "arguments": {"command": "exit 99"}}
+                ],
+            }
+
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        backend = ShellBackend()
+        turn = Dream(store, backend, ApprovalPolicy()).run("run a command")
+        assert turn.tool_calls[0]["allowed"] is False
+        assert '"blocked": true' in backend.tool_result
+        assert "denied" in backend.tool_result
