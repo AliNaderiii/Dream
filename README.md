@@ -1,74 +1,128 @@
 # Dream
 
-A personal AI assistant with first-class Persian language support.
+**Dream is a local-first personal assistant for people who write Persian as well
+as English.** Its memory search treats Persian spelling variants as the same
+word before storing or querying them, so a fact saved from one keyboard is still
+found from another. The core package uses only Python's standard library; run
+its complete demo without an API key.
 
-The core package `dream/` imports the Python standard library only. That is an
-architectural commitment: memory is a single SQLite file, search is SQLite FTS5,
-and Persian text handling is written here rather than pulled from a dependency.
+## Persian retrieval that does not silently miss
 
-## Why Persian normalisation matters
+These look the same in many fonts, but are different Unicode bytes:
 
-`مي‌خواهم` and `می‌خواهم` render identically but are different byte sequences —
-the first uses Arabic yeh (U+064A), the second Farsi yeh (U+06CC). A store that
-does not unify them looks like it works and silently returns nothing. Dream
-normalises on write and on read:
+```text
+مي‌خواهم كتاب  # Arabic yeh (U+064A) and kaf (U+0643)
+می‌خواهم کتاب  # Farsi yeh (U+06CC) and keheh (U+06A9)
+```
 
-- NFKC
-- Persian (U+06F0–U+06F9) and Arabic-Indic (U+0660–U+0669) digits folded to ASCII
-- Arabic letter forms unified to Persian ones (yeh, kaf, teh marbuta, hamza forms)
-- Diacritics, superscript alef and tatweel stripped
-- ZWNJ turned into a space, whitespace collapsed
+Without normalisation, storing the second spelling and searching the first can
+return nothing because a database compares different code points. Dream applies
+NFKC, folds Arabic letter forms and digits, removes diacritics and tatweel, and
+normalises whitespace on both write and read. Both examples become
+`می خواهم کتاب`, so retrieval reaches the same memory. Run the demo below to
+see the value printed by the program.
 
-A light suffix stemmer lets a query for `استارتاپم` reach a stored `استارتاپ`.
+## Install and run
 
-## Memory model
+Python 3.10 or later is required.
 
-Three kinds of memory:
+```bash
+python -m venv .venv
+. .venv/bin/activate                 # Windows: .venv\Scripts\activate
+python -m pip install -e ".[dev]"
+dream --demo                         # no API key or network required
+python doctor.py                     # verify the local installation
+```
 
-| kind | holds |
+For an interactive offline session, use `dream --backend echo`. Configure a
+provider only when needed; see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+## Demo transcript
+
+The following is a transcript captured by running `python cli.py --demo` in
+this repository. Scores and the clock naturally vary between runs.
+
+```text
+1. Seeding memories across semantic, episodic, and procedural kinds
+2. Hybrid retrieval for 'coffee':
+   relevance=0.894  Visited Tehran coffee shop today
+   relevance=0.888  I prefer dark coffee
+3. Normalisation:
+   Arabic forms  → می خواهم کتاب
+   Persian forms → می خواهم کتاب
+   This matters because equivalent spellings retrieve the same stored memory.
+4. Agent tool loop:
+   What time is it? Result: {"result": "2026-07-31T10:49:02.095406+03:30"}
+   What is 12 × 3? Result: {"result": 36}
+5. Approval gate:
+   {"blocked": true, "reason": "dangerous tool denied: no approver configured"}
+```
+
+## Architecture at a glance
+
+Dream stores three kinds of memory:
+
+| Kind | Purpose |
 | --- | --- |
 | `semantic` | durable facts and preferences |
 | `episodic` | timestamped events |
 | `procedural` | instructions and learned rules |
 
-Raw conversation goes to a separate `journal` table, kept apart from distilled
-memory.
+Retrieval combines lexical relevance with time and user intent rather than
+using similarity alone:
 
-`recall()` blends four signals:
-
-```
-score = 0.55 * relevance    (BM25, normalised against the top hit)
-      + 0.20 * recency      (exponential decay, 30-day half-life)
-      + 0.15 * importance
-      + 0.10 * usage        (1 - exp(-use_count / 5))
+```text
+score = 0.55 * relevance + 0.20 * recency + 0.15 * importance + 0.10 * usage
 ```
 
-Recency keeps "my current job" ahead of "my job in 2019"; usage is a cheap
-learning loop that promotes what gets retrieved often.
+Tools are registered from Python signatures and docstrings, then assigned a
+risk tier: `safe` tools run automatically; `guarded` local reversible writes
+run and are logged; `dangerous` external or irreversible actions require an
+approval callback. The agent loop consults that policy before every requested
+tool execution.
 
-## Usage
+Model backends share one `chat(messages, tools)` interface. `EchoBackend` is
+the deterministic offline backend; `OpenAIBackend` speaks the OpenAI-compatible
+HTTP API; `OllamaBackend` points that protocol at a local Ollama instance.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full data flow.
+
+## Add a tool
+
+The decorator derives the provider schema from the signature and `:param` lines;
+do not maintain a second hand-written schema.
 
 ```python
-from dream import MemoryStore
+from dream import tool
 
-store = MemoryStore("data/dream.db")
-store.remember("استارتاپ من درباره هوش مصنوعی است", kind="semantic", importance=0.8)
 
-for hit in store.recall("استارتاپم"):
-    print(round(hit.score, 3), hit.content)
+@tool(risk="safe")
+def word_count(text: str, include_spaces: bool = False) -> int:
+    """Count characters in text.
 
-store.log("user", "سلام", session_id="s1")
-store.close()
+    :param text: Text to count.
+    :param include_spaces: Whether whitespace counts.
+    """
+    return len(text) if include_spaces else len(text.replace(" ", ""))
 ```
+
+Its generated JSON Schema has a required string `text`, an optional boolean
+`include_spaces`, and the two descriptions above. The `safe` tier means the
+agent may execute it automatically; choose `guarded` or `dangerous` when the
+effect warrants it.
 
 ## Development
 
 ```bash
-pip install -e ".[dev]"
-pytest
-ruff check .
+python -m pytest
+python -m ruff check .
+python -m build
 ```
+
+The core `dream/` package has **no runtime dependencies**. Development tools
+are available through the `dev` extra. See [CONTRIBUTING.md](CONTRIBUTING.md)
+and [CHANGELOG.md](CHANGELOG.md) for project process and release history.
 
 ## License
 
-See [LICENSE](LICENSE).
+[MIT](LICENSE)

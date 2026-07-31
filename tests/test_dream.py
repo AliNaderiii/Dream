@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import pytest
 
+import cli
+import doctor
+from dream import tools
+from dream.agent import ApprovalPolicy, Dream, EchoBackend
 from dream.memory import KINDS, MemoryStore, _stem_fa, normalize_fa
 
 
@@ -224,3 +228,274 @@ def test_journal_is_separate_from_memories(store):
     store.log("user", "استارتاپ من چطور است؟")
     assert store.all() == []
     assert store.recall("استارتاپ") == []
+
+
+# --------------------------------------------------------------------------
+# Tool registry
+# --------------------------------------------------------------------------
+
+
+def test_tool_registry_is_populated():
+    assert {
+        "calculate",
+        "read_note",
+        "write_note",
+        "run_shell",
+        "send_email",
+    } <= tools.REGISTRY.keys()
+
+
+def test_schema_types_are_derived_from_hints():
+    properties = tools.REGISTRY["write_note"].schema["properties"]
+    assert properties["filename"]["type"] == "string"
+    assert properties["content"]["type"] == "string"
+    assert tools.REGISTRY["run_shell"].schema["properties"]["timeout"]["type"] == "integer"
+
+
+def test_schema_required_excludes_parameters_with_defaults():
+    schema = tools.REGISTRY["run_shell"].schema
+    assert "command" in schema["required"]
+    assert "timeout" not in schema["required"]
+
+
+def test_schema_includes_param_docstring_text():
+    schema = tools.REGISTRY["read_note"].schema
+    assert schema["properties"]["filename"]["description"] == "Relative path of the note to read."
+
+
+def test_calculate_ascii_digits():
+    assert tools.calculate("2 * (3 + 4)") == 14
+
+
+def test_calculate_extended_arabic_indic_digits():
+    assert tools.calculate("۱۲ + ۳") == 15
+
+
+def test_calculate_multiplication_sign():
+    assert tools.calculate("6 × 7") == 42
+
+
+def test_calculate_rejects_code():
+    with pytest.raises(ValueError):
+        tools.calculate("__import__('os').system('echo unsafe')")
+
+
+def test_execute_unknown_tool_returns_structured_error():
+    result = tools.execute("not_a_tool", {})
+    assert '"error"' in result
+    assert "unknown_tool" in result
+
+
+def test_safe_path_rejects_workspace_escape(tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "WORKSPACE_ROOT", tmp_path.resolve())
+    with pytest.raises(PermissionError):
+        tools._safe_path("../outside.txt")
+
+
+def test_write_then_read_note_preserves_non_ascii(tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "WORKSPACE_ROOT", tmp_path.resolve())
+    text = "سلام، دنیا — unchanged"
+    tools.write_note("notes/فارسی.txt", text)
+    assert tools.read_note("notes/فارسی.txt") == text
+
+
+def test_provider_schema_formats_are_well_formed():
+    openai = tools.openai_schemas()
+    anthropic = tools.anthropic_schemas()
+    assert all(item["type"] == "function" and "parameters" in item["function"] for item in openai)
+    assert all("name" in item and item["input_schema"]["type"] == "object" for item in anthropic)
+
+
+def test_dangerous_tools_are_recorded_as_dangerous():
+    assert tools.REGISTRY["run_shell"].risk == "dangerous"
+    assert tools.REGISTRY["send_email"].risk == "dangerous"
+
+
+def test_execute_blocks_dangerous_tool_without_approval():
+    result = tools.execute("run_shell", {"command": "this must never run"})
+    assert "approval_required" in result
+
+
+def test_execute_logs_guarded_tool(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(tools, "WORKSPACE_ROOT", tmp_path.resolve())
+    with caplog.at_level("INFO", logger="dream.tools"):
+        tools.execute("write_note", {"filename": "note.txt", "content": "logged"})
+    assert "executing guarded tool: write_note" in caplog.text
+
+
+# --------------------------------------------------------------------------
+# Agent runtime
+# --------------------------------------------------------------------------
+
+
+def test_approval_policy_auto_approves_safe_and_guarded():
+    policy = ApprovalPolicy()
+    assert policy.allows("calculate", {})[0] is True
+    assert policy.allows("write_note", {})[0] is True
+
+
+def test_approval_policy_blocks_dangerous_without_approver():
+    assert ApprovalPolicy().allows("run_shell", {"command": "echo no"})[0] is False
+
+
+def test_approval_policy_allows_dangerous_with_approver():
+    policy = ApprovalPolicy(ask=lambda name, arguments: True)
+    assert policy.allows("run_shell", {"command": "echo yes"})[0] is True
+
+
+def test_approval_policy_respects_denial():
+    policy = ApprovalPolicy(ask=lambda name, arguments: False)
+    assert policy.allows("run_shell", {"command": "echo no"})[0] is False
+
+
+def test_approval_policy_uses_registry_risk_not_arguments():
+    policy = ApprovalPolicy()
+    assert policy.allows("run_shell", {"risk": "safe"})[0] is False
+
+
+def test_dream_registers_store_memory_tools(tmp_path):
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        Dream(store, EchoBackend())
+        assert {"remember_fact", "search_memory", "forget_memory"} <= tools.REGISTRY.keys()
+        tools.execute("remember_fact", {"content": "bound to this store"})
+        assert store.recall("bound")
+
+
+def test_agent_invokes_datetime_tool(tmp_path):
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        turn = Dream(store, EchoBackend()).run("What time is it?")
+        assert turn.tool_calls[0]["name"] == "get_datetime"
+        assert "Result:" in turn.reply
+
+
+def test_agent_invokes_calculate_tool(tmp_path):
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        turn = Dream(store, EchoBackend()).run("What is 12 × 3?")
+        assert turn.tool_calls[0]["name"] == "calculate"
+        assert "36" in turn.reply
+
+
+def test_recalled_memory_is_injected_into_backend_messages(tmp_path):
+    class CaptureBackend(EchoBackend):
+        def __init__(self):
+            self.messages = []
+
+        def chat(self, messages, tools=None):
+            self.messages = messages
+            return {"content": "done", "tool_calls": []}
+
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        store.remember("My favorite drink is coffee")
+        backend = CaptureBackend()
+        Dream(store, backend).run("What is my favorite drink?")
+        assert "My favorite drink is coffee" in backend.messages[0]["content"]
+        assert "RECALLED MEMORIES" in backend.messages[0]["content"]
+
+
+def test_agent_journal_records_user_and_assistant(tmp_path):
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        Dream(store, EchoBackend()).run("hello")
+        assert [entry["role"] for entry in store.recent_journal()] == ["user", "assistant"]
+
+
+def test_reset_session_keeps_durable_memory(tmp_path):
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        store.remember("persistent fact")
+        dream = Dream(store, EchoBackend())
+        dream.run("hello")
+        dream.reset_session()
+        assert dream.history == []
+        assert store.recall("persistent")
+
+
+def test_dangerous_shell_is_blocked_end_to_end(tmp_path):
+    class ShellBackend:
+        def __init__(self):
+            self.tool_result = ""
+
+        def chat(self, messages, tools=None):
+            if messages[-1]["role"] == "tool":
+                self.tool_result = messages[-1]["content"]
+                return {"content": "I cannot run that.", "tool_calls": []}
+            return {
+                "content": None,
+                "tool_calls": [
+                    {"id": "shell", "name": "run_shell", "arguments": {"command": "exit 99"}}
+                ],
+            }
+
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        backend = ShellBackend()
+        turn = Dream(store, backend, ApprovalPolicy()).run("run a command")
+        assert turn.tool_calls[0]["allowed"] is False
+        assert '"blocked": true' in backend.tool_result
+        assert "denied" in backend.tool_result
+
+
+# --------------------------------------------------------------------------
+# User-facing entry points
+# --------------------------------------------------------------------------
+
+
+def test_demo_runs_offline_end_to_end(tmp_path):
+    output = []
+    cli.run_demo(str(tmp_path / "demo.db"), output.append)
+    joined = "\n".join(output)
+    assert "1. Seeding" in joined
+    assert "5. Approval gate" in joined
+    assert '"blocked": true' in joined
+
+
+def test_all_slash_commands_dispatch(tmp_path):
+    output = []
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        memory = store.remember("command test")
+        dream = Dream(store, EchoBackend())
+        for command in ("/mem command", "/mems", "/stats", "/tools", "/reset", "/help", "/unknown"):
+            assert cli.dispatch_command(command, dream, output.append) is True
+        assert cli.dispatch_command(f"/forget {memory.id}", dream, output.append) is True
+        assert cli.dispatch_command("/exit", dream, output.append) is False
+    assert any("Unknown command" in line for line in output)
+
+
+def test_forget_non_numeric_argument_is_graceful(tmp_path):
+    output = []
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        assert cli.dispatch_command("/forget nope", Dream(store, EchoBackend()), output.append)
+    assert output == ["Usage: /forget ID — ID must be a number."]
+
+
+def test_colour_is_suppressed_for_non_tty():
+    class PlainStream:
+        def isatty(self):
+            return False
+
+    assert cli._style("hello", "31", PlainStream()) == "hello"
+
+
+def test_doctor_offline_checks_pass():
+    output = []
+    assert doctor.run_checks(output=output.append)
+    assert all(line.startswith("PASS") for line in output)
+
+
+def test_doctor_fails_when_registry_is_empty(monkeypatch):
+    output = []
+    monkeypatch.setattr(doctor, "REGISTRY", {})
+    assert doctor.run_checks(output=output.append) is False
+    assert any(line.startswith("FAIL Tool registry") for line in output)
+
+
+def test_doctor_masks_api_key(monkeypatch):
+    output = []
+    key = "sk-very-secret-key-value"
+    monkeypatch.setenv("OPENAI_API_KEY", key)
+    assert doctor.run_checks(output=output.append)
+    assert key not in "\n".join(output)
+
+
+def test_cli_yolo_is_not_default_and_warns(tmp_path, monkeypatch, capsys):
+    assert cli.build_parser().parse_args([]).yolo is False
+    monkeypatch.setattr("builtins.input", lambda prompt: (_ for _ in ()).throw(EOFError))
+    assert cli.main(["--yolo", "--db", str(tmp_path / "yolo.db")]) == 0
+    assert "WARNING: --yolo auto-approves dangerous tools." in capsys.readouterr().out
