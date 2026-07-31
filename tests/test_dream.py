@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from dream import tools
 from dream.memory import KINDS, MemoryStore, _stem_fa, normalize_fa
 
 
@@ -224,3 +225,96 @@ def test_journal_is_separate_from_memories(store):
     store.log("user", "استارتاپ من چطور است؟")
     assert store.all() == []
     assert store.recall("استارتاپ") == []
+
+
+# --------------------------------------------------------------------------
+# Tool registry
+# --------------------------------------------------------------------------
+
+
+def test_tool_registry_is_populated():
+    assert {
+        "calculate",
+        "read_note",
+        "write_note",
+        "run_shell",
+        "send_email",
+    } <= tools.REGISTRY.keys()
+
+
+def test_schema_types_are_derived_from_hints():
+    properties = tools.REGISTRY["write_note"].schema["properties"]
+    assert properties["filename"]["type"] == "string"
+    assert properties["content"]["type"] == "string"
+    assert tools.REGISTRY["run_shell"].schema["properties"]["timeout"]["type"] == "integer"
+
+
+def test_schema_required_excludes_parameters_with_defaults():
+    schema = tools.REGISTRY["run_shell"].schema
+    assert "command" in schema["required"]
+    assert "timeout" not in schema["required"]
+
+
+def test_schema_includes_param_docstring_text():
+    schema = tools.REGISTRY["read_note"].schema
+    assert schema["properties"]["filename"]["description"] == "Relative path of the note to read."
+
+
+def test_calculate_ascii_digits():
+    assert tools.calculate("2 * (3 + 4)") == 14
+
+
+def test_calculate_extended_arabic_indic_digits():
+    assert tools.calculate("۱۲ + ۳") == 15
+
+
+def test_calculate_multiplication_sign():
+    assert tools.calculate("6 × 7") == 42
+
+
+def test_calculate_rejects_code():
+    with pytest.raises(ValueError):
+        tools.calculate("__import__('os').system('echo unsafe')")
+
+
+def test_execute_unknown_tool_returns_structured_error():
+    result = tools.execute("not_a_tool", {})
+    assert '"error"' in result
+    assert "unknown_tool" in result
+
+
+def test_safe_path_rejects_workspace_escape(tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "WORKSPACE_ROOT", tmp_path.resolve())
+    with pytest.raises(PermissionError):
+        tools._safe_path("../outside.txt")
+
+
+def test_write_then_read_note_preserves_non_ascii(tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "WORKSPACE_ROOT", tmp_path.resolve())
+    text = "سلام، دنیا — unchanged"
+    tools.write_note("notes/فارسی.txt", text)
+    assert tools.read_note("notes/فارسی.txt") == text
+
+
+def test_provider_schema_formats_are_well_formed():
+    openai = tools.openai_schemas()
+    anthropic = tools.anthropic_schemas()
+    assert all(item["type"] == "function" and "parameters" in item["function"] for item in openai)
+    assert all("name" in item and item["input_schema"]["type"] == "object" for item in anthropic)
+
+
+def test_dangerous_tools_are_recorded_as_dangerous():
+    assert tools.REGISTRY["run_shell"].risk == "dangerous"
+    assert tools.REGISTRY["send_email"].risk == "dangerous"
+
+
+def test_execute_blocks_dangerous_tool_without_approval():
+    result = tools.execute("run_shell", {"command": "this must never run"})
+    assert "approval_required" in result
+
+
+def test_execute_logs_guarded_tool(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(tools, "WORKSPACE_ROOT", tmp_path.resolve())
+    with caplog.at_level("INFO", logger="dream.tools"):
+        tools.execute("write_note", {"filename": "note.txt", "content": "logged"})
+    assert "executing guarded tool: write_note" in caplog.text
