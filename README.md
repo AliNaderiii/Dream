@@ -37,6 +37,15 @@ python doctor.py                     # verify the local installation
 For an interactive offline session, use `dream --backend echo`. Configure a
 provider only when needed; see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
+During a session, every tool call the model makes is shown on stderr as a
+compact `[tool] name(args) -> ok | error | blocked` line, and confirmed
+memory writes appear as `[memory] stored N facts`, so you can see what
+actually happened rather than what the model claims. Pass `--quiet` to hide
+these lines. If memory behaviour needs diagnosing, run
+`python tools/memory_probe.py --backend ollama`: it stores nothing unless the
+model really calls the tool, and prints a one-line verdict naming the failure
+mode.
+
 ### Windows
 
 Double-click `run.bat` to start Dream against a local Ollama server: it

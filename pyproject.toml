@@ -51,5 +51,11 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.per-file-ignores]
+# Runnable as ``python tools/memory_probe.py``: the repository root must be
+# put on sys.path before Dream can be imported, so imports cannot all sit at
+# the top of the file.
+"tools/memory_probe.py" = ["E402"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

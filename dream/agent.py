@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import time
@@ -12,7 +13,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from dream.memory import KINDS, Memory, MemoryStore
+from dream.memory import KINDS, Memory, MemoryStore, normalize_fa
 from dream.tools import REGISTRY, execute, openai_schemas, tool
 
 
@@ -247,6 +248,50 @@ class Turn:
     elapsed_seconds: float
 
 
+# Small local models rarely send ``kind`` exactly as the schema enumerates it:
+# expect "fact", "preference", or an empty string rather than a clean
+# "semantic". Rejecting the call loses the memory entirely, which is the worst
+# outcome, so synonyms map onto the closest valid kind and anything
+# unrecognised falls back to semantic. A fact stored under a slightly wrong
+# kind is strictly better than no fact at all.
+_KIND_SYNONYMS = {
+    "fact": "semantic",
+    "info": "semantic",
+    "preference": "semantic",
+    "profile": "semantic",
+    "event": "episodic",
+    "episode": "episodic",
+    "rule": "procedural",
+    "instruction": "procedural",
+    "howto": "procedural",
+}
+
+
+def _normalize_kind(kind: Any) -> str:
+    """Map whatever a model sends as ``kind`` onto the closest valid kind."""
+    text = str(kind).strip().lower() if kind is not None else ""
+    if text in KINDS:
+        return text
+    return _KIND_SYNONYMS.get(text, "semantic")
+
+
+def _normalize_importance(value: Any) -> float:
+    """Coerce ``importance`` into [0.0, 1.0], defaulting to 0.5 when unreadable.
+
+    Numeric strings (including Persian digits, via normalisation) are
+    accepted; out-of-range numbers are clamped rather than rejected.
+    """
+    if isinstance(value, str):
+        value = normalize_fa(value)
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0.5
+    if math.isnan(number):
+        return 0.5
+    return max(0.0, min(1.0, number))
+
+
 class Dream:
     """An agent runtime that combines durable memory, tools, and approval."""
 
@@ -276,15 +321,23 @@ class Dream:
             """Store a durable fact in Dream's memory.
 
             :param content: Fact to remember.
-            :param kind: Memory kind.
+            :param kind: Memory kind — semantic, episodic, or procedural.
             :param importance: Importance from zero to one.
             :param tags: Optional labels for retrieval.
             """
-            if kind not in KINDS:
-                raise ValueError(f"kind must be one of {KINDS}")
-            memory = store.remember(content, kind=kind, importance=importance, tags=tags or [])
+            memory = store.remember(
+                content,
+                kind=_normalize_kind(kind),
+                importance=_normalize_importance(importance),
+                tags=tags or [],
+            )
             created.append(memory)
-            return {"id": memory.id, "content": memory.content, "kind": memory.kind}
+            return {
+                "id": memory.id,
+                "content": memory.content,
+                "kind": memory.kind,
+                "importance": memory.importance,
+            }
 
         @tool(risk="safe")
         def search_memory(query: str, limit: int = 8) -> list[dict[str, Any]]:
