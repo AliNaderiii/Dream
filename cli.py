@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import sys
 from collections.abc import Callable
@@ -12,10 +13,18 @@ from dream.agent import ApprovalPolicy, Dream, EchoBackend
 from dream.memory import MemoryStore, normalize_fa
 from dream.tools import REGISTRY
 
+KNOWN_COMMANDS = ("/mem", "/mems", "/stats", "/forget", "/tools", "/reset", "/help", "/exit")
+
 
 def _style(text: str, code: str, stream: TextIO) -> str:
     """Colour text only when it will be read in an interactive terminal."""
     return f"\x1b[{code}m{text}\x1b[0m" if stream.isatty() else text
+
+
+def _closest_command(command: str) -> str | None:
+    """Return the closest known command, or ``None`` when nothing is close."""
+    matches = difflib.get_close_matches(command, KNOWN_COMMANDS, n=1, cutoff=0.6)
+    return matches[0] if matches else None
 
 
 def _print_memories(store: MemoryStore, output: Callable[[str], None]) -> None:
@@ -30,9 +39,15 @@ def _print_memories(store: MemoryStore, output: Callable[[str], None]) -> None:
 
 
 def dispatch_command(text: str, dream: Dream, output: Callable[[str], None] = print) -> bool:
-    """Dispatch one slash command. Return ``False`` when the session should end."""
+    """Dispatch one slash command. Return ``False`` when the session should end.
+
+    A leading backslash is accepted as an alias for a leading slash, so
+    Windows habits like ``\\mems`` and ``\\exit`` work too.
+    """
     command, _, argument = text.partition(" ")
     argument = argument.strip()
+    if command.startswith("\\"):
+        command = "/" + command[1:]
     store = dream.store
     if command == "/mem":
         if not argument:
@@ -67,7 +82,9 @@ def dispatch_command(text: str, dream: Dream, output: Callable[[str], None] = pr
     elif command == "/exit":
         return False
     else:
-        output(f"Unknown command: {command}. Type /help to see available commands.")
+        suggestion = _closest_command(command)
+        hint = f" Did you mean {suggestion}?" if suggestion else ""
+        output(f"Unknown command: {command}.{hint} Type /help to see available commands.")
     return True
 
 
@@ -158,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
                     break
                 if not text.strip():
                     continue
-                if text.startswith("/"):
+                if text.startswith(("/", "\\")):
                     if not dispatch_command(text, dream):
                         break
                     continue
