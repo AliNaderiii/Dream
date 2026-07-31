@@ -7,9 +7,9 @@ import difflib
 import json
 import sys
 from collections.abc import Callable
-from typing import TextIO
+from typing import Any, TextIO
 
-from dream.agent import ApprovalPolicy, Dream, EchoBackend
+from dream.agent import ApprovalPolicy, Dream, EchoBackend, Turn
 from dream.memory import MemoryStore, normalize_fa
 from dream.tools import REGISTRY
 
@@ -36,6 +36,75 @@ def _print_memories(store: MemoryStore, output: Callable[[str], None]) -> None:
         output(
             f"{memory.id}  {memory.kind:<10} importance={memory.importance:.2f}  {memory.content}"
         )
+
+
+# --------------------------------------------------------------------------
+# Tool-activity reporting
+#
+# A model can claim «ذخیره شد» without ever calling remember_fact, or call it
+# and misread a failure as success. Turn already records every call's name,
+# arguments, and result; printing them to stderr is what makes the CLI honest.
+# --------------------------------------------------------------------------
+
+_ARGUMENT_LIMIT = 80
+_DETAIL_LIMIT = 120
+
+
+def _truncate(text: str, limit: int) -> str:
+    """Clip text to ``limit`` characters, marking what was dropped."""
+    return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def _stderr_line(line: str) -> None:
+    print(line, file=sys.stderr)
+
+
+def _call_status(result: str) -> tuple[str, str]:
+    """Classify a recorded tool result as ok, error, or blocked."""
+    try:
+        payload = json.loads(result)
+    except (TypeError, ValueError):
+        return "error", "unparseable tool result"
+    if not isinstance(payload, dict):
+        return "ok", ""
+    if payload.get("blocked"):
+        return "blocked", str(payload.get("reason") or "")
+    if payload.get("status") == "error" or "error" in payload:
+        error = payload.get("error")
+        if isinstance(error, dict):
+            return "error", str(error.get("message") or error.get("type") or "")
+        return "error", "" if error is None else str(error)
+    return "ok", ""
+
+
+def format_tool_line(name: str, arguments: dict[str, Any], result: str) -> str:
+    """Render one recorded tool call as a compact one-line status."""
+    rendered = ", ".join(f"{key}={value!r}" for key, value in arguments.items())
+    status, detail = _call_status(result)
+    line = f"[tool] {name}({_truncate(rendered, _ARGUMENT_LIMIT)}) -> {status}"
+    if detail:
+        line += f": {_truncate(detail, _DETAIL_LIMIT)}"
+    return line
+
+
+def report_turn_activity(turn: Turn, output: Callable[[str], None] | None = None) -> None:
+    """Print one compact line per tool call, plus a line when memories stored.
+
+    Defaults to stderr so the lines never pollute piped stdout output.
+    """
+    if output is None:
+        output = _stderr_line
+    for call in turn.tool_calls:
+        output(
+            format_tool_line(
+                str(call.get("name", "")),
+                call.get("arguments") or {},
+                str(call.get("result", "")),
+            )
+        )
+    if turn.memories_created:
+        count = len(turn.memories_created)
+        output(f"[memory] stored {count} fact{'s' if count != 1 else ''}")
 
 
 def dispatch_command(text: str, dream: Dream, output: Callable[[str], None] = print) -> bool:
@@ -145,6 +214,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--yolo", action="store_true", help="Allow dangerous tools without prompting"
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress the [tool]/[memory] activity lines on stderr",
+    )
     return parser
 
 
@@ -180,6 +254,8 @@ def main(argv: list[str] | None = None) -> int:
                         break
                     continue
                 turn = dream.run(text)
+                if not args.quiet:
+                    report_turn_activity(turn)
                 print(turn.reply)
     except OSError as exc:
         print(

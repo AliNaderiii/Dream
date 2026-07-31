@@ -291,6 +291,17 @@ def send_email(to: str, subject: str, body: str) -> dict[str, str]:
     }
 
 
+def _failure_payload(error_type: str, message: str) -> dict[str, Any]:
+    """Build an error payload that cannot be mistaken for a result.
+
+    The agent feeds this string straight back to the model. A bare
+    ``{"error": ...}`` is easy for a small model to skim past and narrate as a
+    success, so every failure carries an explicit ``"status": "error"`` and a
+    message that starts with ``Tool call failed:``.
+    """
+    return {"status": "error", "error": {"type": error_type, "message": message}}
+
+
 def execute(name: str, arguments: dict[str, Any], *, approved: bool = False) -> str:
     """Run a registered tool and JSON-encode its result or error.
 
@@ -300,17 +311,28 @@ def execute(name: str, arguments: dict[str, Any], *, approved: bool = False) -> 
     """
     registered = REGISTRY.get(name)
     if registered is None:
-        return json.dumps({"error": {"type": "unknown_tool", "message": f"unknown tool: {name}"}})
+        return json.dumps(
+            _failure_payload("unknown_tool", f"Tool call failed: unknown tool: {name}"),
+            ensure_ascii=False,
+        )
     if registered.risk == "dangerous" and not approved:
         return json.dumps(
-            {"error": {"type": "approval_required", "message": f"{name} requires human approval"}}
+            _failure_payload(
+                "approval_required",
+                f"Tool call failed: {name} requires human approval and none was given",
+            ),
+            ensure_ascii=False,
         )
     if registered.risk == "guarded":
         logger.info("executing guarded tool: %s", name)
     try:
         result = registered.function(**arguments)
-        return json.dumps({"result": result}, ensure_ascii=False)
+        return json.dumps({"status": "ok", "result": result}, ensure_ascii=False)
     except Exception as exc:  # Tool boundaries return data, never leak exceptions.
         return json.dumps(
-            {"error": {"type": type(exc).__name__, "message": str(exc)}}, ensure_ascii=False
+            _failure_payload(
+                type(exc).__name__,
+                f"Tool call failed: {name}() raised {type(exc).__name__}: {exc}",
+            ),
+            ensure_ascii=False,
         )
