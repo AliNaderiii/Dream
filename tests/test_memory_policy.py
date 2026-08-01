@@ -100,7 +100,8 @@ def test_two_turn_fact_survives_into_fresh_instance(store):
             self.messages = []
 
         def chat(self, messages, tools=None):
-            self.messages = messages
+            if tools is not None:
+                self.messages = messages
             return {"content": "پاسخ.", "tool_calls": []}
 
     capture = CaptureBackend()

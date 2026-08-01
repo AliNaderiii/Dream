@@ -54,6 +54,12 @@ class ProbeReport:
     tool_calls: list[dict[str, Any]]
     memories_after: int
     verdict: str
+    memories_before: int = 0
+    extraction_ran: bool = False
+    extraction_status: str = ""
+    extraction_raw_text: str = ""
+    facts_parsed: int = 0
+    facts_stored: int = 0
 
     @property
     def ok(self) -> bool:
@@ -67,7 +73,7 @@ class ProbeReport:
             f"[probe] reply: {self.reply}",
         ]
         if not self.tool_calls:
-            lines.append("[probe] tool calls: none")
+            lines.append("[probe] tool calls: none (no tool call emitted)")
         else:
             lines.append(f"[probe] tool calls: {len(self.tool_calls)}")
             for index, call in enumerate(self.tool_calls, start=1):
@@ -76,6 +82,13 @@ class ProbeReport:
                 lines.append(f"[probe]   arguments: {arguments}")
                 lines.append(f"[probe]   allowed: {call.get('allowed')}")
                 lines.append(f"[probe]   result: {call.get('result')}")
+        lines.append(f"[probe] extraction ran: {'yes' if self.extraction_ran else 'no'}")
+        lines.append(f"[probe] extraction status: {self.extraction_status}")
+        lines.append(f"[probe] extraction raw: {self.extraction_raw_text}")
+        lines.append(f"[probe] facts parsed: {self.facts_parsed}")
+        lines.append(f"[probe] facts stored: {self.facts_stored}")
+        lines.append(f"[probe] store count before: {self.memories_before}")
+        lines.append(f"[probe] store count after: {self.memories_after}")
         lines.append(f"[probe] memories in store after turn: {self.memories_after}")
         lines.append(f"[probe] verdict: {self.verdict}")
         return "\n".join(lines)
@@ -96,20 +109,33 @@ def _call_failed(result: str) -> bool:
     return bool(payload.get("blocked")) or payload.get("status") == "error" or "error" in payload
 
 
-def _verdict(calls: list[dict[str, Any]], memories_after: int) -> str:
+def _verdict(
+    calls: list[dict[str, Any]],
+    memories_after: int,
+    memories_before: int = 0,
+    extraction_status: str = "",
+    facts_parsed: int = 0,
+    facts_stored: int = 0,
+) -> str:
     """Name the failure mode in one line, or confirm success."""
-    if not calls:
-        return (
-            "FAIL: no tool call emitted - the model answered in prose, "
-            "so nothing could have been stored"
-        )
     failures = [call for call in calls if _call_failed(str(call.get("result", "")))]
     if failures:
         failing = failures[0]
         snippet = str(failing.get("result", ""))[:RESULT_SNIPPET_LIMIT]
         return f"FAIL: tool call failed - {failing.get('name')}: {snippet}"
-    if memories_after > 0:
+    if memories_after > memories_before:
         return f"OK: memory stored successfully - {memories_after} memories in the store"
+    if extraction_status == "unparseable" or extraction_status == "error":
+        return "FAIL: extraction could not be parsed - model output was not valid JSON or errored"
+    if facts_parsed > 0 and facts_stored == 0:
+        return "FAIL: facts extracted but none stored - store rejected extracted facts"
+    if extraction_status in {"no_facts", "too_short", "disabled"}:
+        return "FAIL: extraction returned no facts - model found no durable facts in the message"
+    if not calls:
+        return (
+            "FAIL: extraction returned no facts - no tool call emitted "
+            "and model found no durable facts"
+        )
     names = ", ".join(str(call.get("name")) for call in calls)
     return f"FAIL: no memory stored - tool calls succeeded ({names}) but none wrote a memory"
 
@@ -123,16 +149,43 @@ def run_probe(backend: Any, sentence: str = SENTENCE) -> ProbeReport:
     label = f"{type(backend).__name__}({getattr(backend, 'model', '-')})"
     with tempfile.TemporaryDirectory() as directory:
         with MemoryStore(str(Path(directory) / "probe.db")) as store:
+            memories_before = len(store.all())
             turn = Dream(store, backend).run(sentence)
             memories_after = len(store.all())
     tool_calls = list(turn.tool_calls)
+    extraction = getattr(turn, "extraction", None)
+    extraction_ran = extraction is not None and getattr(extraction, "status", "") != "disabled"
+    extraction_status = getattr(extraction, "status", "disabled" if extraction is None else "")
+    raw = str(getattr(extraction, "raw_text", "") or "")
+    extraction_raw_text = raw[:RESULT_SNIPPET_LIMIT]
+    facts_parsed = len(getattr(extraction, "facts", []) or [])
+    facts_stored = sum(
+        1
+        for m in getattr(turn, "memories_created", [])
+        if getattr(m, "source", "") == "extraction"
+    )
+    if facts_stored == 0 and len(getattr(turn, "memories_created", [])) > 0:
+        facts_stored = len(turn.memories_created)
     return ProbeReport(
         backend_label=label,
         sentence=sentence,
         reply=turn.reply,
         tool_calls=tool_calls,
         memories_after=memories_after,
-        verdict=_verdict(tool_calls, memories_after),
+        verdict=_verdict(
+            tool_calls,
+            memories_after,
+            memories_before=memories_before,
+            extraction_status=extraction_status,
+            facts_parsed=facts_parsed,
+            facts_stored=facts_stored,
+        ),
+        memories_before=memories_before,
+        extraction_ran=extraction_ran,
+        extraction_status=extraction_status,
+        extraction_raw_text=extraction_raw_text,
+        facts_parsed=facts_parsed,
+        facts_stored=facts_stored,
     )
 
 

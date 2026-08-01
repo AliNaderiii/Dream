@@ -12,7 +12,9 @@ from dream.agent import (
     build_backend,
     cli_approver,
 )
+from dream.extraction import ExtractedFact, ExtractionResult, extract_facts
 from dream.memory import KINDS, Memory, MemoryStore, normalize_fa
+from dream.normalization import normalize_importance, normalize_kind
 from dream.tools import REGISTRY, anthropic_schemas, execute, openai_schemas, tool
 
 __version__ = "0.1.0"
@@ -21,6 +23,8 @@ __all__ = [
     "ApprovalPolicy",
     "Dream",
     "EchoBackend",
+    "ExtractedFact",
+    "ExtractionResult",
     "KINDS",
     "Memory",
     "MemoryStore",
@@ -32,7 +36,10 @@ __all__ = [
     "build_backend",
     "cli_approver",
     "execute",
+    "extract_facts",
     "normalize_fa",
+    "normalize_importance",
+    "normalize_kind",
     "openai_schemas",
     "tool",
     "__version__",
