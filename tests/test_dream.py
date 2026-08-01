@@ -12,7 +12,13 @@ import pytest
 import cli
 import doctor
 from dream import tools
-from dream.agent import ApprovalPolicy, Dream, EchoBackend, OpenAIBackend
+from dream.agent import (
+    _MEMORIES_OPEN,
+    ApprovalPolicy,
+    Dream,
+    EchoBackend,
+    OpenAIBackend,
+)
 from dream.memory import KINDS, MemoryStore, _stem_fa, normalize_fa
 
 
@@ -395,7 +401,8 @@ def test_recalled_memory_is_injected_into_backend_messages(tmp_path):
         backend = CaptureBackend()
         Dream(store, backend).run("What is my favorite drink?")
         assert "My favorite drink is coffee" in backend.messages[0]["content"]
-        assert "RECALLED MEMORIES" in backend.messages[0]["content"]
+        assert _MEMORIES_OPEN in backend.messages[0]["content"]
+        assert "RECALLED MEMORIES" not in backend.messages[0]["content"]
 
 
 def test_agent_journal_records_user_and_assistant(tmp_path):
@@ -753,3 +760,87 @@ def test_connection_failure_names_the_error_type(monkeypatch):
     content = backend.chat([{"role": "user", "content": "hi"}])["content"]
     assert "URLError" in content
     assert "connection refused" in content
+
+
+# --------------------------------------------------------------------------
+# Sampling temperature
+#
+# The payload previously carried no temperature at all, so the server
+# applied its own creative default. Conversation is now pinned to 0.3,
+# overridable with DREAM_TEMPERATURE; the extraction pass samples colder
+# still, because its output must parse as JSON.
+# --------------------------------------------------------------------------
+
+
+def _recorded_payloads(monkeypatch, *replies: dict) -> list[dict]:
+    """Run the given canned replies through a recording mock server."""
+    server = StrictChatServer(*replies)
+    monkeypatch.setattr("dream.agent.urlopen", server)
+    return server.requests
+
+
+def _test_backend() -> OpenAIBackend:
+    return OpenAIBackend(model="test-model", api_key="", base_url="http://model.test/v1")
+
+
+def test_conversational_payload_sends_temperature_0_3_by_default(monkeypatch):
+    monkeypatch.delenv("DREAM_TEMPERATURE", raising=False)
+    requests = _recorded_payloads(monkeypatch, _reply("hi"))
+    _test_backend().chat([{"role": "user", "content": "hi"}], tools=[])
+    assert requests[0]["temperature"] == 0.3
+
+
+def test_dream_temperature_overrides_the_default(monkeypatch):
+    monkeypatch.setenv("DREAM_TEMPERATURE", "0.7")
+    requests = _recorded_payloads(monkeypatch, _reply("hi"))
+    _test_backend().chat([{"role": "user", "content": "hi"}])
+    assert requests[0]["temperature"] == 0.7
+
+
+@pytest.mark.parametrize("raw", ["", "boiling", "0,3", "one point five"])
+def test_malformed_dream_temperature_falls_back_without_raising(monkeypatch, raw):
+    # A parse failure must yield the default, never an exception mid-turn.
+    monkeypatch.setenv("DREAM_TEMPERATURE", raw)
+    requests = _recorded_payloads(monkeypatch, _reply("hi"))
+    _test_backend().chat([{"role": "user", "content": "hi"}])
+    assert requests[0]["temperature"] == 0.3
+
+
+@pytest.mark.parametrize("raw", ["-0.1", "2.5", "100", "NaN", "inf"])
+def test_out_of_range_dream_temperature_falls_back_to_default(monkeypatch, raw):
+    monkeypatch.setenv("DREAM_TEMPERATURE", raw)
+    requests = _recorded_payloads(monkeypatch, _reply("hi"))
+    _test_backend().chat([{"role": "user", "content": "hi"}])
+    assert requests[0]["temperature"] == 0.3
+
+
+@pytest.mark.parametrize(("raw", "expected"), [("0", 0.0), ("2", 2.0)])
+def test_in_range_dream_temperature_is_accepted(monkeypatch, raw, expected):
+    monkeypatch.setenv("DREAM_TEMPERATURE", raw)
+    requests = _recorded_payloads(monkeypatch, _reply("hi"))
+    _test_backend().chat([{"role": "user", "content": "hi"}])
+    assert requests[0]["temperature"] == expected
+
+
+def test_extraction_payload_samples_colder_than_conversation(monkeypatch, tmp_path):
+    monkeypatch.delenv("DREAM_TEMPERATURE", raising=False)
+    requests = _recorded_payloads(monkeypatch, _reply("A quiet day."), _reply("[]"))
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        Dream(store, _test_backend()).run("I had a calm and quiet morning today.")
+    assert len(requests) == 2
+    conversational, extraction = requests
+    assert "tools" in conversational, "the first request is the conversation"
+    assert "tools" not in extraction, "the second request is the extraction pass"
+    assert conversational["temperature"] == 0.3
+    assert extraction["temperature"] == 0.1
+    assert extraction["temperature"] < conversational["temperature"]
+
+
+def test_extraction_temperature_does_not_follow_dream_temperature(monkeypatch, tmp_path):
+    monkeypatch.setenv("DREAM_TEMPERATURE", "1.2")
+    requests = _recorded_payloads(monkeypatch, _reply("A quiet day."), _reply("[]"))
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        Dream(store, _test_backend()).run("I had a calm and quiet morning today.")
+    conversational, extraction = requests
+    assert conversational["temperature"] == 1.2
+    assert extraction["temperature"] == 0.1

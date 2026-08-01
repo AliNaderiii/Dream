@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -17,6 +18,30 @@ from dream.memory import Memory, MemoryStore
 from dream.normalization import normalize_importance, normalize_kind
 from dream.tools import REGISTRY, execute, openai_schemas, tool
 
+# Sampling temperatures. Conversation gets 0.3: calm but not robotic. The
+# extraction pass must emit parseable JSON, so it runs colder still; at the
+# server default (0.8) a small model wanders — once across a language
+# boundary mid-sentence.
+DEFAULT_TEMPERATURE = 0.3
+EXTRACTION_TEMPERATURE = 0.1
+
+
+def _resolve_temperature(raw: str | None) -> float:
+    """Parse ``DREAM_TEMPERATURE``, falling back to the default on any problem.
+
+    Anything unset, non-numeric, or outside the 0.0 to 2.0 band a sampler
+    accepts resolves to the default rather than raising mid-turn.
+    """
+    if not raw:
+        return DEFAULT_TEMPERATURE
+    try:
+        value = float(raw.strip())
+    except (TypeError, ValueError):
+        return DEFAULT_TEMPERATURE
+    if not 0.0 <= value <= 2.0:
+        return DEFAULT_TEMPERATURE
+    return value
+
 
 class OpenAIBackend:
     """Client for any endpoint implementing OpenAI's chat-completions API."""
@@ -26,17 +51,27 @@ class OpenAIBackend:
         model: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
+        temperature: float | None = None,
     ) -> None:
         self.model = model or os.environ.get("DREAM_MODEL", "")
         self.api_key = api_key if api_key is not None else os.environ.get("OPENAI_API_KEY", "")
         self.base_url = (
             base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
         ).rstrip("/")
+        self.temperature = (
+            _resolve_temperature(os.environ.get("DREAM_TEMPERATURE"))
+            if temperature is None
+            else float(temperature)
+        )
 
     def chat(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
     ) -> dict[str, Any]:
-        payload: dict[str, Any] = {"model": self.model, "messages": messages}
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.temperature,
+        }
         if tools:
             payload["tools"] = tools
         request = Request(
@@ -248,6 +283,7 @@ class Turn:
     memories_created: list[Memory]
     elapsed_seconds: float
     extraction: Any = None
+    memory_errors: list[str] = field(default_factory=list)
 
 
 class Dream:
@@ -322,16 +358,12 @@ class Dream:
         self.history.clear()
 
     def _system_message(self, memories: list[Memory]) -> dict[str, str]:
-        prompt = _BASE_PROMPT + _MEMORY_POLICY + _MEMORY_EXAMPLE
+        prompt = _BASE_PROMPT + _MEMORY_USAGE
         if memories:
             lines = [
                 f"- [{_relative_age(memory.created_at)}] {memory.content}" for memory in memories
             ]
-            prompt += (
-                "\n\n[RECALLED MEMORIES — PRIVATE CONTEXT]\n"
-                + "\n".join(lines)
-                + "\n[END MEMORIES]"
-            )
+            prompt += f"\n\n{_MEMORIES_OPEN}\n" + "\n".join(lines) + f"\n{_MEMORIES_CLOSE}"
         return {"role": "system", "content": prompt}
 
     def run(self, message: str) -> Turn:
@@ -375,7 +407,8 @@ class Dream:
             self.history.append({"role": "assistant", "content": reply})
             self.store.log("assistant", reply)
 
-        extraction_result = extract_facts(self.backend, message)
+        extraction_result = extract_facts(self._extraction_backend(), message)
+        store_errors: list[str] = []
         for fact in getattr(extraction_result, "facts", []):
             try:
                 memory = self.store.remember(
@@ -386,8 +419,14 @@ class Dream:
                 )
                 if not any(m.id == memory.id for m in self._created):
                     self._created.append(memory)
-            except (ValueError, Exception):
+            except ValueError:
+                # The one expected case: an unusable fact (e.g. empty content).
+                # Skip it and keep the rest of the batch.
                 continue
+            except Exception as exc:
+                # A store failure (locked database, full disk, ...) must never
+                # pass silently: record it so the CLI can print what was lost.
+                store_errors.append(f"{type(exc).__name__}: {exc}")
 
         return Turn(
             reply,
@@ -396,7 +435,23 @@ class Dream:
             list(self._created),
             time.monotonic() - started,
             extraction=extraction_result,
+            memory_errors=store_errors,
         )
+
+    def _extraction_backend(self) -> Any:
+        """Return the backend handle for the post-turn extraction pass.
+
+        Extraction must emit parseable JSON, so it samples at a fixed low
+        temperature rather than the conversational one. Only the real HTTP
+        clients carry sampling; offline and scripted backends ignore
+        temperature and are returned unchanged.
+        """
+        backend = self.backend
+        if isinstance(backend, OpenAIBackend):
+            colder = copy.copy(backend)
+            colder.temperature = EXTRACTION_TEMPERATURE
+            return colder
+        return backend
 
 
 def _relative_age(timestamp: float) -> str:
@@ -423,30 +478,21 @@ _BASE_PROMPT = (
     "صرفاً برای موافقت پاسخ نده. از خاطره‌ها طبیعی استفاده کن، نه به شکل فهرست."
 )
 
-# The memory policy tells the model *when* to call remember_fact. Without it a
-# small model treats the registered tool as decoration and never stores
-# anything, leaving the session with zero persistent memory.
-_MEMORY_POLICY = (
-    "\n\nسیاست حافظه:\n"
-    "- وقتی کاربر یک واقعیت ماندگار درباره خودش می‌گوید — نام، شغل، پروژه‌ها، "
-    "ترجیحات، محدودیت‌ها یا تصمیمی که گرفته — ابزار remember_fact را فراخوانی کن.\n"
-    "- حرف‌های گذرای گفتگو، سلام‌ها و سؤال‌ها را ذخیره نکن.\n"
-    "- در هر فراخوانی فقط یک واقعیت مستقل ذخیره کن، طوری نوشته شود که ماه‌ها بعد "
-    "بدون گفتگوی اطرافش معنا بدهد.\n"
-    "- kind را آگاهانه انتخاب کن: semantic برای واقعیت‌ها و ترجیحات ماندگار، "
-    "episodic برای رویدادهای تاریخ‌دار، procedural برای دستورالعمل‌های رفتاری.\n"
-    "- importance را بر اساس مرکزی بودن واقعیت تنظیم کن، نه تازگی آن.\n"
-    "- ذخیره‌سازی بی‌صدا است؛ آن را اعلام نکن و اجازه نپرس؛ فقط طبیعی به کاربر پاسخ بده."
+# The extraction pass writes memory automatically now, so the prompt's memory
+# job is no longer teaching the model to store — it is telling the model to
+# *use* what the store recalls. remember_fact stays registered for facts the
+# extraction pass cannot see, and the prompt names it once, on one line.
+_MEMORY_USAGE = (
+    "\n\nبخش خاطره‌ها در ادامه واقعیت‌هایی است که همین کاربر قبلاً درباره خودش گفته است. "
+    "آن‌ها را درست و قطعی بدان؛ به شکل طبیعی در پاسخ به کار ببر، نه به شکل فهرست، و "
+    "هرگز اعلام نکن که حافظه را بررسی کرده‌ای. اگر پاسخ سؤال کاربر در همین بخش هست، "
+    "مستقیم از همین خاطره‌ها پاسخ بده و از کاربر نخواه دوباره بگوید. اگر واقعیت ماندگار "
+    "تازه‌ای شنیدی که هنوز در خاطره‌ها نیست، می‌توانی آن را با ابزار remember_fact ذخیره "
+    "کنی؛ ذخیره‌سازی بی‌صدا است."
 )
 
-# Small local models follow a demonstrated pattern far more reliably than a
-# described one, so the policy ends with one compact worked example.
-_MEMORY_EXAMPLE = (
-    "\n\nمثال:\n"
-    "کاربر: «من علی هستم و روی پروژه‌ای به نام Dream کار می‌کنم.»\n"
-    "این پیام دو واقعیت ماندگار دارد؛ هر کدام را جداگانه ذخیره کن:\n"
-    'remember_fact(content="کاربر علی نام دارد", kind="semantic", importance=0.9)\n'
-    'remember_fact(content="کاربر روی پروژه‌ای به نام Dream کار می‌کند", '
-    'kind="semantic", importance=0.9)\n'
-    "سپس بدون اعلام ذخیره‌سازی، عادی پاسخ بده: «سلام علی! چطور می‌توانم کمک کنم؟»"
-)
+# The block markers stay bracketed so the block is scannable, but the words
+# are Persian: an English header inside a Persian prompt invites the model to
+# drift languages right where it must answer in Persian.
+_MEMORIES_OPEN = "[خاطره‌های بازیابی‌شده — زمینه خصوصی]"
+_MEMORIES_CLOSE = "[پایان خاطره‌ها]"

@@ -26,15 +26,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failed`, or `memory stored successfully`). Runnable as
   `python tools/memory_probe.py --backend ollama`; exits 0 on success.
 
+### Changed
+
+- The system prompt no longer spends most of its length teaching the model
+  when to call `remember_fact`: the extraction pass writes memory on its own,
+  so the prompt now carries a short Persian instruction to *use* recalled
+  memories instead — treat them as known and true, use them naturally without
+  announcing it, and answer directly from them when they already hold the
+  answer. `remember_fact` stays registered and keeps a single-line mention.
+- The recalled-memory block markers are Persian, keeping the prompt in one
+  language instead of wrapping Persian text in English headers.
+- The conversational model call now sends an explicit `temperature` (default
+  `0.3`), tunable through `DREAM_TEMPERATURE`; malformed or out-of-range
+  values fall back to the default rather than raising. The extraction pass
+  samples colder still (fixed `0.1`), so its output stays parseable JSON.
+
 ### Fixed
 
-- The system prompt now carries an explicit Persian memory policy: call
-  `remember_fact` for durable user facts (name, work, projects, preferences,
-  constraints, decisions), skip conversational filler, store one
-  self-contained fact per call with a deliberate `kind` and a centrality-based
-  `importance`, and store silently. A compact worked example shows the
-  resulting `remember_fact` calls, so small local models follow the pattern
-  instead of ignoring the tool.
+- A store error during the extraction write (for example a locked database)
+  is no longer swallowed: `except (ValueError, Exception)` became a narrow
+  `ValueError` skip for the unusable-fact case, and anything else is recorded
+  on the turn and printed as `[memory] store failed: …`.
 - The language rule is now unconditional: always reply in the language of the
   user's most recent message, reply in Persian to Persian input, and never
   switch to a third language.
