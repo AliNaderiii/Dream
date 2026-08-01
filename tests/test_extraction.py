@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from typing import Any
 
 import pytest
@@ -376,3 +377,50 @@ def test_probe_verdict_facts_extracted_but_none_stored(store, monkeypatch):
     report = memory_probe.run_probe(backend)
     assert "facts extracted but none stored" in report.verdict
     assert report.ok is False
+
+
+# --------------------------------------------------------------------------
+# Store failures: only the unusable-fact case may stay quiet
+#
+# The store write used to sit under ``except (ValueError, Exception)``,
+# which swallowed every error — with a locked database the turn reported
+# «facts found: 1» while nothing was stored and no trace existed anywhere.
+# --------------------------------------------------------------------------
+
+
+def test_store_operational_error_is_visible_not_swallowed(store, monkeypatch):
+    payload = '[{"content": "کاربر علی نام دارد", "kind": "semantic", "importance": 0.9}]'
+    backend = TurnBackend("سلام علی", payload)
+
+    def _locked_remember(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(MemoryStore, "remember", _locked_remember)
+    turn = Dream(store, backend).run("من علی هستم و روی استارتاپ کار می‌کند")
+
+    assert turn.reply == "سلام علی", "the conversation itself must still complete"
+    assert turn.extraction.status == STATUS_FACTS_FOUND
+    assert turn.memories_created == []
+    assert turn.memory_errors == ["OperationalError: database is locked"]
+
+    lines: list[str] = []
+    cli.report_turn_activity(turn, lines.append)
+    assert any("[extraction] facts found: 1 fact" in line for line in lines)
+    assert any("store failed" in line and "OperationalError" in line for line in lines)
+    assert any("database is locked" in line for line in lines)
+
+
+def test_invalid_fact_value_error_is_skipped_quietly(store, monkeypatch):
+    """The skip path exists for one case only: a fact the store rejects."""
+    payload = '[{"content": "کاربر علی نام دارد", "kind": "semantic", "importance": 0.9}]'
+    backend = TurnBackend("سلام علی", payload)
+
+    def _rejecting_remember(*args, **kwargs):
+        raise ValueError("content must not be empty")
+
+    monkeypatch.setattr(MemoryStore, "remember", _rejecting_remember)
+    turn = Dream(store, backend).run("من علی هستم و روی استارتاپ کار می‌کند")
+
+    assert turn.reply == "سلام علی"
+    assert turn.memories_created == []
+    assert turn.memory_errors == [], "the expected rejection stays off the error list"

@@ -129,6 +129,8 @@ def report_turn_activity(turn: Turn, output: Callable[[str], None] | None = None
     if turn.memories_created:
         count = len(turn.memories_created)
         output(f"[memory] stored {count} fact{'s' if count != 1 else ''}")
+    for error in getattr(turn, "memory_errors", []):
+        output(f"[memory] store failed: {_truncate(error, _DETAIL_LIMIT)}")
 
 
 def dispatch_command(text: str, dream: Dream, output: Callable[[str], None] = print) -> bool:
