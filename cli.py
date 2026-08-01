@@ -87,8 +87,30 @@ def format_tool_line(name: str, arguments: dict[str, Any], result: str) -> str:
     return line
 
 
+def format_extraction_line(result: Any) -> str:
+    """Render one compact status line for the extraction pass."""
+    status = getattr(result, "status", "")
+    if status == "facts_found":
+        count = len(getattr(result, "facts", []))
+        return f"[extraction] facts found: {count} fact{'s' if count != 1 else ''}"
+    if status == "no_facts":
+        return "[extraction] no durable facts"
+    if status == "too_short":
+        return "[extraction] skipped as too short"
+    if status == "disabled":
+        return "[extraction] disabled by environment"
+    if status == "unparseable":
+        return "[extraction] model output unparseable"
+    if status == "error":
+        detail = getattr(result, "raw_text", "")
+        if detail:
+            return f"[extraction] backend errored: {_truncate(str(detail), _DETAIL_LIMIT)}"
+        return "[extraction] backend errored"
+    return f"[extraction] {status}"
+
+
 def report_turn_activity(turn: Turn, output: Callable[[str], None] | None = None) -> None:
-    """Print one compact line per tool call, plus a line when memories stored.
+    """Print compact activity lines for tools, extraction, and stored memories.
 
     Defaults to stderr so the lines never pollute piped stdout output.
     """
@@ -102,6 +124,8 @@ def report_turn_activity(turn: Turn, output: Callable[[str], None] | None = None
                 str(call.get("result", "")),
             )
         )
+    if getattr(turn, "extraction", None) is not None:
+        output(format_extraction_line(turn.extraction))
     if turn.memories_created:
         count = len(turn.memories_created)
         output(f"[memory] stored {count} fact{'s' if count != 1 else ''}")

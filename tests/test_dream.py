@@ -386,7 +386,8 @@ def test_recalled_memory_is_injected_into_backend_messages(tmp_path):
             self.messages = []
 
         def chat(self, messages, tools=None):
-            self.messages = messages
+            if tools is not None:
+                self.messages = messages
             return {"content": "done", "tool_calls": []}
 
     with MemoryStore(str(tmp_path / "dream.db")) as store:
@@ -621,7 +622,9 @@ def test_second_turn_replays_history_the_server_accepts(tmp_path, monkeypatch):
             tool_calls=[{"id": "call_1", "function": {"name": "get_datetime", "arguments": "{}"}}]
         ),
         _reply("It is noon."),
+        _reply("[]"),
         _reply("Anything else?"),
+        _reply("[]"),
     )
     monkeypatch.setattr("dream.agent.urlopen", server)
     backend = OpenAIBackend(model="test-model", api_key="", base_url="http://model.test/v1")
@@ -632,8 +635,8 @@ def test_second_turn_replays_history_the_server_accepts(tmp_path, monkeypatch):
 
     assert first.reply == "It is noon."
     assert second.reply == "Anything else?", "the second turn must not fail on replayed history"
-    assert len(server.requests) == 3
-    replayed = _assistant_tool_message(server.requests[2]["messages"])["tool_calls"][0]
+    assert len(server.requests) == 5
+    replayed = _assistant_tool_message(server.requests[3]["messages"])["tool_calls"][0]
     assert replayed["type"] == "function"
     assert replayed["function"]["name"] == "get_datetime"
     assert isinstance(replayed["function"]["arguments"], str)

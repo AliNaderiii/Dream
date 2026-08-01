@@ -126,7 +126,7 @@ def test_turn_without_tool_calls_stays_silent(store):
     turn = Dream(store, EchoBackend()).run("سلام")
     lines = []
     cli.report_turn_activity(turn, lines.append)
-    assert lines == []
+    assert [line for line in lines if line.startswith("[tool]")] == []
 
 
 def test_memory_creation_produces_memory_line_with_count(store):
@@ -286,7 +286,7 @@ def test_probe_reports_no_tool_call_against_prose_only_backend():
     report = memory_probe.run_probe(EchoBackend())
     assert report.tool_calls == []
     assert report.memories_after == 0
-    assert "no tool call emitted" in report.verdict
+    assert "extraction could not be parsed" in report.verdict
     assert not report.ok
 
 
