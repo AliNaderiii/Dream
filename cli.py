@@ -134,6 +134,11 @@ def report_turn_activity(turn: Turn, output: Callable[[str], None] | None = None
                 str(call.get("result", "")),
             )
         )
+    injected = getattr(turn, "memories_injected", None)
+    if injected is not None and len(injected) < len(turn.memories_used):
+        output(
+            f"[memory] recalled {len(turn.memories_used)}, injected {len(injected)} (block limit)"
+        )
     if getattr(turn, "extraction", None) is not None:
         output(format_extraction_line(turn.extraction))
     if turn.memories_created:

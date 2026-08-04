@@ -25,6 +25,10 @@ from dream.tools import REGISTRY, execute, openai_schemas, tool
 DEFAULT_TEMPERATURE = 0.3
 EXTRACTION_TEMPERATURE = 0.1
 
+# Eight thousand characters is roughly two thousand tokens, leaving most of a
+# small model's 8k-token context window for the conversation and its reply.
+DEFAULT_MEMORY_BLOCK_CHAR_LIMIT = 8_000
+
 
 def _resolve_temperature(raw: str | None) -> float:
     """Parse ``DREAM_TEMPERATURE``, falling back to the default on any problem.
@@ -40,6 +44,19 @@ def _resolve_temperature(raw: str | None) -> float:
         return DEFAULT_TEMPERATURE
     if not 0.0 <= value <= 2.0:
         return DEFAULT_TEMPERATURE
+    return value
+
+
+def _resolve_memory_block_char_limit(raw: str | None) -> int:
+    """Parse ``DREAM_MEMORY_BLOCK_CHAR_LIMIT`` without risking a failed turn."""
+    if not raw:
+        return DEFAULT_MEMORY_BLOCK_CHAR_LIMIT
+    try:
+        value = int(raw.strip())
+    except (TypeError, ValueError):
+        return DEFAULT_MEMORY_BLOCK_CHAR_LIMIT
+    if not 1 <= value <= 100_000:
+        return DEFAULT_MEMORY_BLOCK_CHAR_LIMIT
     return value
 
 
@@ -285,6 +302,7 @@ class Turn:
     extraction: Any = None
     memory_errors: list[str] = field(default_factory=list)
     memories_superseded: list[Memory] = field(default_factory=list)
+    memories_injected: list[Memory] | None = None
 
 
 class Dream:
@@ -301,6 +319,9 @@ class Dream:
         self.backend = backend or build_backend()
         self.approval_policy = approval_policy or ApprovalPolicy()
         self.max_iterations = max_iterations
+        self.memory_block_char_limit = _resolve_memory_block_char_limit(
+            os.environ.get("DREAM_MEMORY_BLOCK_CHAR_LIMIT")
+        )
         self.history: list[dict[str, Any]] = []
         self._created: list[Memory] = []
         self._superseded: list[Memory] = []
@@ -361,14 +382,33 @@ class Dream:
         """Discard conversational context without touching durable memory."""
         self.history.clear()
 
-    def _system_message(self, memories: list[Memory]) -> dict[str, str]:
+    def _memory_block(self, memories: list[Memory]) -> tuple[str, list[Memory]]:
+        """Render complete recalled-memory lines that fit the prompt budget."""
+        lines: list[str] = []
+        injected: list[Memory] = []
+        used = 0
+        for memory in sorted(memories, key=lambda memory: memory.score, reverse=True):
+            line = f"- [{_relative_age(memory.created_at)}] {memory.content}"
+            addition = len(line) + (1 if lines else 0)
+            if used + addition > self.memory_block_char_limit:
+                break
+            lines.append(line)
+            injected.append(memory)
+            used += addition
+
+        block = f"\n\n{_MEMORIES_OPEN}\n"
+        if lines:
+            block += "\n".join(lines) + "\n"
+        block += _MEMORIES_CLOSE
+        return block, injected
+
+    def _system_message(
+        self, memories: list[Memory], memory_block: str | None = None
+    ) -> dict[str, str]:
         prompt = _BASE_PROMPT + _MEMORY_USAGE
-        if memories:
-            lines = [
-                f"- [{_relative_age(memory.created_at)}] {memory.content}" for memory in memories
-            ]
-            prompt += f"\n\n{_MEMORIES_OPEN}\n" + "\n".join(lines) + f"\n{_MEMORIES_CLOSE}"
-        return {"role": "system", "content": prompt}
+        if memory_block is None:
+            memory_block, _ = self._memory_block(memories)
+        return {"role": "system", "content": prompt + memory_block}
 
     def run(self, message: str) -> Turn:
         """Run one complete user turn, including any model-requested tools."""
@@ -376,13 +416,14 @@ class Dream:
         self._created.clear()
         self._superseded.clear()
         self.store.log("user", message)
-        memories = self.store.recall(message, reinforce=True)
+        memories = self.store.recall(message, limit=8, reinforce=True)
+        memory_block, injected_memories = self._memory_block(memories)
         self.history.append({"role": "user", "content": message})
         calls_made: list[dict[str, Any]] = []
         reply = "I could not produce an answer."
 
         for _ in range(self.max_iterations):
-            messages = [self._system_message(memories), *self.history]
+            messages = [self._system_message(memories, memory_block), *self.history]
             response = self.backend.chat(messages, tools=openai_schemas())
             calls = response.get("tool_calls", [])
             if not calls:
@@ -443,6 +484,7 @@ class Dream:
             extraction=extraction_result,
             memory_errors=store_errors,
             memories_superseded=list(self._superseded),
+            memories_injected=list(injected_memories),
         )
 
     def _extraction_backend(self) -> Any:
