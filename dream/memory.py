@@ -16,6 +16,7 @@ import json
 import math
 import re
 import sqlite3
+import threading
 import time
 import unicodedata
 from collections.abc import Iterable, Sequence
@@ -250,16 +251,27 @@ HALF_LIFE_SECONDS = 30 * 24 * 3600.0
 
 
 class MemoryStore:
-    """SQLite-backed memory: one file, no external service."""
+    """SQLite-backed memory: one file, no external service.
+
+    The store is safe to share across threads: the connection is opened with
+    ``check_same_thread=False`` and every method that touches it runs under
+    one re-entrant lock.  Both halves are required — the flag alone only
+    silences the cross-thread exception while concurrent writes still lose
+    rows.  The lock is an ``RLock`` because methods call each other while
+    holding it (``remember`` into ``get``, ``recall`` into ``_like_scan``), so
+    a plain ``Lock`` would deadlock.  WAL mode stays on: it is what keeps a
+    reader cheap while one writer holds the lock.
+    """
 
     def __init__(self, path: str = "data/dream.db") -> None:
         self.path = str(path)
+        self._lock = threading.RLock()
         if self.path != ":memory:":
             import os
 
             parent = os.path.dirname(os.path.abspath(self.path))
             os.makedirs(parent, exist_ok=True)
-        self.conn = sqlite3.connect(self.path)
+        self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
@@ -269,7 +281,8 @@ class MemoryStore:
     # -- lifecycle ---------------------------------------------------------
 
     def close(self) -> None:
-        self.conn.close()
+        with self._lock:
+            self.conn.close()
 
     def __enter__(self) -> MemoryStore:
         return self
@@ -288,68 +301,71 @@ class MemoryStore:
         source: str = "",
     ) -> Memory:
         """Store a memory, or boost the existing one if it is a duplicate."""
-        if kind not in KINDS:
-            raise ValueError(f"kind must be one of {KINDS}, got {kind!r}")
-        content = content.strip()
-        if not content:
-            raise ValueError("content must not be empty")
-        norm = normalize_fa(content)
-        tag_list = [normalize_fa(t) for t in (tags or []) if t.strip()]
-        now = time.time()
+        with self._lock:
+            if kind not in KINDS:
+                raise ValueError(f"kind must be one of {KINDS}, got {kind!r}")
+            content = content.strip()
+            if not content:
+                raise ValueError("content must not be empty")
+            norm = normalize_fa(content)
+            tag_list = [normalize_fa(t) for t in (tags or []) if t.strip()]
+            now = time.time()
 
-        existing = self.conn.execute(
-            "SELECT * FROM memories WHERE norm = ? AND kind = ? AND archived = 0",
-            (norm, kind),
-        ).fetchone()
-        if existing is not None:
-            boosted = min(1.0, float(existing["importance"]) + 0.1)
-            merged = sorted(set(json.loads(existing["tags"] or "[]")) | set(tag_list))
-            self.conn.execute(
-                "UPDATE memories SET importance = ?, tags = ?, last_used_at = ? WHERE id = ?",
-                (boosted, json.dumps(merged, ensure_ascii=False), now, existing["id"]),
+            existing = self.conn.execute(
+                "SELECT * FROM memories WHERE norm = ? AND kind = ? AND archived = 0",
+                (norm, kind),
+            ).fetchone()
+            if existing is not None:
+                boosted = min(1.0, float(existing["importance"]) + 0.1)
+                merged = sorted(set(json.loads(existing["tags"] or "[]")) | set(tag_list))
+                self.conn.execute(
+                    "UPDATE memories SET importance = ?, tags = ?, last_used_at = ? WHERE id = ?",
+                    (boosted, json.dumps(merged, ensure_ascii=False), now, existing["id"]),
+                )
+                self.conn.commit()
+                return self.get(existing["id"])  # type: ignore[return-value]
+
+            cur = self.conn.execute(
+                """INSERT INTO memories
+                   (kind, content, norm, tags, importance, created_at, last_used_at,
+                    use_count, source, archived)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 0)""",
+                (
+                    kind,
+                    content,
+                    norm,
+                    json.dumps(tag_list, ensure_ascii=False),
+                    float(importance),
+                    now,
+                    now,
+                    source,
+                ),
             )
             self.conn.commit()
-            return self.get(existing["id"])  # type: ignore[return-value]
-
-        cur = self.conn.execute(
-            """INSERT INTO memories
-               (kind, content, norm, tags, importance, created_at, last_used_at,
-                use_count, source, archived)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 0)""",
-            (
-                kind,
-                content,
-                norm,
-                json.dumps(tag_list, ensure_ascii=False),
-                float(importance),
-                now,
-                now,
-                source,
-            ),
-        )
-        self.conn.commit()
-        return self.get(int(cur.lastrowid))  # type: ignore[return-value]
+            return self.get(int(cur.lastrowid))  # type: ignore[return-value]
 
     def forget(self, memory_id: int, hard: bool = False) -> bool:
         """Archive a memory (default) or delete it outright."""
-        if hard:
-            cur = self.conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
-        else:
-            cur = self.conn.execute(
-                "UPDATE memories SET archived = 1 WHERE id = ? AND archived = 0",
-                (memory_id,),
-            )
-        self.conn.commit()
-        return cur.rowcount > 0
+        with self._lock:
+            if hard:
+                cur = self.conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+            else:
+                cur = self.conn.execute(
+                    "UPDATE memories SET archived = 1 WHERE id = ? AND archived = 0",
+                    (memory_id,),
+                )
+            self.conn.commit()
+            return cur.rowcount > 0
 
     # -- reading -----------------------------------------------------------
 
     def get(self, memory_id: int, include_archived: bool = True) -> Memory | None:
-        sql = "SELECT * FROM memories WHERE id = ?"
-        if not include_archived:
-            sql += " AND archived = 0"
-        row = self.conn.execute(sql, (memory_id,)).fetchone()
-        return Memory.from_row(row) if row is not None else None
+        with self._lock:
+            sql = "SELECT * FROM memories WHERE id = ?"
+            if not include_archived:
+                sql += " AND archived = 0"
+            row = self.conn.execute(sql, (memory_id,)).fetchone()
+            return Memory.from_row(row) if row is not None else None
 
     def all(
         self,
@@ -357,19 +373,20 @@ class MemoryStore:
         include_archived: bool = False,
         limit: int | None = None,
     ) -> list[Memory]:
-        sql = "SELECT * FROM memories WHERE 1=1"
-        params: list[Any] = []
-        if not include_archived:
-            sql += " AND archived = 0"
-        kind_list = list(kinds) if kinds else []
-        if kind_list:
-            sql += f" AND kind IN ({','.join('?' * len(kind_list))})"
-            params.extend(kind_list)
-        sql += " ORDER BY created_at DESC"
-        if limit is not None:
-            sql += " LIMIT ?"
-            params.append(int(limit))
-        return [Memory.from_row(r) for r in self.conn.execute(sql, params)]
+        with self._lock:
+            sql = "SELECT * FROM memories WHERE 1=1"
+            params: list[Any] = []
+            if not include_archived:
+                sql += " AND archived = 0"
+            kind_list = list(kinds) if kinds else []
+            if kind_list:
+                sql += f" AND kind IN ({','.join('?' * len(kind_list))})"
+                params.extend(kind_list)
+            sql += " ORDER BY created_at DESC"
+            if limit is not None:
+                sql += " LIMIT ?"
+                params.append(int(limit))
+            return [Memory.from_row(r) for r in self.conn.execute(sql, params)]
 
     def recall(
         self,
@@ -379,132 +396,139 @@ class MemoryStore:
         reinforce: bool = True,
     ) -> list[Memory]:
         """Hybrid search: relevance, recency, importance and usage."""
-        kind_list = list(kinds) if kinds else []
-        match = build_match_query(query)
-        hits: list[tuple[int, float]] = []
+        with self._lock:
+            kind_list = list(kinds) if kinds else []
+            match = build_match_query(query)
+            hits: list[tuple[int, float]] = []
 
-        if match:
-            try:
-                rows = self.conn.execute(
-                    """SELECT rowid AS rid, bm25(memories_fts, 1.0, 0.5) AS rank_score
-                       FROM memories_fts WHERE memories_fts MATCH ?
-                       ORDER BY rank_score LIMIT ?""",
-                    (match, max(limit * 8, 40)),
-                ).fetchall()
-            except sqlite3.OperationalError:
-                rows = []
-            hits = [(int(r["rid"]), float(r["rank_score"])) for r in rows]
+            if match:
+                try:
+                    rows = self.conn.execute(
+                        """SELECT rowid AS rid, bm25(memories_fts, 1.0, 0.5) AS rank_score
+                           FROM memories_fts WHERE memories_fts MATCH ?
+                           ORDER BY rank_score LIMIT ?""",
+                        (match, max(limit * 8, 40)),
+                    ).fetchall()
+                except sqlite3.OperationalError:
+                    rows = []
+                hits = [(int(r["rid"]), float(r["rank_score"])) for r in rows]
 
-        if not hits:
-            hits = [(rid, -1.0) for rid in self._like_scan(query, kind_list, limit)]
+            if not hits:
+                hits = [(rid, -1.0) for rid in self._like_scan(query, kind_list, limit)]
 
-        if not hits:
-            return []
+            if not hits:
+                return []
 
-        # bm25() is negative, more negative meaning better; normalise against
-        # the best hit so relevance lands in (0, 1].
-        best = min(raw for _, raw in hits)
-        now = time.time()
-        scored: list[Memory] = []
-
-        for rid, raw in hits:
-            # Archived rows must never resurface, otherwise forget() is a lie.
-            sql = "SELECT * FROM memories WHERE id = ? AND archived = 0"
-            params: list[Any] = [rid]
-            if kind_list:
-                sql += f" AND kind IN ({','.join('?' * len(kind_list))})"
-                params.extend(kind_list)
-            row = self.conn.execute(sql, params).fetchone()
-            if row is None:
-                continue
-
-            relevance = (raw / best) if best < 0 else 0.0
-            relevance = max(0.0, min(1.0, relevance))
-            age = max(0.0, now - float(row["created_at"]))
-            recency = math.exp(-math.log(2) * age / HALF_LIFE_SECONDS)
-            importance = max(0.0, min(1.0, float(row["importance"])))
-            usage = 1.0 - math.exp(-int(row["use_count"]) / 5.0)
-
-            score = (
-                W_RELEVANCE * relevance
-                + W_RECENCY * recency
-                + W_IMPORTANCE * importance
-                + W_USAGE * usage
-            )
-            scored.append(Memory.from_row(row, score=score))
-
-        scored.sort(key=lambda m: m.score, reverse=True)
-        results = scored[:limit]
-
-        if reinforce and results:
+            # bm25() is negative, more negative meaning better; normalise against
+            # the best hit so relevance lands in (0, 1].
+            best = min(raw for _, raw in hits)
             now = time.time()
-            self.conn.executemany(
-                "UPDATE memories SET use_count = use_count + 1, last_used_at = ? WHERE id = ?",
-                [(now, m.id) for m in results],
-            )
-            self.conn.commit()
-            for m in results:
-                m.use_count += 1
-                m.last_used_at = now
+            scored: list[Memory] = []
 
-        return results
+            for rid, raw in hits:
+                # Archived rows must never resurface, otherwise forget() is a lie.
+                sql = "SELECT * FROM memories WHERE id = ? AND archived = 0"
+                params: list[Any] = [rid]
+                if kind_list:
+                    sql += f" AND kind IN ({','.join('?' * len(kind_list))})"
+                    params.extend(kind_list)
+                row = self.conn.execute(sql, params).fetchone()
+                if row is None:
+                    continue
+
+                relevance = (raw / best) if best < 0 else 0.0
+                relevance = max(0.0, min(1.0, relevance))
+                age = max(0.0, now - float(row["created_at"]))
+                recency = math.exp(-math.log(2) * age / HALF_LIFE_SECONDS)
+                importance = max(0.0, min(1.0, float(row["importance"])))
+                usage = 1.0 - math.exp(-int(row["use_count"]) / 5.0)
+
+                score = (
+                    W_RELEVANCE * relevance
+                    + W_RECENCY * recency
+                    + W_IMPORTANCE * importance
+                    + W_USAGE * usage
+                )
+                scored.append(Memory.from_row(row, score=score))
+
+            scored.sort(key=lambda m: m.score, reverse=True)
+            results = scored[:limit]
+
+            if reinforce and results:
+                now = time.time()
+                self.conn.executemany(
+                    "UPDATE memories SET use_count = use_count + 1, last_used_at = ? WHERE id = ?",
+                    [(now, m.id) for m in results],
+                )
+                self.conn.commit()
+                for m in results:
+                    m.use_count += 1
+                    m.last_used_at = now
+
+            return results
 
     def _like_scan(self, query: str, kind_list: list[str], limit: int) -> list[int]:
         """Substring fallback for when FTS finds nothing."""
-        tokens = _tokenize(query)
-        if not tokens:
-            return []
-        clauses = []
-        params: list[Any] = []
-        for token in tokens:
-            stem = _stem_fa(token)
-            clauses.append("(norm LIKE ? OR tags LIKE ?)")
-            params.extend([f"%{stem}%", f"%{stem}%"])
-        sql = f"SELECT id FROM memories WHERE archived = 0 AND ({' OR '.join(clauses)})"
-        if kind_list:
-            sql += f" AND kind IN ({','.join('?' * len(kind_list))})"
-            params.extend(kind_list)
-        sql += " ORDER BY created_at DESC LIMIT ?"
-        params.append(max(limit * 8, 40))
-        return [int(r["id"]) for r in self.conn.execute(sql, params)]
+        with self._lock:
+            tokens = _tokenize(query)
+            if not tokens:
+                return []
+            clauses = []
+            params: list[Any] = []
+            for token in tokens:
+                stem = _stem_fa(token)
+                clauses.append("(norm LIKE ? OR tags LIKE ?)")
+                params.extend([f"%{stem}%", f"%{stem}%"])
+            sql = f"SELECT id FROM memories WHERE archived = 0 AND ({' OR '.join(clauses)})"
+            if kind_list:
+                sql += f" AND kind IN ({','.join('?' * len(kind_list))})"
+                params.extend(kind_list)
+            sql += " ORDER BY created_at DESC LIMIT ?"
+            params.append(max(limit * 8, 40))
+            return [int(r["id"]) for r in self.conn.execute(sql, params)]
 
     # -- journal -----------------------------------------------------------
 
     def log(self, role: str, content: str, session_id: str = "") -> int:
-        cur = self.conn.execute(
-            "INSERT INTO journal (ts, role, content, session_id) VALUES (?, ?, ?, ?)",
-            (time.time(), role, content, session_id),
-        )
-        self.conn.commit()
-        return int(cur.lastrowid)
+        with self._lock:
+            cur = self.conn.execute(
+                "INSERT INTO journal (ts, role, content, session_id) VALUES (?, ?, ?, ?)",
+                (time.time(), role, content, session_id),
+            )
+            self.conn.commit()
+            return int(cur.lastrowid)
 
     def recent_journal(
         self, limit: int = 20, session_id: str | None = None
     ) -> list[dict[str, Any]]:
-        sql = "SELECT * FROM journal"
-        params: list[Any] = []
-        if session_id is not None:
-            sql += " WHERE session_id = ?"
-            params.append(session_id)
-        sql += " ORDER BY id DESC LIMIT ?"
-        params.append(int(limit))
-        rows = self.conn.execute(sql, params).fetchall()
-        return [dict(r) for r in reversed(rows)]
+        with self._lock:
+            sql = "SELECT * FROM journal"
+            params: list[Any] = []
+            if session_id is not None:
+                sql += " WHERE session_id = ?"
+                params.append(session_id)
+            sql += " ORDER BY id DESC LIMIT ?"
+            params.append(int(limit))
+            rows = self.conn.execute(sql, params).fetchall()
+            return [dict(r) for r in reversed(rows)]
 
     # -- introspection -----------------------------------------------------
 
     def stats(self) -> dict[str, Any]:
-        total = self.conn.execute("SELECT COUNT(*) FROM memories WHERE archived = 0").fetchone()[0]
-        archived = self.conn.execute("SELECT COUNT(*) FROM memories WHERE archived = 1").fetchone()[
-            0
-        ]
-        by_kind = {
-            row["kind"]: row["n"]
-            for row in self.conn.execute(
-                "SELECT kind, COUNT(*) AS n FROM memories WHERE archived = 0 GROUP BY kind"
-            )
-        }
-        journal = self.conn.execute("SELECT COUNT(*) FROM journal").fetchone()[0]
+        with self._lock:
+            total = self.conn.execute(
+                "SELECT COUNT(*) FROM memories WHERE archived = 0"
+            ).fetchone()[0]
+            archived = self.conn.execute(
+                "SELECT COUNT(*) FROM memories WHERE archived = 1"
+            ).fetchone()[0]
+            by_kind = {
+                row["kind"]: row["n"]
+                for row in self.conn.execute(
+                    "SELECT kind, COUNT(*) AS n FROM memories WHERE archived = 0 GROUP BY kind"
+                )
+            }
+            journal = self.conn.execute("SELECT COUNT(*) FROM journal").fetchone()[0]
         return {
             "total": int(total),
             "archived": int(archived),
