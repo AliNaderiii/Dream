@@ -13,7 +13,17 @@ from dream.agent import ApprovalPolicy, Dream, EchoBackend, Turn
 from dream.memory import MemoryStore, normalize_fa
 from dream.tools import REGISTRY
 
-KNOWN_COMMANDS = ("/mem", "/mems", "/stats", "/forget", "/tools", "/reset", "/help", "/exit")
+KNOWN_COMMANDS = (
+    "/mem",
+    "/mems",
+    "/stats",
+    "/forget",
+    "/pin",
+    "/tools",
+    "/reset",
+    "/help",
+    "/exit",
+)
 
 
 def _style(text: str, code: str, stream: TextIO) -> str:
@@ -129,6 +139,8 @@ def report_turn_activity(turn: Turn, output: Callable[[str], None] | None = None
     if turn.memories_created:
         count = len(turn.memories_created)
         output(f"[memory] stored {count} fact{'s' if count != 1 else ''}")
+    for memory in getattr(turn, "memories_superseded", []):
+        output(f"[memory] superseded #{memory.id} ({memory.content})")
     for error in getattr(turn, "memory_errors", []):
         output(f"[memory] store failed: {_truncate(error, _DETAIL_LIMIT)}")
 
@@ -166,6 +178,13 @@ def dispatch_command(text: str, dream: Dream, output: Callable[[str], None] = pr
             output(
                 "Memory archived." if store.forget(memory_id) else "No active memory has that ID."
             )
+    elif command == "/pin":
+        try:
+            memory_id = int(argument)
+        except ValueError:
+            output("Usage: /pin ID — ID must be a number.")
+        else:
+            output("Memory pinned." if store.pin(memory_id) else "No active memory has that ID.")
     elif command == "/tools":
         for name, registered in sorted(REGISTRY.items()):
             output(f"{name}: {registered.risk}")
@@ -173,7 +192,7 @@ def dispatch_command(text: str, dream: Dream, output: Callable[[str], None] = pr
         dream.reset_session()
         output("Session context cleared; long-term memories remain.")
     elif command == "/help":
-        output("/mem QUERY  /mems  /stats  /forget ID  /tools  /reset  /help  /exit")
+        output("/mem QUERY  /mems  /stats  /forget ID  /pin ID  /tools  /reset  /help  /exit")
     elif command == "/exit":
         return False
     else:

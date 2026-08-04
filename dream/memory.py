@@ -20,11 +20,12 @@ import sqlite3
 import threading
 import time
 import unicodedata
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 __all__ = [
+    "DEFAULT_CONTRADICTION_THRESHOLD",
     "Memory",
     "MemoryStore",
     "KINDS",
@@ -32,6 +33,13 @@ __all__ = [
 ]
 
 KINDS: tuple[str, ...] = ("semantic", "episodic", "procedural")
+
+# A 0.80 threshold requires the shared leading subject and predicate to cover
+# four fifths of the longer fact. It catches a one-token value swap in a
+# five-token statement while leaving the riskier three-of-four case untouched.
+DEFAULT_CONTRADICTION_THRESHOLD = 0.80
+_MIN_CONTRADICTION_PREFIX_TOKENS = 2
+
 
 # --------------------------------------------------------------------------
 # Normalisation
@@ -81,6 +89,19 @@ def normalize_fa(text: str) -> str:
     return _WS_RE.sub(" ", out).strip()
 
 
+def _resolve_contradiction_threshold(raw: str | None) -> float:
+    """Parse the contradiction threshold, falling back safely on bad input."""
+    if not raw:
+        return DEFAULT_CONTRADICTION_THRESHOLD
+    try:
+        value = float(raw.strip())
+    except (TypeError, ValueError):
+        return DEFAULT_CONTRADICTION_THRESHOLD
+    if not 0.0 <= value <= 1.0:
+        return DEFAULT_CONTRADICTION_THRESHOLD
+    return value
+
+
 # Longest suffixes first so ``هایمان`` is not shortened to ``ها`` + junk.
 _SUFFIXES: tuple[str, ...] = (
     "هایمان",
@@ -128,6 +149,29 @@ def _tokenize(text: str) -> list[str]:
     return _TOKEN_RE.findall(normalize_fa(text))
 
 
+def _stemmed_tokens(text: str) -> list[str]:
+    return [_stem_fa(token) for token in _tokenize(text)]
+
+
+def _is_contradiction(old: str, new: str, threshold: float) -> bool:
+    """Return whether two facts share a long leading frame and diverge at the tail."""
+    old_tokens = _stemmed_tokens(old)
+    new_tokens = _stemmed_tokens(new)
+    common_prefix = 0
+    for old_token, new_token in zip(old_tokens, new_tokens, strict=False):
+        if old_token != new_token:
+            break
+        common_prefix += 1
+
+    # One common word is never enough. A prefix extension is not a differing
+    # value either: both statements must still have tokens after the split.
+    if common_prefix < _MIN_CONTRADICTION_PREFIX_TOKENS:
+        return False
+    if common_prefix == min(len(old_tokens), len(new_tokens)):
+        return False
+    return common_prefix / max(len(old_tokens), len(new_tokens)) >= threshold
+
+
 def _fts_escape(term: str) -> str:
     return '"' + term.replace('"', '""') + '"'
 
@@ -166,6 +210,8 @@ class Memory:
     use_count: int = 0
     source: str = ""
     archived: bool = False
+    superseded_by: int | None = None
+    pinned: bool = False
     score: float = 0.0
 
     @classmethod
@@ -186,6 +232,10 @@ class Memory:
             use_count=int(row["use_count"]),
             source=row["source"] or "",
             archived=bool(row["archived"]),
+            superseded_by=(
+                int(row["superseded_by"]) if row["superseded_by"] is not None else None
+            ),
+            pinned=bool(row["pinned"]),
             score=score,
         )
 
@@ -201,9 +251,11 @@ CREATE TABLE IF NOT EXISTS memories (
     importance   REAL    NOT NULL DEFAULT 0.5,
     created_at   REAL    NOT NULL,
     last_used_at REAL    NOT NULL,
-    use_count    INTEGER NOT NULL DEFAULT 0,
-    source       TEXT    NOT NULL DEFAULT '',
-    archived     INTEGER NOT NULL DEFAULT 0
+    use_count      INTEGER NOT NULL DEFAULT 0,
+    source         TEXT    NOT NULL DEFAULT '',
+    archived       INTEGER NOT NULL DEFAULT 0,
+    superseded_by  INTEGER,
+    pinned         INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_memories_kind ON memories(kind);
@@ -275,6 +327,9 @@ class MemoryStore:
         self.user_id = user if user is not None else os.environ.get("DREAM_USER", "local")
         if not isinstance(self.user_id, str) or not self.user_id:
             raise ValueError("user must be a non-empty string")
+        self.contradiction_threshold = _resolve_contradiction_threshold(
+            os.environ.get("DREAM_CONTRADICTION_THRESHOLD")
+        )
         self._lock = threading.RLock()
         if self.path != ":memory:":
             parent = os.path.dirname(os.path.abspath(self.path))
@@ -285,6 +340,7 @@ class MemoryStore:
         self.conn.execute("PRAGMA foreign_keys=ON")
         self.conn.executescript(_SCHEMA)
         self._ensure_user_column()
+        self._ensure_supersession_columns()
         self.conn.commit()
 
     def _ensure_user_column(self) -> None:
@@ -305,6 +361,18 @@ class MemoryStore:
                     f"ALTER TABLE {table} ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local'"
                 )
         self.conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_user ON memories(user_id)")
+
+    def _ensure_supersession_columns(self) -> None:
+        """Add supersession state to databases created before this feature."""
+        cols = {
+            row["name"] for row in self.conn.execute("PRAGMA table_info(memories)")
+        }
+        if "superseded_by" not in cols:
+            self.conn.execute("ALTER TABLE memories ADD COLUMN superseded_by INTEGER")
+        if "pinned" not in cols:
+            self.conn.execute(
+                "ALTER TABLE memories ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0"
+            )
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -327,6 +395,7 @@ class MemoryStore:
         tags: Sequence[str] | None = None,
         importance: float = 0.5,
         source: str = "",
+        on_supersede: Callable[[Memory], None] | None = None,
     ) -> Memory:
         """Store a memory, or boost the existing one if it is a duplicate."""
         with self._lock:
@@ -361,6 +430,23 @@ class MemoryStore:
                 self.conn.commit()
                 return self.get(existing["id"])  # type: ignore[return-value]
 
+            contradictions: list[Memory] = []
+            if kind == "semantic":
+                candidates = self.conn.execute(
+                    """SELECT * FROM memories
+                       WHERE user_id = ? AND kind = 'semantic'
+                         AND archived = 0 AND pinned = 0
+                       ORDER BY id""",
+                    (self.user_id,),
+                )
+                contradictions = [
+                    Memory.from_row(row)
+                    for row in candidates
+                    if _is_contradiction(
+                        str(row["norm"]), norm, self.contradiction_threshold
+                    )
+                ]
+
             cur = self.conn.execute(
                 """INSERT INTO memories
                    (user_id, kind, content, norm, tags, importance, created_at, last_used_at,
@@ -378,8 +464,24 @@ class MemoryStore:
                     source,
                 ),
             )
+            memory_id = int(cur.lastrowid)
+            superseded: list[Memory] = []
+            for old in contradictions:
+                updated = self.conn.execute(
+                    """UPDATE memories SET archived = 1, superseded_by = ?
+                       WHERE user_id = ? AND id = ? AND archived = 0 AND pinned = 0""",
+                    (memory_id, self.user_id, old.id),
+                )
+                if updated.rowcount:
+                    old.archived = True
+                    old.superseded_by = memory_id
+                    superseded.append(old)
             self.conn.commit()
-            return self.get(int(cur.lastrowid))  # type: ignore[return-value]
+            memory = self.get(memory_id)
+            if on_supersede is not None:
+                for old in superseded:
+                    on_supersede(old)
+            return memory  # type: ignore[return-value]
 
     def forget(self, memory_id: int, hard: bool = False) -> bool:
         """Archive a memory (default) or delete it outright."""
@@ -395,6 +497,17 @@ class MemoryStore:
                        WHERE user_id = ? AND id = ? AND archived = 0""",
                     (self.user_id, memory_id),
                 )
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def pin(self, memory_id: int) -> bool:
+        """Protect one active memory from automatic supersession."""
+        with self._lock:
+            cur = self.conn.execute(
+                """UPDATE memories SET pinned = 1
+                   WHERE user_id = ? AND id = ? AND archived = 0""",
+                (self.user_id, memory_id),
+            )
             self.conn.commit()
             return cur.rowcount > 0
 
