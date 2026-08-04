@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import sqlite3
 import threading
@@ -192,6 +193,7 @@ class Memory:
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS memories (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      TEXT    NOT NULL DEFAULT 'local',
     kind         TEXT    NOT NULL,
     content      TEXT    NOT NULL,
     norm         TEXT    NOT NULL,
@@ -232,6 +234,7 @@ END;
 
 CREATE TABLE IF NOT EXISTS journal (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    TEXT    NOT NULL DEFAULT 'local',
     ts         REAL NOT NULL,
     role       TEXT NOT NULL,
     content    TEXT NOT NULL,
@@ -263,12 +266,17 @@ class MemoryStore:
     reader cheap while one writer holds the lock.
     """
 
-    def __init__(self, path: str = "data/dream.db") -> None:
+    def __init__(
+        self,
+        path: str = "data/dream.db",
+        user: str | None = None,
+    ) -> None:
         self.path = str(path)
+        self.user_id = user if user is not None else os.environ.get("DREAM_USER", "local")
+        if not isinstance(self.user_id, str) or not self.user_id:
+            raise ValueError("user must be a non-empty string")
         self._lock = threading.RLock()
         if self.path != ":memory:":
-            import os
-
             parent = os.path.dirname(os.path.abspath(self.path))
             os.makedirs(parent, exist_ok=True)
         self.conn = sqlite3.connect(self.path, check_same_thread=False)
@@ -276,7 +284,27 @@ class MemoryStore:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
         self.conn.executescript(_SCHEMA)
+        self._ensure_user_column()
         self.conn.commit()
+
+    def _ensure_user_column(self) -> None:
+        """Backfill user_id on databases created before this column existed.
+
+        Idempotent: PRAGMA table_info tells us whether the column is present;
+        running twice is a no-op.  Existing rows inherit the DEFAULT 'local'.
+        The index is created with IF NOT EXISTS so it appears on both fresh
+        and migrated files, and never errors on a repeat open.
+        """
+        for table in ("memories", "journal"):
+            cols = {
+                row["name"]
+                for row in self.conn.execute(f"PRAGMA table_info({table})")
+            }
+            if "user_id" not in cols:
+                self.conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local'"
+                )
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_user ON memories(user_id)")
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -312,25 +340,34 @@ class MemoryStore:
             now = time.time()
 
             existing = self.conn.execute(
-                "SELECT * FROM memories WHERE norm = ? AND kind = ? AND archived = 0",
-                (norm, kind),
+                """SELECT * FROM memories
+                   WHERE user_id = ? AND norm = ? AND kind = ? AND archived = 0""",
+                (self.user_id, norm, kind),
             ).fetchone()
             if existing is not None:
                 boosted = min(1.0, float(existing["importance"]) + 0.1)
                 merged = sorted(set(json.loads(existing["tags"] or "[]")) | set(tag_list))
                 self.conn.execute(
-                    "UPDATE memories SET importance = ?, tags = ?, last_used_at = ? WHERE id = ?",
-                    (boosted, json.dumps(merged, ensure_ascii=False), now, existing["id"]),
+                    """UPDATE memories SET importance = ?, tags = ?, last_used_at = ?
+                       WHERE user_id = ? AND id = ?""",
+                    (
+                        boosted,
+                        json.dumps(merged, ensure_ascii=False),
+                        now,
+                        self.user_id,
+                        existing["id"],
+                    ),
                 )
                 self.conn.commit()
                 return self.get(existing["id"])  # type: ignore[return-value]
 
             cur = self.conn.execute(
                 """INSERT INTO memories
-                   (kind, content, norm, tags, importance, created_at, last_used_at,
+                   (user_id, kind, content, norm, tags, importance, created_at, last_used_at,
                     use_count, source, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 0)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0)""",
                 (
+                    self.user_id,
                     kind,
                     content,
                     norm,
@@ -348,11 +385,15 @@ class MemoryStore:
         """Archive a memory (default) or delete it outright."""
         with self._lock:
             if hard:
-                cur = self.conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+                cur = self.conn.execute(
+                    "DELETE FROM memories WHERE user_id = ? AND id = ?",
+                    (self.user_id, memory_id),
+                )
             else:
                 cur = self.conn.execute(
-                    "UPDATE memories SET archived = 1 WHERE id = ? AND archived = 0",
-                    (memory_id,),
+                    """UPDATE memories SET archived = 1
+                       WHERE user_id = ? AND id = ? AND archived = 0""",
+                    (self.user_id, memory_id),
                 )
             self.conn.commit()
             return cur.rowcount > 0
@@ -361,10 +402,11 @@ class MemoryStore:
 
     def get(self, memory_id: int, include_archived: bool = True) -> Memory | None:
         with self._lock:
-            sql = "SELECT * FROM memories WHERE id = ?"
+            sql = "SELECT * FROM memories WHERE user_id = ? AND id = ?"
+            params: list[Any] = [self.user_id, memory_id]
             if not include_archived:
                 sql += " AND archived = 0"
-            row = self.conn.execute(sql, (memory_id,)).fetchone()
+            row = self.conn.execute(sql, params).fetchone()
             return Memory.from_row(row) if row is not None else None
 
     def all(
@@ -374,8 +416,8 @@ class MemoryStore:
         limit: int | None = None,
     ) -> list[Memory]:
         with self._lock:
-            sql = "SELECT * FROM memories WHERE 1=1"
-            params: list[Any] = []
+            sql = "SELECT * FROM memories WHERE user_id = ?"
+            params: list[Any] = [self.user_id]
             if not include_archived:
                 sql += " AND archived = 0"
             kind_list = list(kinds) if kinds else []
@@ -404,10 +446,13 @@ class MemoryStore:
             if match:
                 try:
                     rows = self.conn.execute(
-                        """SELECT rowid AS rid, bm25(memories_fts, 1.0, 0.5) AS rank_score
-                           FROM memories_fts WHERE memories_fts MATCH ?
+                        """SELECT memories_fts.rowid AS rid,
+                                  bm25(memories_fts, 1.0, 0.5) AS rank_score
+                           FROM memories_fts
+                           JOIN memories ON memories.id = memories_fts.rowid
+                           WHERE memories_fts MATCH ? AND memories.user_id = ?
                            ORDER BY rank_score LIMIT ?""",
-                        (match, max(limit * 8, 40)),
+                        (match, self.user_id, max(limit * 8, 40)),
                     ).fetchall()
                 except sqlite3.OperationalError:
                     rows = []
@@ -427,8 +472,8 @@ class MemoryStore:
 
             for rid, raw in hits:
                 # Archived rows must never resurface, otherwise forget() is a lie.
-                sql = "SELECT * FROM memories WHERE id = ? AND archived = 0"
-                params: list[Any] = [rid]
+                sql = "SELECT * FROM memories WHERE user_id = ? AND id = ? AND archived = 0"
+                params: list[Any] = [self.user_id, rid]
                 if kind_list:
                     sql += f" AND kind IN ({','.join('?' * len(kind_list))})"
                     params.extend(kind_list)
@@ -457,8 +502,9 @@ class MemoryStore:
             if reinforce and results:
                 now = time.time()
                 self.conn.executemany(
-                    "UPDATE memories SET use_count = use_count + 1, last_used_at = ? WHERE id = ?",
-                    [(now, m.id) for m in results],
+                    """UPDATE memories SET use_count = use_count + 1, last_used_at = ?
+                       WHERE user_id = ? AND id = ?""",
+                    [(now, self.user_id, m.id) for m in results],
                 )
                 self.conn.commit()
                 for m in results:
@@ -479,7 +525,11 @@ class MemoryStore:
                 stem = _stem_fa(token)
                 clauses.append("(norm LIKE ? OR tags LIKE ?)")
                 params.extend([f"%{stem}%", f"%{stem}%"])
-            sql = f"SELECT id FROM memories WHERE archived = 0 AND ({' OR '.join(clauses)})"
+            sql = (
+                "SELECT id FROM memories WHERE user_id = ? AND archived = 0 AND "
+                f"({' OR '.join(clauses)})"
+            )
+            params.insert(0, self.user_id)
             if kind_list:
                 sql += f" AND kind IN ({','.join('?' * len(kind_list))})"
                 params.extend(kind_list)
@@ -492,8 +542,9 @@ class MemoryStore:
     def log(self, role: str, content: str, session_id: str = "") -> int:
         with self._lock:
             cur = self.conn.execute(
-                "INSERT INTO journal (ts, role, content, session_id) VALUES (?, ?, ?, ?)",
-                (time.time(), role, content, session_id),
+                """INSERT INTO journal (user_id, ts, role, content, session_id)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (self.user_id, time.time(), role, content, session_id),
             )
             self.conn.commit()
             return int(cur.lastrowid)
@@ -502,10 +553,10 @@ class MemoryStore:
         self, limit: int = 20, session_id: str | None = None
     ) -> list[dict[str, Any]]:
         with self._lock:
-            sql = "SELECT * FROM journal"
-            params: list[Any] = []
+            sql = "SELECT * FROM journal WHERE user_id = ?"
+            params: list[Any] = [self.user_id]
             if session_id is not None:
-                sql += " WHERE session_id = ?"
+                sql += " AND session_id = ?"
                 params.append(session_id)
             sql += " ORDER BY id DESC LIMIT ?"
             params.append(int(limit))
@@ -517,18 +568,25 @@ class MemoryStore:
     def stats(self) -> dict[str, Any]:
         with self._lock:
             total = self.conn.execute(
-                "SELECT COUNT(*) FROM memories WHERE archived = 0"
+                "SELECT COUNT(*) FROM memories WHERE user_id = ? AND archived = 0",
+                (self.user_id,),
             ).fetchone()[0]
             archived = self.conn.execute(
-                "SELECT COUNT(*) FROM memories WHERE archived = 1"
+                "SELECT COUNT(*) FROM memories WHERE user_id = ? AND archived = 1",
+                (self.user_id,),
             ).fetchone()[0]
             by_kind = {
                 row["kind"]: row["n"]
                 for row in self.conn.execute(
-                    "SELECT kind, COUNT(*) AS n FROM memories WHERE archived = 0 GROUP BY kind"
+                    """SELECT kind, COUNT(*) AS n FROM memories
+                       WHERE user_id = ? AND archived = 0 GROUP BY kind""",
+                    (self.user_id,),
                 )
             }
-            journal = self.conn.execute("SELECT COUNT(*) FROM journal").fetchone()[0]
+            journal = self.conn.execute(
+                "SELECT COUNT(*) FROM journal WHERE user_id = ?",
+                (self.user_id,),
+            ).fetchone()[0]
         return {
             "total": int(total),
             "archived": int(archived),
