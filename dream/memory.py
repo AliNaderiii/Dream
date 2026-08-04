@@ -16,6 +16,7 @@ import json
 import math
 import re
 import sqlite3
+import threading
 import time
 import unicodedata
 from collections.abc import Iterable, Sequence
@@ -199,12 +200,15 @@ CREATE TABLE IF NOT EXISTS memories (
     created_at   REAL    NOT NULL,
     last_used_at REAL    NOT NULL,
     use_count    INTEGER NOT NULL DEFAULT 0,
+    user_id      TEXT    NOT NULL DEFAULT 'local',
     source       TEXT    NOT NULL DEFAULT '',
-    archived     INTEGER NOT NULL DEFAULT 0
+    archived     INTEGER NOT NULL DEFAULT 0,
+    superseded_by INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_memories_kind ON memories(kind);
 CREATE INDEX IF NOT EXISTS idx_memories_archived ON memories(archived);
+CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
     norm,
@@ -234,7 +238,8 @@ CREATE TABLE IF NOT EXISTS journal (
     ts         REAL NOT NULL,
     role       TEXT NOT NULL,
     content    TEXT NOT NULL,
-    session_id TEXT NOT NULL DEFAULT ''
+    session_id TEXT NOT NULL DEFAULT '',
+    user_id     TEXT    NOT NULL DEFAULT 'local'
 );
 
 CREATE INDEX IF NOT EXISTS idx_journal_session ON journal(session_id);
@@ -259,7 +264,8 @@ class MemoryStore:
 
             parent = os.path.dirname(os.path.abspath(self.path))
             os.makedirs(parent, exist_ok=True)
-        self.conn = sqlite3.connect(self.path)
+        self.conn = sqlite3.connect(self.path, check_same_thread=False)
+        self.lock = threading.RLock()
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
