@@ -14,16 +14,18 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import sqlite3
 import threading
 import time
 import unicodedata
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 __all__ = [
+    "DEFAULT_CONTRADICTION_THRESHOLD",
     "Memory",
     "MemoryStore",
     "KINDS",
@@ -31,6 +33,13 @@ __all__ = [
 ]
 
 KINDS: tuple[str, ...] = ("semantic", "episodic", "procedural")
+
+# A 0.80 threshold requires the shared leading subject and predicate to cover
+# four fifths of the longer fact. It catches a one-token value swap in a
+# five-token statement while leaving the riskier three-of-four case untouched.
+DEFAULT_CONTRADICTION_THRESHOLD = 0.80
+_MIN_CONTRADICTION_PREFIX_TOKENS = 2
+
 
 # --------------------------------------------------------------------------
 # Normalisation
@@ -80,6 +89,19 @@ def normalize_fa(text: str) -> str:
     return _WS_RE.sub(" ", out).strip()
 
 
+def _resolve_contradiction_threshold(raw: str | None) -> float:
+    """Parse the contradiction threshold, falling back safely on bad input."""
+    if not raw:
+        return DEFAULT_CONTRADICTION_THRESHOLD
+    try:
+        value = float(raw.strip())
+    except (TypeError, ValueError):
+        return DEFAULT_CONTRADICTION_THRESHOLD
+    if not 0.0 <= value <= 1.0:
+        return DEFAULT_CONTRADICTION_THRESHOLD
+    return value
+
+
 # Longest suffixes first so ``هایمان`` is not shortened to ``ها`` + junk.
 _SUFFIXES: tuple[str, ...] = (
     "هایمان",
@@ -127,6 +149,29 @@ def _tokenize(text: str) -> list[str]:
     return _TOKEN_RE.findall(normalize_fa(text))
 
 
+def _stemmed_tokens(text: str) -> list[str]:
+    return [_stem_fa(token) for token in _tokenize(text)]
+
+
+def _is_contradiction(old: str, new: str, threshold: float) -> bool:
+    """Return whether two facts share a long leading frame and diverge at the tail."""
+    old_tokens = _stemmed_tokens(old)
+    new_tokens = _stemmed_tokens(new)
+    common_prefix = 0
+    for old_token, new_token in zip(old_tokens, new_tokens, strict=False):
+        if old_token != new_token:
+            break
+        common_prefix += 1
+
+    # One common word is never enough. A prefix extension is not a differing
+    # value either: both statements must still have tokens after the split.
+    if common_prefix < _MIN_CONTRADICTION_PREFIX_TOKENS:
+        return False
+    if common_prefix == min(len(old_tokens), len(new_tokens)):
+        return False
+    return common_prefix / max(len(old_tokens), len(new_tokens)) >= threshold
+
+
 def _fts_escape(term: str) -> str:
     return '"' + term.replace('"', '""') + '"'
 
@@ -165,6 +210,8 @@ class Memory:
     use_count: int = 0
     source: str = ""
     archived: bool = False
+    superseded_by: int | None = None
+    pinned: bool = False
     score: float = 0.0
 
     @classmethod
@@ -185,6 +232,10 @@ class Memory:
             use_count=int(row["use_count"]),
             source=row["source"] or "",
             archived=bool(row["archived"]),
+            superseded_by=(
+                int(row["superseded_by"]) if row["superseded_by"] is not None else None
+            ),
+            pinned=bool(row["pinned"]),
             score=score,
         )
 
@@ -192,6 +243,7 @@ class Memory:
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS memories (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      TEXT    NOT NULL DEFAULT 'local',
     kind         TEXT    NOT NULL,
     content      TEXT    NOT NULL,
     norm         TEXT    NOT NULL,
@@ -199,9 +251,11 @@ CREATE TABLE IF NOT EXISTS memories (
     importance   REAL    NOT NULL DEFAULT 0.5,
     created_at   REAL    NOT NULL,
     last_used_at REAL    NOT NULL,
-    use_count    INTEGER NOT NULL DEFAULT 0,
-    source       TEXT    NOT NULL DEFAULT '',
-    archived     INTEGER NOT NULL DEFAULT 0
+    use_count      INTEGER NOT NULL DEFAULT 0,
+    source         TEXT    NOT NULL DEFAULT '',
+    archived       INTEGER NOT NULL DEFAULT 0,
+    superseded_by  INTEGER,
+    pinned         INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_memories_kind ON memories(kind);
@@ -232,6 +286,7 @@ END;
 
 CREATE TABLE IF NOT EXISTS journal (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    TEXT    NOT NULL DEFAULT 'local',
     ts         REAL NOT NULL,
     role       TEXT NOT NULL,
     content    TEXT NOT NULL,
@@ -263,12 +318,20 @@ class MemoryStore:
     reader cheap while one writer holds the lock.
     """
 
-    def __init__(self, path: str = "data/dream.db") -> None:
+    def __init__(
+        self,
+        path: str = "data/dream.db",
+        user: str | None = None,
+    ) -> None:
         self.path = str(path)
+        self.user_id = user if user is not None else os.environ.get("DREAM_USER", "local")
+        if not isinstance(self.user_id, str) or not self.user_id:
+            raise ValueError("user must be a non-empty string")
+        self.contradiction_threshold = _resolve_contradiction_threshold(
+            os.environ.get("DREAM_CONTRADICTION_THRESHOLD")
+        )
         self._lock = threading.RLock()
         if self.path != ":memory:":
-            import os
-
             parent = os.path.dirname(os.path.abspath(self.path))
             os.makedirs(parent, exist_ok=True)
         self.conn = sqlite3.connect(self.path, check_same_thread=False)
@@ -276,7 +339,40 @@ class MemoryStore:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
         self.conn.executescript(_SCHEMA)
+        self._ensure_user_column()
+        self._ensure_supersession_columns()
         self.conn.commit()
+
+    def _ensure_user_column(self) -> None:
+        """Backfill user_id on databases created before this column existed.
+
+        Idempotent: PRAGMA table_info tells us whether the column is present;
+        running twice is a no-op.  Existing rows inherit the DEFAULT 'local'.
+        The index is created with IF NOT EXISTS so it appears on both fresh
+        and migrated files, and never errors on a repeat open.
+        """
+        for table in ("memories", "journal"):
+            cols = {
+                row["name"]
+                for row in self.conn.execute(f"PRAGMA table_info({table})")
+            }
+            if "user_id" not in cols:
+                self.conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local'"
+                )
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_user ON memories(user_id)")
+
+    def _ensure_supersession_columns(self) -> None:
+        """Add supersession state to databases created before this feature."""
+        cols = {
+            row["name"] for row in self.conn.execute("PRAGMA table_info(memories)")
+        }
+        if "superseded_by" not in cols:
+            self.conn.execute("ALTER TABLE memories ADD COLUMN superseded_by INTEGER")
+        if "pinned" not in cols:
+            self.conn.execute(
+                "ALTER TABLE memories ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0"
+            )
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -299,6 +395,7 @@ class MemoryStore:
         tags: Sequence[str] | None = None,
         importance: float = 0.5,
         source: str = "",
+        on_supersede: Callable[[Memory], None] | None = None,
     ) -> Memory:
         """Store a memory, or boost the existing one if it is a duplicate."""
         with self._lock:
@@ -312,25 +409,51 @@ class MemoryStore:
             now = time.time()
 
             existing = self.conn.execute(
-                "SELECT * FROM memories WHERE norm = ? AND kind = ? AND archived = 0",
-                (norm, kind),
+                """SELECT * FROM memories
+                   WHERE user_id = ? AND norm = ? AND kind = ? AND archived = 0""",
+                (self.user_id, norm, kind),
             ).fetchone()
             if existing is not None:
                 boosted = min(1.0, float(existing["importance"]) + 0.1)
                 merged = sorted(set(json.loads(existing["tags"] or "[]")) | set(tag_list))
                 self.conn.execute(
-                    "UPDATE memories SET importance = ?, tags = ?, last_used_at = ? WHERE id = ?",
-                    (boosted, json.dumps(merged, ensure_ascii=False), now, existing["id"]),
+                    """UPDATE memories SET importance = ?, tags = ?, last_used_at = ?
+                       WHERE user_id = ? AND id = ?""",
+                    (
+                        boosted,
+                        json.dumps(merged, ensure_ascii=False),
+                        now,
+                        self.user_id,
+                        existing["id"],
+                    ),
                 )
                 self.conn.commit()
                 return self.get(existing["id"])  # type: ignore[return-value]
 
+            contradictions: list[Memory] = []
+            if kind == "semantic":
+                candidates = self.conn.execute(
+                    """SELECT * FROM memories
+                       WHERE user_id = ? AND kind = 'semantic'
+                         AND archived = 0 AND pinned = 0
+                       ORDER BY id""",
+                    (self.user_id,),
+                )
+                contradictions = [
+                    Memory.from_row(row)
+                    for row in candidates
+                    if _is_contradiction(
+                        str(row["norm"]), norm, self.contradiction_threshold
+                    )
+                ]
+
             cur = self.conn.execute(
                 """INSERT INTO memories
-                   (kind, content, norm, tags, importance, created_at, last_used_at,
+                   (user_id, kind, content, norm, tags, importance, created_at, last_used_at,
                     use_count, source, archived)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 0)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0)""",
                 (
+                    self.user_id,
                     kind,
                     content,
                     norm,
@@ -341,19 +464,50 @@ class MemoryStore:
                     source,
                 ),
             )
+            memory_id = int(cur.lastrowid)
+            superseded: list[Memory] = []
+            for old in contradictions:
+                updated = self.conn.execute(
+                    """UPDATE memories SET archived = 1, superseded_by = ?
+                       WHERE user_id = ? AND id = ? AND archived = 0 AND pinned = 0""",
+                    (memory_id, self.user_id, old.id),
+                )
+                if updated.rowcount:
+                    old.archived = True
+                    old.superseded_by = memory_id
+                    superseded.append(old)
             self.conn.commit()
-            return self.get(int(cur.lastrowid))  # type: ignore[return-value]
+            memory = self.get(memory_id)
+            if on_supersede is not None:
+                for old in superseded:
+                    on_supersede(old)
+            return memory  # type: ignore[return-value]
 
     def forget(self, memory_id: int, hard: bool = False) -> bool:
         """Archive a memory (default) or delete it outright."""
         with self._lock:
             if hard:
-                cur = self.conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+                cur = self.conn.execute(
+                    "DELETE FROM memories WHERE user_id = ? AND id = ?",
+                    (self.user_id, memory_id),
+                )
             else:
                 cur = self.conn.execute(
-                    "UPDATE memories SET archived = 1 WHERE id = ? AND archived = 0",
-                    (memory_id,),
+                    """UPDATE memories SET archived = 1
+                       WHERE user_id = ? AND id = ? AND archived = 0""",
+                    (self.user_id, memory_id),
                 )
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def pin(self, memory_id: int) -> bool:
+        """Protect one active memory from automatic supersession."""
+        with self._lock:
+            cur = self.conn.execute(
+                """UPDATE memories SET pinned = 1
+                   WHERE user_id = ? AND id = ? AND archived = 0""",
+                (self.user_id, memory_id),
+            )
             self.conn.commit()
             return cur.rowcount > 0
 
@@ -361,10 +515,11 @@ class MemoryStore:
 
     def get(self, memory_id: int, include_archived: bool = True) -> Memory | None:
         with self._lock:
-            sql = "SELECT * FROM memories WHERE id = ?"
+            sql = "SELECT * FROM memories WHERE user_id = ? AND id = ?"
+            params: list[Any] = [self.user_id, memory_id]
             if not include_archived:
                 sql += " AND archived = 0"
-            row = self.conn.execute(sql, (memory_id,)).fetchone()
+            row = self.conn.execute(sql, params).fetchone()
             return Memory.from_row(row) if row is not None else None
 
     def all(
@@ -374,8 +529,8 @@ class MemoryStore:
         limit: int | None = None,
     ) -> list[Memory]:
         with self._lock:
-            sql = "SELECT * FROM memories WHERE 1=1"
-            params: list[Any] = []
+            sql = "SELECT * FROM memories WHERE user_id = ?"
+            params: list[Any] = [self.user_id]
             if not include_archived:
                 sql += " AND archived = 0"
             kind_list = list(kinds) if kinds else []
@@ -404,10 +559,13 @@ class MemoryStore:
             if match:
                 try:
                     rows = self.conn.execute(
-                        """SELECT rowid AS rid, bm25(memories_fts, 1.0, 0.5) AS rank_score
-                           FROM memories_fts WHERE memories_fts MATCH ?
+                        """SELECT memories_fts.rowid AS rid,
+                                  bm25(memories_fts, 1.0, 0.5) AS rank_score
+                           FROM memories_fts
+                           JOIN memories ON memories.id = memories_fts.rowid
+                           WHERE memories_fts MATCH ? AND memories.user_id = ?
                            ORDER BY rank_score LIMIT ?""",
-                        (match, max(limit * 8, 40)),
+                        (match, self.user_id, max(limit * 8, 40)),
                     ).fetchall()
                 except sqlite3.OperationalError:
                     rows = []
@@ -427,8 +585,8 @@ class MemoryStore:
 
             for rid, raw in hits:
                 # Archived rows must never resurface, otherwise forget() is a lie.
-                sql = "SELECT * FROM memories WHERE id = ? AND archived = 0"
-                params: list[Any] = [rid]
+                sql = "SELECT * FROM memories WHERE user_id = ? AND id = ? AND archived = 0"
+                params: list[Any] = [self.user_id, rid]
                 if kind_list:
                     sql += f" AND kind IN ({','.join('?' * len(kind_list))})"
                     params.extend(kind_list)
@@ -457,8 +615,9 @@ class MemoryStore:
             if reinforce and results:
                 now = time.time()
                 self.conn.executemany(
-                    "UPDATE memories SET use_count = use_count + 1, last_used_at = ? WHERE id = ?",
-                    [(now, m.id) for m in results],
+                    """UPDATE memories SET use_count = use_count + 1, last_used_at = ?
+                       WHERE user_id = ? AND id = ?""",
+                    [(now, self.user_id, m.id) for m in results],
                 )
                 self.conn.commit()
                 for m in results:
@@ -479,7 +638,11 @@ class MemoryStore:
                 stem = _stem_fa(token)
                 clauses.append("(norm LIKE ? OR tags LIKE ?)")
                 params.extend([f"%{stem}%", f"%{stem}%"])
-            sql = f"SELECT id FROM memories WHERE archived = 0 AND ({' OR '.join(clauses)})"
+            sql = (
+                "SELECT id FROM memories WHERE user_id = ? AND archived = 0 AND "
+                f"({' OR '.join(clauses)})"
+            )
+            params.insert(0, self.user_id)
             if kind_list:
                 sql += f" AND kind IN ({','.join('?' * len(kind_list))})"
                 params.extend(kind_list)
@@ -492,8 +655,9 @@ class MemoryStore:
     def log(self, role: str, content: str, session_id: str = "") -> int:
         with self._lock:
             cur = self.conn.execute(
-                "INSERT INTO journal (ts, role, content, session_id) VALUES (?, ?, ?, ?)",
-                (time.time(), role, content, session_id),
+                """INSERT INTO journal (user_id, ts, role, content, session_id)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (self.user_id, time.time(), role, content, session_id),
             )
             self.conn.commit()
             return int(cur.lastrowid)
@@ -502,10 +666,10 @@ class MemoryStore:
         self, limit: int = 20, session_id: str | None = None
     ) -> list[dict[str, Any]]:
         with self._lock:
-            sql = "SELECT * FROM journal"
-            params: list[Any] = []
+            sql = "SELECT * FROM journal WHERE user_id = ?"
+            params: list[Any] = [self.user_id]
             if session_id is not None:
-                sql += " WHERE session_id = ?"
+                sql += " AND session_id = ?"
                 params.append(session_id)
             sql += " ORDER BY id DESC LIMIT ?"
             params.append(int(limit))
@@ -517,18 +681,25 @@ class MemoryStore:
     def stats(self) -> dict[str, Any]:
         with self._lock:
             total = self.conn.execute(
-                "SELECT COUNT(*) FROM memories WHERE archived = 0"
+                "SELECT COUNT(*) FROM memories WHERE user_id = ? AND archived = 0",
+                (self.user_id,),
             ).fetchone()[0]
             archived = self.conn.execute(
-                "SELECT COUNT(*) FROM memories WHERE archived = 1"
+                "SELECT COUNT(*) FROM memories WHERE user_id = ? AND archived = 1",
+                (self.user_id,),
             ).fetchone()[0]
             by_kind = {
                 row["kind"]: row["n"]
                 for row in self.conn.execute(
-                    "SELECT kind, COUNT(*) AS n FROM memories WHERE archived = 0 GROUP BY kind"
+                    """SELECT kind, COUNT(*) AS n FROM memories
+                       WHERE user_id = ? AND archived = 0 GROUP BY kind""",
+                    (self.user_id,),
                 )
             }
-            journal = self.conn.execute("SELECT COUNT(*) FROM journal").fetchone()[0]
+            journal = self.conn.execute(
+                "SELECT COUNT(*) FROM journal WHERE user_id = ?",
+                (self.user_id,),
+            ).fetchone()[0]
         return {
             "total": int(total),
             "archived": int(archived),

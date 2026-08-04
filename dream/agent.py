@@ -284,6 +284,7 @@ class Turn:
     elapsed_seconds: float
     extraction: Any = None
     memory_errors: list[str] = field(default_factory=list)
+    memories_superseded: list[Memory] = field(default_factory=list)
 
 
 class Dream:
@@ -302,11 +303,13 @@ class Dream:
         self.max_iterations = max_iterations
         self.history: list[dict[str, Any]] = []
         self._created: list[Memory] = []
+        self._superseded: list[Memory] = []
         self._register_memory_tools()
 
     def _register_memory_tools(self) -> None:
         store = self.store
         created = self._created
+        superseded = self._superseded
 
         @tool(risk="guarded")
         def remember_fact(
@@ -324,6 +327,7 @@ class Dream:
                 kind=normalize_kind(kind),
                 importance=normalize_importance(importance),
                 tags=tags or [],
+                on_supersede=superseded.append,
             )
             created.append(memory)
             return {
@@ -370,6 +374,7 @@ class Dream:
         """Run one complete user turn, including any model-requested tools."""
         started = time.monotonic()
         self._created.clear()
+        self._superseded.clear()
         self.store.log("user", message)
         memories = self.store.recall(message, reinforce=True)
         self.history.append({"role": "user", "content": message})
@@ -416,6 +421,7 @@ class Dream:
                     kind=fact.kind,
                     importance=fact.importance,
                     source="extraction",
+                    on_supersede=self._superseded.append,
                 )
                 if not any(m.id == memory.id for m in self._created):
                     self._created.append(memory)
@@ -436,6 +442,7 @@ class Dream:
             time.monotonic() - started,
             extraction=extraction_result,
             memory_errors=store_errors,
+            memories_superseded=list(self._superseded),
         )
 
     def _extraction_backend(self) -> Any:
