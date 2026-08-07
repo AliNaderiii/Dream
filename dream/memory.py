@@ -556,6 +556,23 @@ CREATE TABLE IF NOT EXISTS journal (
 );
 
 CREATE INDEX IF NOT EXISTS idx_journal_session ON journal(session_id);
+
+CREATE TABLE IF NOT EXISTS reminders (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        TEXT    NOT NULL DEFAULT 'local',
+    text           TEXT    NOT NULL,
+    due_at         REAL    NOT NULL,
+    next_due       REAL    NOT NULL,
+    repeat_days    INTEGER,
+    repeat_months  INTEGER,
+    last_fired_at  REAL,
+    created_at     REAL    NOT NULL,
+    active         INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id);
+CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(due_at);
+CREATE INDEX IF NOT EXISTS idx_reminders_active ON reminders(active);
 """
 
 # Hybrid scoring weights.
@@ -606,6 +623,7 @@ class MemoryStore:
         self.conn.executescript(_SCHEMA)
         self._ensure_user_column()
         self._ensure_supersession_columns()
+        self._ensure_reminders_table()
         self.conn.commit()
 
     def _ensure_user_column(self) -> None:
@@ -638,6 +656,66 @@ class MemoryStore:
             self.conn.execute(
                 "ALTER TABLE memories ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0"
             )
+
+    def _ensure_reminders_table(self) -> None:
+        """Create reminders table and add missing columns for old databases."""
+        self.conn.execute(
+            """CREATE TABLE IF NOT EXISTS reminders (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id        TEXT    NOT NULL DEFAULT 'local',
+                text           TEXT    NOT NULL,
+                due_at         REAL    NOT NULL,
+                next_due       REAL    NOT NULL,
+                repeat_days    INTEGER,
+                repeat_months  INTEGER,
+                last_fired_at  REAL,
+                created_at     REAL    NOT NULL,
+                active         INTEGER NOT NULL DEFAULT 1
+            )"""
+        )
+        cols = {
+            row["name"] for row in self.conn.execute("PRAGMA table_info(reminders)")
+        }
+        if "text" not in cols:
+            self.conn.execute(
+                "ALTER TABLE reminders ADD COLUMN text TEXT NOT NULL DEFAULT ''"
+            )
+        if "due_at" not in cols:
+            self.conn.execute(
+                "ALTER TABLE reminders ADD COLUMN due_at REAL NOT NULL DEFAULT 0"
+            )
+        if "next_due" not in cols:
+            self.conn.execute("ALTER TABLE reminders ADD COLUMN next_due REAL")
+            self.conn.execute(
+                "UPDATE reminders SET next_due = due_at WHERE next_due IS NULL"
+            )
+        if "repeat_days" not in cols:
+            self.conn.execute("ALTER TABLE reminders ADD COLUMN repeat_days INTEGER")
+        if "repeat_months" not in cols:
+            self.conn.execute("ALTER TABLE reminders ADD COLUMN repeat_months INTEGER")
+        if "last_fired_at" not in cols:
+            self.conn.execute("ALTER TABLE reminders ADD COLUMN last_fired_at REAL")
+        if "created_at" not in cols:
+            self.conn.execute(
+                "ALTER TABLE reminders ADD COLUMN created_at REAL NOT NULL DEFAULT 0"
+            )
+        if "active" not in cols:
+            self.conn.execute(
+                "ALTER TABLE reminders ADD COLUMN active INTEGER NOT NULL DEFAULT 1"
+            )
+        if "user_id" not in cols:
+            self.conn.execute(
+                "ALTER TABLE reminders ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local'"
+            )
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id)"
+        )
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(due_at)"
+        )
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_reminders_active ON reminders(active)"
+        )
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -1072,6 +1150,49 @@ class MemoryStore:
             params.append(int(limit))
             rows = self.conn.execute(sql, params).fetchall()
             return [dict(r) for r in reversed(rows)]
+
+    # -- reminders ---------------------------------------------------------
+
+    def add_reminder(
+        self,
+        text: str,
+        due_at: float,
+        repeat_days: int | None = None,
+        repeat_months: int | None = None,
+    ):
+        """Add a reminder for the owning user.
+
+        Delegates to :mod:`dream.reminders` so the schema logic stays in one
+        place. Mirrors the store's lock and user filtering conventions.
+        """
+        from dream.reminders import add_reminder as _add
+
+        return _add(self, text, due_at, repeat_days, repeat_months)
+
+    def list_reminders(self, include_inactive: bool = False):
+        """List reminders for the owning user, active by default."""
+        from dream.reminders import list_reminders as _list
+
+        return _list(self, include_inactive)
+
+    def get_reminder(self, reminder_id: int):
+        """Fetch one reminder by id, filtered by user."""
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT * FROM reminders WHERE user_id = ? AND id = ?",
+                (self.user_id, reminder_id),
+            ).fetchone()
+            if row is None:
+                return None
+            from dream.reminders import _row_to_reminder
+
+            return _row_to_reminder(row)
+
+    def check_due_reminders(self, now: float | None = None):
+        """Run the due check for the owning user."""
+        from dream.reminders import check_due_reminders as _check
+
+        return _check(self, now)
 
     # -- introspection -----------------------------------------------------
 
