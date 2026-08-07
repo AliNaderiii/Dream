@@ -330,6 +330,7 @@ class Turn:
     extraction: Any = None
     memory_errors: list[str] = field(default_factory=list)
     memories_superseded: list[Memory] = field(default_factory=list)
+    memories_merged: list[Memory] = field(default_factory=list)
     memories_injected: list[Memory] | None = None
 
 
@@ -353,12 +354,14 @@ class Dream:
         self.history: list[dict[str, Any]] = []
         self._created: list[Memory] = []
         self._superseded: list[Memory] = []
+        self._merged: list[Memory] = []
         self._register_memory_tools()
 
     def _register_memory_tools(self) -> None:
         store = self.store
         created = self._created
         superseded = self._superseded
+        merged = self._merged
 
         @tool(risk="guarded")
         def remember_fact(
@@ -377,6 +380,7 @@ class Dream:
                 importance=normalize_importance(importance),
                 tags=tags or [],
                 on_supersede=superseded.append,
+                on_merge=merged.append,
             )
             created.append(memory)
             return {
@@ -443,6 +447,7 @@ class Dream:
         started = time.monotonic()
         self._created.clear()
         self._superseded.clear()
+        self._merged.clear()
         self.store.log("user", message)
         memories = self.store.recall(message, limit=8, reinforce=True)
         memory_block, injected_memories = self._memory_block(memories)
@@ -491,6 +496,7 @@ class Dream:
                     importance=fact.importance,
                     source="extraction",
                     on_supersede=self._superseded.append,
+                    on_merge=self._merged.append,
                 )
                 if not any(m.id == memory.id for m in self._created):
                     self._created.append(memory)
@@ -512,6 +518,7 @@ class Dream:
             extraction=extraction_result,
             memory_errors=store_errors,
             memories_superseded=list(self._superseded),
+            memories_merged=list(self._merged),
             memories_injected=list(injected_memories),
         )
 
