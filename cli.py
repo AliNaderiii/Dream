@@ -20,6 +20,8 @@ KNOWN_COMMANDS = (
     "/forget",
     "/dedupe",
     "/pin",
+    "/remind",
+    "/reminders",
     "/tools",
     "/reset",
     "/help",
@@ -47,6 +49,102 @@ def _print_memories(store: MemoryStore, output: Callable[[str], None]) -> None:
         output(
             f"{memory.id}  {memory.kind:<10} importance={memory.importance:.2f}  {memory.content}"
         )
+
+
+def _format_repeat(repeat_days, repeat_months) -> str:
+    if repeat_days is not None:
+        return f"every {repeat_days} days"
+    if repeat_months is not None:
+        return f"every {repeat_months} months"
+    return ""
+
+
+def _parse_remind_args(argument: str):
+    """Parse /remind arguments.
+
+    Returns (due_at, repeat_days, repeat_months, text, error).
+    Accepts YYYY-MM-DD; year below 1700 is Jalali.
+    """
+    import re
+
+    from dream.reminders import parse_date_to_timestamp
+
+    if not argument.strip():
+        return None, None, None, None, (
+            "Usage: /remind YYYY-MM-DD TEXT [repeat] \u2014 "
+            "date as Jalali (year <1700) or Gregorian, repeat as "
+            "'every N days' or 'every N months'"
+        )
+    # extract leading date
+    m = re.match(r"^\s*(\d{4})\s*[-/.\s]\s*(\d{1,2})\s*[-/.\s]\s*(\d{1,2})\b", argument)
+    if not m:
+        return None, None, None, None, (
+            "Unparseable date. Usage: /remind YYYY-MM-DD TEXT \u2014 "
+            "example /remind 1405-05-16 pay bill"
+        )
+    date_str = m.group(0).strip()
+    rest = argument[m.end():].strip()
+    try:
+        due_at = parse_date_to_timestamp(date_str)
+    except ValueError as exc:
+        return None, None, None, None, (
+            f"Invalid date: {exc}. Usage: /remind YYYY-MM-DD TEXT"
+        )
+    repeat_days = None
+    repeat_months = None
+    # try to consume repeat spec at start of rest
+    # patterns: --repeat-days N, --repeat-months N, every N days/months,
+    # repeat N days/months, N days/months
+    # year below 1700 is Jalali \u2014 handled in parse_date_to_timestamp
+    dm = re.match(r"^\s*--repeat[-_]days\s+(\d+)\b\s*", rest, re.IGNORECASE)
+    if dm:
+        repeat_days = int(dm.group(1))
+        rest = rest[dm.end():].strip()
+    else:
+        dm = re.match(r"^\s*--repeat[-_]months\s+(\d+)\b\s*", rest, re.IGNORECASE)
+        if dm:
+            repeat_months = int(dm.group(1))
+            rest = rest[dm.end():].strip()
+        else:
+            dm = re.match(
+                r"^\s*(?:repeat|every)\s+(\d+)\s*(days?|months?)\b\s*",
+                rest,
+                re.IGNORECASE,
+            )
+            if dm:
+                num = int(dm.group(1))
+                unit = dm.group(2).lower()
+                if unit.startswith("day"):
+                    repeat_days = num
+                else:
+                    repeat_months = num
+                rest = rest[dm.end():].strip()
+            else:
+                dm = re.match(r"^\s*(\d+)\s*(days?|months?)\b\s*", rest, re.IGNORECASE)
+                if dm:
+                    num = int(dm.group(1))
+                    unit = dm.group(2).lower()
+                    after = rest[dm.end():].strip()
+                    if after:
+                        if unit.startswith("day"):
+                            repeat_days = num
+                        else:
+                            repeat_months = num
+                        rest = after
+    if repeat_days == 0 or repeat_months == 0:
+        return None, None, None, None, (
+            "Repeat must be non-zero. Usage: /remind YYYY-MM-DD TEXT "
+            "[every N days|every N months]"
+        )
+    if repeat_days is not None and repeat_months is not None:
+        return None, None, None, None, "Repeat must be either days or months, not both."
+    text = rest.strip()
+    if not text:
+        return None, None, None, None, (
+            "Missing text. Usage: /remind YYYY-MM-DD TEXT "
+            "[every N days|every N months]"
+        )
+    return due_at, repeat_days, repeat_months, text, None
 
 
 # --------------------------------------------------------------------------
@@ -215,6 +313,37 @@ def dispatch_command(
             output("Usage: /pin ID — ID must be a number.")
         else:
             output("Memory pinned." if store.pin(memory_id) else "No active memory has that ID.")
+    elif command in ("/remind", "/reminder"):
+        due_at, repeat_days, repeat_months, text, error = _parse_remind_args(argument)
+        if error:
+            output(error)
+        else:
+            try:
+                rem = store.add_reminder(text, due_at, repeat_days, repeat_months)
+                from dream.reminders import format_jalali
+
+                due_str = format_jalali(rem.due_at)
+                rep = _format_repeat(rem.repeat_days, rem.repeat_months)
+                rep_part = f" {rep}" if rep else ""
+                output(f"Reminder #{rem.id} set for {due_str}{rep_part}: {rem.text}")
+            except ValueError as exc:
+                output(str(exc))
+            except Exception as exc:
+                output(f"Failed to add reminder: {exc}")
+    elif command in ("/reminders", "/reminder-list", "/reminds"):
+        include_all = argument.strip().lower() in ("all", "--all", "inactive")
+        rems = store.list_reminders(include_inactive=include_all)
+        if not rems:
+            output("No reminders." if not include_all else "No reminders.")
+        else:
+            from dream.reminders import format_jalali
+
+            for r in rems:
+                due_str = format_jalali(r.due_at)
+                rep = _format_repeat(r.repeat_days, r.repeat_months)
+                rep_part = f" {rep}" if rep else ""
+                status = "" if r.active else " [inactive]"
+                output(f"{r.id}  {due_str}{rep_part}  {r.text}{status}")
     elif command == "/tools":
         for name, registered in sorted(REGISTRY.items()):
             output(f"{name}: {registered.risk}")
@@ -224,7 +353,8 @@ def dispatch_command(
     elif command == "/help":
         output(
             "/mem QUERY  /mems  /stats  /forget ID  /dedupe [confirm]  "
-            "/pin ID  /tools  /reset  /help  /exit"
+            "/pin ID  /remind YYYY-MM-DD TEXT [every N days|months]  "
+            "/reminders  /tools  /reset  /help  /exit"
         )
     elif command == "/exit":
         return False
@@ -315,6 +445,14 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with MemoryStore(args.db) as store:
             dream = Dream(store, build_backend(args.backend), policy)
+            # startup due check: find everything due, show it, mark it
+            try:
+                due = store.check_due_reminders()
+            except Exception:
+                due = []
+            if due and not args.quiet:
+                for _r in due:
+                    print(f"[reminder] {_r.text}", file=sys.stderr)
             if args.memories:
                 _print_memories(store, print)
             owner = f", {args.owner}" if args.owner else ""
