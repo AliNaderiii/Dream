@@ -176,14 +176,133 @@ def _fts_escape(term: str) -> str:
     return '"' + term.replace('"', '""') + '"'
 
 
+# --------------------------------------------------------------------------
+# Persian synonym expansion
+# --------------------------------------------------------------------------
+
+# Lexical search matches words, not meaning: a memory stored with one word
+# for "name" is invisible to a question asked with the other, because the
+# stemmed tokens share nothing.  These groups let build_match_query also
+# search the query's synonyms.  Membership is deliberately strict: two words
+# share a group only when swapping one for the other in a sentence about the
+# user keeps the meaning unchanged.  Words that merely appear in similar
+# contexts do not belong together, so every group stays small.
+#
+# Every string is written as backslash-u escapes, matching
+# tests/test_extraction_prompt.py, so copying this table between editors
+# cannot corrupt it.  The inline glosses give the plain spellings:
+_SYNONYM_GROUPS: tuple[tuple[str, ...], ...] = (
+    # name: نام, اسم
+    ("\u0646\u0627\u0645", "\u0627\u0633\u0645"),
+    # work/occupation: شغل, کار, حرفه
+    ("\u0634\u063a\u0644", "\u06a9\u0627\u0631", "\u062d\u0631\u0641\u0647"),
+    # home: خانه, منزل
+    ("\u062e\u0627\u0646\u0647", "\u0645\u0646\u0632\u0644"),
+    # spouse: همسر, زن, شوهر (همسر is the neutral term; زن and شوهر are its
+    # colloquial stand-ins when asking who someone's spouse is)
+    ("\u0647\u0645\u0633\u0631", "\u0632\u0646", "\u0634\u0648\u0647\u0631"),
+    # car: خودرو, ماشین, اتومبیل
+    (
+        "\u062e\u0648\u062f\u0631\u0648",
+        "\u0645\u0627\u0634\u06cc\u0646",
+        "\u0627\u062a\u0648\u0645\u0628\u06cc\u0644",
+    ),
+    # phone: تلفن, گوشی, موبایل
+    (
+        "\u062a\u0644\u0641\u0646",
+        "\u06af\u0648\u0634\u06cc",
+        "\u0645\u0648\u0628\u0627\u06cc\u0644",
+    ),
+    # city/hometown: شهر, شهرستان (شهرستان stands for hometown in
+    # colloquial use)
+    ("\u0634\u0647\u0631", "\u0634\u0647\u0631\u0633\u062a\u0627\u0646"),
+    # age: سن, عمر
+    ("\u0633\u0646", "\u0639\u0645\u0631"),
+    # friend: دوست, رفیق
+    ("\u062f\u0648\u0633\u062a", "\u0631\u0641\u06cc\u0642"),
+    # money: پول, وجه
+    ("\u067e\u0648\u0644", "\u0648\u062c\u0647"),
+    # income: درآمد, حقوق
+    ("\u062f\u0631\u0622\u0645\u062f", "\u062d\u0642\u0648\u0642"),
+    # address: آدرس, نشانی
+    ("\u0622\u062f\u0631\u0633", "\u0646\u0634\u0627\u0646\u06cc"),
+    # birthday: تولد, زادروز
+    ("\u062a\u0648\u0644\u062f", "\u0632\u0627\u062f\u0631\u0648\u0632"),
+    # family: خانواده, فامیل
+    ("\u062e\u0627\u0646\u0648\u0627\u062f\u0647", "\u0641\u0627\u0645\u06cc\u0644"),
+    # child: بچه, فرزند
+    ("\u0628\u0686\u0647", "\u0641\u0631\u0632\u0646\u062f"),
+    # workplace: دفتر, اداره
+    ("\u062f\u0641\u062a\u0631", "\u0627\u062f\u0627\u0631\u0647"),
+)
+
+
+def _load_extra_synonym_groups() -> tuple[tuple[str, ...], ...]:
+    """Read extra synonym groups from the JSON file named by DREAM_SYNONYMS.
+
+    The file must hold a JSON list of groups, each group a list of strings —
+    nothing else.  A missing path, unreadable file, malformed JSON or wrongly
+    shaped data all fall back to no extra groups: retrieval must never break
+    on a bad override file.
+    """
+    path = os.environ.get("DREAM_SYNONYMS", "")
+    if not path:
+        return ()
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return ()
+    if not isinstance(data, list):
+        return ()
+    for group in data:
+        if not isinstance(group, list) or not all(isinstance(w, str) for w in group):
+            return ()
+    return tuple(tuple(group) for group in data)
+
+
+def _build_synonym_index(
+    groups: Iterable[Sequence[str]],
+) -> dict[str, tuple[str, ...]]:
+    """Index every group member's stem onto its group's stemmed members.
+
+    Members are normalised and stemmed with the existing helpers, so an
+    inflected query form reaches its group through the stem of its token.
+    Built once at import; a query then looks its stem up at no extra cost.
+    """
+    index: dict[str, tuple[str, ...]] = {}
+    for group in groups:
+        members: list[str] = []
+        for word in group:
+            for token in _tokenize(word):
+                stem = _stem_fa(token)
+                if stem not in members:
+                    members.append(stem)
+        member_tuple = tuple(members)
+        for word in group:
+            for token in _tokenize(word):
+                index[_stem_fa(token)] = member_tuple
+    return index
+
+
+_SYNONYM_INDEX: dict[str, tuple[str, ...]] = _build_synonym_index(
+    (*_SYNONYM_GROUPS, *_load_extra_synonym_groups())
+)
+
+
 def build_match_query(query: str) -> str:
     """Build an FTS5 MATCH expression: every token as an exact term OR a
-    prefix search on its stem."""
+    prefix search on its stem, plus the token's synonym group when it has
+    one, so a question phrased with a synonym still reaches the memory."""
     clauses: list[str] = []
     seen: set[str] = set()
     for token in _tokenize(query):
         stem = _stem_fa(token)
-        for clause in (_fts_escape(token), _fts_escape(stem) + "*"):
+        expanded = [_fts_escape(token), _fts_escape(stem) + "*"]
+        for synonym in _SYNONYM_INDEX.get(stem, ()):
+            expanded.append(_fts_escape(synonym))
+            expanded.append(_fts_escape(synonym) + "*")
+        for clause in expanded:
             if clause not in seen:
                 seen.add(clause)
                 clauses.append(clause)
