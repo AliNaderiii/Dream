@@ -340,3 +340,168 @@ def test_quiet_does_not_mute_command_replies(tmp_path, monkeypatch):
     assert "quiet visible fact" in out
     assert "/remind" in out
     assert "[reminder]" not in err
+
+
+# ---------------------------------------------------------------------------
+# Anchor-day ratchet fix
+# ---------------------------------------------------------------------------
+
+
+def test_anchor_full_thirteen_step_sequence(store):
+    start = _ts(1405, 1, 31)
+    cur = start
+    expected = [
+        "1405-02-31",
+        "1405-03-31",
+        "1405-04-31",
+        "1405-05-31",
+        "1405-06-31",
+        "1405-07-30",
+        "1405-08-30",
+        "1405-09-30",
+        "1405-10-30",
+        "1405-11-30",
+        "1405-12-29",
+        "1406-01-31",
+        "1406-02-31",
+    ]
+    anchor = 31
+    for exp in expected:
+        cur = advance_due_date(cur, None, 1, anchor)
+        assert format_jalali(cur) == exp
+
+
+def test_anchor_31_through_mehr_returns_to_31(store):
+    ts = _ts(1405, 1, 31)
+    r = store.add_reminder("anchor 31", ts, repeat_months=1)
+    assert r.anchor_day == 31
+    # advance through the clamped months via store
+    cur = ts
+    for _ in range(11):
+        cur = advance_due_date(cur, None, 1, r.anchor_day)
+    # after 11 steps we are at 1405-12-29 (clamped)
+    assert format_jalali(cur) == "1405-12-29"
+    nxt = advance_due_date(cur, None, 1, r.anchor_day)
+    assert format_jalali(nxt) == "1406-01-31"
+
+
+def test_anchor_30_common_esfand_clamp_and_return(store):
+    r = store.add_reminder("common", _ts(1400, 11, 30), repeat_months=1)
+    assert r.anchor_day == 30
+    nxt = advance_due_date(_ts(1400, 11, 30), None, 1, r.anchor_day)
+    assert format_jalali(nxt) == "1400-12-29"
+    # clamped 29 +1 month with anchor 30 returns to 30
+    nxt2 = advance_due_date(nxt, None, 1, r.anchor_day)
+    assert format_jalali(nxt2) == "1401-01-30"
+
+
+def test_anchor_30_leap_stays_30(store):
+    r = store.add_reminder("leap", _ts(1399, 11, 30), repeat_months=1)
+    assert r.anchor_day == 30
+    nxt = advance_due_date(_ts(1399, 11, 30), None, 1, r.anchor_day)
+    assert format_jalali(nxt) == "1399-12-30"
+    nxt2 = advance_due_date(nxt, None, 1, r.anchor_day)
+    assert format_jalali(nxt2) == "1400-01-30"
+
+
+def test_anchor_pile_up_lands_on_anchor_not_clamped(tmp_path):
+    db = str(tmp_path / "pile_anchor.db")
+    with MemoryStore(db) as s:
+        start = _ts(1405, 1, 31)
+        s.add_reminder("pile", start, repeat_months=1)
+        # now is 5 months later: should be 1405-06-31, not 29
+        now = _ts(1405, 6, 15)
+        due = s.check_due_reminders(now=now)
+        assert len(due) == 1
+        assert format_jalali(due[0].due_at) == "1405-06-31"
+        # 11 months overdue lands on Esfand clamped, then next is 31
+        s2 = MemoryStore(db)
+        # force due to be Jan 31 again and check far future
+        # create new store file separate for clean test
+        s2.close()
+    # fresh test for 5-month pile explicitly
+    with MemoryStore(":memory:") as m:
+        start = _ts(1405, 1, 31)
+        m.add_reminder("pile2", start, repeat_months=1)
+        now = _ts(1405, 6, 16)
+        due = m.check_due_reminders(now=now)
+        assert format_jalali(due[0].due_at) == "1405-06-31"
+        # now test 12 months overdue -> should be 1406-01-31
+        with MemoryStore(":memory:") as m2:
+            m2.add_reminder("pile3", start, repeat_months=1)
+            now2 = _ts(1406, 1, 15)
+            due2 = m2.check_due_reminders(now=now2)
+            # 1406-01-31 is after now2? Actually now2 is 01-15, so due should be 01-31
+            assert format_jalali(due2[0].due_at) == "1406-01-31"
+
+
+def test_anchor_28_never_clamps(store):
+    r = store.add_reminder("28", _ts(1405, 1, 28), repeat_months=1)
+    assert r.anchor_day == 28
+    cur = _ts(1405, 1, 28)
+    for _ in range(13):
+        cur = advance_due_date(cur, None, 1, r.anchor_day)
+        assert format_jalali(cur).endswith("-28")
+
+
+def test_anchor_migration_old_reminders(tmp_path):
+    db = str(tmp_path / "old_anchor.db")
+    # create old reminders table without anchor_day
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE memories (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "user_id TEXT NOT NULL DEFAULT 'local', kind TEXT NOT NULL, "
+        "content TEXT NOT NULL, norm TEXT NOT NULL, tags TEXT NOT NULL, "
+        "importance REAL, created_at REAL, last_used_at REAL, "
+        "use_count INTEGER, source TEXT, archived INTEGER, "
+        "superseded_by INTEGER, pinned INTEGER)"
+    )
+    conn.execute(
+        "CREATE TABLE journal (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "user_id TEXT NOT NULL DEFAULT 'local', ts REAL, role TEXT, "
+        "content TEXT, session_id TEXT)"
+    )
+    conn.execute(
+        "CREATE TABLE reminders (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "user_id TEXT NOT NULL DEFAULT 'local', text TEXT NOT NULL, "
+        "due_at REAL NOT NULL, next_due REAL NOT NULL, "
+        "repeat_days INTEGER, repeat_months INTEGER, "
+        "last_fired_at REAL, created_at REAL NOT NULL, "
+        "active INTEGER NOT NULL DEFAULT 1)"
+    )
+    # insert a reminder with a known due (1405-01-31)
+    due = _ts(1405, 1, 31)
+    conn.execute(
+        "INSERT INTO reminders (user_id, text, due_at, next_due, "
+        "repeat_months, created_at, active) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ("local", "old", due, due, 1, time.time(), 1),
+    )
+    conn.commit()
+    conn.close()
+    # first open adds column and backfills
+    with MemoryStore(db) as s:
+        cols = {r["name"] for r in s.conn.execute("PRAGMA table_info(reminders)")}
+        assert "anchor_day" in cols
+        r = s.list_reminders()[0]
+        # backfilled from due date day (31)
+        assert r.anchor_day == 31
+    # second open is no-op and keeps value
+    with MemoryStore(db) as s2:
+        r2 = s2.list_reminders()[0]
+        assert r2.anchor_day == 31
+
+
+def test_day_repeat_unaffected_by_anchor(store):
+    start = _ts(1405, 1, 31)
+    r = store.add_reminder("days", start, repeat_days=7)
+    # anchor is still 31 but days add is unaffected
+    nxt = advance_due_date(start, 7, None, r.anchor_day)
+    # 7 days after 1405-01-31 is 1405-02-07
+    assert format_jalali(nxt) == "1405-02-07"
+    # via store pile-up
+    now = start + 20 * 86400
+    due = store.check_due_reminders(now=now)
+    assert len(due) == 1
+    # should be start + 21 days (3 weeks)
+    expected = start + 21 * 86400
+    assert due[0].due_at == expected

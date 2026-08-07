@@ -567,7 +567,8 @@ CREATE TABLE IF NOT EXISTS reminders (
     repeat_months  INTEGER,
     last_fired_at  REAL,
     created_at     REAL    NOT NULL,
-    active         INTEGER NOT NULL DEFAULT 1
+    active         INTEGER NOT NULL DEFAULT 1,
+    anchor_day     INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id);
@@ -670,7 +671,8 @@ class MemoryStore:
                 repeat_months  INTEGER,
                 last_fired_at  REAL,
                 created_at     REAL    NOT NULL,
-                active         INTEGER NOT NULL DEFAULT 1
+                active         INTEGER NOT NULL DEFAULT 1,
+                anchor_day     INTEGER
             )"""
         )
         cols = {
@@ -703,6 +705,30 @@ class MemoryStore:
             self.conn.execute(
                 "ALTER TABLE reminders ADD COLUMN active INTEGER NOT NULL DEFAULT 1"
             )
+        if "anchor_day" not in cols:
+            self.conn.execute("ALTER TABLE reminders ADD COLUMN anchor_day INTEGER")
+            # Backfill anchor from existing due dates — best info available
+            rows = list(
+                self.conn.execute(
+                    "SELECT id, due_at FROM reminders WHERE anchor_day IS NULL"
+                )
+            )
+            for row in rows:
+                try:
+                    import datetime
+
+                    from dream.jalali import gregorian_to_jalali
+
+                    dt = datetime.datetime.fromtimestamp(
+                        float(row["due_at"]), tz=datetime.timezone.utc
+                    )
+                    _, _, jd = gregorian_to_jalali(dt.year, dt.month, dt.day)
+                    self.conn.execute(
+                        "UPDATE reminders SET anchor_day = ? WHERE id = ?",
+                        (jd, row["id"]),
+                    )
+                except Exception:
+                    continue
         if "user_id" not in cols:
             self.conn.execute(
                 "ALTER TABLE reminders ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local'"

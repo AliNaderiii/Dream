@@ -52,6 +52,7 @@ class Reminder:
     last_fired_at: float | None
     created_at: float
     active: bool
+    anchor_day: int | None = None
 
 
 def _row_to_reminder(row) -> Reminder:
@@ -66,6 +67,7 @@ def _row_to_reminder(row) -> Reminder:
         last_fired_at=float(row["last_fired_at"]) if row["last_fired_at"] is not None else None,
         created_at=float(row["created_at"]),
         active=bool(row["active"]),
+        anchor_day=int(row["anchor_day"]) if "anchor_day" in row.keys() and row["anchor_day"] is not None else None,  # noqa: E501
     )
 
 
@@ -85,7 +87,7 @@ def _jalali_to_timestamp(jy: int, jm: int, jd: int) -> float:
 
 
 def _timestamp_to_gregorian(ts: float) -> tuple[int, int, int]:
-    dt = datetime.datetime.utcfromtimestamp(ts)
+    dt = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
     return dt.year, dt.month, dt.day
 
 
@@ -110,21 +112,29 @@ def _days_in_jalali_month(year: int, month: int) -> int:
     return 0
 
 
-def advance_due_date(due_at: float, repeat_days: int | None, repeat_months: int | None) -> float:
+def advance_due_date(
+    due_at: float,
+    repeat_days: int | None,
+    repeat_months: int | None,
+    anchor_day: int | None = None,
+) -> float:
     """Advance a due timestamp by one repeat interval, Jalali-aware.
 
     Adding a month is not adding thirty days: the thirty-first of a month
     plus one month lands on the last day of the following month when that
     month is shorter, not spilling into the month after. End of Esfand in
     both leap and common years is handled via clamping.
+
+    When *anchor_day* is given, monthly advances are computed from that
+    anchor, not from the previous clamped day, so a series anchored on 31
+    returns to 31 after a short month. Day repeats never use the anchor.
     """
     if repeat_days is not None:
         return due_at + repeat_days * 86400
     if repeat_months is not None:
-        jy, jm, jd = _timestamp_to_jalali(due_at)
-        # add months in Jalali calendar
+        jy, jm, _jd = _timestamp_to_jalali(due_at)
+        jd = anchor_day if anchor_day is not None else _jd
         total = jy * 12 + (jm - 1) + repeat_months
-        # python // floors for negatives, but years are positive here
         new_jy = total // 12
         new_jm = total % 12 + 1
         max_day = _days_in_jalali_month(new_jy, new_jm)
@@ -173,12 +183,14 @@ def add_reminder(
         raise ValueError("repeat must be either days or months, not both")
     text = text.strip()
     now = time.time()
+    # anchor_day stores the owner's original day-of-month for monthly repeats
+    _, _, anchor_day = _timestamp_to_jalali(float(due_at))
     with store._lock:
         cur = store.conn.execute(
             """INSERT INTO reminders
                (user_id, text, due_at, next_due, repeat_days, repeat_months,
-                last_fired_at, created_at, active)
-               VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 1)""",
+                last_fired_at, created_at, active, anchor_day)
+               VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 1, ?)""",
             (
                 store.user_id,
                 text,
@@ -187,6 +199,7 @@ def add_reminder(
                 repeat_days,
                 repeat_months,
                 float(now),
+                anchor_day,
             ),
         )
         store.conn.commit()
@@ -240,6 +253,18 @@ def check_due_reminders(
                 due_at = float(row["due_at"])
                 repeat_days = row["repeat_days"]
                 repeat_months = row["repeat_months"]
+                # anchor_day keeps the owner's original day, avoiding ratchet
+                try:
+                    anchor_day = (
+                        int(row["anchor_day"])
+                        if "anchor_day" in row.keys() and row["anchor_day"] is not None
+                        else None
+                    )
+                except Exception:
+                    anchor_day = None
+                if anchor_day is None and repeat_months is not None:
+                    # fallback for rows created before the column existed
+                    _, _, anchor_day = _timestamp_to_jalali(due_at)
                 # re-read to handle concurrent? already in transaction
                 if repeat_days is None and repeat_months is None:
                     # one-off becomes inactive
@@ -265,30 +290,25 @@ def check_due_reminders(
                     ):
                         continue
                     # advance from the stored due date, never backwards
+                    original_due = float(row["due_at"])
                     while new_due <= now:
-                        new_due = advance_due_date(new_due, repeat_days, repeat_months)
-                        # safety: break if not moving forward
-                        if new_due <= due_at:
+                        next_due = advance_due_date(
+                            new_due, repeat_days, repeat_months, anchor_day
+                        )
+                        if next_due <= new_due:
                             break
-                        due_at = new_due
-                        # loop condition uses new_due
+                        new_due = next_due
                         if new_due > now:
                             break
                     # ensure we never move backwards relative to original
-                    if new_due < float(row["due_at"]):
-                        new_due = float(row["due_at"])
+                    if new_due < original_due:
+                        new_due = original_due
                     store.conn.execute(
                         """UPDATE reminders
                            SET due_at = ?, next_due = ?, last_fired_at = ?
                            WHERE user_id = ? AND id = ?""",
                         (float(new_due), float(new_due), float(now), store.user_id, rid),
                     )
-                    # return a copy with old text but new due
-                    updated = dict(row)
-                    updated["due_at"] = new_due
-                    updated["next_due"] = new_due
-                    updated["last_fired_at"] = now
-                    # build reminder for reporting (old text, new due)
                     # fetch fresh row for accuracy
                     fresh = store.conn.execute(
                         "SELECT * FROM reminders WHERE user_id = ? AND id = ?",
