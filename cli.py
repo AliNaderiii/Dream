@@ -18,6 +18,7 @@ KNOWN_COMMANDS = (
     "/mems",
     "/stats",
     "/forget",
+    "/dedupe",
     "/pin",
     "/tools",
     "/reset",
@@ -152,7 +153,12 @@ def report_turn_activity(turn: Turn, output: Callable[[str], None] | None = None
         output(f"[memory] store failed: {_truncate(error, _DETAIL_LIMIT)}")
 
 
-def dispatch_command(text: str, dream: Dream, output: Callable[[str], None] = print) -> bool:
+def dispatch_command(
+    text: str,
+    dream: Dream,
+    output: Callable[[str], None] = print,
+    quiet: bool = False,
+) -> bool:
     """Dispatch one slash command. Return ``False`` when the session should end.
 
     A leading backslash is accepted as an alias for a leading slash, so
@@ -185,6 +191,23 @@ def dispatch_command(text: str, dream: Dream, output: Callable[[str], None] = pr
             output(
                 "Memory archived." if store.forget(memory_id) else "No active memory has that ID."
             )
+    elif command == "/dedupe":
+        apply = argument.lower() == "confirm"
+        result = store.cleanup_duplicates(dry_run=not apply)
+        # Bracketed lines are diagnostics; the command reply itself is not.
+        report = (lambda _line: None) if quiet else output
+        verb = "would merge" if not apply else "merged"
+        ending = "would remain" if not apply else "remain"
+        report(
+            f"[dedupe] {result['examined']} rows examined, {result['merged']} {verb}, "
+            f"{result['remaining']} {ending}"
+        )
+        for older, newer, old_text, new_text in result["details"]:
+            report(f"[dedupe] #{newer} into #{older}")
+            report(f"    older: {old_text}")
+            report(f"    newer: {new_text}")
+        if not apply:
+            report("[dedupe] dry run. nothing changed. add the confirm argument to apply.")
     elif command == "/pin":
         try:
             memory_id = int(argument)
@@ -199,7 +222,10 @@ def dispatch_command(text: str, dream: Dream, output: Callable[[str], None] = pr
         dream.reset_session()
         output("Session context cleared; long-term memories remain.")
     elif command == "/help":
-        output("/mem QUERY  /mems  /stats  /forget ID  /pin ID  /tools  /reset  /help  /exit")
+        output(
+            "/mem QUERY  /mems  /stats  /forget ID  /dedupe [confirm]  "
+            "/pin ID  /tools  /reset  /help  /exit"
+        )
     elif command == "/exit":
         return False
     else:
@@ -302,7 +328,7 @@ def main(argv: list[str] | None = None) -> int:
                 if not text.strip():
                     continue
                 if text.startswith(("/", "\\")):
-                    if not dispatch_command(text, dream):
+                    if not dispatch_command(text, dream, output=print, quiet=args.quiet):
                         break
                     continue
                 turn = dream.run(text)
