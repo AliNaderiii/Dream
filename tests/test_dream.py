@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 import json
-from typing import Optional
+from typing import Any, Optional
 from urllib.error import HTTPError, URLError
 
 import pytest
@@ -14,6 +14,7 @@ import doctor
 from dream import tools
 from dream.agent import (
     _MEMORIES_OPEN,
+    DEFAULT_USER_AGENT,
     ApprovalPolicy,
     Dream,
     EchoBackend,
@@ -844,3 +845,102 @@ def test_extraction_temperature_does_not_follow_dream_temperature(monkeypatch, t
     conversational, extraction = requests
     assert conversational["temperature"] == 1.2
     assert extraction["temperature"] == 0.1
+
+
+# --------------------------------------------------------------------------
+# User-Agent header
+#
+# Dream previously sent no User-Agent, so urllib substituted its own default,
+# which Cloudflare fronts some providers with and answers 403 before the
+# provider ever sees the request. The client now always sends an identifying
+# header, overridable through DREAM_USER_AGENT for users behind unusual
+# filters. A header value must stay on one line, so unusable overrides fall
+# back to the default rather than being forwarded or raising.
+# --------------------------------------------------------------------------
+
+
+class _RecordingClient:
+    """Record the outgoing ``Request`` objects and their decoded bodies."""
+
+    def __init__(self, *replies: dict) -> None:
+        self.replies = list(replies)
+        self.requests: list[Any] = []
+        self.payloads: list[dict] = []
+
+    def __call__(self, request, timeout: int | None = None) -> _FakeResponse:
+        self.requests.append(request)
+        self.payloads.append(json.loads(request.data.decode("utf-8")))
+        return _FakeResponse(self.replies.pop(0))
+
+
+def _recorded_requests(monkeypatch, *replies: dict) -> _RecordingClient:
+    """Run the given canned replies through a header-recording mock server."""
+    server = _RecordingClient(*replies)
+    monkeypatch.setattr("dream.agent.urlopen", server)
+    return server
+
+
+def _user_agent(request: Any) -> str | None:
+    """Return a ``Request``'s User-Agent value, matching the header case-insensitively."""
+    for name, value in request.header_items():
+        if name.lower() == "user-agent":
+            return value
+    return None
+
+
+def test_user_agent_header_is_sent_by_default(monkeypatch):
+    monkeypatch.delenv("DREAM_USER_AGENT", raising=False)
+    server = _recorded_requests(monkeypatch, _reply("hi"))
+    _test_backend().chat([{"role": "user", "content": "hi"}])
+    assert _user_agent(server.requests[0]) == DEFAULT_USER_AGENT
+
+
+def test_default_user_agent_is_a_single_line_identifier(monkeypatch):
+    monkeypatch.delenv("DREAM_USER_AGENT", raising=False)
+    server = _recorded_requests(monkeypatch, _reply("hi"))
+    _test_backend().chat([{"role": "user", "content": "hi"}])
+    value = _user_agent(server.requests[0])
+    assert value
+    assert "\n" not in value
+    assert "\r" not in value
+
+
+def test_dream_user_agent_overrides_the_default(monkeypatch):
+    monkeypatch.setenv("DREAM_USER_AGENT", "custom-agent/1.0")
+    server = _recorded_requests(monkeypatch, _reply("hi"))
+    _test_backend().chat([{"role": "user", "content": "hi"}])
+    assert _user_agent(server.requests[0]) == "custom-agent/1.0"
+
+
+@pytest.mark.parametrize("raw", ["", "   ", "\t", "\n", "\r", "spaced\r\ninjection"])
+def test_unusable_dream_user_agent_falls_back_without_raising(monkeypatch, raw):
+    # An empty, whitespace-only, or line-broken value is never forwarded: a
+    # header with a line break is an injection vector, so it must fall back
+    # to the default and must not raise.
+    monkeypatch.setenv("DREAM_USER_AGENT", raw)
+    server = _recorded_requests(monkeypatch, _reply("hi"))
+    _test_backend().chat([{"role": "user", "content": "hi"}])
+    assert _user_agent(server.requests[0]) == DEFAULT_USER_AGENT
+
+
+def test_user_agent_is_sent_on_conversation_and_extraction(monkeypatch, tmp_path):
+    monkeypatch.delenv("DREAM_USER_AGENT", raising=False)
+    server = _recorded_requests(monkeypatch, _reply("A quiet day."), _reply("[]"))
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        Dream(store, _test_backend()).run("I had a calm and quiet morning today.")
+    assert len(server.requests) == 2
+    for request in server.requests:
+        assert _user_agent(request) == DEFAULT_USER_AGENT
+
+
+def test_user_agent_does_not_change_the_request_body(monkeypatch):
+    monkeypatch.delenv("DREAM_USER_AGENT", raising=False)
+    server = _recorded_requests(monkeypatch, _reply("hi"))
+    messages = [{"role": "user", "content": "hi"}]
+    schema = tools.openai_schemas()
+    _test_backend().chat(messages, tools=schema)
+    payload = server.payloads[0]
+    assert payload["model"] == "test-model"
+    assert payload["messages"] == messages
+    assert payload["tools"] == schema
+    assert payload["temperature"] == 0.3

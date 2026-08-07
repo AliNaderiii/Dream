@@ -29,6 +29,12 @@ EXTRACTION_TEMPERATURE = 0.1
 # small model's 8k-token context window for the conversation and its reply.
 DEFAULT_MEMORY_BLOCK_CHAR_LIMIT = 8_000
 
+# Some model providers sit behind Cloudflare, which treats urllib's default
+# User-Agent as a bot and answers 403 before the request ever reaches the
+# provider. Send our own identifying header instead. Dream is a desktop
+# application, not a browser, so this is never a browser-impersonation string.
+DEFAULT_USER_AGENT = "dream-assistant/0.1.0"
+
 
 def _resolve_temperature(raw: str | None) -> float:
     """Parse ``DREAM_TEMPERATURE``, falling back to the default on any problem.
@@ -60,6 +66,23 @@ def _resolve_memory_block_char_limit(raw: str | None) -> int:
     return value
 
 
+def _resolve_user_agent(raw: str | None) -> str:
+    """Parse ``DREAM_USER_AGENT``, falling back to the default on any problem.
+
+    A header value must stay on a single line, so an empty, whitespace-only,
+    or line-broken override is a header-injection risk, not a value to pass
+    through. Anything unusable resolves to the default rather than raising.
+    """
+    if not raw:
+        return DEFAULT_USER_AGENT
+    value = raw.strip()
+    if not value:
+        return DEFAULT_USER_AGENT
+    if "\n" in value or "\r" in value:
+        return DEFAULT_USER_AGENT
+    return value
+
+
 class OpenAIBackend:
     """Client for any endpoint implementing OpenAI's chat-completions API."""
 
@@ -80,6 +103,7 @@ class OpenAIBackend:
             if temperature is None
             else float(temperature)
         )
+        self.user_agent = _resolve_user_agent(os.environ.get("DREAM_USER_AGENT"))
 
     def chat(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
@@ -94,7 +118,11 @@ class OpenAIBackend:
         request = Request(
             f"{self.base_url}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"},
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "User-Agent": self.user_agent,
+            },
             method="POST",
         )
         try:
