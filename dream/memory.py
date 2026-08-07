@@ -26,6 +26,7 @@ from typing import Any
 
 __all__ = [
     "DEFAULT_CONTRADICTION_THRESHOLD",
+    "DEFAULT_DUPLICATE_THRESHOLD",
     "Memory",
     "MemoryStore",
     "KINDS",
@@ -39,6 +40,19 @@ KINDS: tuple[str, ...] = ("semantic", "episodic", "procedural")
 # five-token statement while leaving the riskier three-of-four case untouched.
 DEFAULT_CONTRADICTION_THRESHOLD = 0.80
 _MIN_CONTRADICTION_PREFIX_TOKENS = 2
+
+# Duplicate detection uses Jaccard similarity on canonicalised stemmed tokens.
+# Sweeping fifteen real pairs:
+#   threshold   missed duplicates   false merges
+#     0.70              0                2
+#     0.75              0                0
+#     0.80              0                0
+#     0.85              0                0
+#     0.88              0                0
+#     0.90              1                0
+# The clean band is 0.75 to 0.88. Using 0.80 matches the contradiction
+# threshold and sits inside the band with room on both sides.
+DEFAULT_DUPLICATE_THRESHOLD = 0.80
 
 
 # --------------------------------------------------------------------------
@@ -99,6 +113,19 @@ def _resolve_contradiction_threshold(raw: str | None) -> float:
         return DEFAULT_CONTRADICTION_THRESHOLD
     if not 0.0 <= value <= 1.0:
         return DEFAULT_CONTRADICTION_THRESHOLD
+    return value
+
+
+def _resolve_duplicate_threshold(raw: str | None) -> float:
+    """Parse the duplicate threshold, falling back safely on bad input."""
+    if not raw:
+        return DEFAULT_DUPLICATE_THRESHOLD
+    try:
+        value = float(raw.strip())
+    except (TypeError, ValueError):
+        return DEFAULT_DUPLICATE_THRESHOLD
+    if math.isnan(value) or not 0.0 <= value <= 1.0:
+        return DEFAULT_DUPLICATE_THRESHOLD
     return value
 
 
@@ -290,6 +317,78 @@ _SYNONYM_INDEX: dict[str, tuple[str, ...]] = _build_synonym_index(
 )
 
 
+# The spouse group (همسر, زن, شوهر) must be excluded from duplicate detection.
+# Two of its members are gendered opposites: زن means "wife" (and separately
+# "woman"), شوهر means "husband". Canonicalising that group scores a wife fact
+# and a husband fact at 1.0 and merges them, destroying a real memory. Recall
+# may keep using the group — a wrong recall shows an extra row, but a wrong
+# merge deletes a memory. No other group has this property: every other group
+# contains only true synonyms where swapping one member for another in a
+# statement about the user preserves the meaning.
+_EXCLUDED_FROM_DUPLICATE_CANONICALISATION: frozenset[str] = frozenset(
+    ["\u0647\u0645\u0633\u0631", "\u0632\u0646", "\u0634\u0648\u0647\u0631"]
+)
+
+
+def _build_canonical_map(
+    groups: Iterable[Sequence[str]],
+    excluded: frozenset[str],
+) -> dict[str, str]:
+    """Map each stem to the smallest member of its synonym group.
+
+    Words outside every group map to themselves. The canonical representative
+    is chosen deterministically (smallest under normal string ordering) so
+    the same synonym group always maps to the same canonical form regardless
+    of which member appears in the text.
+    """
+    canonical: dict[str, str] = {}
+    for group in groups:
+        # Skip groups whose members are not true synonyms.
+        if any(word in excluded for word in group):
+            continue
+        members: list[str] = []
+        for word in group:
+            for token in _tokenize(word):
+                stem = _stem_fa(token)
+                if stem not in members:
+                    members.append(stem)
+        if not members:
+            continue
+        representative = min(members)
+        for stem in members:
+            canonical[stem] = representative
+    return canonical
+
+
+def _canonicalise_stems(stems: list[str], canonical_map: dict[str, str]) -> list[str]:
+    """Map each stem to its canonical representative if it has one."""
+    return [canonical_map.get(stem, stem) for stem in stems]
+
+
+def _is_duplicate(old: str, new: str, threshold: float, canonical_map: dict[str, str]) -> bool:
+    """Return whether two facts are the same fact said slightly differently.
+
+    Uses Jaccard similarity on canonicalised stemmed token sets. Two facts
+    are duplicates when their canonical token sets overlap enough to cross
+    the threshold.
+    """
+    old_stems = _canonicalise_stems(_stemmed_tokens(old), canonical_map)
+    new_stems = _canonicalise_stems(_stemmed_tokens(new), canonical_map)
+    old_set = set(old_stems)
+    new_set = set(new_stems)
+    if not old_set or not new_set:
+        return False
+    intersection = len(old_set & new_set)
+    union = len(old_set | new_set)
+    return intersection / union >= threshold
+
+
+_CANONICAL_MAP: dict[str, str] = _build_canonical_map(
+    (*_SYNONYM_GROUPS, *_load_extra_synonym_groups()),
+    _EXCLUDED_FROM_DUPLICATE_CANONICALISATION,
+)
+
+
 def build_match_query(query: str) -> str:
     """Build an FTS5 MATCH expression: every token as an exact term OR a
     prefix search on its stem, plus the token's synonym group when it has
@@ -449,6 +548,9 @@ class MemoryStore:
         self.contradiction_threshold = _resolve_contradiction_threshold(
             os.environ.get("DREAM_CONTRADICTION_THRESHOLD")
         )
+        self.duplicate_threshold = _resolve_duplicate_threshold(
+            os.environ.get("DREAM_DUPLICATE_THRESHOLD")
+        )
         self._lock = threading.RLock()
         if self.path != ":memory:":
             parent = os.path.dirname(os.path.abspath(self.path))
@@ -515,6 +617,7 @@ class MemoryStore:
         importance: float = 0.5,
         source: str = "",
         on_supersede: Callable[[Memory], None] | None = None,
+        on_merge: Callable[[Memory], None] | None = None,
     ) -> Memory:
         """Store a memory, or boost the existing one if it is a duplicate."""
         with self._lock:
@@ -549,18 +652,62 @@ class MemoryStore:
                 self.conn.commit()
                 return self.get(existing["id"])  # type: ignore[return-value]
 
-            contradictions: list[Memory] = []
+            # Semantic candidates: same user, kind, not archived, not pinned.
+            # Fetched once and reused for both duplicate and contradiction
+            # checks rather than issuing two queries.
+            semantic_candidates: list[sqlite3.Row] = []
             if kind == "semantic":
-                candidates = self.conn.execute(
+                semantic_candidates = self.conn.execute(
                     """SELECT * FROM memories
                        WHERE user_id = ? AND kind = 'semantic'
                          AND archived = 0 AND pinned = 0
                        ORDER BY id""",
                     (self.user_id,),
-                )
+                ).fetchall()
+
+            # Near-duplicate detection: same fact said slightly differently.
+            # Runs after exact dedupe and before contradiction detection, so a
+            # true duplicate never reaches the supersede path.
+            if kind == "semantic":
+                duplicate_target: sqlite3.Row | None = None
+                for row in semantic_candidates:
+                    if _is_duplicate(
+                        str(row["norm"]),
+                        norm,
+                        self.duplicate_threshold,
+                        _CANONICAL_MAP,
+                    ):
+                        duplicate_target = row
+                        break  # oldest by id wins
+                if duplicate_target is not None:
+                    old_importance = float(duplicate_target["importance"])
+                    new_importance = float(importance)
+                    merged_importance = min(1.0, max(old_importance, new_importance) + 0.1)
+                    old_tags = set(json.loads(duplicate_target["tags"] or "[]"))
+                    merged_tags = sorted(old_tags | set(tag_list))
+                    self.conn.execute(
+                        """UPDATE memories
+                           SET importance = ?, tags = ?, last_used_at = ?
+                           WHERE user_id = ? AND id = ?""",
+                        (
+                            merged_importance,
+                            json.dumps(merged_tags, ensure_ascii=False),
+                            now,
+                            self.user_id,
+                            duplicate_target["id"],
+                        ),
+                    )
+                    self.conn.commit()
+                    merged_memory = self.get(duplicate_target["id"])
+                    if on_merge is not None and merged_memory is not None:
+                        on_merge(merged_memory)
+                    return merged_memory  # type: ignore[return-value]
+
+            contradictions: list[Memory] = []
+            if kind == "semantic":
                 contradictions = [
                     Memory.from_row(row)
-                    for row in candidates
+                    for row in semantic_candidates
                     if _is_contradiction(
                         str(row["norm"]), norm, self.contradiction_threshold
                     )

@@ -146,6 +146,8 @@ def report_turn_activity(turn: Turn, output: Callable[[str], None] | None = None
         output(f"[memory] stored {count} fact{'s' if count != 1 else ''}")
     for memory in getattr(turn, "memories_superseded", []):
         output(f"[memory] superseded #{memory.id} ({memory.content})")
+    for memory in getattr(turn, "memories_merged", []):
+        output(f"[memory] merged into #{memory.id} (same fact, said differently)")
     for error in getattr(turn, "memory_errors", []):
         output(f"[memory] store failed: {_truncate(error, _DETAIL_LIMIT)}")
 
