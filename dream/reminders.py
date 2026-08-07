@@ -28,6 +28,7 @@ __all__ = [
     "add_reminder",
     "advance_due_date",
     "check_due_reminders",
+    "delete_reminder",
     "format_jalali",
     "list_reminders",
     "parse_date_to_timestamp",
@@ -221,6 +222,17 @@ def list_reminders(store, include_inactive: bool = False) -> list[Reminder]:
         sql += " ORDER BY due_at ASC"
         rows = store.conn.execute(sql, params).fetchall()
         return [_row_to_reminder(r) for r in rows]
+
+
+def delete_reminder(store, reminder_id: int) -> bool:
+    """Delete a reminder by id, filtered by user. Returns True if deleted."""
+    with store._lock:
+        cur = store.conn.execute(
+            "DELETE FROM reminders WHERE user_id = ? AND id = ?",
+            (store.user_id, reminder_id),
+        )
+        store.conn.commit()
+        return cur.rowcount > 0
 
 
 def check_due_reminders(

@@ -262,6 +262,8 @@ _SYNONYM_GROUPS: tuple[tuple[str, ...], ...] = (
     ("\u0628\u0686\u0647", "\u0641\u0631\u0632\u0646\u062f"),
     # workplace: دفتر, اداره
     ("\u062f\u0641\u062a\u0631", "\u0627\u062f\u0627\u0631\u0647"),
+    # who/user: کی, کاربر (who asks about the user, stored facts use کاربر)
+    ("\u06a9\u06cc", "\u06a9\u0627\u0631\u0628\u0631"),
 )
 
 
@@ -1213,6 +1215,12 @@ class MemoryStore:
             from dream.reminders import _row_to_reminder
 
             return _row_to_reminder(row)
+
+    def delete_reminder(self, reminder_id: int) -> bool:
+        """Delete a reminder by id. Returns True if deleted."""
+        from dream.reminders import delete_reminder as _delete
+
+        return _delete(self, reminder_id)
 
     def check_due_reminders(self, now: float | None = None):
         """Run the due check for the owning user."""

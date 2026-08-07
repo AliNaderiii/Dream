@@ -224,3 +224,62 @@ def test_synonym_match_ranks_below_exact_match_for_the_same_query(store):
     assert contents[0] == exact_memory, "an exact-wording memory must rank first"
     assert synonym_memory in contents, "expansion must still surface the synonym memory"
     assert filler_memory not in contents
+
+
+# --------------------------------------------------------------------------
+# The who-am-I recall gap
+# --------------------------------------------------------------------------
+
+
+def test_who_am_i_question_reaches_name_and_work_facts(store):
+    """The Persian who-am-I question reaches the name fact and the work fact.
+
+    The owner asked «من کی هستم» (who am I) and got nothing, while «شغل من
+    چیست» (what is my job) found the work fact. The gap is lexical: the
+    question has no words in common with facts stored under «کاربر». The
+    کی/کاربر synonym group closes that gap without widening unrelated queries.
+    """
+    # کاربر علی نام دارد (the user's name is Ali)
+    name_fact = (
+        "\u06a9\u0627\u0631\u0628\u0631 \u0639\u0644\u06cc "
+        "\u0646\u0627\u0645 \u062f\u0627\u0631\u062f"
+    )
+    # کاربر روی یک استارتاپ فین‌تک کار می‌کند
+    work_fact = (
+        "\u06a9\u0627\u0631\u0628\u0631 \u0631\u0648\u06cc \u06cc\u06a9 "
+        "\u0627\u0633\u062a\u0627\u0631\u062a\u0627\u067e "
+        "\u0641\u06cc\u0646\u200c\u062a\u06a9 \u06a9\u0627\u0631 "
+        "\u0645\u06cc\u200c\u06a9\u0646\u062f"
+    )
+    store.remember(name_fact, kind="semantic", importance=0.9)
+    store.remember(work_fact, kind="semantic", importance=0.9)
+
+    # من کی هستم (who am I)
+    question = "\u0645\u0646 \u06a9\u06cc \u0647\u0633\u062a\u0645"
+    results = store.recall(question, reinforce=False)
+    contents = [m.content for m in results]
+
+    assert name_fact in contents, "who-am-I must reach the name fact"
+    assert work_fact in contents, "who-am-I must reach the work fact"
+
+
+def test_unrelated_query_still_does_not_match(store):
+    """A query that should not match still does not.
+
+    Adding the کی/کاربر group must not cause unrelated queries to start
+    matching everything. A question about coffee should not find facts about
+    the user's name or work.
+    """
+    # کاربر علی نام دارد (the user's name is Ali)
+    name_fact = (
+        "\u06a9\u0627\u0631\u0628\u0631 \u0639\u0644\u06cc "
+        "\u0646\u0627\u0645 \u062f\u0627\u0631\u062f"
+    )
+    store.remember(name_fact, kind="semantic", importance=0.9)
+
+    # قهوه تلخ (bitter coffee) — no overlap with the name fact
+    question = "\u0642\u0647\u0648\u0647 \u062a\u0644\u062e"
+    results = store.recall(question, reinforce=False)
+    contents = [m.content for m in results]
+
+    assert name_fact not in contents, "coffee query must not find name fact"
