@@ -18,6 +18,7 @@ KNOWN_COMMANDS = (
     "/mems",
     "/stats",
     "/forget",
+    "/dedupe",
     "/pin",
     "/tools",
     "/reset",
@@ -185,6 +186,20 @@ def dispatch_command(text: str, dream: Dream, output: Callable[[str], None] = pr
             output(
                 "Memory archived." if store.forget(memory_id) else "No active memory has that ID."
             )
+    elif command == "/dedupe":
+        apply = argument.lower() == "confirm"
+        result = store.cleanup_duplicates(dry_run=not apply)
+        verb = "would merge" if not apply else "merged"
+        output(
+            f"[dedupe] {result['examined']} rows examined, {result['merged']} {verb}, "
+            f"{result['remaining']} would remain"
+        )
+        for older, newer, old_text, new_text in result["details"]:
+            output(f"[dedupe] #{newer} into #{older}")
+            output(f"    older: {old_text}")
+            output(f"    newer: {new_text}")
+        if not apply:
+            output("[dedupe] dry run. nothing changed. add the confirm argument to apply.")
     elif command == "/pin":
         try:
             memory_id = int(argument)
@@ -199,7 +214,10 @@ def dispatch_command(text: str, dream: Dream, output: Callable[[str], None] = pr
         dream.reset_session()
         output("Session context cleared; long-term memories remain.")
     elif command == "/help":
-        output("/mem QUERY  /mems  /stats  /forget ID  /pin ID  /tools  /reset  /help  /exit")
+        output(
+            "/mem QUERY  /mems  /stats  /forget ID  /dedupe [confirm]  "
+            "/pin ID  /tools  /reset  /help  /exit"
+        )
     elif command == "/exit":
         return False
     else:

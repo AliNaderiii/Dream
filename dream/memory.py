@@ -842,6 +842,83 @@ class MemoryStore:
             row = self.conn.execute(sql, params).fetchone()
             return Memory.from_row(row) if row is not None else None
 
+    def deduplicate(self, dry_run: bool = True) -> dict[str, Any]:
+        """Merge old near-duplicate semantic memories in one atomic pass."""
+        with self._lock:
+            self.conn.execute("BEGIN")
+            try:
+                rows = self.conn.execute(
+                    """SELECT * FROM memories
+                       WHERE user_id = ? AND kind = 'semantic'
+                         AND archived = 0 AND pinned = 0""",
+                    (self.user_id,),
+                ).fetchall()
+                # The write path merges into the oldest row, so id order is the authority.
+                rows = sorted(rows, key=lambda row: int(row["id"]))
+                stems = {
+                    int(row["id"]): _canonicalise_stems(
+                        _stemmed_tokens(str(row["norm"])), _CANONICAL_MAP
+                    )
+                    for row in rows
+                }
+                kept: list[sqlite3.Row] = []
+                pairs: list[tuple[int, int]] = []
+                details: list[tuple[int, int, str, str]] = []
+                now = time.time()
+                for row in rows:
+                    target = next(
+                        (
+                            old
+                            for old in kept
+                            if _is_duplicate(
+                                stems[int(old["id"])], stems[int(row["id"])],
+                                self.duplicate_threshold, _CANONICAL_MAP
+                            )
+                        ),
+                        None,
+                    )
+                    if target is None:
+                        kept.append(row)
+                        continue
+                    old_id, new_id = int(target["id"]), int(row["id"])
+                    pairs.append((new_id, old_id))
+                    details.append((old_id, new_id, str(target["content"]), str(row["content"])))
+                    importance = min(
+                        1.0, max(float(target["importance"]), float(row["importance"])) + 0.1
+                    )
+                    tags = sorted(
+                        set(json.loads(target["tags"] or "[]"))
+                        | set(json.loads(row["tags"] or "[]"))
+                    )
+                    self.conn.execute(
+                        """UPDATE memories
+                           SET importance = ?, tags = ?, last_used_at = ? WHERE id = ?""",
+                        (importance, json.dumps(tags, ensure_ascii=False), now, old_id),
+                    )
+                    self.conn.execute(
+                        "DELETE FROM memories WHERE user_id = ? AND id = ?",
+                        (self.user_id, new_id),
+                    )
+                result = {
+                    "examined": len(rows),
+                    "merged": len(pairs),
+                    "remaining": len(kept),
+                    "pairs": pairs,
+                    "details": details,
+                }
+                if dry_run:
+                    self.conn.rollback()
+                else:
+                    self.conn.commit()
+                return result
+            except Exception:
+                self.conn.rollback()
+                raise
+
+    def cleanup_duplicates(self, dry_run: bool = True) -> dict[str, Any]:
+        """Compatibility name for the duplicate maintenance pass."""
+        return self.deduplicate(dry_run=dry_run)
+
     def all(
         self,
         kinds: Iterable[str] | None = None,
