@@ -30,6 +30,7 @@ from dream.memory import (
     _SYNONYM_GROUPS,
     DEFAULT_DUPLICATE_THRESHOLD,
     MemoryStore,
+    _longest_common_subsequence,
 )
 
 
@@ -212,6 +213,66 @@ _PHONE_IPHONE = (
     "\u0622\u06cc\u0641\u0648\u0646 \u0627\u0633\u062a"
 )
 
+# Order-sensitive pair 1: Ali is Reza's brother vs Reza is Ali's brother
+_BROTHER_ALI_REZA = (
+    "\u0639\u0644\u06cc \u0628\u0631\u0627\u062f\u0631 "
+    "\u0631\u0636\u0627 \u0627\u0633\u062a"
+)
+_BROTHER_REZA_ALI = (
+    "\u0631\u0636\u0627 \u0628\u0631\u0627\u062f\u0631 "
+    "\u0639\u0644\u06cc \u0627\u0633\u062a"
+)
+
+# Order-sensitive pair 2: went Tehran to Shiraz vs went Shiraz to Tehran
+_WENT_TEHRAN_SHIRAZ = (
+    "\u06a9\u0627\u0631\u0628\u0631 \u0627\u0632 \u062a\u0647\u0631\u0627\u0646 "
+    "\u0628\u0647 \u0634\u06cc\u0631\u0627\u0632 \u0631\u0641\u062a"
+)
+_WENT_SHIRAZ_TEHRAN = (
+    "\u06a9\u0627\u0631\u0628\u0631 \u0627\u0632 \u0634\u06cc\u0631\u0627\u0632 "
+    "\u0628\u0647 \u062a\u0647\u0631\u0627\u0646 \u0631\u0641\u062a"
+)
+
+# Order-sensitive pair 3: user owes Ali vs Ali owes user
+_OWES_USER_TO_ALI = (
+    "\u06a9\u0627\u0631\u0628\u0631 \u0628\u0647 \u0639\u0644\u06cc "
+    "\u0628\u062f\u0647\u06a9\u0627\u0631 \u0627\u0633\u062a"
+)
+_OWES_ALI_TO_USER = (
+    "\u0639\u0644\u06cc \u0628\u0647 \u06a9\u0627\u0631\u0628\u0631 "
+    "\u0628\u062f\u0647\u06a9\u0627\u0631 \u0627\u0633\u062a"
+)
+
+# Order-sensitive pair 4: meeting runs 9 to 11 vs 11 to 9
+_MEETING_9_TO_11 = (
+    "\u062c\u0644\u0633\u0647 \u0627\u0632 \u06f9 \u062a\u0627 "
+    "\u06f1\u06f1 \u0627\u0633\u062a"
+)
+_MEETING_11_TO_9 = (
+    "\u062c\u0644\u0633\u0647 \u0627\u0632 \u06f1\u06f1 \u062a\u0627 "
+    "\u06f9 \u0627\u0633\u062a"
+)
+
+# Numeric value swap: salary 20 rent 5 vs salary 5 rent 20
+_SALARY_20_RENT_5 = (
+    "\u062d\u0642\u0648\u0642 \u06a9\u0627\u0631\u0628\u0631 \u06f2\u06f0 "
+    "\u0648 \u0627\u062c\u0627\u0631\u0647 \u06f5 \u0627\u0633\u062a"
+)
+_SALARY_5_RENT_20 = (
+    "\u062d\u0642\u0648\u0642 \u06a9\u0627\u0631\u0628\u0631 \u06f5 "
+    "\u0648 \u0627\u062c\u0627\u0631\u0647 \u06f2\u06f0 \u0627\u0633\u062a"
+)
+
+# Person name swap: Ali is Sara's manager vs Sara is Ali's manager
+_MANAGER_ALI_SARA = (
+    "\u0639\u0644\u06cc \u0645\u062f\u06cc\u0631 \u0633\u0627\u0631\u0627 "
+    "\u0627\u0633\u062a"
+)
+_MANAGER_SARA_ALI = (
+    "\u0633\u0627\u0631\u0627 \u0645\u062f\u06cc\u0631 \u0639\u0644\u06cc "
+    "\u0627\u0633\u062a"
+)
+
 
 # --------------------------------------------------------------------------
 # The observed bug: two fintech rows collapse to one
@@ -245,15 +306,19 @@ def test_fintech_keeps_higher_importance_when_higher_arrives_second(store):
 
 
 # --------------------------------------------------------------------------
-# Word-order variants merge
+# Order-sensitive cases stay separate (LCS == multiset intersection rule)
 # --------------------------------------------------------------------------
 
 
-def test_word_order_variants_merge(store):
-    """The same tokens in a different order must be detected as a duplicate.
+def test_reordered_subject_is_kept_separate(store):
+    """Reordering a whole fact without changing meaning no longer merges.
 
-    Set-based comparison (Jaccard) is order-independent, unlike the prefix
-    overlap used by the contradiction path.
+    Moving the subject after the place in 'the user lives in Tehran' has
+    Jaccard 1.000 and 6 shared tokens, but a longest common subsequence of 5.
+    Because the tokens do not appear in the same relative order, the new
+    order-sensitive duplicate rule keeps the two facts separate. This is the
+    accepted trade: leaving a duplicate row is untidy, but deleting a fact
+    wrongly is not recoverable.
     """
     # کاربر در تهران زندگی می‌کند
     original = (
@@ -268,7 +333,83 @@ def test_word_order_variants_merge(store):
     store.remember(original, kind="semantic", importance=0.8)
     store.remember(reordered, kind="semantic", importance=0.7)
     rows = store.all(limit=10)
-    assert len(rows) == 1
+    # Kept separate because LCS < multiset intersection size.
+    assert len(rows) == 2
+
+
+def test_four_order_sensitive_persian_pairs_stay_separate(store):
+    """The four order-sensitive Persian pairs from the specification stay separate."""
+    # 1. Brother pair: Ali is Reza's brother vs Reza is Ali's brother
+    store.remember(_BROTHER_ALI_REZA, kind="semantic")
+    store.remember(_BROTHER_REZA_ALI, kind="semantic")
+    assert len(store.all(limit=10)) == 2
+
+    # 2. Travel pair: went Tehran to Shiraz vs went Shiraz to Tehran
+    store.remember(_WENT_TEHRAN_SHIRAZ, kind="semantic")
+    store.remember(_WENT_SHIRAZ_TEHRAN, kind="semantic")
+    assert len(store.all(limit=10)) == 4
+
+    # 3. Debt pair: user owes Ali vs Ali owes user
+    store.remember(_OWES_USER_TO_ALI, kind="semantic")
+    store.remember(_OWES_ALI_TO_USER, kind="semantic")
+    assert len(store.all(limit=10)) == 6
+
+    # 4. Meeting time pair: runs 9 to 11 vs runs 11 to 9
+    store.remember(_MEETING_9_TO_11, kind="semantic")
+    store.remember(_MEETING_11_TO_9, kind="semantic")
+    assert len(store.all(limit=10)) == 8
+
+
+def test_two_additional_order_sensitive_pairs_stay_separate(store):
+    """Two additional order-sensitive pairs (numeric and person name swap) stay separate."""
+    # Numeric value swap
+    store.remember(_SALARY_20_RENT_5, kind="semantic")
+    store.remember(_SALARY_5_RENT_20, kind="semantic")
+    assert len(store.all(limit=10)) == 2
+
+    # Person name swap
+    store.remember(_MANAGER_ALI_SARA, kind="semantic")
+    store.remember(_MANAGER_SARA_ALI, kind="semantic")
+    assert len(store.all(limit=10)) == 4
+
+
+def test_exact_strings_fact_number_swap_stay_separate(store):
+    """The exact strings 'fact number 1-0' and 'fact number 0-1' stay separate."""
+    store.remember("fact number 1-0", kind="semantic")
+    store.remember("fact number 0-1", kind="semantic")
+    assert len(store.all(limit=10)) == 2
+
+
+def test_bulk_threading_facts_leave_all_rows_stored(store):
+    """Storing the 400 strings from the threading test leaves all 400 rows intact."""
+    bulk = [f"fact number {n}-{i}" for n in range(8) for i in range(50)]
+    for text in bulk:
+        store.remember(text, kind="semantic", importance=0.9)
+    assert len(store.all(limit=1000)) == 400
+
+
+# --------------------------------------------------------------------------
+# Longest common subsequence helper unit tests
+# --------------------------------------------------------------------------
+
+
+def test_longest_common_subsequence_helper():
+    """Unit test of _longest_common_subsequence covering required cases."""
+    # Empty inputs
+    assert _longest_common_subsequence([], []) == 0
+    # One empty input
+    assert _longest_common_subsequence(["a", "b"], []) == 0
+    assert _longest_common_subsequence([], ["a", "b"]) == 0
+    # Identical sequences
+    assert _longest_common_subsequence(["a", "b", "c"], ["a", "b", "c"]) == 3
+    # Pure insertion
+    assert _longest_common_subsequence(["a", "b", "c"], ["a", "c"]) == 2
+    assert _longest_common_subsequence(["a", "c"], ["a", "b", "c"]) == 2
+    # Pure swap
+    assert _longest_common_subsequence(["a", "b", "c"], ["b", "a", "c"]) == 2
+    # Repeated tokens where multiset count matters
+    assert _longest_common_subsequence(["a", "a", "b"], ["a", "b", "b"]) == 2
+    assert _longest_common_subsequence(["a", "b", "a"], ["a", "a", "b"]) == 2
 
 
 # --------------------------------------------------------------------------

@@ -20,6 +20,7 @@ import sqlite3
 import threading
 import time
 import unicodedata
+from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -365,22 +366,65 @@ def _canonicalise_stems(stems: list[str], canonical_map: dict[str, str]) -> list
     return [canonical_map.get(stem, stem) for stem in stems]
 
 
-def _is_duplicate(old: str, new: str, threshold: float, canonical_map: dict[str, str]) -> bool:
+def _longest_common_subsequence(x: Sequence[str], y: Sequence[str]) -> int:
+    """Return the length of the longest common subsequence of two sequences.
+
+    Uses two rolling rows so time is O(len(x) * len(y)) and memory is linear
+    in the length of the shorter sequence.
+    """
+    if not x or not y:
+        return 0
+    if len(x) < len(y):
+        x, y = y, x
+    n = len(y)
+    prev_row = [0] * (n + 1)
+    curr_row = [0] * (n + 1)
+    for item_x in x:
+        for j, item_y in enumerate(y):
+            if item_x == item_y:
+                curr_row[j + 1] = prev_row[j] + 1
+            else:
+                curr_row[j + 1] = max(prev_row[j + 1], curr_row[j])
+        prev_row, curr_row = curr_row, prev_row
+    return prev_row[n]
+
+
+def _is_duplicate(
+    old: str | Sequence[str],
+    new: str | Sequence[str],
+    threshold: float,
+    canonical_map: dict[str, str],
+) -> bool:
     """Return whether two facts are the same fact said slightly differently.
 
-    Uses Jaccard similarity on canonicalised stemmed token sets. Two facts
-    are duplicates when their canonical token sets overlap enough to cross
-    the threshold.
+    Uses Jaccard similarity on canonicalised stemmed token sets, followed by
+    a strict equality check between longest common subsequence length and
+    multiset intersection size to ensure shared tokens appear in the same
+    relative order.
     """
-    old_stems = _canonicalise_stems(_stemmed_tokens(old), canonical_map)
-    new_stems = _canonicalise_stems(_stemmed_tokens(new), canonical_map)
+    old_stems = (
+        _canonicalise_stems(_stemmed_tokens(old), canonical_map)
+        if isinstance(old, str)
+        else old
+    )
+    new_stems = (
+        _canonicalise_stems(_stemmed_tokens(new), canonical_map)
+        if isinstance(new, str)
+        else new
+    )
     old_set = set(old_stems)
     new_set = set(new_stems)
     if not old_set or not new_set:
         return False
     intersection = len(old_set & new_set)
     union = len(old_set | new_set)
-    return intersection / union >= threshold
+    if intersection / union < threshold:
+        return False
+
+    old_counts = Counter(old_stems)
+    new_counts = Counter(new_stems)
+    multiset_intersection = sum((old_counts & new_counts).values())
+    return _longest_common_subsequence(old_stems, new_stems) == multiset_intersection
 
 
 _CANONICAL_MAP: dict[str, str] = _build_canonical_map(
@@ -669,11 +713,21 @@ class MemoryStore:
             # Runs after exact dedupe and before contradiction detection, so a
             # true duplicate never reaches the supersede path.
             if kind == "semantic":
+                new_stems = _canonicalise_stems(_stemmed_tokens(norm), _CANONICAL_MAP)
+                candidate_stems = [
+                    (
+                        row,
+                        _canonicalise_stems(
+                            _stemmed_tokens(str(row["norm"])), _CANONICAL_MAP
+                        ),
+                    )
+                    for row in semantic_candidates
+                ]
                 duplicate_target: sqlite3.Row | None = None
-                for row in semantic_candidates:
+                for row, old_stems in candidate_stems:
                     if _is_duplicate(
-                        str(row["norm"]),
-                        norm,
+                        old_stems,
+                        new_stems,
                         self.duplicate_threshold,
                         _CANONICAL_MAP,
                     ):
