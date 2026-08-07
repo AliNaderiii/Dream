@@ -11,6 +11,7 @@ optional and are read when a backend or workspace is constructed.
 | `OPENAI_BASE_URL` | OpenAI-compatible API base URL | `https://api.openai.com/v1` | OpenAI-compatible |
 | `OLLAMA_HOST` | Local Ollama host, before the `/v1` compatibility path | `http://localhost:11434` | Ollama |
 | `DREAM_WORKSPACE_ROOT` | Root directory available to note/file tools | current working directory | tools |
+| `DREAM_SYNONYMS` | Path to a JSON file of extra Persian synonym groups for query expansion; malformed files fall back to the built-in table | built-in table only | memory |
 
 The CLI can override backend selection with `--backend echo`, `--backend
 openai`, or `--backend ollama`. Its `--db` flag controls the SQLite memory path
