@@ -190,9 +190,10 @@ def dispatch_command(text: str, dream: Dream, output: Callable[[str], None] = pr
         apply = argument.lower() == "confirm"
         result = store.cleanup_duplicates(dry_run=not apply)
         verb = "would merge" if not apply else "merged"
+        ending = "would remain" if not apply else "remain"
         output(
             f"[dedupe] {result['examined']} rows examined, {result['merged']} {verb}, "
-            f"{result['remaining']} would remain"
+            f"{result['remaining']} {ending}"
         )
         for older, newer, old_text, new_text in result["details"]:
             output(f"[dedupe] #{newer} into #{older}")
@@ -320,7 +321,8 @@ def main(argv: list[str] | None = None) -> int:
                 if not text.strip():
                     continue
                 if text.startswith(("/", "\\")):
-                    if not dispatch_command(text, dream):
+                    command_output = (lambda _line: None) if args.quiet else print
+                    if not dispatch_command(text, dream, output=command_output):
                         break
                     continue
                 turn = dream.run(text)
