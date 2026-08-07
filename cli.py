@@ -153,7 +153,12 @@ def report_turn_activity(turn: Turn, output: Callable[[str], None] | None = None
         output(f"[memory] store failed: {_truncate(error, _DETAIL_LIMIT)}")
 
 
-def dispatch_command(text: str, dream: Dream, output: Callable[[str], None] = print) -> bool:
+def dispatch_command(
+    text: str,
+    dream: Dream,
+    output: Callable[[str], None] = print,
+    quiet: bool = False,
+) -> bool:
     """Dispatch one slash command. Return ``False`` when the session should end.
 
     A leading backslash is accepted as an alias for a leading slash, so
@@ -189,18 +194,20 @@ def dispatch_command(text: str, dream: Dream, output: Callable[[str], None] = pr
     elif command == "/dedupe":
         apply = argument.lower() == "confirm"
         result = store.cleanup_duplicates(dry_run=not apply)
+        # Bracketed lines are diagnostics; the command reply itself is not.
+        report = (lambda _line: None) if quiet else output
         verb = "would merge" if not apply else "merged"
         ending = "would remain" if not apply else "remain"
-        output(
+        report(
             f"[dedupe] {result['examined']} rows examined, {result['merged']} {verb}, "
             f"{result['remaining']} {ending}"
         )
         for older, newer, old_text, new_text in result["details"]:
-            output(f"[dedupe] #{newer} into #{older}")
-            output(f"    older: {old_text}")
-            output(f"    newer: {new_text}")
+            report(f"[dedupe] #{newer} into #{older}")
+            report(f"    older: {old_text}")
+            report(f"    newer: {new_text}")
         if not apply:
-            output("[dedupe] dry run. nothing changed. add the confirm argument to apply.")
+            report("[dedupe] dry run. nothing changed. add the confirm argument to apply.")
     elif command == "/pin":
         try:
             memory_id = int(argument)
@@ -321,8 +328,7 @@ def main(argv: list[str] | None = None) -> int:
                 if not text.strip():
                     continue
                 if text.startswith(("/", "\\")):
-                    command_output = (lambda _line: None) if args.quiet else print
-                    if not dispatch_command(text, dream, output=command_output):
+                    if not dispatch_command(text, dream, output=print, quiet=args.quiet):
                         break
                     continue
                 turn = dream.run(text)

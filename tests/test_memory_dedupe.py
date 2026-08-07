@@ -157,6 +157,23 @@ def _feeding_input(lines):
     return read
 
 
+@pytest.mark.parametrize("quiet", [False, True])
+def test_quiet_suppresses_diagnostics_not_command_replies(tmp_path, monkeypatch, capsys, quiet):
+    store_path = tmp_path / ("quiet.db" if quiet else "loud.db")
+    with MemoryStore(str(store_path)) as store:
+        seed(store, "one visible fact")
+    commands = ["/mems", "/help", "/stats", "/unknown", "/dedupe", "/exit"]
+    monkeypatch.setattr("builtins.input", _feeding_input(commands))
+    arguments = ["--db", str(store_path)] + (["--quiet"] if quiet else [])
+    assert cli.main(arguments) == 0
+    output = capsys.readouterr().out
+    assert "one visible fact" in output
+    assert "/dedupe [confirm]" in output
+    assert "{\"" in output
+    assert "Unknown command: /unknown" in output
+    assert ("[dedupe]" in output) is (not quiet)
+
+
 def test_cli_dedupe_wording_help_and_quiet(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", _feeding_input(["/dedupe", "/dedupe confirm", "/help", "/exit"]))  # noqa: E501
     assert cli.main(["--db", str(tmp_path / "one.db")]) == 0
