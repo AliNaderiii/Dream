@@ -22,6 +22,7 @@ KNOWN_COMMANDS = (
     "/pin",
     "/remind",
     "/reminders",
+    "/unremind",
     "/tools",
     "/reset",
     "/help",
@@ -52,10 +53,17 @@ def _print_memories(store: MemoryStore, output: Callable[[str], None]) -> None:
 
 
 def _format_repeat(repeat_days, repeat_months) -> str:
+    """Format repeat interval in Persian with brackets for visual separation.
+
+    Persian uses singular noun after numbers, so "every 3 months" is
+    "هر 3 ماه" (not ماه‌ها). Returns empty string for no repeat.
+    """
     if repeat_days is not None:
-        return f"every {repeat_days} days"
+        # هر N روز (every N days)
+        return f"(\u0647\u0631 {repeat_days} \u0631\u0648\u0632)"
     if repeat_months is not None:
-        return f"every {repeat_months} months"
+        # هر N ماه (every N months)
+        return f"(\u0647\u0631 {repeat_months} \u0645\u0627\u0647)"
     return ""
 
 
@@ -64,9 +72,11 @@ def _parse_remind_args(argument: str):
 
     Returns (due_at, repeat_days, repeat_months, text, error).
     Accepts YYYY-MM-DD; year below 1700 is Jalali.
+    Repeat can appear before or after the text.
     """
     import re
 
+    from dream.memory import normalize_fa
     from dream.reminders import parse_date_to_timestamp
 
     if not argument.strip():
@@ -75,6 +85,8 @@ def _parse_remind_args(argument: str):
             "date as Jalali (year <1700) or Gregorian, repeat as "
             "'every N days' or 'every N months'"
         )
+    # Normalize to fold Persian digits to Latin
+    argument = normalize_fa(argument)
     # extract leading date
     m = re.match(r"^\s*(\d{4})\s*[-/.\s]\s*(\d{1,2})\s*[-/.\s]\s*(\d{1,2})\b", argument)
     if not m:
@@ -90,47 +102,116 @@ def _parse_remind_args(argument: str):
         return None, None, None, None, (
             f"Invalid date: {exc}. Usage: /remind YYYY-MM-DD TEXT"
         )
+
     repeat_days = None
     repeat_months = None
-    # try to consume repeat spec at start of rest
-    # patterns: --repeat-days N, --repeat-months N, every N days/months,
-    # repeat N days/months, N days/months
-    # year below 1700 is Jalali \u2014 handled in parse_date_to_timestamp
-    dm = re.match(r"^\s*--repeat[-_]days\s+(\d+)\b\s*", rest, re.IGNORECASE)
-    if dm:
-        repeat_days = int(dm.group(1))
-        rest = rest[dm.end():].strip()
-    else:
-        dm = re.match(r"^\s*--repeat[-_]months\s+(\d+)\b\s*", rest, re.IGNORECASE)
+
+    def _consume(match, days=None, months=None):
+        """Remove a matched repeat spec from rest and set the interval."""
+        nonlocal rest, repeat_days, repeat_months
+        repeat_days = days
+        repeat_months = months
+        rest = (rest[:match.start()] + rest[match.end():]).strip()
+
+    # Ordered list of (pattern, days_value, months_value) tuples.
+    # \u0647\u0631 = har, \u0631\u0648\u0632 = rooz, \u0645\u0627\u0647 = mah
+    # \u0647\u0641\u062a\u0647 = hafte, \u0633\u0627\u0644 = sal
+    _N = r"(\d+)"
+    _PERSIAN_PATTERNS = [
+        # har N rooz (every N days)
+        (rf"\u0647\u0631\s+{_N}\s+\u0631\u0648\u0632", "days"),
+        # har rooz (every day = 1 day)
+        (r"\u0647\u0631\s+\u0631\u0648\u0632", ("days", 1)),
+        # roozane (daily = 1 day)
+        (r"\u0631\u0648\u0632\u0627\u0646\u0647", ("days", 1)),
+        # har hafte (every week = 7 days)
+        (r"\u0647\u0631\s+\u0647\u0641\u062a\u0647", ("days", 7)),
+        # haftegi (weekly = 7 days)
+        (r"\u0647\u0641\u062a\u06af\u06cc", ("days", 7)),
+        # har N mah (every N months)
+        (rf"\u0647\u0631\s+{_N}\s+\u0645\u0627\u0647", "months"),
+        # harmah (every month, solid = 1 month)
+        (r"\u0647\u0631\u0645\u0627\u0647", ("months", 1)),
+        # har mah (every month = 1 month)
+        (r"\u0647\u0631\s+\u0645\u0627\u0647", ("months", 1)),
+        # mahiane (monthly variant = 1 month)
+        (r"\u0645\u0627\u0647\u06cc\u0627\u0646\u0647", ("months", 1)),
+        # mahane (monthly = 1 month)
+        (r"\u0645\u0627\u0647\u0627\u0646\u0647", ("months", 1)),
+        # har sal (every year = 12 months)
+        (r"\u0647\u0631\s+\u0633\u0627\u0644", ("months", 12)),
+        # salane (yearly = 12 months)
+        (r"\u0633\u0627\u0644\u0627\u0646\u0647", ("months", 12)),
+    ]
+
+    matched = False
+    for pattern, spec in _PERSIAN_PATTERNS:
+        dm = re.search(pattern, rest)
         if dm:
-            repeat_months = int(dm.group(1))
-            rest = rest[dm.end():].strip()
-        else:
-            dm = re.match(
-                r"^\s*(?:repeat|every)\s+(\d+)\s*(days?|months?)\b\s*",
-                rest,
-                re.IGNORECASE,
-            )
-            if dm:
-                num = int(dm.group(1))
-                unit = dm.group(2).lower()
-                if unit.startswith("day"):
-                    repeat_days = num
-                else:
-                    repeat_months = num
-                rest = rest[dm.end():].strip()
+            if spec == "days":
+                _consume(dm, days=int(dm.group(1)))
+            elif spec == "months":
+                _consume(dm, months=int(dm.group(1)))
+            elif isinstance(spec, tuple) and spec[0] == "days":
+                _consume(dm, days=spec[1])
             else:
-                dm = re.match(r"^\s*(\d+)\s*(days?|months?)\b\s*", rest, re.IGNORECASE)
-                if dm:
-                    num = int(dm.group(1))
-                    unit = dm.group(2).lower()
-                    after = rest[dm.end():].strip()
-                    if after:
-                        if unit.startswith("day"):
-                            repeat_days = num
-                        else:
-                            repeat_months = num
-                        rest = after
+                _consume(dm, months=spec[1])
+            matched = True
+            break
+
+    # English: every/repeat N days/months
+    if not matched:
+        dm = re.search(
+            r"\b(?:every|repeat)\s+(\d+)\s+(days?|months?)\b",
+            rest,
+            re.IGNORECASE,
+        )
+        if dm:
+            num = int(dm.group(1))
+            unit = dm.group(2).lower()
+            if unit.startswith("day"):
+                _consume(dm, days=num)
+            else:
+                _consume(dm, months=num)
+            matched = True
+
+    # English: N days/months (only when text remains)
+    if not matched:
+        dm = re.search(r"\b(\d+)\s+(days?|months?)\b", rest, re.IGNORECASE)
+        if dm:
+            num = int(dm.group(1))
+            unit = dm.group(2).lower()
+            before = rest[:dm.start()].strip()
+            after = rest[dm.end():].strip()
+            if before or after:
+                if unit.startswith("day"):
+                    _consume(dm, days=num)
+                else:
+                    _consume(dm, months=num)
+                matched = True
+
+    # Flag: --months N, --days N, --repeat-months N, --repeat-days N
+    if not matched:
+        dm = re.search(r"--(?:repeat[-_]?)?months\s+(\d+)\b", rest, re.IGNORECASE)
+        if dm:
+            _consume(dm, months=int(dm.group(1)))
+            matched = True
+    if not matched:
+        dm = re.search(r"--(?:repeat[-_]?)?days\s+(\d+)\b", rest, re.IGNORECASE)
+        if dm:
+            _consume(dm, days=int(dm.group(1)))
+            matched = True
+
+    # Reject any remaining -- option (unrecognized flag)
+    dm = re.search(r"--\S+", rest)
+    if dm:
+        unknown = dm.group(0)
+        return None, None, None, None, (
+            f"Unrecognized option: {unknown}. "
+            "Example: /remind 1405-06-01 \u0642\u0633\u0637 \u0648\u0627\u0645 "
+            "--months 1"
+        )
+
     if repeat_days == 0 or repeat_months == 0:
         return None, None, None, None, (
             "Repeat must be non-zero. Usage: /remind YYYY-MM-DD TEXT "
@@ -344,6 +425,19 @@ def dispatch_command(
                 rep_part = f" {rep}" if rep else ""
                 status = "" if r.active else " [inactive]"
                 output(f"{r.id}  {due_str}{rep_part}  {r.text}{status}")
+    elif command == "/unremind":
+        try:
+            reminder_id = int(argument)
+        except ValueError:
+            output("Usage: /unremind ID \u2014 ID must be a number.")
+        else:
+            if store.delete_reminder(reminder_id):
+                output(
+                    f"Reminder #{reminder_id} deleted permanently. "
+                    "This cannot be undone."
+                )
+            else:
+                output(f"No reminder with ID {reminder_id} for this user.")
     elif command == "/tools":
         for name, registered in sorted(REGISTRY.items()):
             output(f"{name}: {registered.risk}")
@@ -354,7 +448,7 @@ def dispatch_command(
         output(
             "/mem QUERY  /mems  /stats  /forget ID  /dedupe [confirm]  "
             "/pin ID  /remind YYYY-MM-DD TEXT [every N days|months]  "
-            "/reminders  /tools  /reset  /help  /exit"
+            "/reminders  /unremind ID  /tools  /reset  /help  /exit"
         )
     elif command == "/exit":
         return False
