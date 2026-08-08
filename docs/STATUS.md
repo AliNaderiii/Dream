@@ -4,6 +4,89 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M10 — Teaching the model when a procedure is a skill, not a fact — SHIPPED
+
+**What shipped.** The M4 `contribute_prompt` hook, declared and never called
+since M4, is wired for the first time: the skills subsystem supplies its own
+usage line (`SKILLS_USAGE` in `dream/skills.py`) through a new
+`SkillPromptProvider` that `Dream` registers beside the built-in memory
+provider, and the conversation loop appends the provider block to the system
+prompt after the memory-usage instructions. The model is finally told, in
+Persian, that a step-by-step procedure (the owner says «یاد بگیر» or
+«اول... بعد...») is a method, not a fact about the user — not to be stored in
+memories; to gather every step and save it once with `save_skill`, never one
+skill per message, re-saving under the same name when later steps arrive; and
+to look procedures up with `use_skill` when the user asks how to do
+something, answering normally when nothing matches. `remember_fact` stays for
+durable facts. No store, scheduler, calendar, extraction, Telegram, CLI, or
+tool-module change.
+
+**Multi-message decision, stated and defended.** The model gathers the whole
+procedure across messages and saves once per message that adds steps, always
+under the same name — M9 already defines overwrite-under-the-same-name as the
+correction path, so a later step extends the one file instead of creating a
+second skill. The owner's two-message transcript therefore ends in exactly one
+skill of three steps, and at no point do two skills exist. A clarifying
+question was rejected: the transcript has no confirmation turn, and
+per-message skills are exactly the measured failure.
+
+**The hook answer, in one sentence.** We wire the M4 `contribute_prompt` hook
+and let the skills subsystem supply its own prompt line, rather than
+hardcoding a second mechanism in the conversation module.
+
+**What was measured** (scripted backend — no live model answered:
+`OPENAI_API_KEY` unset, no Ollama in the environment; the scripted
+`PromptFollowingBackend` uses a tool only when the system prompt names it,
+the measured M9 principle, so the before/after tool choice is driven by the
+prompt text).
+
+- Full suite before: `536 passed`; ruff `All checks passed!`; with
+  `-W error::DeprecationWarning`: `536 passed`.
+- Full suite after: `543 passed` (+7); ruff `All checks passed!`; with
+  `-W error::DeprecationWarning`: `543 passed`; the new tests raise no
+  `ResourceWarning` under `-W error::ResourceWarning`.
+- The owner's two-message transcript, replayed on unchanged source (red
+  before any implementation): `remember_fact` per message, `[memory] stored
+  2 facts` then `[memory] stored 1 fact`, **3 rows, 0 skills** — the measured
+  M9 numbers reproduced exactly. After: `save_skill` per message, one skill
+  «تمدید بیمه ماشین» of three steps (file printed in the PR), **memory rows
+  3 → 1**; the model writes zero rows, the single remaining row is the
+  unchanged extraction pass's durable-fact output («کاربر در حال تمدید بیمه
+  ماشین است»), which this milestone was forbidden to touch.
+- A fact-shaped statement («اسم کامل من سارا رادمنش است») still becomes a
+  memory row via `remember_fact` and creates no skill file.
+- A how-to request («چطور بیمه ماشین را تمدید کنم؟») causes a `use_skill`
+  call whose result carries the stored steps and the reply repeats them; an
+  unrelated request («قیمت دلار امروز چقدر است؟») causes no tool call at
+  all. The scoping mechanism is the instruction text itself: `use_skill` is
+  tied to how-to requests and the prompt tells the model to answer normally
+  when nothing matches; both directions are measured above.
+- The skills line reaches the system prompt of a real turn and the provider
+  honours its char budget (block omitted when it would not fit, leaving the
+  prompt byte-for-byte as before).
+- Break-and-restore: every new test was observed red against a deliberate
+  one-line break and green again after `git checkout`; the two
+  still-works pins (fact routing, unrelated-turn silence) are insensitive to
+  every M10 source line by design, so their red was demonstrated by breaking
+  the pinned routing in the model stand-in. Messages are in the PR.
+- Standing regression list (20 items, 72 nodes): all pass.
+
+**On scope.** The milestone measures 466 new lines against the ~400 advisory
+budget; the excess sits in the mandated Persian escape constants and the
+scripted-backend battery. The natural split point, had it been needed, is the
+test file (~364 lines: the prompt-following backend, the Persian constants,
+and the seven tests); the source change itself is ~100 lines.
+
+**What is next.** Skills on the phone: the Telegram command list deliberately
+has no skill commands until the terminal shape has proven itself; the M4
+`expose_tools` hook remains declared and unwired. Windows reserved device
+names: a skill named for a console device is accepted today and lands inside
+the workspace, so nothing escapes, but the file may be unwritable on the
+owner's machine — one line, next milestone.
+
+**What is blocked.** Web search remains procurement, not engineering:
+key-free endpoints return empty pages for the owner's real queries.
+
 ## M9 — File-backed skills — SHIPPED
 
 **What shipped.** A skill is a durable procedure: a UTF-8 text file in
@@ -366,6 +449,6 @@ M6C still pins the current timing-coupled behaviour without blessing it.
 
 ## Planned milestones
 
-M9 file-backed skills (shipped) → surface skills in the prompt via the
-declared `contribute_prompt` hook → Telegram skill access → web search once
-the owner supplies a key or a relay → locale separation.
+M10 teaching skill-vs-fact via the wired `contribute_prompt` hook (shipped)
+→ Telegram skill access → web search once the owner supplies a key or a relay
+→ locale separation.
