@@ -6,6 +6,7 @@ import copy
 import json
 import os
 import re
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -13,7 +14,12 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from dream.extraction import extract_facts
+from dream.extraction import (
+    STATUS_ABANDONED,
+    STATUS_ERROR,
+    ExtractionResult,
+    extract_facts,
+)
 from dream.memory import Memory, MemoryStore
 from dream.normalization import normalize_importance, normalize_kind
 from dream.reminders import Reminder, format_jalali, prompt_reminders
@@ -35,6 +41,18 @@ DEFAULT_MEMORY_BLOCK_CHAR_LIMIT = 8_000
 # provider. Send our own identifying header instead. Dream is a desktop
 # application, not a browser, so this is never a browser-impersonation string.
 DEFAULT_USER_AGENT = "dream-assistant/0.1.0"
+
+# Rate-limit retries: a 429 means the provider is alive and answerable, so a
+# bounded retry with exponential backoff can succeed. A provider that hangs is
+# not retried into the wall clock — the per-request timeout already bounds it.
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_RETRY_BACKOFF_SECONDS = 1.0
+
+# The extraction pass runs in the background after the reply is produced. This
+# is how long a turn waits for it before the pass is marked abandoned and the
+# reply goes out anyway. Five seconds keeps typical extractions reported while
+# bounding the damage of a provider that never answers.
+DEFAULT_EXTRACTION_TIMEOUT_SECONDS = 5.0
 
 
 def _resolve_temperature(raw: str | None) -> float:
@@ -64,6 +82,45 @@ def _resolve_memory_block_char_limit(raw: str | None) -> int:
         return DEFAULT_MEMORY_BLOCK_CHAR_LIMIT
     if not 1 <= value <= 100_000:
         return DEFAULT_MEMORY_BLOCK_CHAR_LIMIT
+    return value
+
+
+def _resolve_max_retries(raw: str | None) -> int:
+    """Parse ``DREAM_MAX_RETRIES``, falling back to the default on any problem."""
+    if not raw:
+        return DEFAULT_MAX_RETRIES
+    try:
+        value = int(raw.strip())
+    except (TypeError, ValueError):
+        return DEFAULT_MAX_RETRIES
+    if not 0 <= value <= 10:
+        return DEFAULT_MAX_RETRIES
+    return value
+
+
+def _resolve_retry_backoff(raw: str | None) -> float:
+    """Parse ``DREAM_RETRY_BACKOFF_SECONDS``, falling back safely on bad input."""
+    if not raw:
+        return DEFAULT_RETRY_BACKOFF_SECONDS
+    try:
+        value = float(raw.strip())
+    except (TypeError, ValueError):
+        return DEFAULT_RETRY_BACKOFF_SECONDS
+    if not 0.0 <= value <= 60.0:
+        return DEFAULT_RETRY_BACKOFF_SECONDS
+    return value
+
+
+def _resolve_extraction_timeout(raw: str | None) -> float:
+    """Parse ``DREAM_EXTRACTION_TIMEOUT_SECONDS``, falling back safely."""
+    if not raw:
+        return DEFAULT_EXTRACTION_TIMEOUT_SECONDS
+    try:
+        value = float(raw.strip())
+    except (TypeError, ValueError):
+        return DEFAULT_EXTRACTION_TIMEOUT_SECONDS
+    if not 0.1 <= value <= 60.0:
+        return DEFAULT_EXTRACTION_TIMEOUT_SECONDS
     return value
 
 
@@ -105,10 +162,42 @@ class OpenAIBackend:
             else float(temperature)
         )
         self.user_agent = _resolve_user_agent(os.environ.get("DREAM_USER_AGENT"))
+        self.max_retries = _resolve_max_retries(os.environ.get("DREAM_MAX_RETRIES"))
+        self.retry_backoff_seconds = _resolve_retry_backoff(
+            os.environ.get("DREAM_RETRY_BACKOFF_SECONDS")
+        )
 
     def chat(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        max_retries: int | None = None,
     ) -> dict[str, Any]:
+        """Send one chat request, retrying rate limits with backoff.
+
+        Only HTTP 429 is retried: a provider that answers with a rate limit
+        is alive and may recover, and each retry sleeps an exponentially
+        growing backoff. A provider that hangs is bounded by the per-request
+        timeout and reported as a failure rather than retried into the wall
+        clock. When every attempt is exhausted the failure message says the
+        call was abandoned and how many attempts were made.
+        """
+        retries = self.max_retries if max_retries is None else max_retries
+        for attempt in range(retries + 1):
+            status, data = self._attempt_chat(messages, tools)
+            if status == 0:
+                return data
+            rate_limited = status == 429
+            if rate_limited and attempt < retries:
+                time.sleep(self.retry_backoff_seconds * (2**attempt))
+                continue
+            return self._failure(_failure_text(data, attempt + 1))
+
+    def _attempt_chat(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None
+    ) -> tuple[int, Any]:
+        """One request attempt: ``(0, response)`` on success, otherwise
+        ``(http_status_or_1, failure_detail)``."""
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
@@ -138,12 +227,12 @@ class OpenAIBackend:
                 }
                 for call in message.get("tool_calls", [])
             ]
-            return {"content": message.get("content"), "tool_calls": calls}
+            return 0, {"content": message.get("content"), "tool_calls": calls}
         except HTTPError as exc:
             # The body is where the server says what it rejected; keep it.
-            return self._failure(_describe_http_error(exc))
+            return exc.code, _describe_http_error(exc)
         except (URLError, OSError, KeyError, IndexError, TypeError, ValueError) as exc:
-            return self._failure(f"{type(exc).__name__}: {exc}")
+            return 1, f"{type(exc).__name__}: {exc}"
 
     def _failure(self, detail: str) -> dict[str, Any]:
         """Report a failed request without ever echoing the credential."""
@@ -151,6 +240,18 @@ class OpenAIBackend:
             "content": f"Model request failed: {_redact(detail, self.api_key)}",
             "tool_calls": [],
         }
+
+
+def _failure_text(detail: str, attempts: int) -> str:
+    """Describe a failed call, naming abandonment when it was retried.
+
+    A single attempt that failed is just the failure. A call that burned
+    several attempts against a rate limit must say so, or the owner cannot
+    tell a retried failure from an instantaneous one.
+    """
+    if attempts > 1:
+        return f"{detail} \u2014 abandoned after {attempts} attempts"
+    return detail
 
 
 class OllamaBackend(OpenAIBackend):
@@ -320,6 +421,18 @@ class ApprovalPolicy:
 
 
 @dataclass(slots=True)
+class _ExtractionOutcome:
+    """Carries the extraction pass result out of its worker thread.
+
+    The worker writes these fields and the turn reads them after the join
+    returns, so the happens-before edge of the join makes the read safe.
+    """
+
+    result: ExtractionResult | None = None
+    errors: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class Turn:
     """Observable record of one user turn through the agent loop."""
 
@@ -351,6 +464,9 @@ class Dream:
         self.max_iterations = max_iterations
         self.memory_block_char_limit = _resolve_memory_block_char_limit(
             os.environ.get("DREAM_MEMORY_BLOCK_CHAR_LIMIT")
+        )
+        self.extraction_timeout_seconds = _resolve_extraction_timeout(
+            os.environ.get("DREAM_EXTRACTION_TIMEOUT_SECONDS")
         )
         self.history: list[dict[str, Any]] = []
         self._created: list[Memory] = []
@@ -532,28 +648,7 @@ class Dream:
             self.history.append({"role": "assistant", "content": reply})
             self.store.log("assistant", reply)
 
-        extraction_result = extract_facts(self._extraction_backend(), message)
-        store_errors: list[str] = []
-        for fact in getattr(extraction_result, "facts", []):
-            try:
-                memory = self.store.remember(
-                    fact.content,
-                    kind=fact.kind,
-                    importance=fact.importance,
-                    source="extraction",
-                    on_supersede=self._superseded.append,
-                    on_merge=self._merged.append,
-                )
-                if not any(m.id == memory.id for m in self._created):
-                    self._created.append(memory)
-            except ValueError:
-                # The one expected case: an unusable fact (e.g. empty content).
-                # Skip it and keep the rest of the batch.
-                continue
-            except Exception as exc:
-                # A store failure (locked database, full disk, ...) must never
-                # pass silently: record it so the CLI can print what was lost.
-                store_errors.append(f"{type(exc).__name__}: {exc}")
+        extraction_result, store_errors = self._run_extraction(message)
 
         return Turn(
             reply,
@@ -574,14 +669,91 @@ class Dream:
         Extraction must emit parseable JSON, so it samples at a fixed low
         temperature rather than the conversational one. Only the real HTTP
         clients carry sampling; offline and scripted backends ignore
-        temperature and are returned unchanged.
+        temperature and are returned unchanged. The real client also gets
+        retries disabled: the pass runs inside a wall-clock budget, so it
+        must never retry a rate limit into that budget.
         """
         backend = self.backend
         if isinstance(backend, OpenAIBackend):
             colder = copy.copy(backend)
             colder.temperature = EXTRACTION_TEMPERATURE
+            colder.max_retries = 0
             return colder
         return backend
+
+    def _extract_in_background(
+        self, message: str, outcome: _ExtractionOutcome
+    ) -> None:
+        """Run the extraction pass and store any facts it finds.
+
+        Runs on a worker thread so the reply is never delayed by it. Every
+        exception is contained here: a broken provider, store, or fact must
+        never escape into the turn that already produced its reply.
+        """
+        try:
+            result = extract_facts(self._extraction_backend(), message)
+        except Exception as exc:  # defensive; extract_facts catches most of these
+            result = ExtractionResult(
+                facts=[], status=STATUS_ERROR, raw_text=f"{type(exc).__name__}: {exc}"
+            )
+        errors: list[str] = []
+        for fact in result.facts:
+            try:
+                memory = self.store.remember(
+                    fact.content,
+                    kind=fact.kind,
+                    importance=fact.importance,
+                    source="extraction",
+                    on_supersede=self._superseded.append,
+                    on_merge=self._merged.append,
+                )
+                if not any(m.id == memory.id for m in self._created):
+                    self._created.append(memory)
+            except ValueError:
+                # The one expected case: an unusable fact (e.g. empty content).
+                # Skip it and keep the rest of the batch.
+                continue
+            except Exception as exc:
+                # A store failure (locked database, full disk, ...) must never
+                # pass silently: record it so the CLI can print what was lost.
+                errors.append(f"{type(exc).__name__}: {exc}")
+        outcome.result = result
+        outcome.errors = errors
+
+    def _run_extraction(self, message: str) -> tuple[ExtractionResult, list[str]]:
+        """Start the extraction pass in the background and wait at most the
+        extraction budget for it.
+
+        When the pass finishes within the budget its facts are already in the
+        store and are reported on the turn, exactly as before. When it does
+        not — the provider hangs — the turn is marked abandoned and the reply
+        is returned anyway; the worker keeps running and stores the facts
+        when the provider finally answers.
+        """
+        outcome = _ExtractionOutcome()
+        worker = threading.Thread(
+            target=self._extract_in_background, args=(message, outcome), daemon=True
+        )
+        worker.start()
+        worker.join(timeout=self.extraction_timeout_seconds)
+        if worker.is_alive():
+            return (
+                ExtractionResult(
+                    facts=[],
+                    status=STATUS_ABANDONED,
+                    raw_text=(
+                        "did not finish within "
+                        f"{self.extraction_timeout_seconds:.1f}s"
+                    ),
+                ),
+                [],
+            )
+        result = outcome.result
+        if result is None:
+            result = ExtractionResult(
+                facts=[], status=STATUS_ERROR, raw_text="extraction produced no result"
+            )
+        return result, outcome.errors
 
 
 def _relative_age(timestamp: float) -> str:

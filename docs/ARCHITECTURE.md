@@ -88,6 +88,26 @@ deterministic offline time and arithmetic tool calls for tests and demos. The
 backend boundary leaves memory files and tool schemas independent of any
 particular model vendor.
 
+A call that answers with HTTP 429 is retried with exponential backoff
+(`DREAM_MAX_RETRIES`, `DREAM_RETRY_BACKOFF_SECONDS`): a rate-limited provider
+is alive and may recover. No other status is retried — a 400 is a rejection,
+a hang is bounded by the per-request timeout — and a call that burns its
+retries reports «abandoned after N attempts» instead of looking like an
+ordinary failure.
+
+## Extraction runs in the background
+
+After the reply loop finishes, a daemon worker thread runs the extraction pass
+and stores any facts it finds. The turn waits at most
+`DREAM_EXTRACTION_TIMEOUT_SECONDS` (default 5.0) for the worker: a fast pass
+reports its facts on the turn exactly as before, while a provider that hangs
+leaves the turn marked `abandoned` and the reply goes out anyway — the worker
+keeps running and stores the facts when the provider finally answers. The
+extraction backend is the conversation backend at a colder temperature with
+retries disabled, so the pass never retries into its own wall-clock budget.
+Every exception inside the worker is contained and reported on the turn, never
+escaped into the reply path.
+
 A tool call crosses that boundary in two shapes. Inside Dream it is the flat
 `{"id", "name", "arguments": {...}}` mapping that the approval policy and
 `execute` consume. On the wire it must be `{"id", "type": "function",

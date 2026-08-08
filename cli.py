@@ -296,6 +296,11 @@ def format_extraction_line(result: Any) -> str:
         if detail:
             return f"[extraction] backend errored: {_truncate(str(detail), _DETAIL_LIMIT)}"
         return "[extraction] backend errored"
+    if status == "abandoned":
+        detail = getattr(result, "raw_text", "")
+        if detail:
+            return f"[extraction] abandoned: {_truncate(str(detail), _DETAIL_LIMIT)}"
+        return "[extraction] abandoned: time budget exceeded"
     return f"[extraction] {status}"
 
 

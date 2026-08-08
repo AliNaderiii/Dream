@@ -17,6 +17,7 @@ from dream.normalization import normalize_importance, normalize_kind
 
 __all__ = [
     "MIN_MESSAGE_LENGTH",
+    "STATUS_ABANDONED",
     "STATUS_DISABLED",
     "STATUS_ERROR",
     "STATUS_FACTS_FOUND",
@@ -36,6 +37,9 @@ STATUS_TOO_SHORT = "too_short"
 STATUS_DISABLED = "disabled"
 STATUS_UNPARSEABLE = "unparseable"
 STATUS_ERROR = "error"
+# The pass was still running when its wall-clock budget expired. The reply
+# goes out regardless; the pass itself keeps running in the background.
+STATUS_ABANDONED = "abandoned"
 
 _EXTRACTION_PROMPT = (
     "تو یک استخراج‌کننده واقعیت هستی. فقط واقعیت‌های ماندگار درباره کاربر را "

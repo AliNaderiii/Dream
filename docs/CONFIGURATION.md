@@ -12,6 +12,9 @@ optional and are read when a backend or workspace is constructed.
 | `OLLAMA_HOST` | Local Ollama host, before the `/v1` compatibility path | `http://localhost:11434` | Ollama |
 | `DREAM_WORKSPACE_ROOT` | Root directory available to note/file tools | current working directory | tools |
 | `DREAM_SYNONYMS` | Path to a JSON file of extra Persian synonym groups for query expansion; malformed files fall back to the built-in table | built-in table only | memory |
+| `DREAM_MAX_RETRIES` | Retry attempts for HTTP 429 rate limits, with exponential backoff | `3` | OpenAI, Ollama |
+| `DREAM_RETRY_BACKOFF_SECONDS` | Base backoff sleep before the first retry; each retry doubles it | `1.0` | OpenAI, Ollama |
+| `DREAM_EXTRACTION_TIMEOUT_SECONDS` | Wall-clock budget a turn waits for the background extraction pass before marking it abandoned | `5.0` | all backends |
 
 The CLI can override backend selection with `--backend echo`, `--backend
 openai`, or `--backend ollama`. Its `--db` flag controls the SQLite memory path

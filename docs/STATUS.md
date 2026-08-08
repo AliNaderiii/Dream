@@ -4,6 +4,41 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M2 — Non-blocking model calls — SHIPPED
+
+**What shipped.** The post-turn extraction pass now runs on a background
+worker: a turn waits at most `DREAM_EXTRACTION_TIMEOUT_SECONDS` (default 5.0)
+for it, marks the pass `abandoned` with the elapsed budget in the message, and
+returns the reply anyway; the worker keeps running and stores facts when the
+provider finally answers. HTTP 429 rate limits are retried with exponential
+backoff (`DREAM_MAX_RETRIES`, default 3; `DREAM_RETRY_BACKOFF_SECONDS`,
+default 1.0); only 429 is retried, a hanging provider is bounded by the
+per-request timeout, and an exhausted retry budget reports
+«abandoned after N attempts». Extraction never retries: it would stretch its
+wall-clock budget.
+
+**What was measured.**
+
+- Pre-M2: instant reply, extraction hanging 8 s → turn wall time `8.00s`
+  (all of it the extraction block).
+- Post-M2, same scenario, default budget: turn wall time `5.00s`, reply
+  instant, `extraction.status == abandoned`, message
+  `did not finish within 5.0s`; budget is configurable down to 0.1 s.
+- Full suite before: `395 passed in 10.70s`; ruff clean.
+- Full suite after: `405 passed in 11.59s` (+10); with `-W error`:
+  `405 passed in 11.83s`, zero warnings.
+- Break-and-restore: with the bounded join replaced by an unbounded wait
+  (the old blocking behaviour), the hanging-extraction and visibility tests
+  fail (10 s turn, no abandoned status); restored, all 10 pass.
+- Regression list (13 items): all pass after M2.
+
+**What is next.** M3 — natural Persian dates: parse Persian date expressions
+(tomorrow, the fifteenth of Mehr, the first of every month) into the
+timestamps the scheduler already uses, keeping the Jalali module as the single
+source of truth; ambiguous input is rejected with an example.
+
+**What is blocked.** Nothing.
+
 ## M1 — Reminders reach the model — SHIPPED
 
 **What shipped.** The agent turn now searches scheduled reminders with the
@@ -34,13 +69,13 @@ ranking) and `Dream._reminder_block()` plus prompt constants in
 
 **What is next.** M2 — non-blocking model calls: extraction must stop blocking
 the reply, add retry with backoff on rate limits, and surface a clear message
-when a call is abandoned.
+when a call is abandoned. *(Shipped — see above.)*
 
 **What is blocked.** Nothing.
 
 ## Planned milestones
 
-M1 reminders reach the model (shipped) → M2 non-blocking model calls → M3
-natural Persian dates → M4 memory provider interface → M5 Telegram → M6 real
-tool layer → M7 skills → M8 locale separation → next three proposed with
-measurements.
+M1 reminders reach the model (shipped) → M2 non-blocking model calls
+(shipped) → M3 natural Persian dates → M4 memory provider interface → M5
+Telegram → M6 real tool layer → M7 skills → M8 locale separation → next three
+proposed with measurements.
