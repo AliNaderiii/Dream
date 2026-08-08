@@ -176,6 +176,45 @@ The delivery table upgrades old databases with data intact. The interface hooks
 raw tool results can still be embedded in Persian replies; and family names can
 be dropped during extraction. These remain deferred to a later milestone.
 
+## M6C — Tests for per-destination delivery — SHIPPED
+
+**What shipped.** Tests only; no source changed. Two new files pin the M6
+delivery rule that shipped with no coverage: `tests/test_reminder_delivery.py`
+(six delivery and migration tests) and `tests/test_concurrent_processes.py`
+(the real-process barrier test). They assert that two destinations each receive
+the same due reminder exactly once; that a one-off still reaches a second
+destination after the first consumed it and the row went inactive (the defect
+M6 existed to fix); that a repeating reminder advances exactly one period no
+matter how many destinations read it; that the default destination behaves as
+before for a lone terminal; that a database from the previous release opens,
+gains the two delivery tables, and keeps its data; and that thirty
+barrier-synchronised two-process due checks are never refused.
+
+**What was measured.**
+
+- Full suite before: `490 passed`; ruff `All checks passed!`.
+- Full suite after: `497 passed` (+7); under `-W error::DeprecationWarning`:
+  `497 passed`.
+- The seven new tests raise no `ResourceWarning` of their own under
+  `-W error::ResourceWarning` (every process and connection is closed).
+- Thirty-trial real-process barrier: `0` of 30 refused (reverting the atomic
+  transaction to a deferred read-before-write made it 30 of 30 raise
+  `database is locked`).
+- Break-and-restore: each new test was seen red against a one-line source
+  break and green after `git checkout` restored it; messages are in the PR.
+- Regression list (13 items): all pass after M6C.
+
+**On the never-seen-destination behaviour.** A destination the store has never
+seen receives every currently-overdue reminder in one batch, but only when it
+first checks at the same instant those reminders fired (`last_fired_at >=
+first_seen` with both equal to `now`). Replay to a newly arrived destination is
+reasonable; the timing coupling is not — a destination added a moment later
+sees nothing. That deserves its own milestone rather than a change here.
+
+**Known and deferred.** The three defects carried over from M6 (verbose 429
+payloads, raw tool results in Persian replies, dropped family names) are
+untouched and still deferred.
+
 ## Planned milestones
 
 M1 reminders reach the model (shipped) → M2 non-blocking model calls
