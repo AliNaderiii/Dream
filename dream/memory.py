@@ -744,6 +744,16 @@ class MemoryStore:
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_reminders_active ON reminders(active)"
         )
+        self.conn.execute("""CREATE TABLE IF NOT EXISTS reminder_deliveries (
+            reminder_id INTEGER NOT NULL, destination TEXT NOT NULL,
+            fired_at REAL NOT NULL, delivered_at REAL NOT NULL,
+            PRIMARY KEY (reminder_id, destination, fired_at),
+            FOREIGN KEY (reminder_id) REFERENCES reminders(id)
+        )""")
+        self.conn.execute("""CREATE TABLE IF NOT EXISTS reminder_destinations (
+            user_id TEXT NOT NULL, destination TEXT NOT NULL, first_seen REAL NOT NULL,
+            PRIMARY KEY (user_id, destination)
+        )""")
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -951,7 +961,7 @@ class MemoryStore:
     def deduplicate(self, dry_run: bool = True) -> dict[str, Any]:
         """Merge old near-duplicate semantic memories in one atomic pass."""
         with self._lock:
-            self.conn.execute("BEGIN")
+            self.conn.execute("BEGIN IMMEDIATE")
             try:
                 rows = self.conn.execute(
                     """SELECT * FROM memories
@@ -1222,11 +1232,11 @@ class MemoryStore:
 
         return _delete(self, reminder_id)
 
-    def check_due_reminders(self, now: float | None = None):
-        """Run the due check for the owning user."""
+    def check_due_reminders(self, now: float | None = None, destination: str = "terminal"):
+        """Run the due check for one notification destination."""
         from dream.reminders import check_due_reminders as _check
 
-        return _check(self, now)
+        return _check(self, now, destination=destination)
 
     # -- introspection -----------------------------------------------------
 
