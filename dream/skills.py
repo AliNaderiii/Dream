@@ -1,0 +1,350 @@
+"""File-backed skills: hand-editable procedures the assistant can find again.
+
+A memory stores what is true; a skill stores how to do something. Skills are
+not rows in the database — they are UTF-8 text files in ``skills/`` under the
+workspace root, so the owner can open one in any editor, correct a wrong
+step, and have the correction take effect on the very next use. Nothing is
+cached: every load reads the directory again, so there is no rebuild step
+and no stale state between sessions.
+
+File format (readable on purpose):
+
+    name: چای دم کردن
+    description: وقتی کاربر می‌خواهد چای درست کند یا طرز تهیه چای را بپرسد
+    steps:
+    1. کتری را با آب تازه پر کن
+    2. ...
+
+Labels may also be written in Persian (``نام:``, ``توضیح:``, ``مراحل:``) —
+the parser accepts both spellings so a hand-written file is never refused for
+choosing the wrong one. Step lines may carry ``-``, ``*``, ``1.`` or ``۱)``
+markers; the marker is not part of the step. All three fields are required: a
+file without a name, a description, or at least one step is reported as
+broken and skipped, never fatal. Files that are not valid UTF-8, or that
+exceed a generous size cap, are reported and skipped the same way.
+
+Matching reuses the existing linguistic pipeline — ``normalize_fa``, the
+suffix stemmer and the synonym index from :mod:`dream.memory` — instead of
+inventing a third mechanism. A skill's matching surface is its name plus
+description (the declared "when it applies"), never its steps: step content
+would false-positive any request that mentions an action. Scoring is
+skill-side coverage, the same formula ``prompt_reminders`` uses: the
+fraction of the skill's content stems that appear among the query's
+synonym-expanded stems. Two guards keep a single generic shared word from
+summoning a skill (the stemmer conflates «درست» and «درس», and every
+description shares scaffolding words): a match needs at least a third of the
+skill's stems covered, and either two shared stems or full coverage.
+
+This module knows nothing about SQLite, and the store knows nothing about
+skills; the only dependencies are the text helpers above and the workspace
+boundary helper in :mod:`dream.tools`, referenced through the module at call
+time so tests that relocate ``WORKSPACE_ROOT`` see every skill move with it.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from typing import Any
+
+from dream import tools
+from dream.memory import _SYNONYM_INDEX, _stem_fa, _tokenize, normalize_fa
+
+__all__ = [
+    "Skill",
+    "SkillProblem",
+    "find_skill",
+    "load_skills",
+    "parse_skill_text",
+    "render_skill_text",
+    "save_skill",
+    "score_skills",
+    "validate_name",
+]
+
+SKILLS_DIR_NAME = "skills"
+SKILL_SUFFIX = ".txt"
+
+# A skill is one screenful of prose; anything past 64 KiB is not a procedure
+# the owner wrote by hand — it is reported as a problem instead of being read.
+MAX_SKILL_FILE_BYTES = 65_536
+
+# Matching bar, chosen against the Persian test battery: one third of the
+# skill's content stems must be covered (paraphrases drop words), and a lone
+# shared stem is never enough unless it is the skill's entire surface.
+MIN_COVERAGE = 1.0 / 3.0
+MIN_SHARED_STEMS = 2
+
+# Scaffolding words with no topic content: politeness and request frames,
+# auxiliaries, function words, question words. Written as backslash-u escapes
+# with a plain-Persian gloss, matching the synonym-table convention.
+# Gloss: وقتی اگر کاربر است هست باشد شود می خواهد خواهم بخواهد کند کن کنم
+#        کنیم کرد کردن کرده بگو بگم بگوید گفت یا و را از به با در که برای تا
+#        این آن هر همه چطور چگونه چی چه چقدر پرسیدن پرسید بپرس
+_STOPWORDS: tuple[str, ...] = (
+    "\u0648\u0642\u062a\u06cc", "\u0627\u06af\u0631", "\u06a9\u0627\u0631\u0628\u0631",
+    "\u0627\u0633\u062a", "\u0647\u0633\u062a", "\u0628\u0627\u0634\u062f", "\u0634\u0648\u062f",
+    "\u0645\u06cc", "\u062e\u0648\u0627\u0647\u062f", "\u062e\u0648\u0627\u0647\u0645",
+    "\u0628\u062e\u0648\u0627\u0647\u062f", "\u06a9\u0646\u062f", "\u06a9\u0646",
+    "\u06a9\u0646\u0645", "\u06a9\u0646\u06cc\u0645", "\u06a9\u0631\u062f",
+    "\u06a9\u0631\u062f\u0646", "\u06a9\u0631\u062f\u0647", "\u0628\u06af\u0648",
+    "\u0628\u06af\u0645", "\u0628\u06af\u0648\u06cc\u062f", "\u06af\u0641\u062a",
+    "\u06cc\u0627", "\u0648", "\u0631\u0627", "\u0627\u0632", "\u0628\u0647",
+    "\u0628\u0627", "\u062f\u0631", "\u06a9\u0647", "\u0628\u0631\u0627\u06cc",
+    "\u062a\u0627", "\u0627\u06cc\u0646", "\u0622\u0646", "\u0647\u0631", "\u0647\u0645\u0647",
+    "\u0686\u0637\u0648\u0631", "\u0686\u06af\u0648\u0646\u0647", "\u0686\u06cc",
+    "\u0686\u0647", "\u0686\u0642\u062f\u0631", "\u067e\u0631\u0633\u06cc\u062f\u0646",
+    "\u067e\u0631\u0633\u06cc\u062f", "\u0628\u067e\u0631\u0633",
+)
+
+_STOP_STEMS: frozenset[str] = frozenset(
+    _stem_fa(token) for word in _STOPWORDS for token in _tokenize(word)
+)
+
+# Both Latin and Persian label spellings parse; the writer emits Latin so the
+# grammar stays unambiguous in editors that mangle RTL punctuation.
+_LABELS = {
+    "name": "name",
+    "description": "description",
+    "steps": "steps",
+    "\u0646\u0627\u0645": "name",  # نام
+    "\u062a\u0648\u0636\u06cc\u062d": "description",  # توضیح
+    "\u0645\u0631\u0627\u062d\u0644": "steps",  # مراحل
+}
+_LABEL_RE = re.compile(r"^([^\s:]{1,16})\s*:\s*(.*)$")
+_STEP_MARKER_RE = re.compile(r"^(?:[-*•]|[0-9۰-۹]+[.)])\s+")
+
+# Characters that are path separators, drive markers, or illegal in Windows
+# file names; the workspace may be copied to a Windows machine (run.bat).
+_FORBIDDEN_NAME_CHARS = re.compile(r'[/\\:*?"<>|\x00-\x1f]')
+
+
+@dataclass(frozen=True, slots=True)
+class Skill:
+    """One parsed skill file: what it is called, when it applies, its steps."""
+
+    name: str
+    description: str
+    steps: tuple[str, ...]
+    filename: str
+
+
+@dataclass(frozen=True, slots=True)
+class SkillProblem:
+    """One unusable skill file and why it was skipped. Never fatal."""
+
+    filename: str
+    detail: str
+
+
+def _skills_dir() -> Any:
+    """Return the skills directory under the current workspace root."""
+    return tools.WORKSPACE_ROOT / SKILLS_DIR_NAME
+
+
+def validate_name(name: str) -> str:
+    """Return the cleaned skill name or raise ``ValueError`` with the reason.
+
+    A name becomes one flat file inside ``skills/``; anything shaped like a
+    path — a separator, a parent reference, an absolute or drive-qualified
+    form — is refused before the file system is ever consulted.
+    """
+    cleaned = name.strip()
+    if not cleaned:
+        raise ValueError("skill name is empty")
+    if _FORBIDDEN_NAME_CHARS.search(cleaned):
+        raise ValueError(f"skill name contains a forbidden character: {name!r}")
+    if ".." in cleaned:
+        raise ValueError(f"skill name contains a parent directory reference: {name!r}")
+    return cleaned
+
+
+def parse_skill_text(text: str) -> tuple[str, str, list[str]]:
+    """Parse skill file text into ``(name, description, steps)``.
+
+    Forgiving by design, because the owner edits these files by hand: blank
+    lines are ignored, both label spellings are accepted, and step markers
+    are stripped. Raises ``ValueError`` naming the first missing part.
+    """
+    name: str | None = None
+    description: str | None = None
+    steps: list[str] = []
+    section: str | None = None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = _LABEL_RE.match(line)
+        if match:
+            field = _LABELS.get(normalize_fa(match.group(1)).lower())
+            if field == "name":
+                name = match.group(2).strip()
+                section = field
+                continue
+            if field == "description":
+                description = match.group(2).strip()
+                section = field
+                continue
+            if field == "steps":
+                section = field
+                continue
+        if section == "steps":
+            steps.append(_STEP_MARKER_RE.sub("", line).strip())
+    if not name:
+        raise ValueError("skill file has no name line")
+    if not description:
+        raise ValueError("skill file has no description line")
+    steps = [step for step in steps if step]
+    if not steps:
+        raise ValueError("skill file has no steps")
+    return name, description, steps
+
+
+def render_skill_text(name: str, description: str, steps: list[str]) -> str:
+    """Render the canonical skill file text that ``save_skill`` writes."""
+    lines = [f"name: {name}", f"description: {description}", "steps:"]
+    lines.extend(f"{index}. {step}" for index, step in enumerate(steps, start=1))
+    return "\n".join(lines) + "\n"
+
+
+def save_skill(name: str, description: str, steps: Any) -> str:
+    """Write one skill file through the workspace boundary helper.
+
+    Returns the workspace-relative filename. Overwriting an existing name is
+    how a skill is corrected. Raises ``ValueError`` on a refused name or on
+    missing content; the tool boundary turns that into a structured error.
+    """
+    cleaned = validate_name(name)
+    description = description.strip()
+    if not description:
+        raise ValueError("skill description is empty")
+    if isinstance(steps, str):
+        steps = steps.splitlines()
+    cleaned_steps = [str(step).strip() for step in (steps or [])]
+    cleaned_steps = [step for step in cleaned_steps if step]
+    if not cleaned_steps:
+        raise ValueError("skill has no steps")
+    directory = _skills_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    path = tools._safe_path(f"{SKILLS_DIR_NAME}/{cleaned}{SKILL_SUFFIX}")
+    path.write_text(
+        render_skill_text(cleaned, description, cleaned_steps), encoding="utf-8"
+    )
+    return f"{SKILLS_DIR_NAME}/{cleaned}{SKILL_SUFFIX}"
+
+
+def load_skills() -> tuple[list[Skill], list[SkillProblem]]:
+    """Read every skill file fresh from the workspace; never raise.
+
+    Each ``.txt`` file is parsed on its own: one malformed, unreadable, or
+    oversized file becomes a :class:`SkillProblem` and every other skill
+    still loads. Files without the skill suffix are not skills at all and
+    are ignored rather than reported.
+    """
+    skills: list[Skill] = []
+    problems: list[SkillProblem] = []
+    directory = _skills_dir()
+    if not directory.is_dir():
+        return skills, problems
+    for path in sorted(directory.glob(f"*{SKILL_SUFFIX}")):
+        relative = f"{SKILLS_DIR_NAME}/{path.name}"
+        try:
+            raw = path.read_bytes()
+        except OSError as exc:
+            problems.append(SkillProblem(relative, f"unreadable: {exc}"))
+            continue
+        if len(raw) > MAX_SKILL_FILE_BYTES:
+            problems.append(SkillProblem(relative, "file is too large to be a skill"))
+            continue
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            problems.append(SkillProblem(relative, "file is not valid UTF-8"))
+            continue
+        try:
+            name, description, steps = parse_skill_text(text)
+        except ValueError as exc:
+            problems.append(SkillProblem(relative, str(exc)))
+            continue
+        skills.append(Skill(name, description, tuple(steps), relative))
+    return skills, problems
+
+
+def _content_stems(text: str) -> set[str]:
+    """Stem ``text`` and drop scaffolding words, leaving topic stems only."""
+    return {
+        stem
+        for stem in (_stem_fa(token) for token in _tokenize(text))
+        if stem not in _STOP_STEMS
+    }
+
+
+def _expanded_query_stems(query: str) -> set[str]:
+    """Content stems of the query plus every synonym-group expansion."""
+    stems = _content_stems(query)
+    expanded = set(stems)
+    for stem in stems:
+        expanded.update(_SYNONYM_INDEX.get(stem, ()))
+    return expanded
+
+
+def _skill_stems(skill: Skill) -> frozenset[str]:
+    """The skill's matching surface: name and description, never the steps."""
+    return frozenset(_content_stems(f"{skill.name} {skill.description}"))
+
+
+# The suffix stemmer is deliberately shallow, so two inflections of one word
+# can land on stems where one merely prefixes the other (measured during the
+# adversarial pass: «دوست» vs «دوستش» gives دوست/دوست — the bare form sheds
+# its ت — and «بنویسم» vs «بنویسد» gives بنویس/بنویسد — د is not in the
+# suffix table). Exact-set matching would miss all of those, so two stems
+# count as equal when one prefixes the other, with a floor of three letters:
+# two-letter «دم» (brewing) must never claim «دما» (the weather report).
+_MIN_PREFIX_STEM = 3
+
+
+def _stem_match(left: str, right: str) -> bool:
+    """Equality of stems, allowing one measured inflection asymmetry."""
+    if left == right:
+        return True
+    shorter, longer = sorted((left, right), key=len)
+    return len(shorter) >= _MIN_PREFIX_STEM and longer.startswith(shorter)
+
+
+def _shared_count(stems: frozenset[str], query_stems: set[str]) -> int:
+    """How many of the skill's stems are covered by the expanded query."""
+    return sum(
+        1 for stem in stems if any(_stem_match(stem, qstem) for qstem in query_stems)
+    )
+
+
+def score_skills(query: str) -> list[Skill]:
+    """Rank skills clearing the matching bar, best first; ties by name.
+
+    Score = fraction of the skill's own content stems covered by the
+    synonym-expanded query. A skill with an empty content surface cannot
+    match anything, and a single shared stem matches only when it is the
+    skill's whole surface, so one generic word never summons a procedure.
+    """
+    query_stems = _expanded_query_stems(query)
+    ranked: list[tuple[float, Skill]] = []
+    skills, _ = load_skills()
+    for skill in skills:
+        stems = _skill_stems(skill)
+        if not stems:
+            continue
+        shared = _shared_count(stems, query_stems)
+        coverage = shared / len(stems)
+        if coverage < MIN_COVERAGE:
+            continue
+        if shared < MIN_SHARED_STEMS and coverage < 1.0:
+            continue
+        ranked.append((coverage, skill))
+    ranked.sort(key=lambda item: (-item[0], item[1].name))
+    return [skill for _, skill in ranked]
+
+
+def find_skill(query: str) -> Skill | None:
+    """Return the best skill for a Persian request, or ``None`` for no match."""
+    ranked = score_skills(query)
+    return ranked[0] if ranked else None

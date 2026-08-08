@@ -32,11 +32,14 @@ __all__ = [
     "execute",
     "get_datetime",
     "list_notes",
+    "list_skills",
     "openai_schemas",
     "read_note",
     "run_shell",
+    "save_skill",
     "send_email",
     "tool",
+    "use_skill",
     "write_note",
 ]
 
@@ -270,6 +273,72 @@ def write_note(filename: str, content: str) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return f"wrote {path.relative_to(WORKSPACE_ROOT)}"
+
+
+@tool(risk="guarded")
+def save_skill(name: str, description: str, steps: list) -> dict[str, Any]:
+    """Save a reusable skill: a named procedure to follow in later requests.
+
+    The skill becomes a plain text file inside ``skills/`` in the workspace
+    that the owner can read and correct by hand. The description must say
+    when the skill applies; it is what future requests are matched against.
+
+    :param name: Skill name; also the file name, so path characters are refused.
+    :param description: When this skill applies, in the owner's words.
+    :param steps: Ordered steps the assistant should follow.
+    """
+    from dream import skills  # deferred: dream.skills imports this module
+
+    cleaned = skills.validate_name(name)
+    was_present = (skills._skills_dir() / f"{cleaned}{skills.SKILL_SUFFIX}").exists()
+    filename = skills.save_skill(cleaned, description, steps)
+    return {"filename": filename, "status": "updated" if was_present else "created"}
+
+
+@tool(risk="safe")
+def use_skill(query: str) -> dict[str, Any]:
+    """Find the stored skill that applies to a request and return its steps.
+
+    Reading a skill never runs anything: the steps are text the assistant
+    follows using its ordinary tools and their ordinary approvals.
+
+    :param query: The request to match, in any wording.
+    """
+    from dream import skills  # deferred: dream.skills imports this module
+
+    skill = skills.find_skill(query)
+    if skill is None:
+        return {"match": None}
+    return {
+        "match": {
+            "name": skill.name,
+            "description": skill.description,
+            "steps": list(skill.steps),
+            "filename": skill.filename,
+        }
+    }
+
+
+@tool(risk="safe")
+def list_skills() -> dict[str, Any]:
+    """List every stored skill, plus any file that failed to load."""
+    from dream import skills  # deferred: dream.skills imports this module
+
+    loaded, problems = skills.load_skills()
+    return {
+        "skills": [
+            {
+                "name": skill.name,
+                "description": skill.description,
+                "steps": list(skill.steps),
+                "filename": skill.filename,
+            }
+            for skill in loaded
+        ],
+        "problems": [
+            {"filename": problem.filename, "detail": problem.detail} for problem in problems
+        ],
+    }
 
 
 @tool(risk="dangerous")
