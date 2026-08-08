@@ -124,6 +124,8 @@ calls unchanged); `Dream.run()` uses `manager.recall()` and
 `manager.list_reminders()` and calls `manager.persist()` after the turn.
 No mutual dependency: `MemoryStore` stays independent of `providers.py`.
 
+**What is not wired yet.** `contribute_prompt` and `expose_tools` are declared on the interface but the conversation loop does not call them yet. The reason: the prompt path built in M1 was left untouched so it could not regress. Wiring them is the job of the first milestone that needs them.
+
 **What was measured.**
 
 - Before: 457 passed in 13.34s; ruff clean.
