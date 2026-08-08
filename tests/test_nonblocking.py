@@ -36,6 +36,23 @@ from dream.memory import MemoryStore
 # پاسخ فوری. (an instant reply) / من علی هستم (I am Ali)
 _REPLY = "\u067e\u0627\u0633\u062e \u0641\u0648\u0631\u06cc."
 _WHO_AM_I = "\u0645\u0646 \u0639\u0644\u06cc \u0647\u0633\u062a\u0645"
+_RATE_LIMIT_REPLY = (
+    "\u0633\u0647\u0645\u06cc\u0647 \u062a\u0645\u0627\u0645 \u0634\u062f\u0647\u061b "
+    "\u06cc\u06a9 \u062f\u0642\u06cc\u0642\u0647 \u062f\u06cc\u06af\u0631 "
+    "\u062f\u0648\u0628\u0627\u0631\u0647 \u0628\u067e\u0631\u0633."
+)
+_UNEXPECTED_REPLY = (
+    "\u06cc\u06a9 \u062e\u0637\u0627\u06cc \u063a\u06cc\u0631\u0645\u0646\u062a\u0638\u0631\u0647 "
+    "\u0631\u062e \u062f\u0627\u062f\u061b \u062c\u0632\u0626\u06cc\u0627\u062a "
+    "\u0631\u0627 \u062f\u0631 \u062a\u0631\u0645\u06cc\u0646\u0627\u0644 "
+    "\u0628\u0628\u06cc\u0646."
+)
+_UNREACHABLE_REPLY = (
+    "\u0627\u0644\u0627\u0646 \u0628\u0647 \u0633\u0631\u0648\u06cc\u0633 "
+    "\u067e\u0627\u0633\u062e\u200c\u06af\u0648\u06cc\u06cc \u0648\u0635\u0644 "
+    "\u0646\u0645\u06cc\u200c\u0634\u0648\u0645\u061b \u0627\u062a\u0635\u0627\u0644 "
+    "\u0631\u0627 \u0628\u0631\u0631\u0633\u06cc \u06a9\u0646."
+)
 
 
 @pytest.fixture()
@@ -198,8 +215,8 @@ def test_rate_limit_retries_then_succeeds(monkeypatch):
     assert calls["count"] == 3  # two 429s, then success
 
 
-def test_rate_limit_exhausted_reports_abandoned(monkeypatch):
-    """Every attempt rate-limited: the message says so and names the count."""
+def test_rate_limit_exhausted_reports_abandoned(monkeypatch, capsys):
+    """Every attempt rate-limited: the diagnostic names the count."""
     monkeypatch.setenv("DREAM_MAX_RETRIES", "2")
     monkeypatch.setenv("DREAM_RETRY_BACKOFF_SECONDS", "0.01")
     calls = {"count": 0}
@@ -210,13 +227,15 @@ def test_rate_limit_exhausted_reports_abandoned(monkeypatch):
 
     monkeypatch.setattr("dream.agent.urlopen", always_429)
     content = _backend().chat([{"role": "user", "content": "hi"}])["content"]
+    captured = capsys.readouterr()
 
-    assert content.startswith("Model request failed: HTTP 429")
-    assert "abandoned after 3 attempts" in content
+    assert content == _RATE_LIMIT_REPLY
+    assert "HTTP 429" in captured.err
+    assert "abandoned after 3 attempts" in captured.err
     assert calls["count"] == 3  # 1 + 2 retries
 
 
-def test_non_rate_limit_errors_are_not_retried(monkeypatch):
+def test_non_rate_limit_errors_are_not_retried(monkeypatch, capsys):
     """A 500 is not a rate limit: one attempt, no backoff, no 'abandoned'."""
     monkeypatch.setenv("DREAM_MAX_RETRIES", "3")
     calls = {"count": 0}
@@ -227,10 +246,12 @@ def test_non_rate_limit_errors_are_not_retried(monkeypatch):
 
     monkeypatch.setattr("dream.agent.urlopen", server_error)
     content = _backend().chat([{"role": "user", "content": "hi"}])["content"]
+    captured = capsys.readouterr()
 
     assert calls["count"] == 1
-    assert "HTTP 500" in content
-    assert "abandoned" not in content
+    assert content == _UNEXPECTED_REPLY
+    assert "HTTP 500" in captured.err
+    assert "abandoned" not in captured.err
 
 
 def test_retry_never_touches_other_status_codes(monkeypatch):
@@ -261,13 +282,12 @@ def test_a_hanging_reply_call_fails_visibly_and_promptly(store, monkeypatch):
         def chat(self, messages, tools=None):
             if tools is not None:
                 return {
-                    "content": "Model request failed: TimeoutError: timed out",
+                    "content": _UNREACHABLE_REPLY,
                     "tool_calls": [],
                 }
             return {"content": "[]", "tool_calls": []}
 
     turn = Dream(store, TimeoutBackend()).run("\u0633\u0644\u0627\u0645")
 
-    assert turn.reply.startswith("Model request failed:")
-    assert "TimeoutError" in turn.reply
+    assert turn.reply == _UNREACHABLE_REPLY
     assert "abandoned" not in turn.reply  # a single attempt is just a failure

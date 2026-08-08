@@ -263,6 +263,28 @@ def test_who_am_i_question_reaches_name_and_work_facts(store):
     assert work_fact in contents, "who-am-I must reach the work fact"
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "\u0627\u0633\u0645 \u0645\u0646 \u0686\u06cc\u0647\u061f",
+        "\u0646\u0627\u0645 \u06a9\u0627\u0645\u0644 \u0645\u0646 \u0686\u06cc\u0633\u062a\u061f",
+        "\u0645\u0646 \u06a9\u06cc \u0647\u0633\u062a\u0645\u061f",
+    ],
+)
+def test_full_name_recall_keeps_family_name_for_persian_name_questions(store, question):
+    """Full-name storage must answer name questions with the family name intact."""
+    full_name_fact = (
+        "\u06a9\u0627\u0631\u0628\u0631 \u0639\u0644\u06cc\u0631\u0636\u0627 "
+        "\u0646\u0627\u062f\u0631\u06cc \u0646\u0627\u0645 \u062f\u0627\u0631\u062f"
+    )
+    store.remember(full_name_fact, kind="semantic", importance=0.9)
+
+    contents = [m.content for m in store.recall(question, reinforce=False)]
+
+    assert full_name_fact in contents
+    assert any("\u0646\u0627\u062f\u0631\u06cc" in content for content in contents)
+
+
 def test_unrelated_query_still_does_not_match(store):
     """A query that should not match still does not.
 

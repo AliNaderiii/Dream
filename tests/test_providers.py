@@ -12,6 +12,7 @@ import time
 
 import pytest
 
+from dream.agent import Dream
 from dream.memory import MemoryStore
 from dream.providers import (
     BuiltInMemoryProvider,
@@ -91,6 +92,39 @@ class BrokenInitProvider(MemoryProvider):
         pass
 
 
+class PostRegistrationRaisingProvider(MemoryProvider):
+    def is_available(self) -> bool:
+        return True
+
+    def initialize(self) -> None:
+        pass
+
+    def recall(self, query: str, limit: int = 8, reinforce: bool = False):
+        raise RuntimeError("recall broken")
+
+    def list_reminders(self, include_inactive: bool = False):
+        raise RuntimeError("reminders broken")
+
+    def contribute_prompt(self, query: str, budget_chars: int):
+        raise RuntimeError("prompt broken")
+
+    def persist(self) -> None:
+        raise RuntimeError("persist broken")
+
+    def expose_tools(self):
+        raise RuntimeError("tools broken")
+
+    def shutdown(self) -> None:
+        raise RuntimeError("shutdown broken")
+
+
+class ReplyBackend:
+    def chat(self, messages, tools=None):
+        if tools is None:
+            return {"content": "[]", "tool_calls": []}
+        return {"content": "ok", "tool_calls": []}
+
+
 def test_memory_provider_is_abstract():
     with pytest.raises(TypeError):
         MemoryProvider()
@@ -152,6 +186,19 @@ def test_manager_list_reminders_dedupes():
     reminders = manager.list_reminders()
     texts = [r.text for r in reminders]
     assert "test reminder" in texts
+
+
+def test_registered_provider_with_raising_methods_does_not_break_a_turn():
+    store = MemoryStore(":memory:")
+    manager = ProviderManager()
+    try:
+        manager.register(BuiltInMemoryProvider(store))
+        manager.register(PostRegistrationRaisingProvider())
+        turn = Dream(manager=manager, backend=ReplyBackend()).run("hello")
+    finally:
+        manager.shutdown()
+
+    assert turn.reply == "ok"
 
 
 def test_break_and_restore_isolation():

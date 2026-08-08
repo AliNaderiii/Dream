@@ -9,7 +9,7 @@ file cannot itself be corrupted by encoding issues.
 
 from __future__ import annotations
 
-from dream.extraction import _EXTRACTION_PROMPT
+from dream.extraction import _EXTRACTION_PROMPT, extract_facts
 
 
 def test_no_unicode_replacement_character():
@@ -75,3 +75,58 @@ def test_empty_array_example_intact():
     first_output_index = _EXTRACTION_PROMPT.find(output_label) + len(output_label)
     snippet = _EXTRACTION_PROMPT[first_output_index:].strip()
     assert snippet.startswith("[]")
+
+
+def test_prompt_has_a_worked_example_with_a_family_name():
+    full_name = "\u0639\u0644\u06cc\u0631\u0636\u0627 \u0646\u0627\u062f\u0631\u06cc"
+    full_name_fact = (
+        "\u06a9\u0627\u0631\u0628\u0631 \u0639\u0644\u06cc\u0631\u0636\u0627 "
+        "\u0646\u0627\u062f\u0631\u06cc \u0646\u0627\u0645 \u062f\u0627\u0631\u062f"
+    )
+    assert full_name in _EXTRACTION_PROMPT
+    assert full_name_fact in _EXTRACTION_PROMPT
+
+
+def test_prompt_tells_extractor_to_preserve_exact_name_wording():
+    instruction = (
+        "\u0646\u0627\u0645 \u0627\u0641\u0631\u0627\u062f \u0631\u0627 \u0628\u0627 "
+        "\u0647\u0645\u0627\u0646 \u0648\u0627\u0698\u0647\u200c\u0647\u0627\u06cc "
+        "\u06a9\u0627\u0631\u0628\u0631 \u062d\u0641\u0638 \u06a9\u0646 \u0648 "
+        "\u0646\u0627\u0645 \u062e\u0627\u0646\u0648\u0627\u062f\u06af\u06cc \u0631\u0627 "
+        "\u062d\u0630\u0641 \u0646\u06a9\u0646."
+    )
+    assert instruction in _EXTRACTION_PROMPT
+
+
+class _PromptSensitiveFullNameBackend:
+    def chat(self, messages):
+        prompt = str(messages[0]["content"])
+        family_name = "\u0646\u0627\u062f\u0631\u06cc"
+        full_name = "\u0639\u0644\u06cc\u0631\u0636\u0627 \u0646\u0627\u062f\u0631\u06cc"
+        if family_name in prompt and full_name in prompt:
+            content = (
+                "\u06a9\u0627\u0631\u0628\u0631 \u0639\u0644\u06cc\u0631\u0636\u0627 "
+                "\u0646\u0627\u062f\u0631\u06cc \u0646\u0627\u0645 \u062f\u0627\u0631\u062f"
+            )
+        else:
+            content = (
+                "\u06a9\u0627\u0631\u0628\u0631 \u0639\u0644\u06cc\u0631\u0636\u0627 "
+                "\u0646\u0627\u0645 \u062f\u0627\u0631\u062f"
+            )
+        return {
+            "content": (
+                '[{"content": "'
+                + content
+                + '", "kind": "semantic", "importance": 0.9}]'
+            )
+        }
+
+
+def test_scripted_full_name_extraction_keeps_the_family_name():
+    sentence = (
+        "\u0627\u0633\u0645 \u06a9\u0627\u0645\u0644 \u0645\u0646 "
+        "\u0639\u0644\u06cc\u0631\u0636\u0627 \u0646\u0627\u062f\u0631\u06cc \u0627\u0633\u062a."
+    )
+    result = extract_facts(_PromptSensitiveFullNameBackend(), sentence)
+    contents = [fact.content for fact in result.facts]
+    assert any("\u0646\u0627\u062f\u0631\u06cc" in content for content in contents), contents
