@@ -215,6 +215,49 @@ sees nothing. That deserves its own milestone rather than a change here.
 payloads, raw tool results in Persian replies, dropped family names) are
 untouched and still deferred.
 
+## M7 — Failure replies, clock shape, full-name extraction — SHIPPED
+
+**What shipped.** Three independent rough edges were removed. Provider request
+failures now keep full redacted diagnostics on the terminal while the chat reply
+is one short Persian sentence, with distinct wording for rate limits, network
+unreachability, rejected requests, and unexpected failures. The clock tool no
+longer returns ISO 8601 to the conversation; it returns a Persian Jalali date
+and local time rendering, so a Persian reminder answer cannot accidentally
+start with a machine timestamp or timezone offset. The extraction prompt now
+tells the extractor to preserve the owner's exact name wording and includes a
+worked example with a family name.
+
+**What was measured.**
+
+- Baseline before source changes: `497 passed in 13.29s`.
+- Full suite after: `509 passed in 13.86s`; ruff over the repository:
+  `All checks passed!`; with `-W error::DeprecationWarning`:
+  `509 passed in 12.92s`.
+- Provider failure wall: four stubbed failures were measured. Each raw error
+  remained on the terminal diagnostic line with credentials absent; each chat
+  reply was the intended short Persian sentence.
+- Clock shape: the tool wrapper now returns `status=ok` with a Jalali/Persian
+  rendering. A scripted Persian oil-reminder reply contained the stored
+  `1405-12-01` date and no ISO timestamp, no timezone offset, and no Latin
+  month name.
+- Full-name extraction: no live provider was configured (`OPENAI_API_KEY` was
+  unset), so the ten-trial measurement used a prompt-sensitive scripted
+  backend. Before the prompt change the family name survived `0/10`; after the
+  change it survived `10/10`.
+- Regression list: 52 targeted regression tests passed, including the two
+  per-destination delivery tests added in M6C.
+
+**Effect on the open unknown-answer hazard.** These changes should not make the
+assistant more likely to bluff. Provider failures are now explicit failures
+rather than raw payloads, and the extraction change asks for exact preservation
+of what the owner said instead of paraphrasing. The broader confident-unknown
+problem remains open outside reminders.
+
+**What is next.** Define the first-seen destination semantics deliberately;
+M6C still pins the current timing-coupled behaviour without blessing it.
+
+**What is blocked.** Nothing.
+
 ## Planned milestones
 
 M1 reminders reach the model (shipped) → M2 non-blocking model calls

@@ -6,6 +6,7 @@ import copy
 import json
 import os
 import re
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -192,7 +193,7 @@ class OpenAIBackend:
             if rate_limited and attempt < retries:
                 time.sleep(self.retry_backoff_seconds * (2**attempt))
                 continue
-            return self._failure(_failure_text(data, attempt + 1))
+            return self._failure(status, _failure_text(data, attempt + 1))
 
     def _attempt_chat(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None
@@ -235,10 +236,12 @@ class OpenAIBackend:
         except (URLError, OSError, KeyError, IndexError, TypeError, ValueError) as exc:
             return 1, f"{type(exc).__name__}: {exc}"
 
-    def _failure(self, detail: str) -> dict[str, Any]:
-        """Report a failed request without ever echoing the credential."""
+    def _failure(self, status: int, detail: str) -> dict[str, Any]:
+        """Report a failed request without ever echoing raw provider detail."""
+        safe_detail = _redact(detail, self.api_key)
+        print(f"[provider] Model request failed: {safe_detail}", file=sys.stderr)
         return {
-            "content": f"Model request failed: {_redact(detail, self.api_key)}",
+            "content": _provider_failure_reply(status, safe_detail),
             "tool_calls": [],
         }
 
@@ -253,6 +256,38 @@ def _failure_text(detail: str, attempts: int) -> str:
     if attempts > 1:
         return f"{detail} \u2014 abandoned after {attempts} attempts"
     return detail
+
+
+def _provider_failure_reply(status: int, detail: str) -> str:
+    """Return the short chat-facing sentence for a provider failure."""
+    if status == 429:
+        return (
+            "\u0633\u0647\u0645\u06cc\u0647 \u062a\u0645\u0627\u0645 "
+            "\u0634\u062f\u0647\u061b \u06cc\u06a9 \u062f\u0642\u06cc\u0642\u0647 "
+            "\u062f\u06cc\u06af\u0631 \u062f\u0648\u0628\u0627\u0631\u0647 "
+            "\u0628\u067e\u0631\u0633."
+        )
+    if 400 <= status < 500:
+        return (
+            "\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0631\u062f "
+            "\u0634\u062f\u061b \u062c\u0632\u0626\u06cc\u0627\u062a "
+            "\u0631\u0627 \u062f\u0631 \u062a\u0631\u0645\u06cc\u0646\u0627\u0644 "
+            "\u0628\u0628\u06cc\u0646."
+        )
+    if detail.startswith(("URLError:", "TimeoutError:", "ConnectionError:", "OSError:")):
+        return (
+            "\u0627\u0644\u0627\u0646 \u0628\u0647 \u0633\u0631\u0648\u06cc\u0633 "
+            "\u067e\u0627\u0633\u062e\u200c\u06af\u0648\u06cc\u06cc \u0648\u0635\u0644 "
+            "\u0646\u0645\u06cc\u200c\u0634\u0648\u0645\u061b \u0627\u062a\u0635\u0627\u0644 "
+            "\u0631\u0627 \u0628\u0631\u0631\u0633\u06cc \u06a9\u0646."
+        )
+    return (
+        "\u06cc\u06a9 \u062e\u0637\u0627\u06cc "
+        "\u063a\u06cc\u0631\u0645\u0646\u062a\u0638\u0631\u0647 "
+        "\u0631\u062e \u062f\u0627\u062f\u061b \u062c\u0632\u0626\u06cc\u0627\u062a "
+        "\u0631\u0627 \u062f\u0631 \u062a\u0631\u0645\u06cc\u0646\u0627\u0644 "
+        "\u0628\u0628\u06cc\u0646."
+    )
 
 
 class OllamaBackend(OpenAIBackend):

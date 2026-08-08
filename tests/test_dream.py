@@ -650,7 +650,7 @@ def test_second_turn_replays_history_the_server_accepts(tmp_path, monkeypatch):
     assert isinstance(replayed["function"]["arguments"], str)
 
 
-def test_mock_server_rejects_dreams_internal_tool_call_shape(monkeypatch):
+def test_mock_server_rejects_dreams_internal_tool_call_shape(monkeypatch, capsys):
     """The guard above has teeth: the pre-fix shape is refused with HTTP 400."""
     server = StrictChatServer(_reply("unreachable"))
     monkeypatch.setattr("dream.agent.urlopen", server)
@@ -661,8 +661,10 @@ def test_mock_server_rejects_dreams_internal_tool_call_shape(monkeypatch):
         "tool_calls": [{"id": "call_1", "name": "get_datetime", "arguments": {}}],
     }
     response = backend.chat([{"role": "user", "content": "hi"}, malformed])
+    captured = capsys.readouterr()
     assert response["tool_calls"] == []
-    assert "tool_calls.0.type must be function" in response["content"]
+    assert response["content"] == _REJECTED_PROVIDER_REPLY
+    assert "tool_calls.0.type must be function" in captured.err
 
 
 # --------------------------------------------------------------------------
@@ -703,6 +705,24 @@ def test_remember_fact_declares_tags_as_an_array(tmp_path):
 # Backend error reporting
 # --------------------------------------------------------------------------
 
+_REJECTED_PROVIDER_REPLY = (
+    "\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0631\u062f \u0634\u062f\u061b "
+    "\u062c\u0632\u0626\u06cc\u0627\u062a \u0631\u0627 \u062f\u0631 "
+    "\u062a\u0631\u0645\u06cc\u0646\u0627\u0644 \u0628\u0628\u06cc\u0646."
+)
+_UNEXPECTED_PROVIDER_REPLY = (
+    "\u06cc\u06a9 \u062e\u0637\u0627\u06cc \u063a\u06cc\u0631\u0645\u0646\u062a\u0638\u0631\u0647 "
+    "\u0631\u062e \u062f\u0627\u062f\u061b \u062c\u0632\u0626\u06cc\u0627\u062a "
+    "\u0631\u0627 \u062f\u0631 \u062a\u0631\u0645\u06cc\u0646\u0627\u0644 "
+    "\u0628\u0628\u06cc\u0646."
+)
+_UNREACHABLE_PROVIDER_REPLY = (
+    "\u0627\u0644\u0627\u0646 \u0628\u0647 \u0633\u0631\u0648\u06cc\u0633 "
+    "\u067e\u0627\u0633\u062e\u200c\u06af\u0648\u06cc\u06cc \u0648\u0635\u0644 "
+    "\u0646\u0645\u06cc\u200c\u0634\u0648\u0645\u061b \u0627\u062a\u0635\u0627\u0644 "
+    "\u0631\u0627 \u0628\u0631\u0631\u0633\u06cc \u06a9\u0646."
+)
+
 
 def _raise(exc: Exception):
     def fail(request, timeout: int | None = None):
@@ -711,56 +731,71 @@ def _raise(exc: Exception):
     return fail
 
 
-def test_http_error_message_includes_the_response_body(monkeypatch):
+def test_http_error_message_includes_the_response_body(monkeypatch, capsys):
     body = '{"error": {"message": "invalid_request: tool_calls.0.function.arguments"}}'
     monkeypatch.setattr("dream.agent.urlopen", _raise(_http_error(400, body)))
     backend = OpenAIBackend(model="test-model", api_key="", base_url="http://model.test/v1")
     content = backend.chat([{"role": "user", "content": "hi"}])["content"]
-    assert "HTTP 400" in content
-    assert "invalid_request: tool_calls.0.function.arguments" in content
+    captured = capsys.readouterr()
+    assert content == _REJECTED_PROVIDER_REPLY
+    assert "HTTP 400" in captured.err
+    assert "invalid_request: tool_calls.0.function.arguments" in captured.err
 
 
-def test_error_message_never_contains_the_api_key(monkeypatch):
+def test_error_message_never_contains_the_api_key(monkeypatch, capsys):
     key = "sk-very-secret-key-value"
     body = json.dumps({"error": {"message": f"Incorrect API key provided: {key}"}})
     monkeypatch.setattr("dream.agent.urlopen", _raise(_http_error(401, body)))
     backend = OpenAIBackend(model="test-model", api_key=key, base_url="http://model.test/v1")
     content = backend.chat([{"role": "user", "content": "hi"}])["content"]
+    captured = capsys.readouterr()
     assert key not in content
-    assert "Incorrect API key provided" in content
+    assert key not in captured.err
+    assert content == _REJECTED_PROVIDER_REPLY
+    assert "Incorrect API key provided" in captured.err
 
 
-def test_bearer_credentials_are_stripped_from_error_bodies(monkeypatch):
+def test_bearer_credentials_are_stripped_from_error_bodies(monkeypatch, capsys):
     body = "upstream rejected header Authorization: Bearer sk-leaked-token-value"
     monkeypatch.setattr("dream.agent.urlopen", _raise(_http_error(403, body)))
     backend = OpenAIBackend(model="test-model", api_key="", base_url="http://model.test/v1")
     content = backend.chat([{"role": "user", "content": "hi"}])["content"]
+    captured = capsys.readouterr()
     assert "sk-leaked-token-value" not in content
+    assert "sk-leaked-token-value" not in captured.err
+    assert "Bearer ***" in captured.err
 
 
-def test_long_error_body_is_truncated(monkeypatch):
+def test_long_error_body_is_truncated(monkeypatch, capsys):
     monkeypatch.setattr("dream.agent.urlopen", _raise(_http_error(500, "x" * 5000)))
     backend = OpenAIBackend(model="test-model", api_key="", base_url="http://model.test/v1")
     content = backend.chat([{"role": "user", "content": "hi"}])["content"]
-    assert "truncated" in content
-    assert len(content) < 700
+    captured = capsys.readouterr()
+    assert content == _UNEXPECTED_PROVIDER_REPLY
+    assert "truncated" in captured.err
+    assert len(captured.err) < 700
 
 
-def test_bodyless_http_error_still_names_the_status(monkeypatch):
+def test_bodyless_http_error_still_names_the_status(monkeypatch, capsys):
     monkeypatch.setattr(
         "dream.agent.urlopen",
         _raise(HTTPError("http://model.test/v1/chat/completions", 502, "Bad Gateway", {}, None)),
     )
     backend = OpenAIBackend(model="test-model", api_key="", base_url="http://model.test/v1")
-    assert "HTTP 502 Bad Gateway" in backend.chat([{"role": "user", "content": "hi"}])["content"]
+    content = backend.chat([{"role": "user", "content": "hi"}])["content"]
+    captured = capsys.readouterr()
+    assert content == _UNEXPECTED_PROVIDER_REPLY
+    assert "HTTP 502 Bad Gateway" in captured.err
 
 
-def test_connection_failure_names_the_error_type(monkeypatch):
+def test_connection_failure_names_the_error_type(monkeypatch, capsys):
     monkeypatch.setattr("dream.agent.urlopen", _raise(URLError("connection refused")))
     backend = OpenAIBackend(model="test-model", api_key="", base_url="http://model.test/v1")
     content = backend.chat([{"role": "user", "content": "hi"}])["content"]
-    assert "URLError" in content
-    assert "connection refused" in content
+    captured = capsys.readouterr()
+    assert content == _UNREACHABLE_PROVIDER_REPLY
+    assert "URLError" in captured.err
+    assert "connection refused" in captured.err
 
 
 # --------------------------------------------------------------------------
