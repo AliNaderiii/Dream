@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 import cli
-from dream.agent import Dream, Turn
+from dream.agent import Dream, EchoBackend, Turn
 from dream.extraction import (
     STATUS_DISABLED,
     STATUS_ERROR,
@@ -275,7 +275,7 @@ def test_agent_still_replies_when_extraction_fails(store):
 def test_extraction_runs_exactly_once_per_turn(store):
     payload = '[{"content": "کاربر برنامه را تست می‌کند", "kind": "semantic"}]'
     backend = ToolCallingTurnBackend(payload)
-    turn = Dream(store, backend).run("بگو ساعت چند است و تاریخ چیست")
+    turn = Dream(store, backend).run("من برنامه را تست می‌کنم و بگو ساعت چند است و تاریخ چیست")
     assert backend.conv_calls == 3
     assert backend.ext_calls == 1
     assert turn.extraction is not None
@@ -341,7 +341,7 @@ def test_cli_quiet_flag_suppresses_extraction_line(tmp_path, monkeypatch, capsys
 
 
 def test_probe_reports_absence_of_tool_call_as_information(store):
-    payload = '[{"content": "کاربر علی است", "kind": "semantic"}]'
+    payload = '[{"content": "کاربر روی استارتاپ فین‌تک کار می‌کند", "kind": "semantic"}]'
     backend = TurnBackend("سلام", payload)
     report = memory_probe.run_probe(backend)
     rendered = report.render()
@@ -367,7 +367,7 @@ def test_probe_verdict_extraction_could_not_be_parsed():
 
 
 def test_probe_verdict_facts_extracted_but_none_stored(store, monkeypatch):
-    payload = '[{"content": "کاربر علی است", "kind": "semantic"}]'
+    payload = '[{"content": "کاربر روی استارتاپ فین‌تک کار می‌کند", "kind": "semantic"}]'
     backend = TurnBackend("سلام", payload)
 
     def _fail_remember(*args, **kwargs):
@@ -424,3 +424,136 @@ def test_invalid_fact_value_error_is_skipped_quietly(store, monkeypatch):
     assert turn.reply == "سلام علی"
     assert turn.memories_created == []
     assert turn.memory_errors == [], "the expected rejection stays off the error list"
+
+
+# --------------------------------------------------------------------------
+# Guard against prompt echoes and ungrounded facts
+# --------------------------------------------------------------------------
+
+
+def test_prompt_echo_rejected_by_extraction_guard():
+    """A candidate fact whose subject matter does not appear in the user message is rejected."""
+    # User message introduces name only; backend hallucinates/echoes fintech startup fact
+    user_msg = "اسم کامل من علیرضا نادری است."
+    prompt_echo_payload = (
+        '[{"content": "کاربر روی استارتاپ فین‌تک کار می‌کند", "kind": "semantic", "importance": 0.9}]'
+    )
+    backend = ExtractionBackend(prompt_echo_payload)
+    result = extract_facts(backend, user_msg)
+    assert result.status == STATUS_NO_FACTS
+    assert result.facts == []
+
+
+def test_prompt_echo_multi_fact_filters_echo_keeps_legitimate():
+    """When a response has a legitimate fact and a prompt echo, keep only the legitimate fact."""
+    user_msg = "اسم کامل من علیرضا نادری است."
+    payload = (
+        '[{"content": "کاربر علیرضا نادری نام دارد", "kind": "semantic", "importance": 0.9}, '
+        '{"content": "کاربر روی استارتاپ فین‌تک کار می‌کند", "kind": "semantic", "importance": 0.9}]'
+    )
+    backend = ExtractionBackend(payload)
+    result = extract_facts(backend, user_msg)
+    assert result.status == STATUS_FACTS_FOUND
+    assert len(result.facts) == 1
+    assert result.facts[0].content == "کاربر علیرضا نادری نام دارد"
+
+
+def test_small_talk_prompt_echo_rejected():
+    """A prompt echo returned on small talk is rejected."""
+    user_msg = "سلام، چطوری؟"
+    payload = '[{"content": "کاربر به نجوم علاقه دارد", "kind": "semantic", "importance": 0.8}]'
+    backend = ExtractionBackend(payload)
+    result = extract_facts(backend, user_msg)
+    assert result.status == STATUS_NO_FACTS
+    assert result.facts == []
+
+
+def test_persian_work_question_unanswered_without_stored_facts(store):
+    """When no work fact is stored, asking where the owner works admits lack of knowledge."""
+    # The store is empty — no work fact exists
+    turn = Dream(store, EchoBackend()).run("کجا کار می‌کنم؟")
+    # EchoBackend reflects the query without inventing startups/consulting
+    assert "فین‌تک" not in turn.reply
+    assert "استارتاپ" not in turn.reply
+    assert "مشاوره" not in turn.reply
+
+
+def test_adversarial_persian_extraction_guard():
+    """Adversarial check: ZWNJ, Arabic yeh/kaf, suffixes, and synonyms are all grounded."""
+    # 1. ZWNJ vs space in user message vs fact
+    msg1 = "من در زمینه برنامه‌نویسی فعالیت دارم"
+    fact1 = "کاربر در برنامه نویسی مهارت دارد"
+    res1 = extract_facts(ExtractionBackend(f'[{{"content": "{fact1}"}}]'), msg1)
+    assert res1.status == STATUS_FACTS_FOUND
+
+    # 2. Arabic Yeh (U+064A) and Kaf (U+0643) in message
+    msg2 = "من در شركت فناوري كار مي‌كنم"
+    fact2 = "کاربر در شرکت فناوری کار می‌کند"
+    res2 = extract_facts(ExtractionBackend(f'[{{"content": "{fact2}"}}]'), msg2)
+    assert res2.status == STATUS_FACTS_FOUND
+
+    # 3. Persian suffixes (استارتاپم / شغلم)
+    msg3 = "استارتاپم در حوزه هوش مصنوعی است"
+    fact3 = "کاربر روی هوش مصنوعی کار می‌کند"
+    res3 = extract_facts(ExtractionBackend(f'[{{"content": "{fact3}"}}]'), msg3)
+    assert res3.status == STATUS_FACTS_FOUND
+
+    # 4. Synonym group: شغل vs کار
+    msg4 = "شغل من طراحی رابط کاربری است"
+    fact4 = "کار کاربر طراحی رابط کاربری است"
+    res4 = extract_facts(ExtractionBackend(f'[{{"content": "{fact4}"}}]'), msg4)
+    assert res4.status == STATUS_FACTS_FOUND
+
+
+def test_legitimate_facts_still_stored_before_and_after_count():
+    """Verify that all legitimate fact categories are accepted by the guard."""
+    legitimate_cases = [
+        ("من علی هستم و روی استارتاپ کار می‌کنم", "کاربر علی نام دارد"),
+        ("من همیشه با پایتون کار می‌کنم", "کاربر پایتون کار می‌کند"),
+        ("استارتاپ من در حوزه فین‌تک است", "کاربر روی فین‌تک کار می‌کند"),
+        ("فردا با تیم طراحی جلسه دارم", "کاربر فردا جلسه دارد"),
+        (
+            "من تابع foo(x=[1]) { return {} } را برای کدنویسی دوست دارم",
+            "کاربر تابع foo(x=[1]) { return {} } را دوست دارد",
+        ),
+        ("یک پیام درباره رویدادهای کاربر", "کاربر"),
+        ("اسم کامل من علیرضا نادری است.", "کاربر علیرضا نادری نام دارد"),
+        (
+            "من به نجوم علاقه‌مندم و از تلسکوپ دابسونی استفاده می‌کنم.",
+            "کاربر به نجوم علاقه دارد",
+        ),
+        (
+            "من برای نقاشی رنگ‌روغن از قلم‌موی بادبزنی استفاده می‌کنم.",
+            "کاربر برای نقاشی از قلم‌موی بادبزنی استفاده می‌کند",
+        ),
+        (
+            "هفته آینده در کارگاه سفالگری شرکت می‌کنم.",
+            "کاربر هفته آینده در کارگاه سفالگری شرکت می‌کند",
+        ),
+    ]
+    for msg, fact in legitimate_cases:
+        backend = ExtractionBackend(f'[{{"content": "{fact}", "kind": "semantic"}}]')
+        result = extract_facts(backend, msg)
+        assert result.status == STATUS_FACTS_FOUND, f"Failed for msg: {msg}, fact: {fact}"
+        assert len(result.facts) == 1
+        assert result.facts[0].content == fact
+
+
+def test_prompt_echoes_rejected_count_and_candidates():
+    """Verify that prompt echoes across diverse user inputs are rejected."""
+    echo_cases = [
+        ("اسم کامل من علیرضا نادری است.", "کاربر روی استارتاپ فین‌تک کار می‌کند"),
+        ("سلام، چطوری؟", "کاربر به نجوم علاقه دارد"),
+        ("من قهوه تلخ دوست دارم.", "کاربر همیشه از پایتون برای برنامه‌نویسی استفاده می‌کند"),
+        ("کجا کار می‌کنم؟", "کاربر در کارگاه سفالگری شرکت می‌کند"),
+        ("هوا امروز بارانی است.", "کاربر سارا رادمنش نام دارد"),
+        ("ساعت چند است؟", "کاربر برای نقاشی از قلم‌موی بادبزنی استفاده می‌کند"),
+    ]
+    for msg, echo in echo_cases:
+        backend = ExtractionBackend(f'[{{"content": "{echo}", "kind": "semantic"}}]')
+        result = extract_facts(backend, msg)
+        assert result.status == STATUS_NO_FACTS, f"Failed to reject echo: {echo} for msg: {msg}"
+        assert result.facts == []
+
+
+

@@ -78,10 +78,10 @@ def test_empty_array_example_intact():
 
 
 def test_prompt_has_a_worked_example_with_a_family_name():
-    full_name = "\u0639\u0644\u06cc\u0631\u0636\u0627 \u0646\u0627\u062f\u0631\u06cc"
+    full_name = "\u0633\u0627\u0631\u0627 \u0631\u0627\u062f\u0645\u0646\u0634"
     full_name_fact = (
-        "\u06a9\u0627\u0631\u0628\u0631 \u0639\u0644\u06cc\u0631\u0636\u0627 "
-        "\u0646\u0627\u062f\u0631\u06cc \u0646\u0627\u0645 \u062f\u0627\u0631\u062f"
+        "\u06a9\u0627\u0631\u0628\u0631 \u0633\u0627\u0631\u0627 "
+        "\u0631\u0627\u062f\u0645\u0646\u0634 \u0646\u0627\u0645 \u062f\u0627\u0631\u062f"
     )
     assert full_name in _EXTRACTION_PROMPT
     assert full_name_fact in _EXTRACTION_PROMPT
@@ -101,8 +101,8 @@ def test_prompt_tells_extractor_to_preserve_exact_name_wording():
 class _PromptSensitiveFullNameBackend:
     def chat(self, messages):
         prompt = str(messages[0]["content"])
-        family_name = "\u0646\u0627\u062f\u0631\u06cc"
-        full_name = "\u0639\u0644\u06cc\u0631\u0636\u0627 \u0646\u0627\u062f\u0631\u06cc"
+        family_name = "\u0631\u0627\u062f\u0645\u0646\u0634"
+        full_name = "\u0633\u0627\u0631\u0627 \u0631\u0627\u062f\u0645\u0646\u0634"
         if family_name in prompt and full_name in prompt:
             content = (
                 "\u06a9\u0627\u0631\u0628\u0631 \u0639\u0644\u06cc\u0631\u0636\u0627 "
