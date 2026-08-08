@@ -22,8 +22,11 @@ from dream.jalali import (
     is_jalali_leap,
     jalali_to_gregorian,
 )
+from dream.memory import _stem_fa, _tokenize
 
 __all__ = [
+    "DUE_SOON_WINDOW_SECONDS",
+    "MAX_REMINDER_LINES",
     "Reminder",
     "add_reminder",
     "advance_due_date",
@@ -32,7 +35,17 @@ __all__ = [
     "format_jalali",
     "list_reminders",
     "parse_date_to_timestamp",
+    "prompt_reminders",
 ]
+
+# A reminder falls due "soon" when its due date is within this horizon. Seven
+# days covers next week's obligations without flooding the prompt with the
+# owner's entire far-future schedule.
+DUE_SOON_WINDOW_SECONDS = 7 * 24 * 3600.0
+
+# At most this many reminders reach the model prompt in one turn. The prompt
+# is for answering, not for dumping the whole calendar.
+MAX_REMINDER_LINES = 5
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -159,6 +172,46 @@ def parse_date_to_timestamp(text: str) -> float:
         # Jalali input
         return _jalali_to_timestamp(y, mo, d)
     return _gregorian_to_timestamp(y, mo, d)
+
+
+def prompt_reminders(
+    reminders: list[Reminder],
+    query: str,
+    now: float | None = None,
+    limit: int = MAX_REMINDER_LINES,
+) -> list[Reminder]:
+    """Choose the reminders that reach the model prompt for one turn.
+
+    A reminder qualifies when it is relevant to the current query (shares at
+    least one normalised, stemmed token with it) or falls due within the soon
+    window, so something due regardless of the query is still surfaced. The
+    owner's far-future schedule stays out unless the turn concerns it.
+
+    Candidates are ranked by relevance plus an urgency bonus: overdue scores
+    1.0, due-soon 0.5, future 0. Ties keep ``list_reminders``'s due-date
+    order because the sort is stable. The ranked list is capped at *limit*.
+    """
+    if limit <= 0 or not reminders:
+        return []
+    if now is None:
+        now = time.time()
+    now = float(now)
+    horizon = now + DUE_SOON_WINDOW_SECONDS
+    query_stems = {_stem_fa(token) for token in _tokenize(query)}
+    scored: list[tuple[float, Reminder]] = []
+    for reminder in reminders:
+        stems = {_stem_fa(token) for token in _tokenize(reminder.text)}
+        relevance = len(stems & query_stems) / len(stems) if stems else 0.0
+        if reminder.due_at <= now:
+            urgency = 1.0
+        elif reminder.due_at <= horizon:
+            urgency = 0.5
+        else:
+            urgency = 0.0
+        if relevance > 0.0 or urgency > 0.0:
+            scored.append((relevance + urgency, reminder))
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [reminder for _, reminder in scored[:limit]]
 
 
 # ---------------------------------------------------------------------------

@@ -51,10 +51,30 @@ A `Dream.run()` turn performs the following work:
 1. append the user's message to the journal;
 2. retrieve relevant memories and place them in a labelled private section of
 the Persian system prompt, with relative ages;
-3. call a backend with the generated tool schemas;
-4. approve or block each requested tool and append its structured result; and
-5. repeat until a textual answer or the iteration limit, then journal the
+3. select scheduled reminders — those relevant to the query plus anything due
+soon — and render them in their own labelled section between the usage
+instructions and the memory section, each with its stored Jalali date;
+4. call a backend with the generated tool schemas;
+5. approve or block each requested tool and append its structured result; and
+6. repeat until a textual answer or the iteration limit, then journal the
 assistant reply and return an observable `Turn`.
+
+## Reminders in the prompt
+
+Reminders reach the model the same way memories do: `prompt_reminders()` in
+`dream/reminders.py` scores each active reminder by query relevance (the
+fraction of its own normalised, stemmed tokens that appear in the query) plus
+an urgency bonus (overdue 1.0, due within the 7-day window 0.5). A reminder
+qualifies when relevance is non-zero *or* the urgency bonus is non-zero, so
+something due surfaces even when the turn's wording shares no tokens with it,
+while the far-future schedule stays out unless the turn concerns it. At most
+five lines reach the prompt.
+
+The reminder section shares the memory block's character budget
+(`DREAM_MEMORY_BLOCK_CHAR_LIMIT`). Memories are fitted to the budget first;
+the reminder section gets only what remains, so reminders can never crowd
+memories out. When nothing qualifies or nothing fits, the section is omitted
+and the prompt is byte-for-byte what it was before this feature.
 
 Each `Dream` instance registers `remember_fact`, `search_memory`, and
 `forget_memory` functions bound to its own `MemoryStore`.

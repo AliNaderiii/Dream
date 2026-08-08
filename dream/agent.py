@@ -16,6 +16,7 @@ from urllib.request import Request, urlopen
 from dream.extraction import extract_facts
 from dream.memory import Memory, MemoryStore
 from dream.normalization import normalize_importance, normalize_kind
+from dream.reminders import Reminder, format_jalali, prompt_reminders
 from dream.tools import REGISTRY, execute, openai_schemas, tool
 
 # Sampling temperatures. Conversation gets 0.3: calm but not robotic. The
@@ -434,13 +435,50 @@ class Dream:
         block += _MEMORIES_CLOSE
         return block, injected
 
+    def _reminder_block(
+        self, reminders: list[Reminder], query: str, budget: int
+    ) -> tuple[str, list[Reminder]]:
+        """Render the reminder section of the prompt within *budget* chars.
+
+        Memories are fitted to the shared budget first and this section is
+        omitted when nothing qualifies or nothing fits, so reminders can never
+        crowd memories out of the prompt.
+        """
+        if budget <= 0 or not reminders:
+            return "", []
+        overhead = len("\n\n" + _REMINDERS_OPEN + "\n") + len("\n" + _REMINDERS_CLOSE)
+        usable = budget - overhead
+        if usable <= 0:
+            return "", []
+        lines: list[str] = []
+        injected: list[Reminder] = []
+        used = 0
+        for reminder in prompt_reminders(reminders, query):
+            line = _render_reminder_line(reminder)
+            addition = len(line) + (1 if lines else 0)
+            if used + addition > usable:
+                break
+            lines.append(line)
+            injected.append(reminder)
+            used += addition
+        if not lines:
+            return "", []
+        block = "\n\n" + _REMINDERS_OPEN + "\n" + "\n".join(lines) + "\n" + _REMINDERS_CLOSE
+        return block, injected
+
     def _system_message(
-        self, memories: list[Memory], memory_block: str | None = None
+        self,
+        memories: list[Memory],
+        memory_block: str | None = None,
+        reminder_block: str | None = None,
     ) -> dict[str, str]:
         prompt = _BASE_PROMPT + _MEMORY_USAGE
         if memory_block is None:
             memory_block, _ = self._memory_block(memories)
-        return {"role": "system", "content": prompt + memory_block}
+        middle = ""
+        if reminder_block:
+            middle = _REMINDER_USAGE + reminder_block
+        return {"role": "system", "content": prompt + middle + memory_block}
 
     def run(self, message: str) -> Turn:
         """Run one complete user turn, including any model-requested tools."""
@@ -451,12 +489,20 @@ class Dream:
         self.store.log("user", message)
         memories = self.store.recall(message, limit=8, reinforce=True)
         memory_block, injected_memories = self._memory_block(memories)
+        reminder_block, _ = self._reminder_block(
+            self.store.list_reminders(),
+            message,
+            self.memory_block_char_limit - len(memory_block),
+        )
         self.history.append({"role": "user", "content": message})
         calls_made: list[dict[str, Any]] = []
         reply = "I could not produce an answer."
 
         for _ in range(self.max_iterations):
-            messages = [self._system_message(memories, memory_block), *self.history]
+            messages = [
+                self._system_message(memories, memory_block, reminder_block),
+                *self.history,
+            ]
             response = self.backend.chat(messages, tools=openai_schemas())
             calls = response.get("tool_calls", [])
             if not calls:
@@ -547,6 +593,23 @@ def _relative_age(timestamp: float) -> str:
     return f"{days} days ago"
 
 
+def _render_reminder_line(reminder: Reminder) -> str:
+    """Render one reminder for the prompt: text plus its stored Jalali date.
+
+    The date is the owner's own record, so it is explicit on the line and the
+    model repeats it instead of guessing. A past due date is flagged with
+    «دیر شده» so the model can tell the owner the deadline has passed.
+    """
+    date = format_jalali(reminder.due_at)
+    if reminder.due_at <= time.time():
+        return (
+            f"- {reminder.text} "
+            f"(\u0633\u0631\u0631\u0633\u06cc\u062f {date} \u2014 "
+            f"\u062f\u06cc\u0631 \u0634\u062f\u0647)"
+        )
+    return f"- {reminder.text} (\u0633\u0631\u0631\u0633\u06cc\u062f {date})"
+
+
 # The language rule is unconditional, so a small model cannot drift away from
 # the user's language: reply in the language of the most recent message, reply
 # in Persian to Persian input, and never switch to a third language.
@@ -580,3 +643,40 @@ _MEMORY_USAGE = (
 # drift languages right where it must answer in Persian.
 _MEMORIES_OPEN = "[خاطره‌های بازیابی‌شده — زمینه خصوصی]"
 _MEMORIES_CLOSE = "[پایان خاطره‌ها]"
+
+# Scheduled reminders get their own labelled section, placed between the usage
+# instructions and the memory section, so the model answers with the owner's
+# stored date rather than general knowledge. The section is omitted entirely
+# when nothing is relevant or due, so a turn that has nothing to do with
+# reminders sends byte-for-byte the same prompt as before this feature.
+#
+# New Persian strings are written as backslash-u escapes, matching the
+# convention in tests/test_extraction_prompt.py and dream/memory.py.
+_REMINDERS_OPEN = "[\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc\u0647\u0627]"
+_REMINDERS_CLOSE = (
+    "[\u067e\u0627\u06cc\u0627\u0646 \u06cc\u0627\u062f\u0622\u0648\u0631\u06cc\u0647\u0627]"
+)
+
+# «بخش یادآوریها کارهایی است که کاربر با تاریخ مشخص برای خودش ثبت کرده. اگر
+# سؤال کاربر درباره یکی از همین کارهاست، تاریخ ثبت‌شده را از همین بخش بگو و حدس
+# نزن. یادآوری‌ای که سررسیدش گذشته یا نزدیک است مهم‌تر است و باید در پاسخ دیده
+# شود.»
+_REMINDER_USAGE = (
+    "\n\n"
+    "\u0628\u062e\u0634 \u06cc\u0627\u062f\u0622\u0648\u0631\u06cc\u0647\u0627 "
+    "\u06a9\u0627\u0631\u0647\u0627\u06cc\u06cc \u0627\u0633\u062a \u06a9\u0647 "
+    "\u06a9\u0627\u0631\u0628\u0631 \u0628\u0627 \u062a\u0627\u0631\u06cc\u062e "
+    "\u0645\u0634\u062e\u0635 \u0628\u0631\u0627\u06cc \u062e\u0648\u062f\u0634 "
+    "\u062b\u0628\u062a \u06a9\u0631\u062f\u0647. "
+    "\u0627\u06af\u0631 \u0633\u0624\u0627\u0644 \u06a9\u0627\u0631\u0628\u0631 "
+    "\u062f\u0631\u0628\u0627\u0631\u0647 \u06cc\u06a9\u06cc \u0627\u0632 "
+    "\u0647\u0645\u06cc\u0646 \u06a9\u0627\u0631\u0647\u0627\u0633\u062a\u060c "
+    "\u062a\u0627\u0631\u06cc\u062e \u062b\u0628\u062a\u200c\u0634\u062f\u0647 "
+    "\u0631\u0627 \u0627\u0632 \u0647\u0645\u06cc\u0646 \u0628\u062e\u0634 "
+    "\u0628\u06af\u0648 \u0648 \u062d\u062f\u0633 \u0646\u0632\u0646. "
+    "\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc\u200c\u0627\u06cc \u06a9\u0647 "
+    "\u0633\u0631\u0631\u0633\u06cc\u062f\u0634 \u06af\u0630\u0634\u062a\u0647 "
+    "\u06cc\u0627 \u0646\u0632\u062f\u06cc\u06a9 \u0627\u0633\u062a "
+    "\u0645\u0647\u0645\u200c\u062a\u0631 \u0627\u0633\u062a \u0648 \u0628\u0627\u06cc\u062f "
+    "\u062f\u0631 \u067e\u0627\u0633\u062e \u062f\u06cc\u062f\u0647 \u0634\u0648\u062f."
+)
