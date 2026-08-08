@@ -292,6 +292,7 @@ def delete_reminder(store, reminder_id: int) -> bool:
 def check_due_reminders(
     store,
     now: float | None = None,
+    destination: str = "terminal",
 ) -> list[Reminder]:
     """Find due reminders, notify once, and advance to the future.
 
@@ -306,14 +307,26 @@ def check_due_reminders(
         now = time.time()
     now = float(now)
     fired: list[Reminder] = []
+    fired_occurrences: dict[int, float] = {}
     with store._lock:
-        store.conn.execute("BEGIN")
+        store.conn.execute("BEGIN IMMEDIATE")
         try:
-            rows = store.conn.execute(
-                """SELECT * FROM reminders
-                   WHERE user_id = ? AND active = 1 AND due_at <= ?""",
-                (store.user_id, now),
-            ).fetchall()
+            store.conn.execute("""INSERT OR IGNORE INTO reminder_destinations
+                (user_id, destination, first_seen) VALUES (?, ?, ?)""",
+                (store.user_id, destination, now))
+            first_seen = store.conn.execute(
+                "SELECT first_seen FROM reminder_destinations "
+                "WHERE user_id = ? AND destination = ?",
+                (store.user_id, destination),
+            ).fetchone()[0]
+            rows = store.conn.execute("""SELECT * FROM reminders WHERE user_id = ?
+                AND ((active = 1 AND due_at <= ? AND NOT EXISTS (
+                    SELECT 1 FROM reminder_deliveries d WHERE d.reminder_id = reminders.id
+                    AND d.destination = ? AND d.fired_at = reminders.due_at))
+                 OR (last_fired_at IS NOT NULL AND last_fired_at >= ? AND NOT EXISTS (
+                    SELECT 1 FROM reminder_deliveries d WHERE d.reminder_id = reminders.id
+                    AND d.destination = ? AND d.delivered_at = reminders.last_fired_at)))""",  
+                (store.user_id, now, destination, first_seen, destination)).fetchall()
             for row in rows:
                 rid = int(row["id"])
                 due_at = float(row["due_at"])
@@ -332,6 +345,7 @@ def check_due_reminders(
                     # fallback for rows created before the column existed
                     _, _, anchor_day = _timestamp_to_jalali(due_at)
                 # re-read to handle concurrent? already in transaction
+                fired_occurrences[rid] = due_at
                 if repeat_days is None and repeat_months is None:
                     # one-off becomes inactive
                     store.conn.execute(
@@ -384,6 +398,11 @@ def check_due_reminders(
                         fired.append(_row_to_reminder(fresh))
                     else:
                         fired.append(_row_to_reminder(row))
+            for reminder in fired:
+                occurrence = fired_occurrences.get(reminder.id, reminder.due_at)
+                store.conn.execute("""INSERT OR IGNORE INTO reminder_deliveries
+                    (reminder_id, destination, fired_at, delivered_at)
+                    VALUES (?, ?, ?, ?)""", (reminder.id, destination, occurrence, now))
             store.conn.commit()
         except Exception:
             store.conn.rollback()

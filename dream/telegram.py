@@ -653,11 +653,16 @@ class TelegramBot:
             chat_ids = self._paired_chat_ids()
             if not chat_ids:
                 return []
-            due = self.memory_store.check_due_reminders(now=now)
-            for reminder in due:
-                text = self._reminder_text(reminder.text)
-                for chat_id in chat_ids:
-                    self._pending_reminders.append((chat_id, text))
+            due: list[Any] = []
+            for chat_id in chat_ids:
+                chat_due = self.memory_store.check_due_reminders(
+                    now=now, destination=f"telegram:{chat_id}"
+                )
+                due.extend(chat_due)
+                for reminder in chat_due:
+                    self._pending_reminders.append(
+                        (chat_id, self._reminder_text(reminder.text))
+                    )
             self._flush_pending_reminders()
             return due
 

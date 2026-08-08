@@ -146,6 +146,36 @@ step so strangers cannot read memories, reminders fire into the chat.
 
 **What is blocked.** Nothing.
 
+## M5 — Secure local Telegram front end — SHIPPED
+
+**What shipped.** Secure Telegram long polling, pairing, refusal handling, and
+reminder delivery into paired chats. Pairing and token-redaction review remains
+unchanged.
+
+**What was measured.** 490 tests pass after M5. Two M6 concurrency defects were
+then reproduced: the first consumer consumed reminders globally, and deferred
+transactions raised `database is locked` under a two-process barrier.
+
+## M6 — Per-destination reminder delivery and atomic due checks — SHIPPED
+
+**What shipped.** Due checks now use `BEGIN IMMEDIATE`, and delivery state is
+stored in idempotently-created `reminder_deliveries` plus destination first-seen
+state. Each caller supplies a destination identity; the terminal remains the
+`terminal` default and Telegram uses each paired chat identity. A destination
+first seen later receives the current occurrence, not historical pile-up. A
+reminder advances once per due occurrence, while each destination receives it
+once; one-offs remain available to later destinations. Existing repeat, anchor,
+pile-up, clock, and single-terminal behavior are preserved.
+
+**What was measured.** Two real-process barrier tests and two-destination
+regressions cover the findings; full suite and ruff are recorded in the PR.
+The delivery table upgrades old databases with data intact. The interface hooks
+`contribute_prompt` and `expose_tools` remain unwired and carried forward.
+
+**Known and deferred.** Provider 429 payloads are still too verbose for Telegram;
+raw tool results can still be embedded in Persian replies; and family names can
+be dropped during extraction. These remain deferred to a later milestone.
+
 ## Planned milestones
 
 M1 reminders reach the model (shipped) → M2 non-blocking model calls
