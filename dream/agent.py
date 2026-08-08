@@ -22,6 +22,7 @@ from dream.extraction import (
 )
 from dream.memory import Memory, MemoryStore
 from dream.normalization import normalize_importance, normalize_kind
+from dream.providers import BuiltInMemoryProvider, ProviderManager
 from dream.reminders import Reminder, format_jalali, prompt_reminders
 from dream.tools import REGISTRY, execute, openai_schemas, tool
 
@@ -453,12 +454,27 @@ class Dream:
 
     def __init__(
         self,
-        store: MemoryStore,
+        store: MemoryStore | None = None,
         backend: OpenAIBackend | OllamaBackend | EchoBackend | None = None,
         approval_policy: ApprovalPolicy | None = None,
         max_iterations: int = 4,
+        manager: ProviderManager | None = None,
     ) -> None:
-        self.store = store
+        if manager is not None:
+            self.manager = manager
+            self.store = None
+            for p in manager.providers:
+                if isinstance(p, BuiltInMemoryProvider):
+                    self.store = p.store
+                    break
+            if self.store is None and store is not None:
+                self.store = store
+        else:
+            if store is None:
+                raise TypeError("Dream requires either a store or a manager")
+            self.store = store
+            self.manager = ProviderManager()
+            self.manager.register(BuiltInMemoryProvider(store))
         self.backend = backend or build_backend()
         self.approval_policy = approval_policy or ApprovalPolicy()
         self.max_iterations = max_iterations
@@ -602,11 +618,12 @@ class Dream:
         self._created.clear()
         self._superseded.clear()
         self._merged.clear()
-        self.store.log("user", message)
-        memories = self.store.recall(message, limit=8, reinforce=True)
+        if self.store is not None:
+            self.store.log("user", message)
+        memories = self.manager.recall(message, limit=8, reinforce=True)
         memory_block, injected_memories = self._memory_block(memories)
         reminder_block, _ = self._reminder_block(
-            self.store.list_reminders(),
+            self.manager.list_reminders(),
             message,
             self.memory_block_char_limit - len(memory_block),
         )
@@ -624,7 +641,8 @@ class Dream:
             if not calls:
                 reply = response.get("content") or reply
                 self.history.append({"role": "assistant", "content": reply})
-                self.store.log("assistant", reply)
+                if self.store is not None:
+                    self.store.log("assistant", reply)
                 break
             wire_calls = _wire_tool_calls(calls)
             self.history.append(
@@ -646,7 +664,10 @@ class Dream:
                 )
         else:
             self.history.append({"role": "assistant", "content": reply})
-            self.store.log("assistant", reply)
+            if self.store is not None:
+                self.store.log("assistant", reply)
+
+        self.manager.persist()
 
         extraction_result, store_errors = self._run_extraction(message)
 

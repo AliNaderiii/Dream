@@ -94,6 +94,22 @@ reminder text and repeat spec.
 Each `Dream` instance registers `remember_fact`, `search_memory`, and
 `forget_memory` functions bound to its own `MemoryStore`.
 
+## Memory provider interface (M4)
+
+`MemoryProvider` is the seam that makes external memory possible. It exposes
+a small lifecycle: `is_available`, `initialize`, `recall`,
+`list_reminders`, `contribute_prompt`, `persist`, `expose_tools`,
+`shutdown`. `BuiltInMemoryProvider` wraps `MemoryStore`; the manager
+registers providers and fans calls out, catching exceptions so one broken
+provider never breaks a turn. `Dream` now takes either `store` or `manager`;`
+when `store` is given the manager is constructed automatically with the
+built-in provider, so behaviour is unchanged.
+
+A provider that fails to initialize is not registered; a provider whose
+`recall` raises is skipped; a provider whose `persist` raises is skipped.
+The manager deduplicates recalled memories and reminders by stable keys,
+preserving first-occurrence order.
+
 ## Backends
 
 Backends expose `chat(messages, tools) -> {"content", "tool_calls"}`.

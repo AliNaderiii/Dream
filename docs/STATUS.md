@@ -112,6 +112,38 @@ when a call is abandoned. *(Shipped — see above.)*
 
 **What is blocked.** Nothing.
 
+## M4 — Memory provider interface — SHIPPED
+
+**What shipped.** `dream/providers.py` defines abstract `MemoryProvider`
+with lifecycle (available, initialise, recall, list_reminders,
+contribute_prompt, persist, expose_tools, shutdown); `BuiltInMemoryProvider`
+wraps `MemoryStore`; `ProviderManager` registers providers, fans out
+calls, and isolates one failure from a turn. `Dream.__init__` now accepts
+either `store` or `manager` (backward-compatible; existing `Dream(store,)
+calls unchanged); `Dream.run()` uses `manager.recall()` and
+`manager.list_reminders()` and calls `manager.persist()` after the turn.
+No mutual dependency: `MemoryStore` stays independent of `providers.py`.
+
+**What was measured.**
+
+- Before: 457 passed in 13.34s; ruff clean.
+- After: 465 passed in 11.98s (+8 new provider tests); with `-W error`:
+  465 passed in 12.09s, zero warnings.
+- Break-and-restore (manual + `test_break_and_restore_isolation`):
+  manager recalls correctly before break; with a broken provider's recall
+  replaced by a raiser the manager still returns safely (isolation); after
+  restore all 8 provider tests pass.
+- Interface isolation verified: broken init (`BrokenInitProvider`) is not
+  registered; broken recall does not stop the turn; shutdown completes even
+  when providers raise.
+- Regression list (12 items): all pass after M4 (24 representative
+  regression tests run, 465 total suite).
+
+**What is next.** M5 — Telegram: long polling, no inbound port, pairing
+step so strangers cannot read memories, reminders fire into the chat.
+
+**What is blocked.** Nothing.
+
 ## Planned milestones
 
 M1 reminders reach the model (shipped) → M2 non-blocking model calls
