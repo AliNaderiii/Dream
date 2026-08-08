@@ -717,6 +717,70 @@ def test_reminder_commands_and_memory_listing_work_in_chat(tmp_path):
     assert transport.actions == []
 
 
+def test_forget_command_archives_memory_in_chat(tmp_path):
+    transport = FakeTransport()
+    memory_text = "کاربر روی پروژه آزمایشی کار می‌کند"
+    with MemoryStore(str(tmp_path / "forget.db")) as store:
+        mem = store.remember(memory_text)
+        bot, _ = _bot(store, transport)
+        commands = [
+            _update(1, OWNER, f"/forget {mem.id}"),
+        ]
+        assert bot.process_updates(commands) is True
+        # Verify the memory was archived in the store
+        assert store.get(mem.id, include_archived=False) is None
+        assert store.get(mem.id, include_archived=True).archived is True
+
+    replies = [text for _, text, _ in transport.sent]
+    assert replies == ["Memory archived."]
+
+
+def test_forget_command_nonexistent_id(tmp_path):
+    transport = FakeTransport()
+    with MemoryStore(str(tmp_path / "forget_none.db")) as store:
+        bot, _ = _bot(store, transport)
+        assert bot.process_updates([_update(1, OWNER, "/forget 999")]) is True
+
+    replies = [text for _, text, _ in transport.sent]
+    assert replies == ["No active memory has that ID."]
+
+
+def test_forget_command_invalid_id_shows_usage(tmp_path):
+    transport = FakeTransport()
+    with MemoryStore(str(tmp_path / "forget_invalid.db")) as store:
+        bot, _ = _bot(store, transport)
+        assert bot.process_updates([_update(1, OWNER, "/forget abc")]) is True
+
+    replies = [text for _, text, _ in transport.sent]
+    assert replies == ["Usage: /forget ID — ID must be a number."]
+
+
+def test_forget_command_mistap_without_id_leaves_memories_intact(tmp_path):
+    transport = FakeTransport()
+    memory_text = "کاربر قهوه تلخ دوست دارد"
+    with MemoryStore(str(tmp_path / "forget_mistap.db")) as store:
+        mem = store.remember(memory_text)
+        bot, _ = _bot(store, transport)
+        assert bot.process_updates([_update(1, OWNER, "/forget")]) is True
+        # Memory remains active
+        assert store.get(mem.id, include_archived=False) is not None
+
+    replies = [text for _, text, _ in transport.sent]
+    assert replies == ["Usage: /forget ID — ID must be a number."]
+
+
+def test_chat_help_includes_forget(tmp_path):
+    transport = FakeTransport()
+    with MemoryStore(str(tmp_path / "help.db")) as store:
+        bot, _ = _bot(store, transport)
+        assert bot.process_updates([_update(1, OWNER, "/help")]) is True
+
+    replies = [text for _, text, _ in transport.sent]
+    assert "/forget ID" in replies[0]
+
+
+
+
 def test_group_chat_is_refused_even_when_sender_is_allowlisted(tmp_path):
     transport = FakeTransport()
     with MemoryStore(str(tmp_path / "group.db")) as store:

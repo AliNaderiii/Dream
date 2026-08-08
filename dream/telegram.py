@@ -71,6 +71,7 @@ CHAT_COMMANDS = frozenset(
     {
         "/mem",
         "/mems",
+        "/forget",
         "/remind",
         "/reminder",
         "/reminders",
@@ -81,7 +82,7 @@ CHAT_COMMANDS = frozenset(
     }
 )
 CHAT_HELP = (
-    "/mem QUERY  /mems  /remind DATE TEXT [every N days|months]  "
+    "/mem QUERY  /mems  /forget ID  /remind DATE TEXT [every N days|months]  "
     "/reminders  /unremind ID  /reset  /help"
 )
 

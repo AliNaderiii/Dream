@@ -215,6 +215,46 @@ sees nothing. That deserves its own milestone rather than a change here.
 payloads, raw tool results in Persian replies, dropped family names) are
 untouched and still deferred.
 
+## M8 — Example decontamination, extraction guard, mobile forget — SHIPPED
+
+**What shipped.** Three coordinated changes eliminate the invented-biography
+hazard and allow phone-based memory management. Worked examples in the
+extraction prompt were rewritten with generic, non-owner topics (astronomy with
+a Dobsonian telescope, Sara Radmanesh family-name preservation, oil painting
+fan brush, pottery workshop) so no worked example can be mistaken for the
+owner's real biography. A grounding guard in `extract_facts` verifies that
+candidate facts share substantive subject-matter stems or synonyms with the
+user message, discarding prompt echoes and ungrounded hallucinations. The
+Telegram front end allow list now includes `/forget`, giving the owner
+phone-level capability to archive false memories with explicit numeric ID
+validation and mistap safety.
+
+**What was measured.**
+
+- Legitimate facts count before and after: `10/10` legitimate test facts
+  preserved across categories (names, tools, domains, episodic events,
+  preferences, and code expressions).
+- Prompt echoes rejected: `6/6` prompt echo candidates rejected across diverse
+  user inputs (e.g. `اسم کامل من علیرضا نادری است.` rejecting `کاربر روی استارتاپ فین‌تک کار می‌کند`).
+- Persian work question: asking «کجا کار می‌کنم؟» when no work memory is
+  stored produces an admission of lack of knowledge rather than inventing
+  technical consulting or fintech startups.
+- Telegram `/forget`: verified archiving an active memory via chat ID,
+  rejecting invalid non-numeric IDs, rejecting non-existent IDs, and leaving
+  memories intact on a zero-argument mistap.
+- Full suite before: `509 passed in 15.04s`; ruff `All checks passed!`.
+- Full suite after: `521 passed in 13.31s` (+12); with
+  `-W error::DeprecationWarning`: `521 passed in 13.70s`, zero warnings.
+- Break-and-restore: observed failures on disconnected guard, missing
+  family-name prompt example, and omitted `/forget` command; restored from
+  version control and confirmed green.
+- Standing regression list (17 items): all 17 items ran and passed.
+
+**What is next.** Define the first-seen destination semantics deliberately;
+M6C still pins the timing-coupled behavior without blessing it.
+
+**What is blocked.** Nothing.
+
 ## M7 — Failure replies, clock shape, full-name extraction — SHIPPED
 
 **What shipped.** Three independent rough edges were removed. Provider request
