@@ -25,6 +25,7 @@ from dream.memory import Memory, MemoryStore
 from dream.normalization import normalize_importance, normalize_kind
 from dream.providers import BuiltInMemoryProvider, ProviderManager
 from dream.reminders import Reminder, format_jalali, prompt_reminders
+from dream.skills import SkillPromptProvider
 from dream.tools import REGISTRY, execute, openai_schemas, tool
 
 # Sampling temperatures. Conversation gets 0.3: calm but not robotic. The
@@ -504,12 +505,17 @@ class Dream:
                     break
             if self.store is None and store is not None:
                 self.store = store
+            # The skills usage line is part of Dream's own behaviour, not of
+            # any caller's provider choice; the manager seam carries it
+            # either way.
+            self.manager.register(SkillPromptProvider())
         else:
             if store is None:
                 raise TypeError("Dream requires either a store or a manager")
             self.store = store
             self.manager = ProviderManager()
             self.manager.register(BuiltInMemoryProvider(store))
+            self.manager.register(SkillPromptProvider())
         self.backend = backend or build_backend()
         self.approval_policy = approval_policy or ApprovalPolicy()
         self.max_iterations = max_iterations
@@ -638,8 +644,16 @@ class Dream:
         memories: list[Memory],
         memory_block: str | None = None,
         reminder_block: str | None = None,
+        query: str = "",
     ) -> dict[str, str]:
         prompt = _BASE_PROMPT + _MEMORY_USAGE
+        # The M4 contribute_prompt hook, wired for the first time: subsystems
+        # (here: skills) add their own usage line to the system prompt.
+        skills_block, _ = self.manager.contribute_prompt(
+            query, self.memory_block_char_limit
+        )
+        if skills_block:
+            prompt += skills_block
         if memory_block is None:
             memory_block, _ = self._memory_block(memories)
         middle = ""
@@ -668,7 +682,7 @@ class Dream:
 
         for _ in range(self.max_iterations):
             messages = [
-                self._system_message(memories, memory_block, reminder_block),
+                self._system_message(memories, memory_block, reminder_block, message),
                 *self.history,
             ]
             response = self.backend.chat(messages, tools=openai_schemas())
