@@ -76,6 +76,21 @@ the reminder section gets only what remains, so reminders can never crowd
 memories out. When nothing qualifies or nothing fits, the section is omitted
 and the prompt is byte-for-byte what it was before this feature.
 
+## Natural Persian dates
+
+`parse_persian_date()` in `dream/reminders.py` resolves the phrases real
+people type — «فردا», «پانزدهم مهر», «۱۵ مهر ۱۴۰۴», «اول هر ماه», «سه روز
+بعد», «شنبه هفته آینده» — into the same midnight timestamps the scheduler
+already uses. It is a pure phrase interpreter: all calendar math stays in
+`dream/jalali.py`, the single source of truth. Words are matched
+space-insensitively after `normalize_fa`, so joined, ZWNJ, and spaced
+spellings are the same day; Arabic-yeh and alef-madda spellings fold onto the
+Persian forms. Ambiguous input — a month without a day, a day without a
+month — raises `ValueError` with a worked example; it is never guessed.
+`/remind` accepts a natural phrase in its date slot via prefix matching: the
+longest leading phrase that parses becomes the date, everything after is the
+reminder text and repeat spec.
+
 Each `Dream` instance registers `remember_fact`, `search_memory`, and
 `forget_memory` functions bound to its own `MemoryStore`.
 

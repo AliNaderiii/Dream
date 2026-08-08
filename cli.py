@@ -67,11 +67,49 @@ def _format_repeat(repeat_days, repeat_months) -> str:
     return ""
 
 
+# The /remind date slot accepts YYYY-MM-DD (Jalali year < 1700) or a natural
+# Persian phrase. The Persian examples are backslash-u escapes:
+# فردا / پانزدهم مهر / اول هر ماه.
+_REMIND_USAGE = (
+    "Unparseable date. Usage: /remind DATE TEXT [repeat] \u2014 DATE as "
+    "YYYY-MM-DD (Jalali year <1700) or a Persian phrase like "
+    "\u00ab\u0641\u0631\u062f\u0627\u00bb, \u00ab\u067e\u0627\u0646\u0632\u062f\u0647\u0645 "
+    "\u0645\u0647\u0631\u00bb, \u00ab\u0627\u0648\u0644 \u0647\u0631 \u0645\u0627\u0647\u00bb"
+)
+
+
+def _parse_natural_date_prefix(argument: str):
+    """Try progressively longer leading word-prefixes as a Persian date.
+
+    The date must come first, matching the existing /remind grammar; the
+    reminder text is whatever follows. Returns (due_at, rest, error): on
+    success error is None; when nothing parses, the ambiguity error from the
+    shortest prefix (the most specific, e.g. «مهر» needs a day) is returned
+    verbatim, and everything else gets the usage message.
+    """
+    from dream.reminders import parse_persian_date
+
+    tokens = argument.split()
+    last_error = None
+    for length in range(min(len(tokens), 6), 0, -1):
+        prefix = " ".join(tokens[:length])
+        try:
+            due_at = parse_persian_date(prefix)
+        except ValueError as exc:
+            last_error = str(exc)
+            continue
+        return due_at, " ".join(tokens[length:]), None
+    if last_error is not None and last_error.startswith("ambiguous date"):
+        return None, None, last_error
+    return None, None, _REMIND_USAGE
+
+
 def _parse_remind_args(argument: str):
     """Parse /remind arguments.
 
     Returns (due_at, repeat_days, repeat_months, text, error).
-    Accepts YYYY-MM-DD; year below 1700 is Jalali.
+    Accepts YYYY-MM-DD (year below 1700 is Jalali) or a natural Persian
+    date phrase like «فردا» or «پانزدهم مهر».
     Repeat can appear before or after the text.
     """
     import re
@@ -80,28 +118,24 @@ def _parse_remind_args(argument: str):
     from dream.reminders import parse_date_to_timestamp
 
     if not argument.strip():
-        return None, None, None, None, (
-            "Usage: /remind YYYY-MM-DD TEXT [repeat] \u2014 "
-            "date as Jalali (year <1700) or Gregorian, repeat as "
-            "'every N days' or 'every N months'"
-        )
+        return None, None, None, None, _REMIND_USAGE
     # Normalize to fold Persian digits to Latin
     argument = normalize_fa(argument)
     # extract leading date
     m = re.match(r"^\s*(\d{4})\s*[-/.\s]\s*(\d{1,2})\s*[-/.\s]\s*(\d{1,2})\b", argument)
-    if not m:
-        return None, None, None, None, (
-            "Unparseable date. Usage: /remind YYYY-MM-DD TEXT \u2014 "
-            "example /remind 1405-05-16 pay bill"
-        )
-    date_str = m.group(0).strip()
-    rest = argument[m.end():].strip()
-    try:
-        due_at = parse_date_to_timestamp(date_str)
-    except ValueError as exc:
-        return None, None, None, None, (
-            f"Invalid date: {exc}. Usage: /remind YYYY-MM-DD TEXT"
-        )
+    if m:
+        date_str = m.group(0).strip()
+        rest = argument[m.end():].strip()
+        try:
+            due_at = parse_date_to_timestamp(date_str)
+        except ValueError as exc:
+            return None, None, None, None, (
+                f"Invalid date: {exc}. Usage: /remind YYYY-MM-DD TEXT"
+            )
+    else:
+        due_at, rest, error = _parse_natural_date_prefix(argument)
+        if error is not None:
+            return None, None, None, None, error
 
     repeat_days = None
     repeat_months = None
@@ -452,7 +486,8 @@ def dispatch_command(
     elif command == "/help":
         output(
             "/mem QUERY  /mems  /stats  /forget ID  /dedupe [confirm]  "
-            "/pin ID  /remind YYYY-MM-DD TEXT [every N days|months]  "
+            "/pin ID  /remind DATE TEXT [every N days|months]  "
+            "(DATE: YYYY-MM-DD or a Persian phrase)  "
             "/reminders  /unremind ID  /tools  /reset  /help  /exit"
         )
     elif command == "/exit":

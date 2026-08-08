@@ -4,6 +4,44 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M3 — Natural Persian dates — SHIPPED
+
+**What shipped.** `dream/reminders.parse_persian_date()` turns the phrases real
+people type — «فردا», «پانزدهم مهر», «۱۵ مهر ۱۴۰۴», «اول هر ماه», «سه روز
+بعد», «شنبه هفته آینده», «آخر ماه» — into the same midnight timestamps the
+scheduler already uses, with the Jalali module as the single source of
+calendar truth. Ordinal and colloquial day words (1–31), month names,
+relative periods with numbers, weekdays, and every-month day phrases are
+covered. Ambiguous input («مهر» without a day, «بیستم» without a month) is
+rejected with a worked example, never guessed. `/remind` accepts a natural
+date phrase in place of the digit date.
+
+**What was measured.**
+
+- Acceptance table: 26 real phrases with resolved Jalali dates, run at a fixed
+  reference instant (1405-05-17 noon) — all 26 correct (pasted in the PR).
+- Adversarial pass: Arabic-yeh spellings, ZWNJ vs space, joined vs spaced
+  compounds, Persian vs ASCII digits, and «آبان»/«آذر» (alef-madda folding)
+  all resolve identically to their canonical forms.
+- Impossible dates rejected: «سی و یکم آبان» (Aban has 30 days), Gregorian
+  year with a Persian month, unknown phrases — each with a hint.
+- Full suite before: `405 passed in 11.59s`; ruff clean.
+- Full suite after: `457 passed in 11.92s` (+52); with `-W error`:
+  `457 passed in 12.56s`, zero warnings.
+- Break-and-restore: with the CLI's natural-date branch disconnected, the 5
+  CLI integration tests fail (the parser's 47 unit tests still pass);
+  restored, all 52 pass.
+- Regression list (13 items): all pass after M3.
+
+**What is next.** M4 — the memory provider interface: the seam that makes
+everything after it possible. An abstract provider with a small lifecycle
+(available, initialise, contribute to the system prompt, recall before a
+turn, persist after a turn, expose tools, shut down); the existing store
+becomes the built-in provider with unchanged behaviour; a manager registers
+providers and fans calls out, one failing provider never breaking a turn.
+
+**What is blocked.** Nothing.
+
 ## M2 — Non-blocking model calls — SHIPPED
 
 **What shipped.** The post-turn extraction pass now runs on a background
@@ -36,6 +74,7 @@ wall-clock budget.
 (tomorrow, the fifteenth of Mehr, the first of every month) into the
 timestamps the scheduler already uses, keeping the Jalali module as the single
 source of truth; ambiguous input is rejected with an example.
+*(Shipped — see above.)*
 
 **What is blocked.** Nothing.
 
@@ -76,6 +115,6 @@ when a call is abandoned. *(Shipped — see above.)*
 ## Planned milestones
 
 M1 reminders reach the model (shipped) → M2 non-blocking model calls
-(shipped) → M3 natural Persian dates → M4 memory provider interface → M5
-Telegram → M6 real tool layer → M7 skills → M8 locale separation → next three
-proposed with measurements.
+(shipped) → M3 natural Persian dates (shipped) → M4 memory provider interface
+→ M5 Telegram → M6 real tool layer → M7 skills → M8 locale separation → next
+three proposed with measurements.
