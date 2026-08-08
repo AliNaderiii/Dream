@@ -23,6 +23,8 @@ KNOWN_COMMANDS = (
     "/remind",
     "/reminders",
     "/unremind",
+    "/skill",
+    "/skills",
     "/tools",
     "/reset",
     "/help",
@@ -477,6 +479,29 @@ def dispatch_command(
                 )
             else:
                 output(f"No reminder with ID {reminder_id} for this user.")
+    elif command == "/skills":
+        from dream import skills as skills_module
+
+        loaded, problems = skills_module.load_skills()
+        if not loaded and not problems:
+            output("No skills yet. The assistant saves them with the save_skill tool.")
+        for skill in loaded:
+            output(f"{skill.name} — {skill.description} ({skill.filename})")
+        for problem in problems:
+            output(f"[broken] {problem.filename}: {problem.detail}")
+    elif command == "/skill":
+        if not argument:
+            output("Usage: /skill QUERY — find the skill that applies to a request.")
+        else:
+            from dream import skills as skills_module
+
+            skill = skills_module.find_skill(argument)
+            if skill is None:
+                output("No skill matches that request.")
+            else:
+                output(f"{skill.name} — {skill.description} ({skill.filename})")
+                for index, step in enumerate(skill.steps, start=1):
+                    output(f"  {index}. {step}")
     elif command == "/tools":
         for name, registered in sorted(REGISTRY.items()):
             output(f"{name}: {registered.risk}")
@@ -488,7 +513,7 @@ def dispatch_command(
             "/mem QUERY  /mems  /stats  /forget ID  /dedupe [confirm]  "
             "/pin ID  /remind DATE TEXT [every N days|months]  "
             "(DATE: YYYY-MM-DD or a Persian phrase)  "
-            "/reminders  /unremind ID  /tools  /reset  /help  /exit"
+            "/reminders  /unremind ID  /skill QUERY  /skills  /tools  /reset  /help  /exit"
         )
     elif command == "/exit":
         return False

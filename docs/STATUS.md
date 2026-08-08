@@ -4,6 +4,72 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M9 — File-backed skills — SHIPPED
+
+**What shipped.** A skill is a durable procedure: a UTF-8 text file in
+`skills/` under the workspace root with three labelled parts — `name:`,
+`description:` (when it applies), and `steps:` — which the owner can open,
+correct by hand and have the correction take effect on the next use; nothing
+is cached, nothing is rebuilt, and the store gains no table. New module
+`dream/skills.py` owns parsing, writing (through the existing `_safe_path`
+boundary, with skill names shaped like paths refused), and matching; the tool
+module exposes `save_skill` (guarded), `use_skill` and `list_skills` (safe);
+the terminal gains `/skill QUERY` and `/skills`. Matching reuses
+`normalize_fa`, the suffix stemmer and the synonym index — no third
+mechanism — scoring skill-side content-stem coverage against the
+synonym-expanded query, with two guards: at least a third of the skill's
+stems covered, and two shared stems unless coverage is full. Broken files
+(missing parts, invalid UTF-8, oversized) are skipped and reported; an empty
+directory is not an error. A skill naming a dangerous tool changes nothing
+about that tool's approval.
+
+**Measured during the adversarial pass.** The suffix stemmer is not
+transitive across inflections («دوست» stems to دوس but «دوستش» to دوست;
+«بنویسم» to بنویس but «بنویسد» stays — د is not a suffix), so exact-set
+intersection misses real paraphrases; matching therefore counts two stems as
+equal when one prefixes the other with a three-letter floor (two-letter «دم»
+must never claim «دما»). «درست» and «درس» conflate to one stem — safe only
+because both sides are stemmed and the two-shared-stems guard absorbs it.
+
+**What was measured.**
+
+- The cross-session test was written against unchanged source and observed
+  red (`unknown tool: save_skill`) before any implementation.
+- Full suite before: `521 passed in 13.91s`; ruff `All checks passed!`.
+- Full suite after: `536 passed in 12.96s` (+15); with
+  `-W error::DeprecationWarning`: `536 passed in 13.44s`; new tests raise no
+  `ResourceWarning` under `-W error::ResourceWarning`.
+- Printed evidence (in the PR): a real skill file, the same file after a hand
+  edit with the edited step returned on next use, reuse across two separate
+  store and conversation instances, three Persian phrasings finding one skill
+  plus an unrelated dollar-price query finding nothing, three refused names
+  with their error payloads, and broken files listed as problems while the
+  good skill keeps answering.
+- Near-miss pair («پیامک تبریک تولد» vs «پیامک تبریک سال نو»): each request
+  routes to its own skill and the wrong skill does not clear the bar
+  (measured coverages 0.60/0.67 vs 0.20/0.25; multi-word scaffold paraphrases
+  with no shared content return zero).
+- Break-and-restore: every new test was observed failing against a
+  deliberate one-line source break and green again after `git checkout`;
+  two initial breaks that silently exercised nothing (a cache that was never
+  primed, a gate opened on a branch the dangerous path never reaches) were
+  caught, the test or the break was corrected, and the red was observed.
+  Messages are in the PR.
+- Standing regression list (19 items, 63 nodes): all pass.
+
+**On scope.** The milestone measures ~960 new lines against the ~800
+advisory budget; the excess sits in the mandated Persian adversarial battery
+and the per-test break-and-restore evidence. The natural split point, had it
+been needed, was the two CLI commands (~60 lines with their test); the
+remainder is one inseparable seam.
+
+**What is next.** Surface relevant skills in the system prompt (the
+`contribute_prompt` hook still declared and unwired) once the terminal shape
+has proven itself, then Telegram.
+
+**What is blocked.** Web search remains procurement, not engineering:
+key-free endpoints return empty pages for the owner's real queries.
+
 ## M3 — Natural Persian dates — SHIPPED
 
 **What shipped.** `dream/reminders.parse_persian_date()` turns the phrases real
@@ -300,7 +366,6 @@ M6C still pins the current timing-coupled behaviour without blessing it.
 
 ## Planned milestones
 
-M1 reminders reach the model (shipped) → M2 non-blocking model calls
-(shipped) → M3 natural Persian dates (shipped) → M4 memory provider interface
-→ M5 Telegram → M6 real tool layer → M7 skills → M8 locale separation → next
-three proposed with measurements.
+M9 file-backed skills (shipped) → surface skills in the prompt via the
+declared `contribute_prompt` hook → Telegram skill access → web search once
+the owner supplies a key or a relay → locale separation.
