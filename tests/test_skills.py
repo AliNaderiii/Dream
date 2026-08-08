@@ -231,6 +231,13 @@ def test_saved_skill_file_is_human_readable(workspace):
 
 def test_hand_edit_takes_effect_on_next_use(workspace):
     result = _save_tea_skill()
+    # The skill is used once before the edit, so a stale cache would survive
+    # into the second use and fail this test.
+    before = _use_skill(TEA_QUERY_HOW)
+    assert any(
+        "\u062f\u0647 \u062f\u0642\u06cc\u0642\u0647" in step
+        for step in before["match"]["steps"]
+    )
     path = workspace / result["filename"]
     text = path.read_text(encoding="utf-8")
     # The owner corrects step one in a text editor; ten minutes becomes five.
