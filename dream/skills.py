@@ -48,7 +48,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from dream import tools
-from dream.memory import _SYNONYM_INDEX, _stem_fa, _tokenize, normalize_fa
+from dream.memory import _SYNONYM_INDEX, Memory, _stem_fa, _tokenize, normalize_fa
+from dream.providers import MemoryProvider
+from dream.reminders import Reminder
 
 __all__ = [
     "Skill",
@@ -57,6 +59,8 @@ __all__ = [
     "load_skills",
     "parse_skill_text",
     "render_skill_text",
+    "SKILLS_USAGE",
+    "SkillPromptProvider",
     "save_skill",
     "score_skills",
     "validate_name",
@@ -348,3 +352,85 @@ def find_skill(query: str) -> Skill | None:
     """Return the best skill for a Persian request, or ``None`` for no match."""
     ranked = score_skills(query)
     return ranked[0] if ranked else None
+
+# The skills usage line, supplied to the system prompt through the M4
+# ``contribute_prompt`` hook (wired in M10). Written as backslash-u escapes
+# with a plain-Persian gloss, matching the prompt-string convention:
+# «درباره مهارت‌ها: وقتی کاربر روش انجام کاری را قدم‌به‌قدم می‌گوید — مثلاً
+# می‌گوید «یاد بگیر» یا «اول... بعد...» — این یک روش است، نه یک واقعیت درباره
+# خودش؛ پس آن را در خاطره‌ها ذخیره نکن. همه قدم‌ها را جمع کن و با ابزار
+# save_skill یک‌جا ذخیره کن؛ هر پیام را یک روش جدا نکن، و اگر بعداً قدم
+# تازه‌ای گفت دوباره با همان نام ذخیره کن. وقتی کاربر پرسید کاری را چطور
+# انجام دهد، اول با ابزار use_skill بگرد؛ اگر روشی پیدا شد همان را دنبال کن
+# و اگر نه، عادی پاسخ بده.»
+SKILLS_USAGE = (
+    "\n\n"
+    "\u062f\u0631\u0628\u0627\u0631\u0647 \u0645\u0647\u0627\u0631\u062a\u200c\u0647\u0627: "
+    "\u0648\u0642\u062a\u06cc \u06a9\u0627\u0631\u0628\u0631 \u0631\u0648\u0634 \u0627\u0646"
+    "\u062c\u0627\u0645 \u06a9\u0627\u0631\u06cc \u0631\u0627 \u0642\u062f\u0645\u200c\u0628"
+    "\u0647\u200c\u0642\u062f\u0645 \u0645\u06cc\u200c\u06af\u0648\u06cc\u062f \u2014 \u0645"
+    "\u062b\u0644\u0627\u064b \u0645\u06cc\u200c\u06af\u0648\u06cc\u062f \u00ab\u06cc\u0627"
+    "\u062f \u0628\u06af\u06cc\u0631\u00bb \u06cc\u0627 \u00ab\u0627\u0648\u0644... \u0628"
+    "\u0639\u062f...\u00bb \u2014 \u0627\u06cc\u0646 \u06cc\u06a9 \u0631\u0648\u0634 \u0627"
+    "\u0633\u062a\u060c \u0646\u0647 \u06cc\u06a9 \u0648\u0627\u0642\u0639\u06cc\u062a \u062f"
+    "\u0631\u0628\u0627\u0631\u0647 \u062e\u0648\u062f\u0634\u061b \u067e\u0633 \u0622\u0646 "
+    "\u0631\u0627 \u062f\u0631 \u062e\u0627\u0637\u0631\u0647\u200c\u0647\u0627 \u0630\u062e"
+    "\u06cc\u0631\u0647 \u0646\u06a9\u0646. \u0647\u0645\u0647 \u0642\u062f\u0645\u200c\u0647"
+    "\u0627 \u0631\u0627 \u062c\u0645\u0639 \u06a9\u0646 \u0648 \u0628\u0627 \u0627\u0628"
+    "\u0632\u0627\u0631 save_skill \u06cc\u06a9\u200c\u062c\u0627 \u0630\u062e\u06cc\u0631"
+    "\u0647 \u06a9\u0646\u061b \u0647\u0631 \u067e\u06cc\u0627\u0645 \u0631\u0627 \u06cc"
+    "\u06a9 \u0631\u0648\u0634 \u062c\u062f\u0627 \u0646\u06a9\u0646\u060c \u0648 \u0627"
+    "\u06af\u0631 \u0628\u0639\u062f\u0627\u064b \u0642\u062f\u0645 \u062a\u0627\u0632\u0647"
+    "\u200c\u0627\u06cc \u06af\u0641\u062a \u062f\u0648\u0628\u0627\u0631\u0647 \u0628\u0627 "
+    "\u0647\u0645\u0627\u0646 \u0646\u0627\u0645 \u0630\u062e\u06cc\u0631\u0647 \u06a9\u0646."
+    " \u0648\u0642\u062a\u06cc \u06a9\u0627\u0631\u0628\u0631 \u067e\u0631\u0633\u06cc\u062f "
+    "\u06a9\u0627\u0631\u06cc \u0631\u0627 \u0686\u0637\u0648\u0631 \u0627\u0646\u062c\u0627"
+    "\u0645 \u062f\u0647\u062f\u060c \u0627\u0648\u0644 \u0628\u0627 \u0627\u0628\u0632\u0627"
+    "\u0631 use_skill \u0628\u06af\u0631\u062f\u061b \u0627\u06af\u0631 \u0631\u0648\u0634"
+    "\u06cc \u067e\u06cc\u062f\u0627 \u0634\u062f \u0647\u0645\u0627\u0646 \u0631\u0627 "
+    "\u062f\u0646\u0628\u0627\u0644 \u06a9\u0646 \u0648 \u0627\u06af\u0631 \u0646\u0647\u060c"
+    " \u0639\u0627\u062f\u06cc \u067e\u0627\u0633\u062e \u0628\u062f\u0647."
+)
+
+
+class SkillPromptProvider(MemoryProvider):
+    """Supplies the skills usage line to the system prompt.
+
+    The M4 ``contribute_prompt`` hook was declared and never called until
+    this milestone. The skills subsystem is its first real contributor: a
+    subsystem that wants to add its own sentence to the system prompt. The
+    provider has no store, no recall, and no tools of its own, so every
+    other lifecycle method is a no-op and only ``contribute_prompt`` returns
+    anything. ``Dream`` registers it beside the built-in memory provider, so
+    the model is finally told that procedures are saved with ``save_skill``
+    and looked up with ``use_skill``.
+    """
+
+    def is_available(self) -> bool:
+        return True
+
+    def initialize(self) -> None:
+        pass
+
+    def recall(
+        self, query: str, limit: int = 8, reinforce: bool = False
+    ) -> list[Memory]:
+        return []
+
+    def list_reminders(self, include_inactive: bool = False) -> list[Reminder]:
+        return []
+
+    def contribute_prompt(self, query: str, budget_chars: int) -> tuple[str, list[Any]]:
+        del query
+        if len(SKILLS_USAGE) > budget_chars:
+            return "", []
+        return SKILLS_USAGE, []
+
+    def persist(self) -> None:
+        pass
+
+    def expose_tools(self) -> list[Any]:
+        return []
+
+    def shutdown(self) -> None:
+        pass
