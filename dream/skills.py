@@ -199,7 +199,10 @@ def validate_name(name: str) -> str:
 
     A name becomes one flat file inside ``skills/``; anything shaped like a
     path — a separator, a parent reference, an absolute or drive-qualified
-    form — is refused before the file system is ever consulted.
+    form — is refused before the file system is ever consulted. Windows
+    reserved device names are refused case-insensitively on the stem before
+    the first dot, after Persian folding, because the file would be a device
+    alias on the owner's machine.
     """
     cleaned = name.strip()
     if not cleaned:
@@ -208,6 +211,11 @@ def validate_name(name: str) -> str:
         raise ValueError(f"skill name contains a forbidden character: {name!r}")
     if ".." in cleaned:
         raise ValueError(f"skill name contains a parent directory reference: {name!r}")
+    if cleaned.endswith(".") or cleaned.endswith(" "):
+        raise ValueError(f"skill name must not end with a trailing dot or space: {name!r}")
+    # Single definition lives in tools; this validates the same rule.
+    if tools._is_reserved_name(cleaned):
+        raise ValueError(f"skill name is reserved on Windows: {name!r}")
     return cleaned
 
 
@@ -356,9 +364,9 @@ def save_skill(name: str, description: str, steps: Any) -> str:
     cleaned_steps = [step for step in cleaned_steps if step]
     if not cleaned_steps:
         raise ValueError("skill has no steps")
+    path = tools._safe_path(f"{SKILLS_DIR_NAME}/{cleaned}{SKILL_SUFFIX}")
     directory = _skills_dir()
     directory.mkdir(parents=True, exist_ok=True)
-    path = tools._safe_path(f"{SKILLS_DIR_NAME}/{cleaned}{SKILL_SUFFIX}")
     path.write_text(
         render_skill_text(cleaned, description, cleaned_steps), encoding="utf-8"
     )

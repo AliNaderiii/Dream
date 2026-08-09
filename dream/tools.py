@@ -161,8 +161,58 @@ def anthropic_schemas() -> list[dict[str, Any]]:
     ]
 
 
+# Windows reserved device names: case-insensitive, extension does not release.
+# 22 base names; comparison uses the stem before the first dot after Persian
+# folding (normalize_fa) so Persian digits folded to Latin are caught.
+_RESERVED_DEVICE_NAMES: frozenset[str] = frozenset(
+    {
+        "con",
+        "prn",
+        "aux",
+        "nul",
+        *{f"com{i}" for i in range(1, 10)},
+        *{f"lpt{i}" for i in range(1, 10)},
+    }
+)
+
+
+def _reserved_stem(name: str) -> str:
+    """Return the lower-cased stem before the first dot after folding."""
+    folded = normalize_fa(name).lower().strip()
+    # Strip trailing dots/spaces as Windows does before lookup.
+    folded = folded.rstrip(" .")
+    if not folded:
+        return ""
+    stem = folded.split(".")[0].strip()
+    return stem
+
+
+def _is_reserved_name(name: str) -> bool:
+    """Whether *name* is a Windows reserved device name."""
+    return _reserved_stem(name) in _RESERVED_DEVICE_NAMES
+
+
+def _check_reserved_path(rel: str) -> None:
+    """Raise ValueError if any path component is a reserved device name."""
+    # Check trailing dot/space hazard (Windows collision).
+    stripped = rel.strip()
+    if stripped.endswith(".") or stripped.endswith(" "):
+        raise ValueError(f"path must not end with a trailing dot or space: {rel!r}")
+    # Split on both separators to catch every component.
+    parts = rel.replace("\\", "/").split("/")
+    for part in parts:
+        if not part or part in (".", ".."):
+            continue
+        # Component ending with dot/space is a hazard even if not reserved.
+        if part.endswith(".") or part.endswith(" "):
+            raise ValueError(f"path component must not end with a trailing dot or space: {rel!r}")
+        if _is_reserved_name(part):
+            raise ValueError(f"reserved device name is not allowed: {rel!r}")
+
+
 def _safe_path(rel: str) -> Path:
     """Resolve a relative workspace path, rejecting every escape attempt."""
+    _check_reserved_path(rel)
     candidate = Path(rel)
     if candidate.is_absolute():
         raise PermissionError("absolute paths are not permitted")
