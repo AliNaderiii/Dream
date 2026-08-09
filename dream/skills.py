@@ -113,10 +113,37 @@ _LABELS = {
     "steps": "steps",
     "\u0646\u0627\u0645": "name",  # نام
     "\u062a\u0648\u0636\u06cc\u062d": "description",  # توضیح
+    "\u0645\u0631\u062d\u0644\u0647": "steps",  # مرحله (treated as steps)
     "\u0645\u0631\u0627\u062d\u0644": "steps",  # مراحل
 }
 _LABEL_RE = re.compile(r"^([^\s:]{1,16})\s*:\s*(.*)$")
 _STEP_MARKER_RE = re.compile(r"^(?:[-*•]|[0-9۰-۹]+[.)])\s+")
+
+# Recognized step object keys: text keys carry the step instruction, index keys
+# carry ignorable numbering metadata (e.g. {"number": 1, "step": "..."}).
+_STEP_TEXT_KEYS: frozenset[str] = frozenset({
+    "step",
+    "text",
+    "description",
+    "content",
+    "instruction",
+    "detail",
+    "\u0645\u0631\u062d\u0644\u0647",  # مرحله
+    "\u0645\u062a\u0646",     # متن
+    "\u062a\u0648\u0636\u06cc\u062d",  # توضیح
+})
+
+_STEP_INDEX_KEYS: frozenset[str] = frozenset({
+    "number",
+    "index",
+    "step_number",
+    "order",
+    "num",
+    "id",
+    "no",
+    "\u0634\u0645\u0627\u0631\u0647",  # شماره
+    "\u0631\u062f\u06cc\u0641",   # ردیف
+})
 
 # Characters that are path separators, drive markers, or illegal in Windows
 # file names; the workspace may be copied to a Windows machine (run.bat).
@@ -211,6 +238,84 @@ def render_skill_text(name: str, description: str, steps: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _coerce_step(step: Any) -> str:
+    """Coerce one step item into clean text or raise ``ValueError``.
+
+    Data Integrity rule: If a shape cannot be read confidently, refuse the
+    write with a descriptive message rather than storing a repr or guessing.
+    """
+    if isinstance(step, bool):
+        raise ValueError("unusable step shape: boolean is not a step")
+    if isinstance(step, (int, float)):
+        return str(step).strip()
+    if isinstance(step, str):
+        cleaned = step.strip()
+        if not cleaned:
+            raise ValueError("step text is empty")
+        return cleaned
+    if isinstance(step, dict):
+        if not step:
+            raise ValueError("unusable step shape: empty dictionary")
+        for val in step.values():
+            if isinstance(val, (dict, list)):
+                raise ValueError(f"unusable step shape: nested structure in {step!r}")
+
+        text_candidates: dict[str, str] = {}
+        index_candidates: dict[str, Any] = {}
+        other_candidates: dict[str, Any] = {}
+
+        for k, val in step.items():
+            key_norm = normalize_fa(str(k)).lower().strip()
+            if key_norm in _STEP_INDEX_KEYS:
+                index_candidates[key_norm] = val
+            elif key_norm in _STEP_TEXT_KEYS:
+                if isinstance(val, bool):
+                    raise ValueError(f"unusable step shape: boolean value in {step!r}")
+                if isinstance(val, (str, int, float)):
+                    t = str(val).strip()
+                    if t:
+                        text_candidates[key_norm] = t
+            else:
+                other_candidates[key_norm] = val
+
+        if text_candidates:
+            unique = set(text_candidates.values())
+            if len(unique) > 1:
+                raise ValueError(
+                    f"unusable step shape: ambiguous conflicting text keys in {step!r}"
+                )
+            return next(iter(unique))
+
+        if len(step) == 1:
+            k, val = next(iter(step.items()))
+            if isinstance(val, bool):
+                raise ValueError(f"unusable step shape: boolean value in {step!r}")
+            key_norm = normalize_fa(str(k)).lower().strip()
+            if key_norm in _STEP_INDEX_KEYS:
+                raise ValueError(f"unusable step shape: index-only dictionary in {step!r}")
+            if isinstance(val, (str, int, float)):
+                t = str(val).strip()
+                if t:
+                    return t
+                raise ValueError(f"unusable step shape: empty text in {step!r}")
+
+        if index_candidates and len(other_candidates) == 1:
+            k, val = next(iter(other_candidates.items()))
+            if isinstance(val, bool):
+                raise ValueError(f"unusable step shape: boolean value in {step!r}")
+            if isinstance(val, (str, int, float)):
+                t = str(val).strip()
+                if t:
+                    return t
+
+        if index_candidates and not other_candidates and not text_candidates:
+            raise ValueError(f"unusable step shape: index-only dictionary in {step!r}")
+
+        raise ValueError(f"unusable step shape: cannot confidently read step from {step!r}")
+
+    raise ValueError(f"unusable step shape: {type(step).__name__} is not a valid step")
+
+
 def save_skill(name: str, description: str, steps: Any) -> str:
     """Write one skill file through the workspace boundary helper.
 
@@ -224,7 +329,9 @@ def save_skill(name: str, description: str, steps: Any) -> str:
         raise ValueError("skill description is empty")
     if isinstance(steps, str):
         steps = steps.splitlines()
-    cleaned_steps = [str(step).strip() for step in (steps or [])]
+    if not isinstance(steps, (list, tuple)):
+        raise ValueError(f"skill steps must be a list, got {type(steps).__name__}")
+    cleaned_steps = [_coerce_step(step) for step in steps]
     cleaned_steps = [step for step in cleaned_steps if step]
     if not cleaned_steps:
         raise ValueError("skill has no steps")
@@ -354,42 +461,60 @@ def find_skill(query: str) -> Skill | None:
     return ranked[0] if ranked else None
 
 # The skills usage line, supplied to the system prompt through the M4
-# ``contribute_prompt`` hook (wired in M10). Written as backslash-u escapes
-# with a plain-Persian gloss, matching the prompt-string convention:
+# ``contribute_prompt`` hook (wired in M10, sharpened in M11). Written as
+# backslash-u escapes with a plain-Persian gloss, matching the prompt-string
+# convention:
 # «درباره مهارت‌ها: وقتی کاربر روش انجام کاری را قدم‌به‌قدم می‌گوید — مثلاً
 # می‌گوید «یاد بگیر» یا «اول... بعد...» — این یک روش است، نه یک واقعیت درباره
 # خودش؛ پس آن را در خاطره‌ها ذخیره نکن. همه قدم‌ها را جمع کن و با ابزار
-# save_skill یک‌جا ذخیره کن؛ هر پیام را یک روش جدا نکن، و اگر بعداً قدم
-# تازه‌ای گفت دوباره با همان نام ذخیره کن. وقتی کاربر پرسید کاری را چطور
-# انجام دهد، اول با ابزار use_skill بگرد؛ اگر روشی پیدا شد همان را دنبال کن
-# و اگر نه، عادی پاسخ بده.»
+# save_skill یک‌جا ذخیره کن؛ هر پیام را یک روش جدا نکن. اگر بعداً قدم
+# تازه‌ای گفت، تمام قدم‌های قبلی و جدید را دوباره با همان نام با ابزار
+# save_skill ذخیره کن. هرگز بدون فراخوانی ابزار save_skill ادعا نکن که روشی
+# ذخیره یا اضافه شده است؛ تأیید ذخیره فقط پس از فراخوانی ابزار مجاز است.
+# وقتی کاربر پرسید کاری را چطور انجام دهد، اول با ابزار use_skill بگرد؛ اگر
+# روشی پیدا شد همان را دنبال کن و اگر نه، عادی پاسخ بده.»
 SKILLS_USAGE = (
     "\n\n"
-    "\u062f\u0631\u0628\u0627\u0631\u0647 \u0645\u0647\u0627\u0631\u062a\u200c\u0647\u0627: "
-    "\u0648\u0642\u062a\u06cc \u06a9\u0627\u0631\u0628\u0631 \u0631\u0648\u0634 \u0627\u0646"
-    "\u062c\u0627\u0645 \u06a9\u0627\u0631\u06cc \u0631\u0627 \u0642\u062f\u0645\u200c\u0628"
-    "\u0647\u200c\u0642\u062f\u0645 \u0645\u06cc\u200c\u06af\u0648\u06cc\u062f \u2014 \u0645"
-    "\u062b\u0644\u0627\u064b \u0645\u06cc\u200c\u06af\u0648\u06cc\u062f \u00ab\u06cc\u0627"
-    "\u062f \u0628\u06af\u06cc\u0631\u00bb \u06cc\u0627 \u00ab\u0627\u0648\u0644... \u0628"
-    "\u0639\u062f...\u00bb \u2014 \u0627\u06cc\u0646 \u06cc\u06a9 \u0631\u0648\u0634 \u0627"
-    "\u0633\u062a\u060c \u0646\u0647 \u06cc\u06a9 \u0648\u0627\u0642\u0639\u06cc\u062a \u062f"
-    "\u0631\u0628\u0627\u0631\u0647 \u062e\u0648\u062f\u0634\u061b \u067e\u0633 \u0622\u0646 "
-    "\u0631\u0627 \u062f\u0631 \u062e\u0627\u0637\u0631\u0647\u200c\u0647\u0627 \u0630\u062e"
-    "\u06cc\u0631\u0647 \u0646\u06a9\u0646. \u0647\u0645\u0647 \u0642\u062f\u0645\u200c\u0647"
-    "\u0627 \u0631\u0627 \u062c\u0645\u0639 \u06a9\u0646 \u0648 \u0628\u0627 \u0627\u0628"
-    "\u0632\u0627\u0631 save_skill \u06cc\u06a9\u200c\u062c\u0627 \u0630\u062e\u06cc\u0631"
-    "\u0647 \u06a9\u0646\u061b \u0647\u0631 \u067e\u06cc\u0627\u0645 \u0631\u0627 \u06cc"
-    "\u06a9 \u0631\u0648\u0634 \u062c\u062f\u0627 \u0646\u06a9\u0646\u060c \u0648 \u0627"
-    "\u06af\u0631 \u0628\u0639\u062f\u0627\u064b \u0642\u062f\u0645 \u062a\u0627\u0632\u0647"
-    "\u200c\u0627\u06cc \u06af\u0641\u062a \u062f\u0648\u0628\u0627\u0631\u0647 \u0628\u0627 "
-    "\u0647\u0645\u0627\u0646 \u0646\u0627\u0645 \u0630\u062e\u06cc\u0631\u0647 \u06a9\u0646."
-    " \u0648\u0642\u062a\u06cc \u06a9\u0627\u0631\u0628\u0631 \u067e\u0631\u0633\u06cc\u062f "
-    "\u06a9\u0627\u0631\u06cc \u0631\u0627 \u0686\u0637\u0648\u0631 \u0627\u0646\u062c\u0627"
-    "\u0645 \u062f\u0647\u062f\u060c \u0627\u0648\u0644 \u0628\u0627 \u0627\u0628\u0632\u0627"
-    "\u0631 use_skill \u0628\u06af\u0631\u062f\u061b \u0627\u06af\u0631 \u0631\u0648\u0634"
-    "\u06cc \u067e\u06cc\u062f\u0627 \u0634\u062f \u0647\u0645\u0627\u0646 \u0631\u0627 "
-    "\u062f\u0646\u0628\u0627\u0644 \u06a9\u0646 \u0648 \u0627\u06af\u0631 \u0646\u0647\u060c"
-    " \u0639\u0627\u062f\u06cc \u067e\u0627\u0633\u062e \u0628\u062f\u0647."
+    "\u062f\u0631\u0628\u0627\u0631\u0647 \u0645\u0647\u0627\u0631\u062a\u200c"
+    "\u0647\u0627: \u0648\u0642\u062a\u06cc \u06a9\u0627\u0631\u0628\u0631 "
+    "\u0631\u0648\u0634 \u0627\u0646\u062c\u0627\u0645 \u06a9\u0627\u0631\u06cc "
+    "\u0631\u0627 \u0642\u062f\u0645\u200c\u0628\u0647\u200c\u0642\u062f\u0645 "
+    "\u0645\u06cc\u200c\u06af\u0648\u06cc\u062f \u2014 \u0645\u062b\u0644\u0627"
+    "\u064b \u0645\u06cc\u200c\u06af\u0648\u06cc\u062f \u00ab\u06cc\u0627\u062f "
+    "\u0628\u06af\u06cc\u0631\u00bb \u06cc\u0627 \u00ab\u0627\u0648\u0644... "
+    "\u0628\u0639\u062f...\u00bb \u2014 \u0627\u06cc\u0646 \u06cc\u06a9 \u0631"
+    "\u0648\u0634 \u0627\u0633\u062a\u060c \u0646\u0647 \u06cc\u06a9 \u0648"
+    "\u0627\u0642\u0639\u06cc\u062a \u062f\u0631\u0628\u0627\u0631\u0647 \u062e"
+    "\u0648\u062f\u0634\u061b \u067e\u0633 \u0622\u0646 \u0631\u0627 \u062f"
+    "\u0631 \u062e\u0627\u0637\u0631\u0647\u200c\u0647\u0627 \u0630\u062e\u06cc"
+    "\u0631\u0647 \u0646\u06a9\u0646. \u0647\u0645\u0647 \u0642\u062f\u0645"
+    "\u200c\u0647\u0627 \u0631\u0627 \u062c\u0645\u0639 \u06a9\u0646 \u0648 "
+    "\u0628\u0627 \u0627\u0628\u0632\u0627\u0631 save_skill \u06cc\u06a9\u200c"
+    "\u062c\u0627 \u0630\u062e\u06cc\u0631\u0647 \u06a9\u0646\u061b \u0647\u0631"
+    " \u067e\u06cc\u0627\u0645 \u0631\u0627 \u06cc\u06a9 \u0631\u0648\u0634 "
+    "\u062c\u062f\u0627 \u0646\u06a9\u0646. \u0627\u06af\u0631 \u0628\u0639"
+    "\u062f\u0627\u064b \u0642\u062f\u0645 \u062a\u0627\u0632\u0647\u200c\u0627"
+    "\u06cc \u06af\u0641\u062a\u060c \u062a\u0645\u0627\u0645 \u0642\u062f\u0645"
+    "\u200c\u0647\u0627\u06cc \u0642\u0628\u0644\u06cc \u0648 \u062c\u062f\u06cc"
+    "\u062f \u0631\u0627 \u062f\u0648\u0628\u0627\u0631\u0647 \u0628\u0627 "
+    "\u0647\u0645\u0627\u0646 \u0646\u0627\u0645 \u0628\u0627 \u0627\u0628\u0632"
+    "\u0627\u0631 save_skill \u0630\u062e\u06cc\u0631\u0647 \u06a9\u0646. \u0647"
+    "\u0631\u06af\u0632 \u0628\u062f\u0648\u0646 \u0641\u0631\u0627\u062e\u0648"
+    "\u0627\u0646\u06cc \u0627\u0628\u0632\u0627\u0631 save_skill \u0627\u062f"
+    "\u0639\u0627 \u0646\u06a9\u0646 \u06a9\u0647 \u0631\u0648\u0634\u06cc "
+    "\u0630\u062e\u06cc\u0631\u0647 \u06cc\u0627 \u0627\u0636\u0627\u0641\u0647 "
+    "\u0634\u062f\u0647 \u0627\u0633\u062a\u061b \u062a\u0623\u06cc\u06cc\u062f "
+    "\u0630\u062e\u06cc\u0631\u0647 \u0641\u0642\u0637 \u067e\u0633 \u0627\u0632"
+    " \u0641\u0631\u0627\u062e\u0648\u0627\u0646\u06cc \u0627\u0628\u0632\u0627"
+    "\u0631 \u0645\u062c\u0627\u0632 \u0627\u0633\u062a. \u0648\u0642\u062a"
+    "\u06cc \u06a9\u0627\u0631\u0628\u0631 \u067e\u0631\u0633\u06cc\u062f \u06a9"
+    "\u0627\u0631\u06cc \u0631\u0627 \u0686\u0637\u0648\u0631 \u0627\u0646\u062c"
+    "\u0627\u0645 \u062f\u0647\u062f\u060c \u0627\u0648\u0644 \u0628\u0627 "
+    "\u0627\u0628\u0632\u0627\u0631 use_skill \u0628\u06af\u0631\u062f\u061b "
+    "\u0627\u06af\u0631 \u0631\u0648\u0634\u06cc \u067e\u06cc\u062f\u0627 \u0634"
+    "\u062f \u0647\u0645\u0627\u0646 \u0631\u0627 \u062f\u0646\u0628\u0627\u0644"
+    " \u06a9\u0646 \u0648 \u0627\u06af\u0631 \u0646\u0647\u060c \u0639\u0627"
+    "\u062f\u06cc \u067e\u0627\u0633\u062e \u0628\u062f\u0647."
 )
 
 
