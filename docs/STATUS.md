@@ -4,6 +4,60 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M11 — Step object coercion and multi-message save compliance — SHIPPED
+
+**What shipped.** Two small defects observed during owner testing of M10 are
+resolved:
+
+1. **Step shape coercion & durable file readability (Defect One).** Models
+   frequently send step lists as objects (e.g. `[{"step": "..."}]`, `[{"text": "..."}]`,
+   or `[{"number": 1, "step": "..."}]`) rather than flat strings. Previously,
+   string coercion stored Python dictionary representations (`{'step': ...}`)
+   with backslash-u escapes into the durable skill file, breaking hand-readability.
+   `dream/skills.py` now implements `_coerce_step()` to extract clean text from
+   plain strings, bare numbers, objects keyed with text indicators (`step`,
+   `text`, `description`, `مرحله`, `متن`, `توضیح`), and objects with numbering
+   metadata. Data integrity veto enforced: unreadable, nested, empty, or
+   conflicting multi-text shapes are strictly refused with a descriptive
+   `ValueError`, never guessed or silently coerced to repr. Files on disk are
+   clean UTF-8 with genuine Persian characters and no escape sequences.
+2. **Multi-message save compliance & anti-hallucination rule (Defect Two).**
+   The skills usage line (`SKILLS_USAGE` in `dream/skills.py`) is sharpened to
+   explicitly instruct the model that claiming or confirming a skill was saved
+   without calling `save_skill` is forbidden, and that continuation steps must
+   be saved by calling `save_skill` with all steps (previous and new) under the
+   same name. A claimed save and an actual disk save can no longer disagree.
+   The owner's two-message transcript ends with all three steps on disk.
+
+No changes to store, scheduler, calendar, extraction, Telegram, CLI, or tools.
+
+**What was measured.**
+
+- Baseline suite count before: `543 passed`; ruff `All checks passed!`; with
+  `-W error::DeprecationWarning`: `543 passed`.
+- Full suite count after: `558 passed` (+15); ruff `All checks passed!`; with
+  `-W error::DeprecationWarning`: `558 passed`; zero `ResourceWarning`.
+- Red-before-green evidence: against unchanged source, both defects failed (13 failed,
+  2 passed in `tests/test_skill_step_coercion.py`), reproducing dict reprs on disk
+  and the second message failing to call `save_skill`.
+- Step coercion acceptance table (7 accepted shapes tested, 7 unusable shapes refused
+  with descriptive messages; file printed in PR).
+- Two-message sequence: ends with exactly one skill of three steps on disk, both
+  turns executing `save_skill`, and proof that replies claiming save require an actual
+  tool call.
+- Break-and-restore: every new test was seen failing against deliberate breaks
+  (reverting `_coerce_step`, reverting `SKILLS_USAGE`) and restored green.
+- Standing regression list (23 items, 65 test nodes): all pass.
+
+**On scope.** The milestone measures ~300 new lines across source, tests, and status
+document, perfectly within the milestone budget.
+
+**What is next.** Skills on the phone (Telegram integration for skills); Windows
+reserved device names.
+
+**What is blocked.** Web search remains procurement, not engineering:
+key-free endpoints return empty pages for the owner's real queries.
+
 ## M10 — Teaching the model when a procedure is a skill, not a fact — SHIPPED
 
 **What shipped.** The M4 `contribute_prompt` hook, declared and never called
