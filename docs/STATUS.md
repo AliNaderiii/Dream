@@ -4,6 +4,37 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M18 — Windows reserved device names — SHIPPED
+
+**What shipped.** Windows reserved device names (CON, PRN, AUX, NUL, COM1-9, LPT1-9) are now refused before any write, case-insensitively and with any extension, because on the owner's Windows machine those names are device aliases that cannot be deleted with ordinary tools. Both writing surfaces are covered: `save_skill` via `validate_name` and `write_note` via the workspace boundary helper `_safe_path`. Trailing dot/space hazard also refused (Windows strips them, two names differing only by a dot would collide).
+
+**Placement argued.** Single definition in `dream/tools.py` (`_RESERVED_DEVICE_NAMES`, `_is_reserved_name`, `_check_reserved_path`). `_safe_path` is the workspace boundary every write traverses, so putting the check there covers `write_note` and any future tool without duplication. `skills.validate_name` delegates to `tools._is_reserved_name` so the skill path shares the same set. Rejected alternatives: putting the rule only in `skills` leaves `write_note` open; duplicating the set in two modules drifts. Single source was the cheapest correct shape.
+
+**Folding and stem rule.** Check runs after `normalize_fa`, so Persian digits are folded: `com\u06f1` folds to `com1` and is refused (both spellings proved). Stem is part before first dot, lower-cased, trailing dots/spaces stripped, so `con.txt` and `CON.TXT` are `con` and refused, while `conference` stem is `conference` and stays accepted. Prefix trap pinned by five legitimate names.
+
+**Trailing dot decision — handled.** Any name or path ending with a dot or space is refused (`report.`). This is the same family as the device hazard and costs one check; handling it now avoids a silent overwrite on Windows. The validator already stripped trailing spaces, but trailing dots survived and are now refused in both surfaces. A separate deferred entry would have left the collision open.
+
+**Refusal message and language.** English (`reserved device name is not allowed: ...` / `skill name is reserved on Windows: ...`) for consistency: `validate_name`'s existing three errors are English, `_safe_path`'s two errors are English, and the tool error payload `Tool call failed: ...` is English throughout. Persian warnings are for post-turn claim guards the owner reads as conversational text; a path/name validation error is a tool error the developer and tests grep for. English keeps the surface uniform and searchable.
+
+**What was measured.**
+
+- Baseline before: `657 passed`; ruff `All checks passed!`
+- After: `830 passed` (+173); ruff `All checks passed!`
+- Red-before-green: 163 failed, 10 passed on unchanged source (legitimate prefix pins passed, all reserved/bare/extension/uppercase/Persian/trailing-dot failed); after: 173 passed.
+- Every reserved name refused, lower and upper, bare and with `.txt`: 22 × 4 surfaces pinned, each leaves no file (`rglob` empty).
+- Legitimate prefix names still accepted: `conference`, `control`, `contact list`, `common tasks`, `aux ideas` — both surfaces `ok`.
+- Persian-digit spelling refused, side of folding `after`: `com\u06f1` `normalize_fa == com1`, both `com1` and `com\u06f1` refused; `lpt\u06f9.txt` refused via note.
+- Both surfaces refusing with messages containing `reserved` and the name fragment; data integrity: refused name leaves `skills/` not created, no empty file, no directory.
+- Break and restore: (1) `_is_reserved_name` forced to `False` → 123 reserved tests failed → restored; (2) `validate_name` reserved check removed → skill reserved tests failed while note still blocked via `_safe_path` → restored; (3) `_check_reserved_path` removed → note reserved tests failed → restored; (4) trailing-dot check removed → trailing-dot tests failed → restored. Each break verified to actually remove behaviour (payload status inspected, `rglob` inspected).
+- Standing regression list every line: 830 tests, all green (full suite pasted in PR; 657 original + 173 new).
+
+**On scope.** Source diff `dream/tools.py` (+~40) and `dream/skills.py` (+~8, reorder of mkdir), executable logic ~35 lines, well inside ~200 budget. No change to store, folding, scheduler, calendar, extraction, provider, conversation, phone front end, claim guards. Folding not edited (only read).
+
+**What is next.** Editing/cancelling reminder from conversation, long listings on phone, dead `expose_tools` hook, web search.
+
+**What is blocked.** Nothing.
+
+
 ## M17 — Plural marker read as procedure name and conditional assertion repair — SHIPPED
 
 **What shipped.** Two coordinated fixes after M16 taught the suite to detect
