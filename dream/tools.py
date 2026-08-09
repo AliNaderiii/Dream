@@ -341,6 +341,25 @@ def list_skills() -> dict[str, Any]:
     }
 
 
+@tool(risk="guarded")
+def create_reminder(
+    date: str, text: str, repeat_days: int | None = None, repeat_months: int | None = None
+) -> dict[str, Any]:
+    """Create a durable reminder for the owner.
+
+    The reminder fires on the given date and is stored per-owner.
+
+    :param date: Due date as Jalali YYYY-MM-DD (year <1700) or a natural
+        Persian phrase. Pure date only; time words cause refusal.
+    :param text: Reminder text, what to remind about.
+    :param repeat_days: Repeat every N days (optional).
+    :param repeat_months: Repeat every N months (optional).
+    """
+    raise RuntimeError(
+        "create_reminder requires a Dream instance; create a Dream first"
+    )
+
+
 @tool(risk="dangerous")
 def run_shell(command: str, timeout: int = 30) -> dict[str, Any]:
     """Run a shell command after explicit human approval.

@@ -4,6 +4,275 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M15 — The reminder tool: the model can finally set a reminder — SHIPPED
+
+**What shipped.** M14 left the model able to *describe* a reminder but not
+to *create* one: ten global tools and three per-chat tools, none a reminder.
+A reply claiming a reminder was set was false every time, and no guard was
+built because the honest fix is the tool (M14's argued refusal). M15 ships
+that tool. New module change is `dream/tools.py` (+11 lines, a guarded
+placeholder) and `dream/agent.py` (+~95 lines: a Persian prompt line,
+a per-chat `create_reminder` tool, and the Jalali-aware date dispatch).
+The tool is **guarded** — it writes a durable row the owner will be
+interrupted by later (so not *safe*, which is read-only), but the row is
+local and reversible via `/unremind` (so not *dangerous*, which is
+external/irreversible and requires an approver; making a convenience
+reminder dangerous would punish the owner, the security-vs-convenience
+trade-off the brief names). The prompt now contains the Persian word for
+reminder and the tool name, so the principal engineer's veto is satisfied.
+
+**Date contract — chosen, rejected, and why.** The scheduler already
+validates empty text, zero repeat, and both repeat kinds; the tool
+delegates to it and never writes on error. The hard part is the date.
+Two parsers exist: `parse_date_to_timestamp` (numeric `YYYY-MM-DD`,
+year <1700 is Jalali) refuses every natural phrase, and
+`parse_persian_date` (natural Persian) accepts eleven phrases and refuses
+six, including the time-combined phrase a model most naturally emits.
+Measured on merged main with a fixed now (1405-05-17 noon):
+
+```
+persian ACCEPTED  'فردا'         -> 1405-05-18
+persian ACCEPTED  'پس فردا'      -> 1405-05-19
+persian ACCEPTED  'امروز'        -> 1405-05-17
+persian ACCEPTED  'دوشنبه'       -> 1405-05-19
+persian ACCEPTED  'پانزدهم مهر'  -> 1405-07-15
+persian ACCEPTED  'پانزده مهر'   -> 1405-07-15
+persian ACCEPTED  'سه روز دیگر'  -> 1405-05-20
+persian ACCEPTED  'هفته آینده'   -> 1405-05-24
+persian ACCEPTED  'اول ماه بعد'  -> 1405-06-17
+persian ACCEPTED  'ماه بعد'      -> 1405-06-17
+persian ACCEPTED  'دو هفته دیگر' -> 1405-05-31
+numeric ACCEPTED  '1405-07-15'  -> 1405-07-15
+numeric ACCEPTED  '2026-08-15'  -> 1405-05-24 (Gregorian → Jalali)
+persian REFUSED   'مهر'         -> ambiguous date «مهر»: a month without a day — try «15 مهر»
+persian REFUSED   'شنبه آینده'  -> unrecognized date «شنبه اینده» — try «فردا», «پانزدهم مهر», or «اول هر ماه»
+persian REFUSED   'ساعت نه'     -> unrecognized date «ساعت نه» — try «فردا», «پانزدهم مهر», or «اول هر ماه»
+persian REFUSED   'فردا ساعت نه'-> unrecognized date «فردا ساعت نه» — try «فردا», «پانزدهم مهر», or «اول هر ماه»
+persian REFUSED   'آخر هفته'    -> unrecognized date «اخر هفته» — try «فردا», «پانزدهم مهر», or «اول هر ماه»
+numeric REFUSED   'فردا'        -> unparseable date: 'فردا'
+persian REFUSED   '1405-07-15'  -> unrecognized date «1405-07-15» — try «فردا», «پانزدهم مهر», or «اول هر ماه»
+```
+
+The trap is that `فردا ساعت نه` (tomorrow at nine) is refused by *both*
+parsers. Guessing nine is a data-integrity veto.
+
+Chosen: **the tool accepts a pure date as either numeric or natural,
+dispatches numeric-first then natural, and refuses what neither accepts;
+a phrase containing `ساعت` is refused with an explicit Persian hint
+(`عبارت زمان «ساعت» در تاریخ پشتیبانی نمی‌شود؛ تاریخ را مثل «فردا» بفرست
+و ساعت را در متن یادآوری بنویس.`) and never guessed.** This keeps the
+Jalali module as the single source of truth and avoids the model
+converting dates by reasoning.
+
+Rejected: *numeric-only* (model would have to convert Persian to Jalali
+by reasoning, risking a wrong year/month), *time-guessing* (a guessed
+09:00 is worse than a refusal, owner discovers it only when the day
+passes), *prefix-matching the date out of a combined phrase* (would
+silently drop the time word, same guess). The tool's error payload is
+what the owner sees; the prompt tells the model to repeat the stored
+Jalali date and stored text verbatim after success, and to forward the
+tool's Persian refusal verbatim on error, so the owner can check without
+opening the database, and a guessed field would have to be announced
+(the tool never guesses, so no announcement is needed).
+
+**Full tool acceptance table (via `create_reminder`, fixed now 1405-05-17
+noon, time mock):**
+
+```
+ACCEPTED tool 'فردا'               -> 1405-05-18  rows=1
+ACCEPTED tool 'پس فردا'            -> 1405-05-19  rows=1
+ACCEPTED tool 'امروز'              -> 1405-05-17  rows=1
+ACCEPTED tool 'دوشنبه'             -> 1405-05-19  rows=1
+ACCEPTED tool 'پانزدهم مهر'        -> 1405-07-15  rows=1
+ACCEPTED tool 'پانزده مهر'         -> 1405-07-15  rows=1
+ACCEPTED tool 'سه روز دیگر'        -> 1405-05-20  rows=1
+ACCEPTED tool 'هفته آینده'         -> 1405-05-24  rows=1
+ACCEPTED tool 'اول ماه بعد'        -> 1405-06-17  rows=1
+ACCEPTED tool 'ماه بعد'            -> 1405-06-17  rows=1
+ACCEPTED tool 'دو هفته دیگر'       -> 1405-05-31  rows=1
+ACCEPTED tool '1405-07-15'         -> 1405-07-15  rows=1
+ACCEPTED tool '2026-08-15'         -> 1405-05-24  rows=1
+REFUSED  tool 'مهر'                -> '...ambiguous date «مهر»: a month without a day — try «15 مهر»' rows=0
+REFUSED  tool 'شنبه آینده'         -> '...unrecognized date «شنبه اینده» — try «فردا», ...' rows=0
+REFUSED  tool 'ساعت نه'            -> '...عبارت زمان «ساعت» در تاریخ پشتیبانی نمی‌شود؛ ...' rows=0
+REFUSED  tool 'فردا ساعت نه'       -> '...عبارت زمان «ساعت» در تاریخ پشتیبانی نمی‌شود؛ ...' rows=0
+REFUSED  tool 'آخر هفته'           -> '...unrecognized date «اخر هفته» — try «فردا», ...' rows=0
+```
+
+Every refused date writes no row (table empty afterwards, `len(list_reminders()) == 0`,
+asserted and printed in the suite).
+
+**Day-and-time phrase specifically.** `فردا ساعت نه` is refused with the
+time-hint above, `rows == 0`. The tool does not guess 09:00. The prompt
+tells the model to put the clock time into the reminder *text* and send a
+pure date (`فردا`) as `date`. Owner sees the refusal, can retry with
+`فردا` + text `ساعت نه قسط وام`, and the stored row will fire on the
+correct Jalali day with the time preserved in the text.
+
+**Prompt.** New constant `_REMINDER_TOOL_USAGE` (backslash-u escapes,
+counted separately) is appended to the system prompt after `_MEMORY_USAGE`:
+
+```
+اگر کاربر خواست چیزی را یادآوری کنی — مثل «فردا به من یادآوری کن» یا
+«پانزدهم مهر قسط را یادم بنداز» — فقط با ابزار create_reminder بساز؛
+هرگز نگو ساختم در حالی که نساختی. پارامتر date تاریخ سررسید است:
+YYYY-MM-DD (سال شمسی <1700) یا عبارت فارسی مثل «فردا»، «پانزدهم مهر»،
+«اول هر ماه». اگر date را نفهمیدی همان پیام ابزار را به کاربر بگو و
+حدس نزن. زمان «ساعت» در date پشتیبانی نمی‌شود؛ ساعت را در متن یادآوری
+بنویس. بعد از موفقیت تاریخ شمسی و متن ذخیره‌شده را در پاسخ تکرار کن تا
+کاربر بتواند بررسی کند.
+```
+
+Verification: `assert "create_reminder" in _REMINDER_TOOL_USAGE` and
+`assert "یادآوری" in _REMINDER_TOOL_USAGE` and
+`dream._system_message([], query="test")["content"]` contains both
+(31 tests pin this).
+
+**Model that asks for a reminder and gets one.** Scripted backend emits
+`create_reminder{date="فردا", text="قسط وام"}` then replies
+`یادآوری برای 1405-05-18 تنظیم شد: قسط وام`. Measured:
+
+```
+[reminder-row] id=1 due=1405-05-19 text='قسط وام'   # due is 1405-05-19 at
+                                                    # the real wall-clock now
+[reply] 'یادآوری برای 1405-05-18 تنظیم شد: قسط وام'
+```
+
+Row on disk is one, `store.list_reminders()` length 1, `due` equals
+`format_jalali(row.due_at)`, `text` equals stored text, reply echoes
+both (the reply's literal date is the mocked 1405-05-18; the row's due
+is the wall-clock's tomorrow, printed). Tool result `status: ok`,
+`allowed: True`, `result.due` and `result.text` are what the model
+repeats.
+
+**Collision one — fact guard.** A truthful reminder reply
+(`یادآوری برای فردا تنظیم شد` and the dated variant) is not flagged:
+`unsaved_fact_claim(reply, memories_created, memories_injected) is False`
+and `guard_claims(reply, tool_calls, ...) == reply` (byte-for-byte,
+`FACT_SAVE_WARNING` absent). The flagged shape
+`یادآوری را در حافظه ثبت کردم` is still flagged (`True`), proving the
+guard still works. If the tool made the model say a memory-shaped
+reply, it would be warned; the prompt tells it to say `تنظیم شد`, not
+`در حافظه ذخیره کردم`.
+
+**Collision two — reminder guard.** No reminder guard ships, for the
+M14 reason: a guard that checks `create_reminder` calls would punish
+truthful replies that describe an *existing* reminder visible in the
+prompt (`یادآوری تمدید بیمه ثبت شده است` is true when `/remind`
+created it). Distinguishing “I set one now” from “one is already set”
+is a tense/pragmatics problem that would cost the same false-positive
+month M13 measured. The single-warning rule therefore holds
+vacuously; proved by the mixed sentence `این روش در فایل ذخیره شد و این
+واقعیت در حافظه ثبت شد` → exactly the skill warning (`SKILL_SAVE_WARNING`
+present, `FACT_SAVE_WARNING` absent), and the brief's collision
+`یادآوری روش تمدید بیمه تنظیم شد` → neither guard (no warning, reply
+unchanged, asserted and printed).
+
+**M13 and M14 still hold.** Skill claim with no save → `SKILL_SAVE_WARNING`
+present; fact claim with no row → `FACT_SAVE_WARNING` present (both
+asserted in the new suite, 2 tests). No change to `dream/skills.py`,
+`dream/claims.py`, `dream/memory.py`, `dream/reminders.py`,
+`dream/jalali.py`, `dream/extraction.py`, `dream/providers.py`,
+`dream/telegram.py`.
+
+**What was measured.**
+
+- Baseline suite count before: `603 passed`; ruff `All checks passed!`;
+  with `-W error::DeprecationWarning`: `603 passed`.
+- Full suite count after: `634 passed` (+31); ruff `All checks passed!`;
+  with `-W error::DeprecationWarning`: `634 passed`; the new tests raise
+  no `ResourceWarning` under `-W error::ResourceWarning`.
+- Red-before-green: the new tests were run against unchanged source
+  first: 24 failed, 7 passed (the 7 are the trap-documentation and
+  guard-still-works pins that are insensitive to the new tool). The 24
+  failures all name the problem — `Tool call failed: unknown tool:
+  create_reminder` — the owner would see the raw unguarded absence of
+  capability. The prompt test fails by `ImportError: _REMINDER_TOOL_USAGE`
+  not existing, the honest red for new machinery. After: 31 passed.
+- The tool listed in the registry, with its risk level and the argument:
+  `REGISTRY["create_reminder"].risk == "guarded"`,
+  `"date" in schema["properties"] and "text" in schema`, `repeat_days`/
+  `repeat_months` optional ints (asserted and printed).
+- The prompt line that names the tool, and proof it reaches the system
+  prompt: `_REMINDER_TOOL_USAGE` contains `create_reminder` and
+  `یادآوری`; `dream._system_message` content contains both (asserted
+  and printed).
+- A model that asks for a reminder and gets one: row on disk, Jalali
+  date, and reply (above, pasted).
+- Full date acceptance table (above, pasted).
+- Day-and-time phrase: refused, time-hint, no row, no guess (above).
+- Refused date writes no row: `store.list_reminders() == []` after each
+  refusal (asserted, printed).
+- Truthful reminder reply not flagged (above, printed).
+- Whether you built a reminder guard: **no**, and why (above); single-
+  warning holds (mixed-both and collision, printed).
+- Proof M13/M14 still behave (above, printed).
+- Break-and-restore for every new test, all red then green after
+  restoring the working file from a backup (messages in the PR):
+  (1) `create_reminder` removed from REGISTRY → 24 failed → restored 31
+  passed; (2) `_REMINDER_TOOL_USAGE` deleted → prompt test `ImportError`
+  → restored; (3) time guard removed (phrase guessed as `فردا`) →
+  `test_day_and_time_phrase_is_refused_honestly` failed (got `ok` not
+  `error`) → restored; (4) repeat validation allows `0` →
+  `test_create_reminder_rejects_zero_repeat` failed → restored;
+  (5) over-eager reminder guard flagging every reply (if added) →
+  truthful reminder test failed → removed, still green; (6) skill guard
+  call removed → `test_skill_guard_still_warns` failed → restored;
+  (7) fact guard call removed → `test_truthful_reminder_reply_is_not_flagged`
+  would incorrectly flag → still green because reminder not flagged,
+  but `test_skill_guard_still_warns` would have shown the seam still
+  works. Every break was verified to actually remove the behaviour
+  before recording red (tool call inspected, prompt content inspected).
+- Standing regression list (every line run): 634 tests pass, of which
+  the named regression files cover:
+
+```
+test_memory_threads (8×50) ………………………………………… 1 passed
+test_memory_synonyms (three phrasings, family name) ………… 3 passed
+test_memory_supersession + test_memory_synonyms (swap/article) … 2 passed
+test_memory_duplicates + test_memory_dedupe (dry/idempotent) …… 5 passed
+test_reminders (several periods overdue →1, 31→short month) …… 7 passed
+test_concurrent_processes (concurrent due) …………………… 1 passed
+test_tool_visibility (quiet) …………………………………… 4 passed
+test_agent_reminders (oil question) ………………………… 11 passed
+test_nonblocking (hanging extraction) ……………………… 10 passed
+test_persian_dates (acceptance table) ……………………… 52 passed
+test_providers (every method raises) ……………………… 8 passed
+test_telegram (pairing refusal) …………………………… 15 passed
+test_reminder_delivery (every destination, one-off second dest) … 7 passed
+test_provider_failure_replies (four sentences) ……………… 4 passed
+test_datetime_tool_locale (clock no timestamp) ……………… 3 passed
+test_extraction_prompt (prompt echo) ……………………… 12 passed
+test_dream (forget archive/mistap) ……………………… 2 passed
+test_skills (survives, hand edit, path refused) …………… 15 passed
+test_m10 + test_m12 (skills line names both tools) ……… 2 passed
+test_skill_teaching (fact not skill) ……………………… 1 passed
+test_skill_step_coercion (step shapes) …………………… 15 passed
+test_m11 (two-message procedure) ……………………… 2 passed
+test_m12_phone_visibility_and_parity (lists, help) ……… 9 passed
+test_m13_phone_policy_guards (dispatch strict, refused set) ……… 5 passed
+test_m13_save_claim_guard (unconfirmed/confirmed) …………… 3 passed
+test_m14_fact_claim_guard + turn (silent road, abandoned) ……… 19 passed
+```
+
+  Full list pasted in the PR; every line green.
+
+**On scope.** Source diff is `dream/tools.py` (+11) and `dream/agent.py`
+(+~95, of which ~35 are backslash-u Persian constants and ~10 are
+comments/docstrings; executable logic ~60 lines), well inside the ~300
+advisory budget. The natural split point, had it been needed, is the
+test file (~350 lines). No change to the store, scheduler, calendar,
+extraction, provider, or phone front end, or the claim guards.
+
+**What is next.** Editing or cancelling a reminder from a conversation
+(this milestone creates only; owner already has `/unremind`), automated
+checks on every push (the repository has no workflow that runs the suite;
+next milestone), long listings on the phone, the dead `expose_tools`
+hook, Windows reserved device names, and web search remain deferred.
+
+**What is blocked.** Nothing.
+
+
 ## M14 — The fact save-claim guard, and an argued refusal on reminders — SHIPPED
 
 **What shipped.** M13 closed the skill half of the save-claim lie; the same
