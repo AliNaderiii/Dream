@@ -31,3 +31,10 @@ jobs:
 
       - name: Lint
         run: ruff check .
+
+      - name: Commit rules
+        if: github.event_name == 'pull_request'
+        run: python tools/check_commit.py HEAD
+
+      - name: Suite size
+        run: python tools/check_suite_count.py
