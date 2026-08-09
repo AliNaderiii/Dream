@@ -4,6 +4,193 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M17 — Plural marker read as procedure name and conditional assertion repair — SHIPPED
+
+**What shipped.** Two coordinated fixes after M16 taught the suite to detect
+conditional assertions:
+
+1. **The conditional assertion that asserted nothing (first half).** In
+   `tests/test_skill_step_coercion.py:267` a block was shaped like
+   `if CLAIM_SAVED_TEXT in second.reply: assert save happened`. The reply on
+   the second message is the tool result prefixed by the Persian word for
+   result ("نتیجه: ..."), so the claim phrase is not in it. Measured:
+   ```
+   condition true?  False
+   ```
+   The condition false, assertion never executes, test green on nothing for
+   six milestones. M16 allowlisted this one occurrence as deferred. M17
+   removes the allowlist entry and the reason for it.
+
+   Replacement: unconditional assertions about the same property — that a
+   reply claiming a save cannot appear without the save. The turn object
+   carries reply and every call with result; guard function is importable.
+   ```
+   assert any(c["name"] == "save_skill" for c in second.tool_calls)
+   assert not unsaved_skill_claim(second.reply, second.tool_calls)
+   assert guard_skill_save_claim(second.reply, second.tool_calls) == second.reply
+   assert not unsaved_skill_claim(CLAIM_SAVED_TEXT, second.tool_calls)
+   assert guard_skill_save_claim(CLAIM_SAVED_TEXT, second.tool_calls) == CLAIM_SAVED_TEXT
+   ```
+   Red-before-green: repaired assertion observed failing against unrepaired
+   guard:
+   ```
+   assert not unsaved_skill_claim(CLAIM_SAVED_TEXT, second.tool_calls)
+   E AssertionError: assert not True
+   ```
+   Message names problem, not import error. After fix: 1 passed.
+
+2. **The skill guard plural false positive (second half).** While deciding
+   what replacement should assert, calling shipped guard on the very phrase
+   the dead assertion was written for, where save DID happen, should be
+   silent, is not.
+
+   ```
+   reply: قدم‌ها ذخیره شدند (steps were saved, plural with ZWNJ)
+   turn: one completed save of insurance procedure
+   guard: flagged
+   ```
+
+   Traced: store folds ZWNJ to space before matching, correct and deliberate.
+   Persian plural with that joiner becomes two tokens: noun and bare plural
+   marker "ها". Guard reads tokens between skill noun and save word as claimed
+   procedure name. For plural that span is marker alone. Marker shares no stem
+   with saved name, so guard concludes different procedure and warns.
+
+   Eight replies, all truthful, backed by completed save, measured before:
+   ```
+   plural of step, joiner spelling      WARNED | قدم‌ها ذخیره شدند
+   plural of step, joiner, other verb   WARNED | قدم‌ها اضافه شدند
+   plural of skill                      WARNED | مهارت‌ها ذخیره شد
+   plural of procedure                  WARNED | روش‌ها ذخیره شد
+   plural of stage                      WARNED | مرحله‌ها ذخیره شد
+   plural of step, spaced spelling      WARNED | قدم ها ذخیره شدند
+   names the procedure explicitly       silent | روش تمدید بیمه ماشین ذخیره شد.
+   singular and generic                 silent | قدم ذخیره شد.
+   ```
+   Six of eight. Every Persian plural formed with that marker turns truthful
+   confirmation into warning.
+
+   Fix: treat plural marker as stopword so never survives into claimed name.
+   STOPWORDS table in skills module does not currently contain marker.
+   Is it right home given shared with matcher that finds skills by name?
+   Yes: plural affix carries no topic content in either place. Searching
+   "قدم‌ها" should match same as "قدم", and guard should not read "ها" as
+   procedure name. Alternative "require claimed name to carry more than affix"
+   is effectively same after cleaning: claimed span reduced to empty becomes
+   generic, left alone when some save completed (existing boundary).
+
+   Covered affixes (appear as separate tokens after ZWNJ folding):
+     ها, های, هایی, هایم, هایت, هایش, هایمان, هایتان, هایشان
+
+   Not covered as separate tokens (safe, remain attached and handled by
+   stemmer or not a plural marker in this context):
+     ان (animate plural, e.g. کاربران), ات (Arabic plural, نکات),
+     ین, ون, تر, ترین (comparative/superlative)
+
+   These never appear isolated via ZWNJ->space folding, so do not trigger
+   claimed-name extraction bug. Documented and pinned.
+
+   After fix, eight replies measured:
+   ```
+   plural of step, joiner spelling      silent | قدم‌ها ذخیره شدند
+   plural of step, joiner, other verb   silent | قدم‌ها اضافه شدند
+   plural of skill                      silent | مهارت‌ها ذخیره شد
+   plural of procedure                  silent | روش‌ها ذخیره شد
+   plural of stage                      silent | مرحله‌ها ذخیره شد
+   plural of step, spaced spelling      silent | قدم ها ذخیره شدند
+   names the procedure explicitly       silent | روش تمدید بیمه ماشین ذخیره شد.
+   singular and generic                 silent | قدم ذخیره شد.
+   ```
+
+   Wrong-skill detection still warns (principal engineer's veto):
+   ```
+   reply: روش چای دم کردن ذخیره شد.
+   save: تمدید بیمه ماشین
+   flagged: True, warning present, byte "توجه" in guard output
+   ```
+   Truthful same name silent. Both directions proved.
+
+   Fact guard measurement (M14): does not have same shape because it does not
+   extract claimed name; it only checks presence of fact/memory marker before
+   save stem. Tested:
+   ```
+   واقعیت ذخیره شد -> flagged when no memory, silent when backed
+   واقعیت‌ها ذخیره شد -> flagged when no memory, silent when backed
+   -> no wrong-skill comparison, no plural bug
+   ```
+   Confirmed clean.
+
+**What was measured.**
+
+- Baseline: `652 passed in 24.41s`; ruff `All checks passed!`
+- After: `657 passed in 24.78s` (+5 tests); ruff `All checks passed!`
+- Condition in dead assertion printed, false (above)
+- Replacement assertion failing against unrepaired guard before passing (above)
+- M16 allowlist entry removed, detector clean afterwards:
+  `test_conditional_assertions_pass_clean_on_merged_trunk` passes with no
+  allowlist; file no longer contains DEFERRED_M11_OFFENDER.
+- Eight-reply table before and after (above)
+- Plural affix coverage (above)
+- Wrong-skill still warned (above)
+- Fact guard measurement clean (above)
+- Break and restore for every new test (messages in PR):
+  (1) plural markers removed from STOPWORDS -> 2 failed (plural tests) -> restored 5 passed
+  (2) guard forced to always silent -> wrong-skill test failed -> restored passed
+  (3) guard forced to always warn -> truthful plural tests failed -> restored passed
+  (4) conditional assertion re-introduced -> detector found 1 violation -> removed, clean
+  (5) step coercion backend forced to not call save_skill on second message ->
+      first assert (tool_calls) failed -> restored
+  Every break verified to actually remove behaviour (tool call inspected,
+  guard output inspected).
+- Standing regression list, every line run (657 tests, all green, relevant files):
+```
+test_memory_threads (8x50, 400 rows) ................................ 1 passed
+test_memory_synonyms (three phrasings, family name) .................. 3 passed
+test_memory_supersession + synonyms (swap/article) ................... 2 passed
+test_memory_duplicates + dedupe (dry/idempotent) ..................... 5 passed
+test_reminders (several overdue->1, 31->short month) ................ 7 passed
+test_concurrent_processes (concurrent due) ........................... 1 passed
+test_tool_visibility (quiet) ......................................... 4 passed
+test_agent_reminders (Persian oil question date) ..................... 11 passed
+test_nonblocking (hanging extraction budget) ......................... 10 passed
+test_persian_dates (date phrase table) ............................... 52 passed
+test_providers (every method raises) ................................. 8 passed
+test_telegram (pairing refusal) ...................................... 15 passed
+test_reminder_delivery (every destination, one-off second dest) ..... 7 passed
+test_provider_failure_replies (four sentences) ....................... 4 passed
+test_datetime_tool_locale (clock no timestamp) ....................... 3 passed
+test_extraction_prompt (prompt echo) ................................. 12 passed
+test_dream (forget archive/mistap) ................................... 2 passed
+test_skills (survives, hand edit, path refused) ...................... 15 passed
+test_m10 + test_m12 (skills line names both tools) ................... 2 passed
+test_skill_teaching (fact not skill) ................................. 1 passed
+test_skill_step_coercion (step shapes + repaired) .................... 16 passed (was 15)
+test_m11 (two-message procedure) ..................................... 2 passed
+test_m12_phone_visibility_and_parity (lists, help) ................... 9 passed
+test_m13_phone_policy_guards (dispatch strict, refused set) .......... 5 passed
+test_m13_save_claim_guard (unconfirmed/confirmed) .................... 3 passed (plus plural)
+test_m14_fact_claim_guard + turn (silent road, abandoned) ............ 19 passed
+test_m15_reminder_tool (reminder table, refused no row) .............. 31 passed
+test_m16_escaping (escaping convention) .............................. 4 passed
+test_m16_conditional_assertions (detector clean, no allowlist) ....... 4 passed
+test_m17_plural_guard (plural fix) .................................. 5 passed
+```
+
+**On scope.** Source diff is `dream/skills.py` (+14 lines, of which 10 are backslash-u
+Persian constants counted separately; executable logic ~4 lines added to
+STOPWORDS and NAME_DROP). Well inside ~200 advisory budget. No change to store,
+folding, scheduler, calendar, extraction, provider, tool, conversation,
+phone front end, fact guard. Folding out of budget and not bug. Fact guard out
+of budget, measured clean.
+
+**What is next.** Wiring commit-rule script into build (needs permission),
+rewriting merged history (deferred), editing/cancelling reminder from
+conversation, long listings on phone, dead expose_tools hook, Windows reserved
+device names, web search.
+
+**What is blocked.** Nothing.
+
+
 ## M16 — Automated enforcement of project rules — SHIPPED
 
 **What shipped.** Automated build and suite enforcement for the six rules that
