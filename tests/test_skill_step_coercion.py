@@ -263,9 +263,23 @@ def test_two_message_sequence_saves_all_three_steps_and_never_claims_unsaved(
     assert [call["name"] for call in first.tool_calls] == ["save_skill"]
     assert [call["name"] for call in second.tool_calls] == ["save_skill"]
 
-    # 2. Proof that a claimed save cannot appear without the actual save
-    if CLAIM_SAVED_TEXT in second.reply:
-        assert any(c["name"] == "save_skill" for c in second.tool_calls)
+    # 2. Proof that a claimed save cannot appear without the actual save.
+    # The turn object carries reply and every call with its result; the guard
+    # function is importable. A reply claiming a save must be backed by a
+    # completed save, otherwise the guard would append a warning. We assert
+    # unconditionally that the turn's final reply is not an unbacked claim,
+    # and that a truthful plural confirmation (the very phrase the old
+    # conditional was written for) is silent when backed by the save.
+    from dream.skills import guard_skill_save_claim, unsaved_skill_claim
+
+    assert any(c["name"] == "save_skill" for c in second.tool_calls)
+    assert not unsaved_skill_claim(second.reply, second.tool_calls)
+    assert guard_skill_save_claim(second.reply, second.tool_calls) == second.reply
+    # This phrase is the plural form that M17 fixes: "قدم‌ها ذخیره شدند".
+    # Before the fix it was flagged as naming a different procedure ("ها")
+    # because ZWNJ folds to space. After the fix it is treated as generic.
+    assert not unsaved_skill_claim(CLAIM_SAVED_TEXT, second.tool_calls)
+    assert guard_skill_save_claim(CLAIM_SAVED_TEXT, second.tool_calls) == CLAIM_SAVED_TEXT
 
     # 3. Verify exactly one skill with all three steps is stored on disk
     loaded, problems = skills.load_skills()

@@ -89,6 +89,19 @@ MIN_SHARED_STEMS = 2
 # Gloss: وقتی اگر کاربر است هست باشد شود می خواهد خواهم بخواهد کند کن کنم
 #        کنیم کرد کردن کرده بگو بگم بگوید گفت یا و را از به با در که برای تا
 #        این آن هر همه چطور چگونه چی چه چقدر پرسیدن پرسید بپرس
+# Scaffolding words with no topic content: politeness and request frames,
+# auxiliaries, function words, question words. Written as backslash-u escapes
+# with a plain-Persian gloss, matching the synonym-table convention.
+# Gloss: وقتی اگر کاربر است هست باشد شود می خواهد خواهم بخواهد کند کن کنم
+#        کنیم کرد کردن کرده بگو بگم بگوید گفت یا و را از به با در که برای تا
+#        این آن هر همه چطور چگونه چی چه چقدر پرسیدن پرسید بپرس
+#        ها های هایی هایم هایت هایش هایمان هایتان هایشان — plural marker and
+#        its siblings (ZWNJ-folded forms become separate tokens). They carry no
+#        topic content and must never survive into a claimed procedure name;
+#        adding them to STOPWORDS also improves skill search (plural query
+#        "قدم‌ها" matches same as "قدم"). This is the right home despite the
+#        table being shared with the matcher, because a plural affix is not
+#        content in either place.
 _STOPWORDS: tuple[str, ...] = (
     "\u0648\u0642\u062a\u06cc", "\u0627\u06af\u0631", "\u06a9\u0627\u0631\u0628\u0631",
     "\u0627\u0633\u062a", "\u0647\u0633\u062a", "\u0628\u0627\u0634\u062f", "\u0634\u0648\u062f",
@@ -103,6 +116,10 @@ _STOPWORDS: tuple[str, ...] = (
     "\u0686\u0637\u0648\u0631", "\u0686\u06af\u0648\u0646\u0647", "\u0686\u06cc",
     "\u0686\u0647", "\u0686\u0642\u062f\u0631", "\u067e\u0631\u0633\u06cc\u062f\u0646",
     "\u067e\u0631\u0633\u06cc\u062f", "\u0628\u067e\u0631\u0633",
+    "\u0647\u0627", "\u0647\u0627\u06cc", "\u0647\u0627\u06cc\u06cc",
+    "\u0647\u0627\u06cc\u0645", "\u0647\u0627\u06cc\u062a", "\u0647\u0627\u06cc\u0634",
+    "\u0647\u0627\u06cc\u0645\u0627\u0646", "\u0647\u0627\u06cc\u062a\u0627\u0646",
+    "\u0647\u0627\u06cc\u0634\u0627\u0646",
 )
 
 _STOP_STEMS: frozenset[str] = frozenset(
@@ -743,6 +760,15 @@ _NAME_DROP: frozenset[str] = frozenset({
     "\u0627\u0645\u0631\u0648\u0632",          # امروز
     "\u062f\u0648\u0628\u0627\u0631\u0647",    # دوباره
     "\u0647\u0645\u06cc\u0646",                # همین
+    "\u0647\u0627",                      # ها — plural marker
+    "\u0647\u0627\u06cc",                # های
+    "\u0647\u0627\u06cc\u06cc",              # هایی
+    "\u0647\u0627\u06cc\u0645",              # هایم
+    "\u0647\u0627\u06cc\u062a",              # هایت
+    "\u0647\u0627\u06cc\u0634",              # هایش
+    "\u0647\u0627\u06cc\u0645\u0627\u0646",          # هایمان
+    "\u0647\u0627\u06cc\u062a\u0627\u0646",          # هایتان
+    "\u0647\u0627\u06cc\u0634\u0627\u0646",          # هایشان
 })
 
 _CLAIM_WINDOW = 10          # tokens back from the verb to hunt the skill noun
