@@ -4,6 +4,157 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M14 — The fact save-claim guard, and an argued refusal on reminders — SHIPPED
+
+**What shipped.** M13 closed the skill half of the save-claim lie; the same
+lie was still free for facts. On merged main six replies, none backed by
+anything, none flagged — three reminders and three facts. M14 turns the fact
+half into a property of the finished turn: a reply that claims a fact was
+remembered or stored is only true when the turn actually wrote a memory row.
+The new module `dream/claims.py` hosts `unsaved_fact_claim`,
+`guard_fact_save_claim` and `guard_claims`; `Dream.run` now calls the single
+`guard_claims` seam once, after extraction, so the owner is never told a
+durable memory write happened when it did not. The warning the owner sees:
+«توجه: ادعای ذخیره‌شدن این واقعیت تایید نشده است؛ چیزی در حافظه ذخیره نشده
+است.» A truthful reply reaches the owner byte for byte. The M13 skill guard
+(`guard_skill_save_claim`, `unsaved_skill_claim`) stays in `dream/skills.py`
+with its public names unchanged; the M13 tests pass unchanged.
+
+**Basis chosen: the outcome, not the call list.** Facts reach the store by two
+roads. The model may call `remember_fact`, or the silent extraction pass may
+write the fact after the reply is composed with no tool call at all. A guard
+shaped like M13's — ask whether a `remember_fact` call completed — would
+punish the truthful extraction road, because its call list is empty. Measured
+on merged main, one field separates the two roads: `memories_created` is
+`[one row]` for the extraction road and `[]` when extraction finds nothing.
+The fact guard therefore asks whether the turn wrote a memory row, not whether
+a tool was named. The M13 basis was right; the M13 mechanism was call-shaped
+only because skills have one road.
+
+**The reminder decision — argued, and a reasoned refusal.** The tool registry
+lists no reminder tool (measured: ten global tools and three per-chat —
+`forget_memory`, `remember_fact`, `search_memory` — none a reminder). A model
+cannot set a reminder even if it wants to; reminders are created only by the
+owner's own `/remind` command. So a reply claiming a reminder was set is false
+every single time. The question was whether the reminder half is a guard, a
+missing capability, or both. Decision: **it is a missing capability, and the
+honest fix is a reminder tool, which is out of budget here** (it touches the
+tool module, explicitly MUST-NOT-CHANGE). No reminder guard ships, for the
+principal engineer's reason: a guard would punish truthful replies that
+describe an *existing* reminder — the model sees scheduled reminders in its
+prompt section and can truthfully say «یادآوری تمدید بیمه ثبت شده است» about
+one the owner set via `/remind`. Distinguishing «I set one now» from «one is
+already set» is a tense/pragmatics problem that would cost the same
+false-positive month M13 measured elsewhere. The tool is deferred to the next
+milestone. A reasoned refusal to build a guard for a capability that should
+exist is the explicitly sanctioned outcome in the brief.
+
+**The abandoned-extraction boundary — decided.** Extraction runs on a worker
+with a wall-clock budget; when the provider is slow the turn is marked
+abandoned and the worker keeps running, so a truthful reply can be composed
+before its own row exists (measured: rows 0 at reply time, rows 1 four seconds
+later). The fact guard therefore does *nothing* when extraction is abandoned —
+warning then would call a truthful reply a lie. This is the accepted
+trade-off: a genuine lie that coincides with an abandoned pass is not flagged,
+which is preferable to punishing truth, and it is a rare conjunction.
+
+**Ownership of a mixed sentence — decided.** `guard_claims` appends at most one
+warning: the skill guard is consulted first, and only when it passes does the
+fact guard run. The owner never reads two warnings on one reply. The brief's
+reminder/procedure collision sentence («یادآوری روش تمدید بیمه تنظیم شد»)
+fires *neither* guard — there is no reminder guard, and the fact guard needs a
+fact/memory marker, which a reminder sentence lacks — so it reaches the owner
+unchanged. A genuine skill-plus-fact double claim shows exactly the skill
+warning.
+
+**Scoping, measured not guessed.** A save word alone is not a fact claim, so
+the fact guard requires a fact noun (واقعیت، موضوع، نکته، مطلب، چیز), a memory
+noun (حافظه، خاطره، خاطرات، ذهن), or «به خاطر» inside the claim window. Note
+saves («یادداشت ذخیره شد»), email saves, skill saves («روش ... ذخیره شد»), and
+bare saves with no marker are never flagged. «یاد» is deliberately *not* a
+memory marker, so «یادآوری» (reminder) cannot be misread as a fact claim. The
+recall family («یادم می‌ماند»، «به یاد دارم»، «به خاطر دارم/سپردم») is a closed
+set of positive phrases; a recall claim is confirmed when the claimed subject
+matches a row written this turn *or* a memory the model was shown this turn, so
+a truthful recall of existing memory is never punished.
+
+**Negation — by design, both families.** The negative prefix attaches to the
+Persian verb, so denials differ from their claims by whole tokens never in the
+positive sets: save denials (نشد، نکردم، نشده) versus the closed positive past-
+verb set, and recall denials (یادم نمی‌آید، یادم نیست، به خاطر ندارم، به یاد
+ندارم) versus the closed positive recall-phrase set. Four save denials and
+four recall denials measured, none flagged; a disjointness test pins the save
+verb sets apart.
+
+**Normalisation.** Every new Persian constant is a backslash-u escape passed
+through the same `normalize_fa`/tokenisation pipeline the store uses before it
+is trusted, so a hamza or ZWNJ spelling cannot silently fail to match. None of
+the constants carries a hamza (the reminder word that does, «یادآوری», is
+deliberately absent); the check is pinned in the tests.
+
+**What was measured.**
+
+- Baseline suite count before: `584 passed`; ruff `All checks passed!`; with
+  `-W error::DeprecationWarning`: `584 passed`.
+- Full suite count after: `603 passed` (+19); ruff `All checks passed!`; with
+  `-W error::DeprecationWarning`: `603 passed`; the new tests raise no
+  `ResourceWarning` under `-W error::ResourceWarning`.
+- Red-before-green: the new tests were run against unchanged source first. The
+  turn-seam test failed with a message naming the problem — the owner would see
+  the raw unguarded claim «این واقعیت ثبت شد» with no annotation. The detector
+  unit tests are red by the guard module not existing (import), the honest red
+  for new machinery; the seam red names the problem, not an import error.
+- The six unflagged replies, before and after: before, the M13 (skill)
+  detector reports `False` for all six. After, the three fact replies are
+  flagged and warned when unbacked; the three reminder replies remain
+  unflagged (deferred); under an abandoned extraction none of the six is
+  warned.
+- The extraction road: user «سگ من اسمش رکس است», reply «این را در حافظه ذخیره
+  کردم» with an empty call list, extraction writes one row. Reply untouched;
+  row printed: `[extraction-road row] id=1 content='سگ کاربر رکس است'
+  source=extraction`.
+- The tool road: a `remember_fact` call writes one row, reply «این را در
+  حافظه ذخیره کردم» untouched byte for byte; row printed: `[tool-road row]
+  id=1 content='کاربر مهندس است'`.
+- A fact reply with no row anywhere: «این واقعیت ثبت شد» reaches the owner
+  with the warning appended, extraction `no_facts`, no rows created.
+- Truthful recall: «یادم می‌ماند که شما مهندس هستید» backed by an injected
+  memory the model was shown is untouched, not warned.
+- Abandoned extraction: reply not warned (see decision above).
+- Mixed sentence: a skill-plus-fact double claim yields exactly one warning
+  (the skill one, `FACT_SAVE_WARNING` absent); the reminder/procedure
+  collision sentence yields none.
+- Normalisation check on every new Persian constant: all stable under
+  `normalize_fa`; every recall source phrase survives tokenisation into
+  `_RECALL_PHRASES`; the hamza-bearing denial «یادم نمی‌آید» is not a member.
+- Break-and-restore, every new test seen red then green (messages in the PR):
+  (1) `guard_claims` seam disabled → 2 turn tests fail; (2) `dream/claims.py`
+  removed → unit tests red by `ModuleNotFoundError`; (3) a negative verb added
+  to the positive save set → save-denial test fails; (4) recall confirmation
+  ignores injected memory → injected-recall test fails; (5) single-warning
+  short-circuit removed → doubled-warning test fails; (6) abandoned no longer
+  suppresses → abandoned turn test fails; (7) over-eager guard warns on every
+  reply → six truthful-reply pins fail (the still-works tests are shown red
+  against over-warning, since they are insensitive to the real source by
+  design).
+- Standing regression list (every line run): 349 tests across the named
+  regression files pass; full suite 603.
+
+**On scope.** New source is `dream/claims.py` (~91 executable-logic lines) and
+a ~5-line net change to the `dream/agent.py` seam; escaped Persian constants
+and docstrings/gloss comments count separately, so the executable logic is
+~96 lines, well inside the ~300-line budget. No change to the store, scheduler,
+calendar, extraction, provider, or tool modules. `guard_skill_save_claim` and
+`unsaved_skill_claim` keep their public names in `dream/skills.py`; the M13
+tests pass unchanged.
+
+**What is next.** The reminder tool, argued here and deferred: give the model
+the capability it already pretends to have. Long-listing truncation, the dead
+`expose_tools` hook, Windows reserved device names, and web search (procurement)
+remain deferred.
+
+**What is blocked.** Nothing.
+
 ## M13 — The save-claim guard: a claim that cannot outrun the write — SHIPPED
 
 **What shipped.** The M11 rule against claiming a skill was saved without
