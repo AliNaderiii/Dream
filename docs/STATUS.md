@@ -4,6 +4,142 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M12 — Phone skill visibility, interface parity, and permissive search — SHIPPED
+
+**What shipped.** Three defects measured on merged main are resolved without
+touching the store, scheduler, calendar, extraction, provider, tool or
+conversation modules:
+
+1. **Skills visible on the phone (Defect One).** The phone allowlist and help
+   now expose `/skills` and `/skill QUERY`. The conversation the phone builds
+   already registered `save_skill`/`use_skill`, so the owner could teach a
+   procedure by talking on the phone but could not see or search what was
+   learned. The phone listing (`/skills`) and search (`/skill QUERY`) now read
+   the same file-backed `skills/` directory the terminal does, with the same
+   readable Persian output.
+
+   *Security engineer, per-command reasons (phone is internet-reachable; only
+   the pairing allowlist protects it — an allowlist that grows by habit is not
+   an allowlist):*
+
+   - `/dedupe` — **REFUSED** — bulk destructive merge needs large-screen diff
+     review; keep terminal-only to keep phone surface minimal.
+   - `/pin` — **REFUSED** — rare maintenance pinning; keep phone surface
+     minimal and auditable.
+   - `/skill` — **ALLOWED** — read-only skill search; needed for visibility;
+     safe for paired owner, no mutation, no credential.
+   - `/skills` — **ALLOWED** — read-only skill listing; needed for visibility;
+     safe.
+   - `/stats` — **ALLOWED** — read-only aggregate counts; no content; safe.
+   - `/tools` — **ALLOWED** — read-only tool inventory; no execution; safe.
+
+   Refused commands reply `This command is not available in Telegram. Type
+   /help.` — the existing refusal line. Allowed commands delegate to the same
+   `dispatch_command` the terminal uses, so behaviour and file-boundary checks
+   are identical.
+
+2. **Interface parity — single source, not discipline (Defect Two).** The
+   terminal kept `KNOWN_COMMANDS`, the phone kept a separate `CHAT_COMMANDS`
+   frozenset, and a third hand-written `CHAT_HELP` string listed commands as
+   free text; nothing compared them (`/forget` lived in the terminal for
+   several milestones before being patched into the phone, caught by the owner
+   not the suite). The principal engineer's veto applies: two hand-maintained
+   lists that must agree by discipline are a failure even if tests pass.
+
+   Fixed by making `cli.py` the single source: `KNOWN_COMMANDS` is canonical;
+   `_PHONE_POLICY` maps every `KNOWN_COMMAND` to `(allowed, reason)`; the full
+   phone allowlist `PHONE_COMMANDS` is derived from it (including aliases
+   `/reminder`, `/reminder-list`, `/reminds` where their canonical is allowed);
+   `PHONE_HELP` and `TERMINAL_HELP` are generated from the same
+   `_HELP_FRAGMENTS` dict, not hand-typed. `dream/telegram.py` now imports
+   `PHONE_COMMANDS`/`PHONE_HELP` as `CHAT_COMMANDS`/`CHAT_HELP` — no second
+   copy. Two tests enforce the invariant: one fails when `CHAT_HELP` and
+   `CHAT_COMMANDS` disagree, one fails when a `KNOWN_COMMAND` lacks a phone
+   policy entry (e.g. adding `/newcmd` to `KNOWN_COMMANDS` without a decision
+   breaks the import with `KeyError`).
+
+3. **Search vs dispatch are not the same question (Defect Three — accepted).**
+   The matcher requires `coverage >= 1/3` and `shared >=2` unless coverage is
+   `1.0`, chosen deliberately so one generic word can never summon a procedure
+   the assistant then follows. Correct for `use_skill` (dispatch — false
+   positive means wrong procedure is followed, strict). Wrong for
+   `/skill QUERY` (search — owner typed the word and reads the result; false
+   negative means he concludes the skill was never saved, permissive).
+
+   Fixed by keeping the strict bar for `use_skill`/`find_skill` and adding a
+   permissive bar for the command: `score_skills(query, permissive=True)` and
+   `find_skill(query, permissive=True)` require only `shared >=1`. The
+   terminal and phone `/skill` paths now call the permissive scorer and list
+   all ranked hits; `use_skill` stays strict. A reasoned refusal would have
+   been valid for this defect alone; measurement justified the split.
+
+No changes to the system prompt (not in scope).
+
+**What was measured.**
+
+- Baseline suite count before: `558 passed`; ruff `All checks passed!`; with
+  `-W error::DeprecationWarning`: `558 passed`.
+- Full suite count after: `567 passed` (+9); ruff `All checks passed!`; with
+  `-W error::DeprecationWarning`: `567 passed`; zero `ResourceWarning`.
+- Red-before-green: against unchanged source, the nine new tests in
+  `tests/test_m12_phone_visibility_and_parity.py` were observed red
+  (8 failed, 1 passed — the strict dispatch pin), reproducing
+  `This command is not available in Telegram.` for `/skills` and `/skill`,
+  missing `/skills` in `CHAT_HELP`, missing `_PHONE_POLICY`/`_COMMAND_ALIASES`,
+  and `TypeError: unexpected keyword argument 'permissive'` for the single-word
+  search. After: 9 passed.
+- Phone listing: with one skill `تمدید بیمه ماشین` saved, terminal `/skills`
+  and phone `/skills` both list `تمدید بیمه ماشین — ... (skills/تمدید بیمه ماشین.txt)`
+  (reply pasted in PR).
+- Phone search: phone `/skill بیمه` (single word) now lists the insurance
+  skill and its three steps; strict `find_skill("بیمه")` remains `None`.
+  Terminal `/skill بیمه` shows the same ranked hit — the permissive path.
+- Six commands: allowed/refused with one-line reasons above; refused replies
+  `This command is not available in Telegram. Type /help.` (measured for
+  `/dedupe` and `/pin`), allowed replies show JSON for `/stats`, tool list for
+  `/tools`, skill card for `/skill`, listing for `/skills` (pasted in PR).
+- Phone help vs allowlist: test extracts slash tokens from `CHAT_HELP` and
+  asserts the canonical set equals `CHAT_COMMANDS` (aliases normalised). Shown
+  failing when `PHONE_HELP` is broken to `"/mem QUERY  /mems  /forget ID"`,
+  then passing after restore.
+- Terminal vs phone parity: test asserts every `KNOWN_COMMAND` has a
+  `_PHONE_POLICY` entry and `CHAT_COMMANDS == allowed_canonical ∪ aliases`.
+  Shown failing when a dummy `/newcmd` is added to `KNOWN_COMMANDS` without a
+  help fragment/policy (`KeyError: '/newcmd'`), then passing.
+- Single-word queries (five realistic skills: two share `بیمه`, one `چای`,
+  one `قطر`, one `قسط`): before, `bime/chay/qatar/tamdid` all strict-empty;
+  after, permissive finds `bime→2`, `chay→1`, `qatar→1`, `tamdid→2` while
+  strict stays empty. Near-miss pair (`پیامک تبریک تولد` vs `سال نو`)
+  still routes strictly (`0.60/0.67` vs `0.20` not clearing the strict bar) and
+  an unrelated dollar query stays `None`. (`use_skill` dispatch bar unchanged
+  by measurement.)
+- Break-and-restore: every new test was seen failing against a deliberate
+  one-line break and green after `git checkout -- <file>` (messages in PR):
+  removing `/skills` from phone policy, requiring `shared>=2` for permissive,
+  forcing `find_skill` to permissive, breaking help generation, adding a dummy
+  command.
+- Standing regression list (25 items, 567 nodes): all pass (list pasted in PR).
+- Persian owner reads replies on phone in RTL: phone skill and help replies
+  are genuine Persian characters (verified on disk and in replies, no
+  backslash-u), ad-hoc adversarial check for readability on small screen.
+
+**On scope.** Source diff is 126 insertions, 40 deletions (net ~126 new source
+lines) across `cli.py`, `dream/skills.py`, `dream/telegram.py`, well within
+the ~300-line budget. The natural split point, had it been needed, is the
+test file (~350 lines); the source change is one inseparable seam (parity
+needs both front ends and the matcher).
+
+**What is next.** The three deferred notes from the brief: the false-claim guard
+(prompt sentence with no code enforcement, next milestone), long listings on the
+phone (truncated at 4000 chars, crosses at 83 saved skills; owner has one —
+noted and moved on), and the second declared hook `expose_tools` still never
+called. Windows reserved device names (skill named for a console device lands
+inside workspace but may be unwritable on owner's machine) and web search
+(procurement, not engineering) remain deferred.
+
+**What is blocked.** Nothing. Web search still procurement: key-free endpoints
+return empty pages for Persian queries, zero of ten.
+
 ## M11 — Step object coercion and multi-message save compliance — SHIPPED
 
 **What shipped.** Two small defects observed during owner testing of M10 are
