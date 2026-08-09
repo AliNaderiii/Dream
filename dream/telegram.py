@@ -24,6 +24,8 @@ from typing import Any, Protocol
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
+from cli import PHONE_COMMANDS as CHAT_COMMANDS
+from cli import PHONE_HELP as CHAT_HELP
 from cli import dispatch_command
 from dream.agent import Dream, Turn, build_backend
 from dream.memory import MemoryStore
@@ -67,24 +69,11 @@ REMINDER_LABEL = (
     "\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc:"
 )
 
-CHAT_COMMANDS = frozenset(
-    {
-        "/mem",
-        "/mems",
-        "/forget",
-        "/remind",
-        "/reminder",
-        "/reminders",
-        "/reminder-list",
-        "/reminds",
-        "/unremind",
-        "/reset",
-    }
-)
-CHAT_HELP = (
-    "/mem QUERY  /mems  /forget ID  /remind DATE TEXT [every N days|months]  "
-    "/reminders  /unremind ID  /reset  /help"
-)
+# CHAT_COMMANDS and CHAT_HELP are now single-sourced from cli.py
+# (PHONE_COMMANDS / PHONE_HELP) to satisfy the interface parity veto:
+# two hand-maintained lists that must agree by discipline are not allowed.
+# PHONE_COMMANDS includes aliases where canonical is allowed; PHONE_HELP is
+# generated from the same allowlist and help fragments.
 
 
 class TelegramConfigurationError(ValueError):

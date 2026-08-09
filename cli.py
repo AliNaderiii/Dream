@@ -31,6 +31,88 @@ KNOWN_COMMANDS = (
     "/exit",
 )
 
+# Aliases: additional spellings accepted by dispatch and the phone.
+_COMMAND_ALIASES: dict[str, str] = {
+    "/reminder": "/remind",
+    "/reminder-list": "/reminders",
+    "/reminds": "/reminders",
+}
+
+# Help fragments: one per canonical command, single source for both helps.
+_HELP_FRAGMENTS: dict[str, str] = {
+    "/mem": "/mem QUERY",
+    "/mems": "/mems",
+    "/stats": "/stats",
+    "/forget": "/forget ID",
+    "/dedupe": "/dedupe [confirm]",
+    "/pin": "/pin ID",
+    "/remind": "/remind DATE TEXT [every N days|months]",
+    "/reminders": "/reminders",
+    "/unremind": "/unremind ID",
+    "/skill": "/skill QUERY",
+    "/skills": "/skills",
+    "/tools": "/tools",
+    "/reset": "/reset",
+    "/help": "/help",
+    "/exit": "/exit",
+}
+
+# Phone policy: every KNOWN_COMMAND must have an entry with an explicit
+# SECURITY ENGINEER reason. This is the single source for the phone surface;
+# adding a new terminal command without a decision here breaks the parity test.
+# Six previously-unreachable commands reviewed individually:
+#   /dedupe  REFUSED — bulk destructive merge needs large-screen diff review
+#   /pin     REFUSED — rare maintenance, keep phone surface minimal
+#   /skill   ALLOWED — read-only skill search, needed for visibility
+#   /skills  ALLOWED — read-only skill listing, needed for visibility
+#   /stats   ALLOWED — read-only aggregate counts, no content
+#   /tools   ALLOWED — read-only tool inventory, no execution
+_PHONE_POLICY: dict[str, tuple[bool, str]] = {
+    "/mem": (True, "read-only memory search; safe for paired owner"),
+    "/mems": (True, "read-only listing; safe"),
+    "/stats": (True, "read-only aggregate counts; no content; safe"),
+    "/forget": (True, "owner-authenticated archive; already allowed on phone"),
+    "/dedupe": (False, "bulk destructive merge needs large-screen diff review; keep terminal-only"),
+    "/pin": (False, "rare maintenance pinning; keep phone surface minimal"),
+    "/remind": (True, "owner creates reminder; already allowed"),
+    "/reminders": (True, "read-only reminder listing; already allowed"),
+    "/unremind": (True, "owner deletes own reminder; already allowed"),
+    "/skill": (True, "read-only skill search; needed for visibility; safe"),
+    "/skills": (True, "read-only skill listing; needed for visibility; safe"),
+    "/tools": (True, "read-only tool inventory; no execution; safe"),
+    "/reset": (True, "per-chat session reset; safe"),
+    "/help": (True, "help is always allowed"),
+    "/exit": (False, "terminal session control; not applicable to phone"),
+}
+
+_PHONE_ALLOWED_CANONICAL: frozenset[str] = frozenset(
+    cmd for cmd, (allowed, _) in _PHONE_POLICY.items() if allowed
+)
+_PHONE_REFUSED_CANONICAL: frozenset[str] = frozenset(
+    cmd for cmd, (allowed, _) in _PHONE_POLICY.items() if not allowed
+)
+
+# Full phone allowlist includes aliases where canonical is allowed.
+PHONE_COMMANDS: frozenset[str] = frozenset(
+    list(_PHONE_ALLOWED_CANONICAL)
+    + [alias for alias, canon in _COMMAND_ALIASES.items() if canon in _PHONE_ALLOWED_CANONICAL]
+)
+
+
+def _build_help(allowed: frozenset[str]) -> str:
+    parts = [_HELP_FRAGMENTS[cmd] for cmd in KNOWN_COMMANDS if cmd in allowed]
+    base = "  ".join(parts)
+    if "/remind" in allowed:
+        base = base.replace(
+            "/remind DATE TEXT [every N days|months]",
+            "/remind DATE TEXT [every N days|months]  (DATE: YYYY-MM-DD or a Persian phrase)",
+        )
+    return base
+
+
+PHONE_HELP: str = _build_help(_PHONE_ALLOWED_CANONICAL)
+TERMINAL_HELP: str = _build_help(frozenset(KNOWN_COMMANDS))
+
 
 def _style(text: str, code: str, stream: TextIO) -> str:
     """Colour text only when it will be read in an interactive terminal."""
@@ -495,13 +577,14 @@ def dispatch_command(
         else:
             from dream import skills as skills_module
 
-            skill = skills_module.find_skill(argument)
-            if skill is None:
+            ranked = skills_module.score_skills(argument, permissive=True)
+            if not ranked:
                 output("No skill matches that request.")
             else:
-                output(f"{skill.name} — {skill.description} ({skill.filename})")
-                for index, step in enumerate(skill.steps, start=1):
-                    output(f"  {index}. {step}")
+                for skill in ranked:
+                    output(f"{skill.name} — {skill.description} ({skill.filename})")
+                    for index, step in enumerate(skill.steps, start=1):
+                        output(f"  {index}. {step}")
     elif command == "/tools":
         for name, registered in sorted(REGISTRY.items()):
             output(f"{name}: {registered.risk}")
@@ -509,12 +592,7 @@ def dispatch_command(
         dream.reset_session()
         output("Session context cleared; long-term memories remain.")
     elif command == "/help":
-        output(
-            "/mem QUERY  /mems  /stats  /forget ID  /dedupe [confirm]  "
-            "/pin ID  /remind DATE TEXT [every N days|months]  "
-            "(DATE: YYYY-MM-DD or a Persian phrase)  "
-            "/reminders  /unremind ID  /skill QUERY  /skills  /tools  /reset  /help  /exit"
-        )
+        output(TERMINAL_HELP)
     elif command == "/exit":
         return False
     else:

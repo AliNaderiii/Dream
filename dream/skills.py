@@ -429,13 +429,24 @@ def _shared_count(stems: frozenset[str], query_stems: set[str]) -> int:
     )
 
 
-def score_skills(query: str) -> list[Skill]:
+def score_skills(query: str, *, permissive: bool = False) -> list[Skill]:
     """Rank skills clearing the matching bar, best first; ties by name.
 
     Score = fraction of the skill's own content stems covered by the
     synonym-expanded query. A skill with an empty content surface cannot
-    match anything, and a single shared stem matches only when it is the
-    skill's whole surface, so one generic word never summons a procedure.
+    match anything.
+
+    Two bars exist:
+
+    - Strict (``permissive=False``): a skill needs at least a third of its
+      stems covered and either two shared stems or full coverage, so one
+      generic word never summons a procedure the assistant would then
+      follow. Used by the ``use_skill`` tool (dispatch).
+
+    - Permissive (``permissive=True``): a single shared content stem is
+      enough. The owner typed the query and reads the result with his own
+      eyes, so a false negative (concluding the skill was never saved) is
+      worse than a low-ranked extra hit. Used by ``/skill QUERY`` (search).
     """
     query_stems = _expanded_query_stems(query)
     ranked: list[tuple[float, Skill]] = []
@@ -445,19 +456,27 @@ def score_skills(query: str) -> list[Skill]:
         if not stems:
             continue
         shared = _shared_count(stems, query_stems)
-        coverage = shared / len(stems)
-        if coverage < MIN_COVERAGE:
-            continue
-        if shared < MIN_SHARED_STEMS and coverage < 1.0:
-            continue
+        coverage = shared / len(stems) if stems else 0
+        if permissive:
+            if shared < 1:
+                continue
+        else:
+            if coverage < MIN_COVERAGE:
+                continue
+            if shared < MIN_SHARED_STEMS and coverage < 1.0:
+                continue
         ranked.append((coverage, skill))
     ranked.sort(key=lambda item: (-item[0], item[1].name))
     return [skill for _, skill in ranked]
 
 
-def find_skill(query: str) -> Skill | None:
-    """Return the best skill for a Persian request, or ``None`` for no match."""
-    ranked = score_skills(query)
+def find_skill(query: str, *, permissive: bool = False) -> Skill | None:
+    """Return the best skill for a Persian request, or ``None`` for no match.
+
+    ``permissive`` selects the search bar (``/skill``) vs the dispatch bar
+    (``use_skill``). Dispatch stays strict.
+    """
+    ranked = score_skills(query, permissive=permissive)
     return ranked[0] if ranked else None
 
 # The skills usage line, supplied to the system prompt through the M4
