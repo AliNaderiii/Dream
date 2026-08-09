@@ -4,6 +4,66 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M16 — Automated enforcement of project rules — SHIPPED
+
+**What shipped.** Automated build and suite enforcement for the six rules that
+the project previously wrote down and policed by hand.
+Checks were wired into the project configuration (`pyproject.toml`, `tools/`, and `tests/`)
+so they run automatically when CI executes `pytest`:
+- **Rule 1 (Warnings form):** Enforced in `pyproject.toml` via
+  `filterwarnings = ["error::DeprecationWarning"]` under `[tool.pytest.ini_options]`,
+  so every local or CI `pytest` invocation treats deprecation warnings as errors
+  automatically. Tested in `tests/test_m16_warnings.py`.
+- **Rule 2 (Commit authorship):** Enforced via `tools/check_commit.py` and tested in
+  `tests/test_m16_commit_rules.py`, checking `HEAD` (`git log -1`) to ensure
+  author name is `Ali Naderi` and email is `alinaderi@users.noreply.github.com`.
+  Checking only `HEAD` avoids failing on the 30 already-merged automated
+  commits on trunk (explicitly deferred) and requires only default read permissions
+  (`fetch-depth: 1`).
+- **Rule 3 (Banned trailers and AI references):** Enforced via `tools/check_commit.py`
+  and tested in `tests/test_m16_commit_rules.py`, rejecting any `Co-authored-by:`
+  trailers or references to AI agents/tooling in commit messages.
+- **Rule 4 (Escaping convention for new Persian strings):** Enforced in the suite
+  via `tests/test_m16_escaping.py`. Using Python AST (`ast.Constant`), the test
+  inspects `.py` product code under `dream/` and checks UTF-8 source segments to
+  allowlist the legacy baseline of unescaped Persian strings via SHA-256 hashes while
+  rejecting any newly introduced unescaped Persian string literals. Comments and
+  docstrings are ignored so valid unescaped gloss comments and test strings are
+  preserved.
+- **Rule 5 (Conditional assertions):** Enforced in the suite via
+  `tests/test_m16_conditional_assertions.py`. By inspecting AST of top-level
+  `test_*` functions in `tests/*.py`, the check flags `assert` statements inside
+  `if` blocks. Helper classes and methods (such as the synchronisation guard in
+  `tests/test_telegram.py:505`) are ignored. The single known M11 conditional
+  assertion defect (`tests/test_skill_step_coercion.py:267`) is allowlisted in the
+  baseline since repairing it is explicitly deferred to its own milestone.
+- **Rule 6 (Suite shrinking):** Enforced via `tools/check_suite_count.py`
+  and tested in `tests/test_m16_suite_count.py`, verifying that `pytest --collect-only`
+  finds at least `652` tests (`DEFAULT_MIN_COUNT`), preventing silent test deletions.
+
+**What was measured.**
+- Baseline before changes: `634 passed in 15.82s`; linter `All checks passed!`;
+  `pytest -W error::DeprecationWarning` passed clean.
+- After adding 18 new rules/enforcement tests: `652 passed in 24.58s` (+18 tests);
+  linter `All checks passed!`; zero warnings under DeprecationWarning.
+- Observed every new check failing on a real violation introduced deliberately,
+  then passing on the honest case (break-and-restore).
+- Standing regression list (35 items): all 35 standing regression items ran and passed.
+- Permissions and workflow measurement: Attempting to modify `.github/workflows/ci.yml`
+  directly was rejected by GitHub OAuth (`refusing to allow a GitHub App to create or
+  update workflow .github/workflows/ci.yml without workflows permission`). Respecting the
+  brief's instruction to trust measurements over assumptions, `.github/workflows/ci.yml`
+  was left unchanged and all checks were wired into `pyproject.toml`, `tools/`, and
+  `tests/` so CI's existing `pytest` command enforces all rules automatically without
+  workflow write permissions.
+- Package code integrity: zero files changed under `dream/`, `cli.py`, or `doctor.py`.
+
+**What is next.** Repair the deferred M11 conditional assertion defect in
+`tests/test_skill_step_coercion.py` in its own milestone with its own red; define
+first-seen destination semantics deliberately.
+
+**What is blocked.** Nothing.
+
 ## M15 — The reminder tool: the model can finally set a reminder — SHIPPED
 
 **What shipped.** M14 left the model able to *describe* a reminder but not
