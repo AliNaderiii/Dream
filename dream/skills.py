@@ -43,6 +43,7 @@ time so tests that relocate ``WORKSPACE_ROOT`` see every skill move with it.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -55,7 +56,9 @@ from dream.reminders import Reminder
 __all__ = [
     "Skill",
     "SkillProblem",
+    "SKILL_SAVE_WARNING",
     "find_skill",
+    "guard_skill_save_claim",
     "load_skills",
     "parse_skill_text",
     "render_skill_text",
@@ -63,6 +66,7 @@ __all__ = [
     "SkillPromptProvider",
     "save_skill",
     "score_skills",
+    "unsaved_skill_claim",
     "validate_name",
 ]
 
@@ -478,6 +482,485 @@ def find_skill(query: str, *, permissive: bool = False) -> Skill | None:
     """
     ranked = score_skills(query, permissive=permissive)
     return ranked[0] if ranked else None
+
+
+# ---------------------------------------------------------------------------
+# Save-claim guard: a reply that claims a skill was saved must be backed by a
+# completed save in the same turn.
+#
+# The M11 rule against claiming a save without calling save_skill existed only
+# as a sentence in the system prompt. The owner was once told a step was added
+# and heard all three steps recited while the file on disk still held one
+# step; a prompt sentence is a request, so this milestone turns it into a
+# property of every finished turn.
+#
+# Basis chosen: outcome, not attempt. A turn either changed a skill file or it
+# did not, so the guard asks whether a save_skill call *completed* (was
+# allowed and returned ``status: ok``) rather than whether a call was merely
+# recorded. A blocked call and a call whose write failed are both "no save".
+#
+# The reply must claim a *skill* save, not any save: a save word alone raised
+# two false positives on note and fact replies (those tools legitimately say
+# something was saved), so a skill noun is required inside the claim window.
+# Offers and questions are excluded by construction: only completed past and
+# perfective verb forms are claim verbs, and a question word before the claim
+# vetoes it.
+#
+# Negation is handled by design, not by word order. The Persian negative
+# prefix attaches to the front of the verb (ذخیره شد vs ذخیره نشد), so the
+# detector matches whole normalized tokens against a closed set of positive
+# past forms; the negative forms (نشد، نشده، نکردم، نیست، ...) are never
+# members of that set, and a test asserts the two sets are disjoint.
+#
+# The four holes found in the M13 candidate detector:
+#   1  a blocked call still counting as a call -> closed: ``allowed`` must be
+#      True and the result must carry ``status: ok``.
+#   2  the wrong skill counting                -> closed: when the claim names
+#      a procedure and a save completed, the saved skill's name must share a
+#      content stem with the claimed name; a fully disjoint name (a tea
+#      recipe satisfying a claim about the insurance procedure) is flagged.
+#      A generic claim that names no procedure cannot be disproved and is
+#      left alone — stated as the boundary.
+#   3  paraphrase evading the save word       -> closed: the receive/put/write
+#      families (دریافت، گرفت، گذاشت، نوشت) are claim verbs too when they
+#      land on a file («در فایل»); «از فایل» marks a read and vetoes.
+#   4  negation surviving by word-order luck  -> closed by design, see above.
+# ---------------------------------------------------------------------------
+
+# Gloss: روش مهارت مهارتها قدم قدمها مرحله مراحل دستورالعمل دستورالعملها رویه
+#        روال راهنما گام — skill nouns that make a save word a *skill* claim.
+_SKILL_NOUNS: frozenset[str] = frozenset({
+    "\u0631\u0648\u0634",                      # روش
+    "\u0645\u0647\u0627\u0631\u062a",          # مهارت
+    "\u0642\u062f\u0645",                      # قدم
+    "\u0645\u0631\u062d\u0644\u0647",          # مرحله
+    "\u0645\u0631\u0627\u062d\u0644",          # مراحل
+    "\u062f\u0633\u062a\u0648\u0631\u0627\u0644\u0639\u0645\u0644",  # دستورالعمل
+    "\u0631\u0648\u06cc\u0647",                # رویه
+    "\u0631\u0648\u0627\u0644",                # روال
+    "\u0631\u0627\u0647\u0646\u0645\u0627",    # راهنما
+    "\u06af\u0627\u0645",                      # گام
+})
+
+# Gloss: ذخیره ثبت اضافه قرار دریافت نوشته — nominal save stems that form a
+# claim when followed by a completed past verb (ذخیره شد، ثبت کرده، ...).
+_SAVE_STEMS: frozenset[str] = frozenset({
+    "\u0630\u062e\u06cc\u0631\u0647",          # ذخیره
+    "\u062b\u0628\u062a",                      # ثبت
+    "\u0627\u0636\u0627\u0641\u0647",          # اضافه
+    "\u0642\u0631\u0627\u0631",                # قرار
+    "\u062f\u0631\u06cc\u0627\u0641\u062a",    # دریافت
+    "\u0646\u0648\u0634\u062a\u0647",          # نوشته
+})
+
+# Gloss: نوشتم نوشت گرفتم گرفت گذاشتم گذاشت گذاشته — standalone past verbs
+# that claim a write; these only count as claims when «فایل» is in the window.
+_STANDALONE_SAVE_VERBS: frozenset[str] = frozenset({
+    "\u0646\u0648\u0634\u062a\u0645",          # نوشتم
+    "\u0646\u0648\u0634\u062a",                # نوشت
+    "\u06af\u0631\u0641\u062a\u0645",          # گرفتم
+    "\u06af\u0631\u0641\u062a",                # گرفت
+    "\u06af\u0630\u0627\u0634\u062a\u0645",    # گذاشتم
+    "\u06af\u0630\u0627\u0634\u062a",          # گذاشت
+    "\u06af\u0630\u0627\u0634\u062a\u0647",    # گذاشته
+})
+
+# Completed past and perfective verb forms, token-exact after normalization.
+# The negative forms (نشد، نشده، نکردم، نیست، ...) are deliberately absent:
+# they belong to _NEGATIVE_VERBS below and a test pins the two sets apart.
+_PAST_VERBS: frozenset[str] = frozenset({
+    "\u0634\u062f",                            # شد
+    "\u0634\u062f\u0646\u062f",                # شدند
+    "\u0634\u062f\u0647",                      # شده
+    "\u0634\u062f\u0647\u0627\u0633\u062a",    # شدهاست
+    "\u0634\u062f\u0647\u0627\u0646\u062f",    # شدهاند
+    "\u06a9\u0631\u062f",                      # کرد
+    "\u06a9\u0631\u062f\u0645",                # کردم
+    "\u06a9\u0631\u062f\u06cc",                # کردی
+    "\u06a9\u0631\u062f\u06cc\u0645",          # کردیم
+    "\u06a9\u0631\u062f\u06cc\u062f",          # کردید
+    "\u06a9\u0631\u062f\u0647\u0627\u0645",    # کردهام
+    "\u06a9\u0631\u062f\u0647\u0627\u06cc\u0645",  # کردهایم
+    "\u06a9\u0631\u062f\u0647\u0627\u06cc\u062f",  # کردهاید
+    "\u06a9\u0631\u062f\u0647",                # کرده
+    "\u06a9\u0631\u062f\u0647\u0627\u0633\u062a",  # کردهاست
+    "\u06a9\u0631\u062f\u0647\u0627\u0646\u062f",  # کردهاند
+    "\u06af\u0631\u0641\u062a",                # گرفت
+    "\u06af\u0631\u0641\u062a\u0645",          # گرفتم
+    "\u06af\u0631\u0641\u062a\u06cc",          # گرفتی
+    "\u06af\u0631\u0641\u062a\u06cc\u0645",    # گرفتیم
+    "\u06af\u0631\u0641\u062a\u06cc\u062f",    # گرفتید
+    "\u06af\u0631\u0641\u062a\u0647\u0627\u0645",  # گرفتهام
+    "\u06af\u0631\u0641\u062a\u0647\u0627\u06cc\u0645",  # گرفتهایم
+    "\u06af\u0631\u0641\u062a\u0647",          # گرفته
+    "\u06af\u0631\u0641\u062a\u0647\u0627\u0633\u062a",  # گرفتهایست → گرفتهاست
+    "\u06af\u0631\u0641\u062a\u0647\u0627\u0646\u062f",  # گرفتهاند
+    "\u0646\u0648\u0634\u062a",                # نوشت
+    "\u0646\u0648\u0634\u062a\u0645",          # نوشتم
+    "\u0646\u0648\u0634\u062a\u06cc",          # نوشتی
+    "\u0646\u0648\u0634\u062a\u06cc\u0645",    # نوشتیم
+    "\u0646\u0648\u0634\u062a\u06cc\u062f",    # نوشتید
+    "\u0646\u0648\u0634\u062a\u0647\u0627\u0645",  # نوشتهام
+    "\u0646\u0648\u0634\u062a\u0647\u0627\u06cc\u0645",  # نوشتهایم
+    "\u0646\u0648\u0634\u062a\u0647",          # نوشته
+    "\u0646\u0648\u0634\u062a\u0647\u0627\u0633\u062a",  # نوشتهاست
+    "\u0646\u0648\u0634\u062a\u0647\u0627\u0646\u062f",  # نوشتهاند
+})
+
+# Trailing copula that completes a perfective: «ذخیره شده است», «کرده ایم».
+_COPULA: frozenset[str] = frozenset({
+    "\u0627\u0633\u062a",                      # است
+    "\u0627\u0646\u062f",                      # اند
+    "\u0627\u0645",                            # ام
+    "\u0627\u06cc",                            # ای
+    "\u0627\u06cc\u0645",                      # ایم
+    "\u0627\u06cc\u062f",                      # اید
+})
+
+# The negative forms whose positive twins are in _PAST_VERBS. The Persian
+# negative prefix attaches to the verb, so every denial differs from its
+# claim by these whole tokens; the detector never matches them, by design.
+# A test asserts this set is disjoint from _PAST_VERBS.
+_NEGATIVE_VERBS: frozenset[str] = frozenset({
+    "\u0646\u0634\u062f",                      # نشد
+    "\u0646\u0634\u062f\u0646\u062f",          # نشدند
+    "\u0646\u0634\u062f\u0647",                # نشده
+    "\u0646\u0634\u062f\u0647\u0627\u0633\u062a",  # نشدهاست
+    "\u0646\u0634\u062f\u0647\u0627\u0646\u062f",  # نشدهاند
+    "\u0646\u06a9\u0631\u062f",                # نکرد
+    "\u0646\u06a9\u0631\u062f\u0645",          # نکردم
+    "\u0646\u06a9\u0631\u062f\u06cc",          # نکردی
+    "\u0646\u06a9\u0631\u062f\u06cc\u0645",    # نکردیم
+    "\u0646\u06a9\u0631\u062f\u06cc\u062f",    # نکردید
+    "\u0646\u06a9\u0631\u062f\u0647",          # نکرده
+    "\u0646\u06a9\u0631\u062f\u0647\u0627\u0645",  # نکردهام
+    "\u0646\u06a9\u0631\u062f\u0647\u0627\u06cc\u0645",  # نکردهایم
+    "\u0646\u06a9\u0631\u062f\u0647\u0627\u0633\u062a",  # نکردهاست
+    "\u0646\u06a9\u0631\u062f\u0647\u0627\u0646\u062f",  # نکردهاند
+    "\u0646\u06af\u0631\u0641\u062a",          # نگرفت
+    "\u0646\u06af\u0631\u0641\u062a\u0645",    # نگرفتم
+    "\u0646\u06af\u0631\u0641\u062a\u0647",    # نگرفته
+    "\u0646\u0646\u0648\u0634\u062a",          # ننوشت
+    "\u0646\u0646\u0648\u0634\u062a\u0645",    # ننوشتم
+    "\u0646\u0646\u0648\u0634\u062a\u0647",    # ننوشته
+    "\u0646\u06cc\u0633\u062a",                # نیست
+    "\u0646\u06cc\u0633\u062a\u0645",          # نیستم
+    "\u0646\u06cc\u0633\u062a\u06cc",          # نیستی
+    "\u0646\u06cc\u0633\u062a\u06cc\u0645",    # نیستیم
+    "\u0646\u06cc\u0633\u062a\u06cc\u062f",    # نیستید
+    "\u0646\u06cc\u0633\u062a\u0646\u062f",    # نیستند
+    "\u0646\u06af\u0630\u0627\u0634\u062a\u0645",  # نگذاشتم
+    "\u0646\u06af\u0630\u0627\u0634\u062a",    # نگذاشت
+})
+
+# «قرار» only claims when it took/placed something: «قرار گرفت»; «قرار شد»
+# (it was decided) is a plan, not a save, and must never be a claim.
+_SAVE_VERB_ALLOWLIST: dict[str, frozenset[str]] = {
+    "\u0642\u0631\u0627\u0631": frozenset({
+        "\u06af\u0631\u0641\u062a",
+        "\u06af\u0631\u0641\u062a\u0645",
+        "\u06af\u0631\u0641\u062a\u06cc\u0645",
+        "\u06af\u0631\u0641\u062a\u0647",
+        "\u06af\u0631\u0641\u062a\u0647\u0627\u0645",
+        "\u06af\u0631\u0641\u062a\u0647\u0627\u06cc\u0645",
+        "\u06af\u0631\u0641\u062a\u0647\u0627\u0633\u062a",
+        "\u06af\u0631\u0641\u062a\u0647\u0627\u0646\u062f",
+    }),
+}
+
+# Stems needing «فایل» in the window, and the direction rule: «در فایل» marks
+# a claim, «از فایل» marks a read. «روش را از فایل دریافت کردم» is a read;
+# «روش دریافت شد و در فایل است» is a claim.
+_FILE_REQUIRED_STEMS: frozenset[str] = frozenset({
+    "\u062f\u0631\u06cc\u0627\u0641\u062a",    # دریافت
+    "\u0646\u0648\u0634\u062a\u0647",          # نوشته
+})
+
+# Gloss: یادداشت یادداشتم یادداشتها ایمیل حافظه حافظهام — a non-skill
+# container right before the claim verb means the save landed somewhere other
+# than a skill file («این روش را در یادداشت ذخیره کردم»); the claim is not a
+# skill-file claim. «فایل» itself is deliberately absent: «در فایل ذخیره شد»
+# is exactly the claim we want.
+_NON_SKILL_CONTAINERS: frozenset[str] = frozenset({
+    "\u06cc\u0627\u062f\u062f\u0627\u0634\u062a",  # یادداشت
+    "\u06cc\u0627\u062f\u062f\u0627\u0634\u062a\u0645",  # یادداشتم
+    "\u06cc\u0627\u062f\u062f\u0627\u0634\u062a\u0647\u0627",  # یادداشتها
+    "\u0627\u06cc\u0645\u06cc\u0644",          # ایمیل
+    "\u062d\u0627\u0641\u0638\u0647",          # حافظه
+    "\u062d\u0627\u0641\u0638\u0647\u0627\u0645",  # حافظهام
+})
+
+# Gloss: قبلا قبل قبلی پیش پیشتر سابق وقتی اگر — past-reference and
+# conditional markers inside the claim window mean the sentence refers to an
+# earlier save (or a hypothetical one), not to a completion of this turn.
+_PAST_REFERENCE: frozenset[str] = frozenset({
+    "\u0642\u0628\u0644\u0627",                # قبلا
+    "\u0642\u0628\u0644",                      # قبل
+    "\u0642\u0628\u0644\u06cc",                # قبلی
+    "\u067e\u06cc\u0634",                      # پیش
+    "\u067e\u06cc\u0634\u062a\u0631",          # پیشتر
+    "\u0633\u0627\u0628\u0642",                # سابق
+    "\u0648\u0642\u062a\u06cc",                # وقتی
+    "\u0627\u06af\u0631",                      # اگر
+})
+
+# Gloss: ایا مگر چرا کجا — question words before the claim mark a question
+# about saving («آیا روش ذخیره شد؟»), never a claim.
+_QUESTION_WORDS: frozenset[str] = frozenset({
+    "\u0627\u06cc\u0627",                      # آیا → ایا
+    "\u0645\u06af\u0631",                      # مگر
+    "\u0686\u0631\u0627",                      # چرا
+    "\u06a9\u062c\u0627",                      # کجا
+})
+
+# Gloss: بود بوده — a past-perfect marker right after the verb complex makes
+# the sentence a reference to an earlier state («ذخیره شده بود»), not a
+# completion of this turn.
+_PAST_PERFECT_MARKERS: frozenset[str] = frozenset({
+    "\u0628\u0648\u062f",                      # بود
+    "\u0628\u0648\u062f\u0647",                # بوده
+})
+
+# Ordinal and temporal words dropped from a claimed-name span: «قدم دوم اضافه
+# شد» names no procedure, so no wrong-skill comparison may use «دوم».
+_NAME_DROP: frozenset[str] = frozenset({
+    "\u0627\u0648\u0644",                      # اول
+    "\u062f\u0648\u0645",                      # دوم
+    "\u0633\u0648\u0645",                      # سوم
+    "\u0686\u0647\u0627\u0631\u0645",          # چهارم
+    "\u067e\u0646\u062c\u0645",                # پنجم
+    "\u0634\u0634\u0645",                      # ششم
+    "\u0647\u0641\u062a\u0645",                # هفتم
+    "\u0647\u0634\u062a\u0645",                # هشتم
+    "\u0646\u0647\u0645",                      # نهم
+    "\u062f\u0647\u0645",                      # دهم
+    "\u0622\u062e\u0631",                      # آخر
+    "\u0622\u062e\u0631\u06cc",                # آخری
+    "\u0641\u0627\u06cc\u0644",                # فایل
+    "\u062a\u0627\u0632\u0647",                # تازه
+    "\u0627\u0644\u0627\u0646",                # الان
+    "\u062d\u0627\u0644\u0627",                # حالا
+    "\u0627\u0645\u0631\u0648\u0632",          # امروز
+    "\u062f\u0648\u0628\u0627\u0631\u0647",    # دوباره
+    "\u0647\u0645\u06cc\u0646",                # همین
+})
+
+_CLAIM_WINDOW = 10          # tokens back from the verb to hunt the skill noun
+_FULL_WINDOW = 8            # tokens each side of the verb for the فایل rule
+_CONTAINER_LOOKBACK = 3     # tokens before the verb for a non-skill container
+
+
+def _is_skill_noun(token: str) -> bool:
+    """Whether a normalized token names a skill, honouring common morphology."""
+    if token in _SKILL_NOUNS:
+        return True
+    if token[:-1] in _SKILL_NOUNS:  # indefinite -ی: روشی، مهارتی
+        return True
+    if _stem_fa(token) in _SKILL_NOUNS:  # attached plural: روشها، مهارتها
+        return True
+    return _stem_fa(token[:-1]) in _SKILL_NOUNS  # مهارتم، روشش
+
+
+def _complex_span(tokens: list[str], index: int) -> tuple[int, int]:
+    """End index of the (save stem, past verb, optional copula) at ``index``.
+
+    ``index`` is the save stem or a standalone claim verb. Returns the index
+    just past the completed verb complex so a following «بود» (past perfect,
+    a reference, not a claim) can be recognised.
+    """
+    if index + 1 < len(tokens) and tokens[index + 1] in _PAST_VERBS:
+        end = index + 2
+        if end < len(tokens) and tokens[end] in _COPULA:
+            return end + 1
+        return end
+    return index + 1
+
+
+def _claim_context(tokens: list[str], index: int, end: int) -> dict[str, Any]:
+    """The skill noun, claimed name span, and veto markers around a complex."""
+    window = tokens[max(0, index - _CLAIM_WINDOW):index]
+    noun_at = next(
+        (j for j in range(len(window) - 1, -1, -1) if _is_skill_noun(window[j])),
+        None,
+    )
+    claimed = (
+        tokens[max(0, index - _CLAIM_WINDOW) + noun_at + 1 : index]
+        if noun_at is not None
+        else []
+    )
+    nearby = tokens[
+        max(0, index - _FULL_WINDOW): min(len(tokens), end + _FULL_WINDOW)
+    ]
+    return {
+        "noun_found": noun_at is not None,
+        "claimed": claimed,
+        "nearby": nearby,
+        "before": tokens[max(0, index - _CLAIM_WINDOW):index],
+        "after_end": tokens[end : min(len(tokens), end + 2)],
+    }
+
+
+def _vetoed_context(context: dict[str, Any], index: int, tokens: list[str]) -> bool:
+    """Whether the context around a complex marks it as no claim.
+
+    Question words, past-reference markers, a relative-clause «که», a
+    non-skill container, a past-perfect «بود», or «از فایل» (a read) all
+    make the sentence something other than a this-turn skill-save claim.
+    """
+    if any(word in context["before"] for word in _QUESTION_WORDS):
+        return True
+    if any(word in context["before"] for word in _PAST_REFERENCE):
+        return True
+    if index > 0 and tokens[index - 1] == "\u06a9\u0647":  # که — relative clause
+        return True
+    if any(word in context["before"][-_CONTAINER_LOOKBACK:] for word in _NON_SKILL_CONTAINERS):
+        return True
+    if any(word in context["after_end"] for word in _PAST_PERFECT_MARKERS):
+        return True
+    # «از فایل» marks a read («از فایل دریافت کردم»); the file rule below
+    # still needs the file present to call something a claim.
+    for j, token in enumerate(context["nearby"]):
+        if token != "\u0641\u0627\u06cc\u0644":  # فایل
+            continue
+        if j > 0 and context["nearby"][j - 1] == "\u0627\u0632":  # از
+            return True
+    return False
+
+
+def _claims_skill_save(reply: str) -> tuple[bool, list[str]]:
+    """Detect a completed skill-save claim in a reply.
+
+    Returns ``(found, claimed_names)`` where ``claimed_names`` are the
+    procedure names the reply says were saved (empty when the claim names no
+    procedure, e.g. «قدم اضافه شد»). Token membership in the positive past
+    verb set is what makes negation a design property, not a word-order
+    accident.
+    """
+    tokens = _tokenize(reply)
+    claimed_names: list[str] = []
+    found = False
+    for index, token in enumerate(tokens):
+        verb = tokens[index + 1] if index + 1 < len(tokens) else ""
+        if token in _SAVE_STEMS:
+            if verb not in _PAST_VERBS:
+                continue
+            allowlist = _SAVE_VERB_ALLOWLIST.get(token)
+            if allowlist is not None and verb not in allowlist:
+                continue
+        elif token in _STANDALONE_SAVE_VERBS:
+            pass
+        else:
+            continue
+        end = _complex_span(tokens, index)
+        context = _claim_context(tokens, index, end)
+        if not context["noun_found"] or _vetoed_context(context, index, tokens):
+            continue
+        needs_file = (
+            token in _FILE_REQUIRED_STEMS or token in _STANDALONE_SAVE_VERBS
+        )
+        if needs_file and "\u0641\u0627\u06cc\u0644" not in context["nearby"]:
+            continue  # «گرفتم/نوشتم» without a file is not a skill-file claim
+        found = True
+        if context["claimed"]:
+            claimed_names.append(_clean_claimed_name(context["claimed"]))
+    return found, [name for name in claimed_names if name]
+
+
+def _clean_claimed_name(tokens: list[str]) -> str:
+    """Join claim-span tokens into a procedure name, dropping non-content.
+
+    Stopwords, ordinals, digits, save stems, and past verbs carry no
+    procedure content; a span reduced to those (e.g. «قدم دوم اضافه شد»)
+    names no procedure.
+    """
+    kept: list[str] = []
+    for token in tokens:
+        if token in _STOPWORDS or token in _NAME_DROP:
+            continue
+        if token.isdigit():
+            continue
+        if token in _SAVE_STEMS or token in _PAST_VERBS or token in _STANDALONE_SAVE_VERBS:
+            continue
+        kept.append(token)
+    return " ".join(kept)
+
+
+def _successful_skill_saves(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Calls that actually changed a skill file: allowed and reported ok.
+
+    A blocked call (approval refused) and a call whose write failed both
+    leave the disk untouched; only an allowed call whose result carries
+    ``status: ok`` counts as a save.
+    """
+    completed: list[dict[str, Any]] = []
+    for call in tool_calls:
+        if str(call.get("name", "")) != "save_skill":
+            continue
+        if call.get("allowed") is not True:
+            continue
+        try:
+            payload = json.loads(str(call.get("result", "")))
+        except (TypeError, ValueError):
+            continue
+        if isinstance(payload, dict) and payload.get("status") == "ok":
+            completed.append(call)
+    return completed
+
+
+def _same_skill(claimed_name: str, saved_name: str) -> bool:
+    """Whether a claimed procedure name and a saved skill name share content.
+
+    Both sides run through the same content-stem pipeline, so «تمدید بیمه
+    ماشین» matches a file saved under that name, and a tea recipe shares no
+    stem with the insurance procedure.
+    """
+    claimed = _content_stems(claimed_name)
+    saved = _content_stems(saved_name)
+    return bool(claimed and saved and (claimed & saved))
+
+
+def unsaved_skill_claim(reply: str, tool_calls: list[dict[str, Any]]) -> bool:
+    """Whether a reply claims a skill save that no completed save backs.
+
+    The basis is the outcome: a turn either changed a skill file or it did
+    not. A claim with no completed ``save_skill`` call is unconfirmed; a
+    claim that names a procedure is unconfirmed when every completed save
+    wrote a fully different skill.
+    """
+    claimed, claimed_names = _claims_skill_save(reply)
+    if not claimed:
+        return False
+    saves = _successful_skill_saves(tool_calls)
+    if not saves:
+        return True
+    for name in claimed_names:
+        saved_names = [str(save.get("arguments", {}).get("name", "")) for save in saves]
+        if not any(_same_skill(name, saved) for saved in saved_names):
+            return True
+    return False
+
+
+# Gloss: توجه: ادعای ذخیره‌شدن این روش تایید نشده است؛ فایل همان روش تغییر
+# نکرده است.
+SKILL_SAVE_WARNING = (
+    "\n\n"
+    "\u062a\u0648\u062c\u0647: "
+    "\u0627\u062f\u0639\u0627\u06cc \u0630\u062e\u06cc\u0631\u0647\u200c\u0634\u062f\u0646 "
+    "\u0627\u06cc\u0646 \u0631\u0648\u0634 "
+    "\u062a\u0627\u06cc\u06cc\u062f \u0646\u0634\u062f\u0647 \u0627\u0633\u062a\u061b "
+    "\u0641\u0627\u06cc\u0644 \u0647\u0645\u0627\u0646 \u0631\u0648\u0634 "
+    "\u062a\u063a\u06cc\u06cc\u0631 \u0646\u06a9\u0631\u062f\u0647 \u0627\u0633\u062a."
+)
+
+
+def guard_skill_save_claim(reply: str, tool_calls: list[dict[str, Any]]) -> str:
+    """Return the reply, appending a Persian warning when its save claim is
+    unconfirmed. A truthful reply — a claim backed by a completed save — is
+    returned byte for byte.
+    """
+    if unsaved_skill_claim(reply, tool_calls):
+        return reply + SKILL_SAVE_WARNING
+    return reply
 
 # The skills usage line, supplied to the system prompt through the M4
 # ``contribute_prompt`` hook (wired in M10, sharpened in M11). Written as
