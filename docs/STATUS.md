@@ -4,6 +4,191 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M19 — Taking a reminder back by asking — SHIPPED
+
+**What shipped.** The owner can take a reminder back in conversation, in
+Persian, without a terminal: «یادآوری تمدید بیمه را لغو کن» removes the row
+and he reads «یادآوری «تمدید بیمه» برای 1405-05-20 لغو شد.» New per-chat tool
+`cancel_reminder(text, date=None)` — **guarded**, same argument as M15's
+creator: the write is local and intentional, and `dangerous` would demand an
+approver the phone cannot show, making spoken cancellation impossible; the
+integrity duty is carried by the identification protocol, not the tier.
+Prompt gains `_REMINDER_CANCEL_USAGE` naming the tool and the ask-not-choose
+rule; both proven to reach the system prompt. No change to the store,
+scheduler, calendar, extraction, provider interface, claim guards, phone
+front end, or terminal entry. `dream/tools.py` gains the guarded placeholder
+(M15 shape: the schema that exists before any `Dream` instance, failing
+honestly without one).
+
+**Identification decision — chosen, rejected, why.** The prompt section shows
+text and a stored Jalali date, no identifier (measured: two «قسط وام» rows
+print two identical-worded lines differing only by date). Chosen: **the tool
+takes the owner's text plus an optional date and finds the row itself** —
+exact normalized match, then unique substring; the date, parsed by the same
+numeric-first-then-Persian dispatch with the clock-time refusal, filters the
+matches. A row is removed only when exactly one row fits; zero or several
+fits refuse in Persian naming the candidates with Jalali dates and repeat
+rules, touching nothing. Both arguments come from what the model is shown:
+the text from the owner's message, the dates rendered in the prompt section —
+the principal engineer's veto is satisfied without a prompt identifier, and
+the refusal is the data integrity veto's ask-not-choose. Rejected: *(a)* a
+row id in the prompt — obtainable only for the at-most-five filtered rows
+the section shows, unverifiable by the owner in conversation, and it would
+let a call carry an id whose text never matched the owner's words (the
+verbal argument keeps utterance and row checkably in correspondence), plus
+a re-render of every M1 prompt line; *(b)* text alone — refuses the owner's
+own disambiguation («قسط وام ۲۱ام») though it identifies exactly one row;
+*(c)* candidate-return with a mandatory second turn — it falls out of the
+refusal for free (the payload names the candidates, the owner answers with
+a date) without taxing the unique-match case. A read-back tool is **not**
+required by this decision; the tool reads the store directly. Stated plainly
+per the deferred list.
+
+**Removal decision — permanent, argued, and a finding.** Measured: the
+scheduler's `active=0` notion is set only when a one-off fires; **no surface
+can reactivate an inactive reminder** (grep: only `check_due_reminders`
+clears it, `add_reminder` sets it), so conversational deactivation would be
+cosmetic gentleness that hides the row, leaves `[inactive]` residue under
+`/reminders all`, and makes the two surfaces disagree (`/unremind` deletes).
+The real safeguard against the wrong row leaving is never choosing it:
+unique-match-only plus refusals, plus a confirmation naming text, Jalali
+date and repeat rule — a mistaken cancellation is recreatable verbatim in
+one message. Chosen: the conversational path deletes through the store's
+own `delete_reminder`, the same permanent removal `/unremind` performs.
+Verified by break: deactivate-instead-of-delete leaves residue and fails
+the parity pin. **Finding, reported not fixed** (store and scheduler are
+out of budget): a store-level reminder archive — `deactivate_reminder`
+paired with a reactivation surface and phone parity — is the genuinely
+gentler design for a future milestone.
+
+**The FK finding — measured on trunk, handled inside budget.** While running
+break verification, a fired one-off's deletion raised `IntegrityError:
+FOREIGN KEY constraint failed`: `reminder_deliveries` references
+`reminders(id)` with no `ON DELETE CASCADE`, and `PRAGMA foreign_keys=ON` is
+set. Reproduced on **unmodified merged trunk**: a repeating reminder that
+has fired once cannot be deleted at all — `store.delete_reminder` raises and
+the shipped `/unremind` command raises the same, the row surviving. The
+child rows prove a delivery happened; ids are `AUTOINCREMENT` and never
+reused, so removing children with the parent is the FK's own evident intent
+and removes the stale-delivery hazard. The conversational path performs the
+child removal through the store's own lock and connection immediately before
+the parent delete (two commits; a mid-cancellation crash can at worst
+re-deliver one occurrence once). **Store fix needed, reported:** add the
+cascade — either `ON DELETE CASCADE` in the schema migration, or the child
+`DELETE` inside `dream/reminders.delete_reminder` — after which the agent-side
+block can go. `/unremind` on a fired repeating reminder crashes today
+(measured: `IntegrityError` escapes `dispatch_command`); out of budget here.
+
+**Claim guards measured.** A truthful cancellation confirmation
+(«یادآوری «تمدید بیمه» برای 1405-05-20 لغو شد.») carries no save stem, no
+skill noun, no fact/memory marker: M13 `unsaved_skill_claim` False, M14
+`unsaved_fact_claim` False, `guard_claims` byte-identical — measured before
+implementation and pinned after. No defect in the guards; no fix needed.
+
+**What was measured.**
+
+- Baseline before: `830 passed`; ruff `All checks passed!`.
+- After: `849 passed` (+19); ruff `All checks passed!` over the whole
+  repository, no path argument.
+- Red before green: the new test file ran against unchanged source first —
+  **17 failed, 0 passed**, the messages naming the problem
+  (`cancel_reminder must be a registered tool; registry holds [...]`;
+  `unknown tool: cancel_reminder` surfacing where a refusal was required;
+  the prompt-usage assertion naming the missing constant). After: 18 passed;
+  a 19th test (fired repeating reminder) was added when the FK finding
+  surfaced, written failing against the FK (`IntegrityError`, row surviving)
+  before the cascade shipped.
+- Tool in the registry, risk and schema (pasted in the PR):
+  `risk='guarded'`, `required=['text']`, optional `date`.
+- Prompt: `_REMINDER_CANCEL_USAGE` names `cancel_reminder`, «لغو», and
+  «خودت انتخاب نکن»; `_system_message` content contains both (asserted).
+- The turn (pasted in the PR): three rows before, two after, confirmation
+  «یادآوری «تمدید بیمه» برای 1405-05-20 لغو شد.» — byte-identical to the
+  tool's own message.
+- Same-text refusal: «چند یادآوری با متن «قسط وام» پیدا شد؛ کدام را لغو
+  کنم؟ قسط وام (1405-05-19)؛ قسط وام (1405-05-21)», no row touched; adding
+  the date «1405-05-21» cancels exactly that row, the 19th surviving.
+- Missing text: «یادآوری فعالی با متن «پرداخت قبض» پیدا نشد؛ چیزی لغو
+  نشد.»; row count `1 -> 1`, listing compared before/after equal.
+- Guards: `False`, `False`, byte-identical (above).
+- Fired repeating bill: store delete `IntegrityError`; conversational path
+  `ok`, deliveries `1 -> 0`, rows `0`; confirmation names «تکرار: هر ماه».
+- Permanence: `delete_reminder` removes the row from the full listing
+  (measured in the probe); recoverability is re-creation from the named
+  confirmation, argued above.
+- Slash surfaces: `tests/test_reminder_command.py` 20 passed unchanged;
+  conversation/slash listings proven equal in the parity test, both active
+  and full, no residue.
+- Break and restore, every break verified to remove the behaviour before
+  the red was recorded (payloads and row counts inspected):
+  (1) per-chat registration removed → 15 failed, 3 passed (the three
+      insensitive: registry shape via the tools.py placeholder, prompt
+      constant, wording oracle; the placeholder's RuntimeError surfaced
+      instead of the payload → the M15-shaped placeholder genuinely masked
+      registry-shape assertions — recorded) → restored 18 passed;
+  (2) usage unwired from `_system_message` → prompt test red (prompt no
+      longer named the tool; create naming intact) → restored;
+  (3) ambiguity refusal removed, first match chosen → one verify-measured
+      row deleted, 2 refusal tests red → restored;
+  (4) substring fallback removed → unique-substring refusal red, row
+      measured intact, exact-match tests green → restored;
+  (5) date filter ignored → 3 dated tests red; a wrong-date call measured
+      deleting a row → restored;
+  (6) inactive matching → fired one-off verifiably destroyed → fired-oneoff
+      test red → restored;
+  (7) delivery cascade removed → `IntegrityError`, row and deliveries
+      measured surviving → fired-repeating test red → restored;
+  (8) confirmation dropped from the payload → 6 tests red (owner unnamed
+      deletion measured) → restored;
+  (9) claim seam doctored to warn always → truthful confirmation measured
+      warned; 2 M19 tests + 1 M15 test (independent layer) red → restored;
+  (10) success without deleting → 7 tests red; row measured intact →
+      restored;
+  (11) repeat wording dropped from the confirmation → repeat test and
+      wording oracle red (two layers) → restored;
+  (12) clock-time guard removed → time-word test red — after fixing the
+      pin that the break itself exposed as too weak («ساعت» also appears in
+      the generic parser echo; the discriminator is «پشتیبانی») → restored;
+  (13) spelling typo تارئخ reintroduced → oracle red — the first attempt
+      landed the typo in the M15 create hint and stayed green, proving M15's
+      substring pins cannot spell-check; create hint added to the oracle,
+      then the break landed in the cancel builder and went red → restored;
+  (14) «خودت انتخاب نکن» dropped from the usage → prompt test red →
+      restored;
+  (15) deactivate-instead-of-delete (the rejected design) → parity and
+      fired-repeating red; residue measured under `include_inactive` →
+      restored;
+  (16) per-chat risk flipped to dangerous → registry + behaviour tests red;
+      the no-approver policy measured blocking the call (rows intact) —
+      the measured argument for guarded → restored.
+- Wording oracle: seven owner-facing sentences compared to independently
+  typed correctly spelled plain-text oracles, including the joined
+  «نمی‌شود» of the cancel hint and the shipped joinerless «نمیشود» of the
+  M15 hint (kept byte-identical on purpose; the mismatch was caught by the
+  oracle while writing it).
+- Standing regression list, every line run (pasted in the PR): all 41 test
+  files, 849 tests, every line green.
+
+**On scope.** Source diff `dream/agent.py` (+~300: ~109 executable logic,
+90 escaped Persian constant lines counted separately, 49 comments, 71
+docstring/blank) and `dream/tools.py` (+18 placeholder). Around 109
+executable lines, well inside the ~250 budget; no split needed. The
+conversational matching/removal seam is the only natural cut, and it is
+indivisible. Deferred unchanged: rescheduling (a different seam — it takes
+a *new date*, not just identification of the old row), the read-back tool
+(identification here does not require it, stated above), long listings,
+`expose_tools`, web search. The FK store fix and the `/unremind` crash on
+fired repeating reminders are reported findings, not budget violations.
+
+**What is next.** Rescheduling a reminder (shares the identification seam,
+argued deferred), the store-level reminder archive + reactivation surface,
+the FK cascade in `delete_reminder` and the `/unremind` crash, the
+store-side reminder listing with identifiers for the read-back tool,
+`expose_tools`, long listings, web search.
+
+**What is blocked.** Nothing.
+
+
 ## M18 — Windows reserved device names — SHIPPED
 
 **What shipped.** Windows reserved device names (CON, PRN, AUX, NUL, COM1-9, LPT1-9) are now refused before any write, case-insensitively and with any extension, because on the owner's Windows machine those names are device aliases that cannot be deleted with ordinary tools. Both writing surfaces are covered: `save_skill` via `validate_name` and `write_note` via the workspace boundary helper `_safe_path`. Trailing dot/space hazard also refused (Windows strips them, two names differing only by a dot would collide).

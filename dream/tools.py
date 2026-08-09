@@ -410,6 +410,24 @@ def create_reminder(
     )
 
 
+@tool(risk="guarded")
+def cancel_reminder(text: str, date: str | None = None) -> dict[str, Any]:
+    """Cancel one of the owner's reminders, by text and an optional date.
+
+    A row is removed only when the text and date identify exactly one
+    active reminder; otherwise the tool refuses and names the candidates
+    in Persian, touching nothing.
+
+    :param text: Reminder text as the owner says it; a unique fragment is
+        accepted.
+    :param date: Optional due date as Jalali YYYY-MM-DD (year <1700) or a
+        natural Persian phrase. Pure date only; time words cause refusal.
+    """
+    raise RuntimeError(
+        "cancel_reminder requires a Dream instance; create a Dream first"
+    )
+
+
 @tool(risk="dangerous")
 def run_shell(command: str, timeout: int = 30) -> dict[str, Any]:
     """Run a shell command after explicit human approval.

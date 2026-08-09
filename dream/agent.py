@@ -22,10 +22,16 @@ from dream.extraction import (
     ExtractionResult,
     extract_facts,
 )
-from dream.memory import Memory, MemoryStore
+from dream.memory import Memory, MemoryStore, normalize_fa
 from dream.normalization import normalize_importance, normalize_kind
 from dream.providers import BuiltInMemoryProvider, ProviderManager
-from dream.reminders import Reminder, format_jalali, prompt_reminders
+from dream.reminders import (
+    Reminder,
+    format_jalali,
+    parse_date_to_timestamp,
+    parse_persian_date,
+    prompt_reminders,
+)
 from dream.skills import SkillPromptProvider
 from dream.tools import REGISTRY, execute, openai_schemas, tool
 
@@ -486,6 +492,182 @@ class Turn:
     memories_injected: list[Memory] | None = None
 
 
+# ---------------------------------------------------------------------------
+# Reminder tool support: shared date resolution, matching, and the Persian
+# refusal/confirmation wording every reminder tool answer carries.
+# ---------------------------------------------------------------------------
+
+# Gloss: ساعت. A date argument containing the clock-time word is refused in
+# both reminder tools; the date is a pure date, never a guessed hour.
+_TIME_WORD = "\u0633\u0627\u0639\u062a"
+
+# The create-side clock-time refusal, kept byte-identical to the M15 wording
+# its tests pin. Gloss: «عبارت زمان «ساعت» در تاریخ پشتیبانی نمی‌شود؛ تاریخ را
+# مثل «فردا» بفرست و ساعت را در متن یادآوری بنویس.»
+_CREATE_TIME_HINT = (
+    "\u0639\u0628\u0627\u0631\u062a \u0632\u0645\u0627\u0646 "
+    "\u00ab\u0633\u0627\u0639\u062a\u00bb \u062f\u0631 "
+    "\u062a\u0627\u0631\u06cc\u062e "
+    "\u067e\u0634\u062a\u06cc\u0628\u0627\u0646\u06cc "
+    "\u0646\u0645\u06cc\u0634\u0648\u062f\u061b "
+    "\u062a\u0627\u0631\u06cc\u062e \u0631\u0627 "
+    "\u0645\u062b\u0644 \u00ab\u0641\u0631\u062f\u0627\u00bb "
+    "\u0628\u0641\u0631\u0633\u062a \u0648 "
+    "\u0633\u0627\u0639\u062a \u0631\u0627 "
+    "\u062f\u0631 \u0645\u062a\u0646 "
+    "\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc "
+    "\u0628\u0646\u0648\u06cc\u0633."
+)
+
+# The cancel-side clock-time refusal. Gloss: «در date ساعت پشتیبانی نمی‌شود؛
+# فقط تاریخ را مثل «فردا» یا «1405-05-19» بفرست.»
+_CANCEL_TIME_HINT = (
+    "\u062f\u0631 date "
+    "\u0633\u0627\u0639\u062a "
+    "\u067e\u0634\u062a\u06cc\u0628\u0627\u0646\u06cc "
+    "\u0646\u0645\u06cc\u200c\u0634\u0648\u062f\u061b "
+    "\u0641\u0642\u0637 \u062a\u0627\u0631\u06cc\u062e "
+    "\u0631\u0627 \u0645\u062b\u0644 "
+    "\u00ab\u0641\u0631\u062f\u0627\u00bb \u06cc\u0627 "
+    "\u00ab1405-05-19\u00bb "
+    "\u0628\u0641\u0631\u0633\u062a."
+)
+
+
+def _resolve_reminder_date(date: str, time_hint: str) -> float:
+    """Resolve a shared reminder-tool date argument, refusing clock times.
+
+    Numeric input (``YYYY-MM-DD``; year below 1700 is Jalali) is tried first,
+    then a natural Persian phrase; whatever neither parser accepts raises the
+    parser's own message, and a clock-time word raises *time_hint*. Neither
+    reminder tool ever guesses an hour.
+    """
+    date_norm = normalize_fa(date).strip()
+    if not date_norm:
+        raise ValueError(f"unparseable date: {date!r}")
+    if _TIME_WORD in date_norm:
+        raise ValueError(time_hint)
+    try:
+        return parse_date_to_timestamp(date_norm)
+    except Exception:
+        try:
+            return parse_persian_date(date_norm)
+        except Exception as exc:
+            raise ValueError(str(exc)) from exc
+
+
+def _match_reminders(store: MemoryStore, text: str) -> list:
+    # The owner speaks approximately («بیمه» for «تمدید بیمه ماشین»), so when
+    # no row equals the said text, rows merely containing it are candidates
+    # too. Removing is only allowed when exactly one row fits, and the
+    # confirmation always names the full stored text, so a shortened request
+    # can be verified against what was removed. Inactive reminders (fired
+    # one-offs) never enter matching.
+    """Active reminders matching *text*: exact normalized, else substring."""
+    query = normalize_fa(text).strip()
+    active = store.list_reminders()
+    exact = [rem for rem in active if normalize_fa(rem.text).strip() == query]
+    if exact:
+        return exact
+    return [rem for rem in active if query in normalize_fa(rem.text)]
+
+
+def _repeat_words(reminder: Reminder) -> str:
+    # Gloss of the phrasing: «هر روز» / «هر ۳ ماه».
+    """The repeat rule in Persian, or "" for a one-off."""
+    if reminder.repeat_days is not None:
+        if reminder.repeat_days == 1:
+            return "\u0647\u0631 \u0631\u0648\u0632"  # هر روز
+        return f"\u0647\u0631 {reminder.repeat_days} \u0631\u0648\u0632"  # هر N روز
+    if reminder.repeat_months is not None:
+        if reminder.repeat_months == 1:
+            return "\u0647\u0631 \u0645\u0627\u0647"  # هر ماه
+        return f"\u0647\u0631 {reminder.repeat_months} \u0645\u0627\u0647"  # هر N ماه
+    return ""
+
+
+def _candidate_summary(reminder: Reminder) -> str:
+    """One candidate for a refusal list: text, Jalali date, repeat rule.
+
+    The owner distinguishes two same-text reminders by the date he said; the
+    Jalali date and the repeat rule make each candidate checkable.
+    """
+    due = format_jalali(reminder.due_at)
+    repeat = _repeat_words(reminder)
+    if repeat:
+        return f"{reminder.text} ({due}\u060c {repeat})"  # ،
+    return f"{reminder.text} ({due})"
+
+
+def _candidates_summary(matches: list) -> str:
+    # The separator is the Persian «؛».
+    """Join candidate summaries with the Persian semicolon separator."""
+    return "\u061b ".join(_candidate_summary(rem) for rem in matches)
+
+
+def _cancel_not_found_message(text: str) -> str:
+    # Gloss: «یادآوری فعالی با متن «{text}» پیدا نشد؛ چیزی لغو نشد.»
+    """Refusal when no active reminder fits *text*."""
+    return (
+        f"\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc "
+        f"\u0641\u0639\u0627\u0644\u06cc "
+        f"\u0628\u0627 \u0645\u062a\u0646 \u00ab{text}\u00bb "
+        f"\u067e\u06cc\u062f\u0627 \u0646\u0634\u062f\u061b "
+        f"\u0686\u06cc\u0632\u06cc \u0644\u063a\u0648 "
+        f"\u0646\u0634\u062f."
+    )
+
+
+def _cancel_ambiguous_message(text: str, matches: list) -> str:
+    # Gloss: «چند یادآوری با متن «{text}» پیدا شد؛ کدام را لغو کنم؟ ...»
+    """Refusal asking the owner to choose between several candidates."""
+    return (
+        f"\u0686\u0646\u062f \u06cc\u0627\u062f\u0622\u0648\u0631\u06cc "
+        f"\u0628\u0627 \u0645\u062a\u0646 \u00ab{text}\u00bb "
+        f"\u067e\u06cc\u062f\u0627 \u0634\u062f\u061b "
+        f"\u06a9\u062f\u0627\u0645 \u0631\u0627 \u0644\u063a\u0648 "
+        f"\u06a9\u0646\u0645\u061f "
+        f"{_candidates_summary(matches)}"
+    )
+
+
+def _cancel_no_date_match_message(text: str, wanted: str, matches: list) -> str:
+    # Gloss: «یادآوری فعالی با متن «{text}» برای تاریخ {date} پیدا نشد؛
+    # چیزی لغو نشد. موارد موجود: ...»
+    """Refusal when the date filter empties the match."""
+    return (
+        f"\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc "
+        f"\u0641\u0639\u0627\u0644\u06cc "
+        f"\u0628\u0627 \u0645\u062a\u0646 \u00ab{text}\u00bb "
+        f"\u0628\u0631\u0627\u06cc \u062a\u0627\u0631\u06cc\u062e {wanted} "
+        f"\u067e\u06cc\u062f\u0627 \u0646\u0634\u062f\u061b "
+        f"\u0686\u06cc\u0632\u06cc \u0644\u063a\u0648 \u0646\u0634\u062f. "
+        f"\u0645\u0648\u0627\u0631\u062f "
+        f"\u0645\u0648\u062c\u0648\u062f: "
+        f"{_candidates_summary(matches)}"
+    )
+
+
+def _cancelled_message(reminder: Reminder) -> str:
+    # Gloss: «یادآوری «{text}» برای {due} (تکرار: ...) لغو شد.»
+    """The Persian confirmation naming what was removed, in Jalali."""
+    due = format_jalali(reminder.due_at)
+    repeat = _repeat_words(reminder)
+    if repeat:
+        return (
+            f"\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc "
+            f"\u00ab{reminder.text}\u00bb "
+            f"\u0628\u0631\u0627\u06cc {due} "
+            f"(\u062a\u06a9\u0631\u0627\u0631: {repeat}) "
+            f"\u0644\u063a\u0648 \u0634\u062f."
+        )
+    return (
+        f"\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc "
+        f"\u00ab{reminder.text}\u00bb "
+        f"\u0628\u0631\u0627\u06cc {due} \u0644\u063a\u0648 \u0634\u062f."
+    )
+
+
 class Dream:
     """An agent runtime that combines durable memory, tools, and approval."""
 
@@ -590,8 +772,6 @@ class Dream:
         store = self.store
         if store is None:
             return
-        from dream.memory import normalize_fa
-        from dream.reminders import format_jalali, parse_date_to_timestamp, parse_persian_date
 
         @tool(risk="guarded")
         def create_reminder(
@@ -615,32 +795,7 @@ class Dream:
                 raise ValueError(
                     "repeat must be either days or months, not both"
                 )
-            date_norm = normalize_fa(date).strip()
-            if not date_norm:
-                raise ValueError(f"unparseable date: {date!r}")
-            if "\u0633\u0627\u0639\u062a" in date_norm:
-                raise ValueError(
-                    "\u0639\u0628\u0627\u0631\u062a \u0632\u0645\u0627\u0646 "
-                    "\u00ab\u0633\u0627\u0639\u062a\u00bb \u062f\u0631 "
-                    "\u062a\u0627\u0631\u06cc\u062e "
-                    "\u067e\u0634\u062a\u06cc\u0628\u0627\u0646\u06cc "
-                    "\u0646\u0645\u06cc\u0634\u0648\u062f\u061b "
-                    "\u062a\u0627\u0631\u06cc\u062e \u0631\u0627 "
-                    "\u0645\u062b\u0644 \u00ab\u0641\u0631\u062f\u0627\u00bb "
-                    "\u0628\u0641\u0631\u0633\u062a \u0648 "
-                    "\u0633\u0627\u0639\u062a \u0631\u0627 "
-                    "\u062f\u0631 \u0645\u062a\u0646 "
-                    "\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc "
-                    "\u0628\u0646\u0648\u06cc\u0633."
-                )
-            due_at = None
-            try:
-                due_at = parse_date_to_timestamp(date_norm)
-            except Exception:
-                try:
-                    due_at = parse_persian_date(date_norm)
-                except Exception as exc:
-                    raise ValueError(str(exc)) from exc
+            due_at = _resolve_reminder_date(date, _CREATE_TIME_HINT)
             rem = store.add_reminder(
                 text.strip(), due_at, repeat_days, repeat_months
             )
@@ -651,6 +806,70 @@ class Dream:
                 "repeat_days": rem.repeat_days,
                 "repeat_months": rem.repeat_months,
                 "due_at": rem.due_at,
+            }
+
+        @tool(risk="guarded")
+        def cancel_reminder(text: str, date: str | None = None) -> dict[str, Any]:
+            """Cancel one of the owner's reminders, by text and optional date.
+
+            The match runs over the active reminders: an exact text match,
+            otherwise a unique substring match, narrowed by the date when one
+            is sent. A row is removed only when exactly one row fits; zero or
+            several fits refuse with the candidates named in Persian, and no
+            row is touched. The removal is the same permanent delete
+            ``/unremind`` performs, so the two surfaces stay identical.
+
+            :param text: Reminder text as the owner says it; a unique
+                fragment is accepted.
+            :param date: Optional due date — Jalali YYYY-MM-DD (year <1700)
+                or a natural Persian phrase. Pure date only.
+            """
+            if not text or not text.strip():
+                raise ValueError("text must not be empty")
+            matches = _match_reminders(store, text)
+            if not matches:
+                raise ValueError(_cancel_not_found_message(text.strip()))
+            if date is not None and str(date).strip():
+                wanted = format_jalali(
+                    _resolve_reminder_date(str(date), _CANCEL_TIME_HINT)
+                )
+                dated = [rem for rem in matches if format_jalali(rem.due_at) == wanted]
+                if not dated:
+                    raise ValueError(
+                        _cancel_no_date_match_message(text.strip(), wanted, matches)
+                    )
+                matches = dated
+            if len(matches) > 1:
+                raise ValueError(_cancel_ambiguous_message(text.strip(), matches))
+            victim = matches[0]
+            # Delivery bookkeeping in ``reminder_deliveries`` references the
+            # reminder by foreign key with no ON DELETE CASCADE, so any
+            # reminder that has already fired cannot be deleted at all —
+            # measured on trunk, where ``/unremind`` raises IntegrityError
+            # and the row survives. Removal of the child rows belongs with
+            # removal of the parent: the rows prove a delivery happened, and
+            # the FK's own intent is that they not outlive the reminder.
+            # Until the store grows that cascade (reported finding), the
+            # conversational path removes them through the store's own lock
+            # and connection, immediately before the parent row; ids are
+            # AUTOINCREMENT and never reused, so no future reminder can be
+            # affected by the cleanup. The re-delivery window between the
+            # two commits exists only if the process dies mid-cancellation.
+            with store._lock:
+                store.conn.execute(
+                    "DELETE FROM reminder_deliveries WHERE reminder_id = ?",
+                    (victim.id,),
+                )
+                store.conn.commit()
+            if not store.delete_reminder(victim.id):
+                raise ValueError(_cancel_not_found_message(text.strip()))
+            return {
+                "id": victim.id,
+                "text": victim.text,
+                "due": format_jalali(victim.due_at),
+                "repeat_days": victim.repeat_days,
+                "repeat_months": victim.repeat_months,
+                "message": _cancelled_message(victim),
             }
 
     def reset_session(self) -> None:
@@ -715,7 +934,7 @@ class Dream:
         reminder_block: str | None = None,
         query: str = "",
     ) -> dict[str, str]:
-        prompt = _BASE_PROMPT + _MEMORY_USAGE + _REMINDER_TOOL_USAGE
+        prompt = _BASE_PROMPT + _MEMORY_USAGE + _REMINDER_TOOL_USAGE + _REMINDER_CANCEL_USAGE
         # The M4 contribute_prompt hook, wired for the first time: subsystems
         # (here: skills) add their own usage line to the system prompt.
         skills_block, _ = self.manager.contribute_prompt(
@@ -997,6 +1216,57 @@ _REMINDER_TOOL_USAGE = (
     "\u062f\u0631 \u067e\u0627\u0633\u062e \u062a\u06a9\u0631\u0627\u0631 "
     "\u06a9\u0646 \u062a\u0627 \u06a9\u0627\u0631\u0628\u0631 "
     "\u0628\u062a\u0648\u0627\u0646\u062f \u0628\u0631\u0631\u0633\u06cc \u06a9\u0646\u062f."
+)
+
+# Reminder cancellation usage: taking a reminder back is cancel_reminder's
+# job, never a claim without the call. The model passes the owner's text (and
+# the date, when the owner gives one); when the tool reports several rows it
+# relays the list and asks for the date instead of choosing — the data
+# integrity floor — and after success it repeats the cancelled text and
+# Jalali date so the owner can verify the removal. Gloss (plain spelling):
+# «اگر کاربر خواست یادآوری‌ای را لغو یا حذف کند — مثل «یادآوری قسط وام را لغو
+# کن» — فقط با ابزار cancel_reminder لغو کن؛ هرگز نگو لغو کردم در حالی که
+# نکردی. پارامتر text متن یادآوری است؛ اگر کاربر تاریخ گفت، آن تاریخ را مثل
+# «1405-05-19» یا «فردا» در پارامتر date بفرست. اگر ابزار گفت چند یادآوری
+# پیدا شد، فهرستش را به کاربر بگو و تاریخش را بپرس؛ خودت انتخاب نکن. بعد از
+# موفقیت، متن و تاریخ شمسی یادآوریِ لغوشده را عیناً از پاسخ ابزار تکرار کن.»
+_REMINDER_CANCEL_USAGE = (
+    "\n\n"
+    "\u0627\u06af\u0631 \u06a9\u0627\u0631\u0628\u0631 \u062e\u0648\u0627\u0633\u062a "
+    "\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc\u200c\u0627\u06cc \u0631\u0627 "
+    "\u0644\u063a\u0648 \u06cc\u0627 \u062d\u0630\u0641 \u06a9\u0646\u062f "
+    "\u2014 \u0645\u062b\u0644 "
+    "\u00ab\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc "
+    "\u0642\u0633\u0637 \u0648\u0627\u0645 \u0631\u0627 "
+    "\u0644\u063a\u0648 \u06a9\u0646\u00bb \u2014 "
+    "\u0641\u0642\u0637 \u0628\u0627 \u0627\u0628\u0632\u0627\u0631 "
+    "cancel_reminder \u0644\u063a\u0648 \u06a9\u0646\u061b "
+    "\u0647\u0631\u06af\u0632 \u0646\u06af\u0648 \u0644\u063a\u0648 "
+    "\u06a9\u0631\u062f\u0645 \u062f\u0631 \u062d\u0627\u0644\u06cc "
+    "\u06a9\u0647 \u0646\u06a9\u0631\u062f\u06cc. "
+    "\u067e\u0627\u0631\u0627\u0645\u062a\u0631 text "
+    "\u0645\u062a\u0646 \u06cc\u0627\u062f\u0622\u0648\u0631\u06cc "
+    "\u0627\u0633\u062a\u061b \u0627\u06af\u0631 \u06a9\u0627\u0631\u0628\u0631 "
+    "\u062a\u0627\u0631\u06cc\u062e \u06af\u0641\u062a\u060c "
+    "\u0622\u0646 \u062a\u0627\u0631\u06cc\u062e \u0631\u0627 "
+    "\u0645\u062b\u0644 \u00ab1405-05-19\u00bb \u06cc\u0627 "
+    "\u00ab\u0641\u0631\u062f\u0627\u00bb \u062f\u0631 "
+    "\u067e\u0627\u0631\u0627\u0645\u062a\u0631 date "
+    "\u0628\u0641\u0631\u0633\u062a. "
+    "\u0627\u06af\u0631 \u0627\u0628\u0632\u0627\u0631 \u06af\u0641\u062a "
+    "\u0686\u0646\u062f \u06cc\u0627\u062f\u0622\u0648\u0631\u06cc "
+    "\u067e\u06cc\u062f\u0627 \u0634\u062f\u060c "
+    "\u0641\u0647\u0631\u0633\u062a\u0634 \u0631\u0627 \u0628\u0647 "
+    "\u06a9\u0627\u0631\u0628\u0631 \u0628\u06af\u0648 \u0648 "
+    "\u062a\u0627\u0631\u06cc\u062e\u0634 \u0631\u0627 "
+    "\u0628\u067e\u0631\u0633\u061b \u062e\u0648\u062f\u062a "
+    "\u0627\u0646\u062a\u062e\u0627\u0628 \u0646\u06a9\u0646. "
+    "\u0628\u0639\u062f \u0627\u0632 \u0645\u0648\u0641\u0642\u06cc\u062a\u060c "
+    "\u0645\u062a\u0646 \u0648 \u062a\u0627\u0631\u06cc\u062e "
+    "\u0634\u0645\u0633\u06cc \u06cc\u0627\u062f\u0622\u0648\u0631\u06cc\u0650 "
+    "\u0644\u063a\u0648\u0634\u062f\u0647 \u0631\u0627 "
+    "\u0639\u06cc\u0646\u0627\u064b \u0627\u0632 \u067e\u0627\u0633\u062e "
+    "\u0627\u0628\u0632\u0627\u0631 \u062a\u06a9\u0631\u0627\u0631 \u06a9\u0646."
 )
 
 # The block markers stay bracketed so the block is scannable, but the words
