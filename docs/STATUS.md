@@ -4,6 +4,173 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M13 — The save-claim guard: a claim that cannot outrun the write — SHIPPED
+
+**What shipped.** The M11 rule against claiming a skill was saved without
+calling `save_skill` existed only as a sentence in the system prompt; a
+search of the conversation module found no code behind it. Observed before
+M11: the owner sent the second half of a procedure, no tool line appeared,
+the reply said the step was added and recited all three steps, and the file
+on disk still held one step. M13 turns the prompt sentence into a property
+of every finished turn: `Dream.run` passes the final reply through
+`guard_skill_save_claim` (new in `dream/skills.py`), which appends a Persian
+warning when the reply claims a skill save that no completed save backs.
+The warning the owner sees: «توجه: ادعای ذخیرهشدن این روش تایید نشده است؛
+فایل همان روش تغییر نکرده است.» A truthful reply — a claim backed by a
+completed save — reaches the owner byte for byte. The same seam serves the
+phone, because the phone runs the same conversation loop.
+
+**Basis chosen: outcome, not attempt.** A turn either changed a skill file
+or it did not. The guard therefore asks whether a `save_skill` call
+*completed* — `allowed` was true and the result carried `status: ok` — not
+whether a call was merely recorded. Counting attempts is what let the
+candidate detector's four holes through; checking the outcome closes them:
+
+1. **A blocked call still counting as a call — closed.** A call the approval
+   policy refused has `allowed: False` and never reaches the tool, so it is
+   not a save; the guard fires anyway. Measured end to end with an approval
+   policy that denies guarded tools: `allowed=False`, result
+   `{"blocked": true, ...}`, no file on disk, warning appended.
+2. **The wrong skill counting — closed.** When the reply names a procedure
+   and a save completed, the saved skill's name must share a content stem
+   with the claimed name (both sides through the same stem pipeline). A tea
+   recipe never satisfies a claim about the insurance procedure. Boundary
+   stated: a generic claim that names no procedure («قدم اضافه شد») cannot
+   be disproved and is left alone when *some* save completed.
+3. **Paraphrase evading the save word — closed.** The receive/put/write
+   families (دریافت، گرفت، گذاشت، نوشت) are claim verbs too when they land
+   on a file: «روش را دریافت کردم و حالا در فایل است» flags with no save
+   call, while «روش را از فایل دریافت کردم» (a read) is vetoed.
+4. **Negation surviving by word order — closed by design.** The Persian
+   negative prefix attaches to the front of the verb (ذخیره شد vs ذخیره
+   نشد), so the detector matches whole normalized tokens against a closed
+   set of positive past/perfective forms, and the negative forms (نشد،
+   نشده، نکردم، نیست، ...) are never members. A test asserts the two sets
+   are disjoint; six denial sentences measured, none flagged. This is a
+   design property, not word-order luck.
+
+**What the guard does when it fires — decided.** It appends the Persian
+warning sentence to the reply before the owner sees it. The two alternatives
+were rejected: *correcting the reply* risks rewriting meaning and hides the
+model's misbehaviour behind a fabricated text — a false positive would
+destroy a truthful reply; *recording the disagreement and letting the reply
+stand* fails the data-integrity floor — on the phone the owner never sees
+the terminal record, so he would be left believing a durable write happened.
+Appending meets the floor (the owner is never left believing the file
+changed) with the smallest possible touch on a truthful reply, satisfying
+the principal engineer's ceiling; the byte-for-byte proof below shows a
+truthful reply is not touched at all.
+
+**Scoping, measured not guessed.** A bare save-word pattern raised false
+positives on note and fact replies (those tools legitimately say something
+was saved), so a skill noun (روش، مهارت، قدم، مرحله، ...) is required inside
+the claim window. Offers and questions («میخواهم ذخیره کنم», «آیا ذخیره
+شد؟») are excluded by construction: only completed past and perfective verb
+forms are claim verbs, and a question word before the claim vetoes it.
+Past-reference and past-perfect forms («قبلا ذخیره شده است», «ذخیره شده
+بود»), conditional and relative-clause references («اگر ذخیره شد», «روشی که
+ذخیره شده است»), and non-skill containers («در یادداشت ذخیره کردم», «از
+فایل دریافت کردم») are vetoed as references or reads, so the guard does not
+punish truthful replies. Two documented boundaries: a bare procedure name
+without a skill noun («تمدید بیمه ماشین ذخیره شد») is not flagged (the
+note/fact false-positive scoping line), and a subject-position note compound
+(«یادداشت روش X ذخیره شد») is flagged conservatively — the warning remains
+factually true in that reading, since the skill file did not change.
+
+**Rider one — the dispatch bar is now pinned where the tool uses it.** M12
+correctly made search permissive and dispatch strict, but nothing pinned
+which bar the `use_skill` *tool* passes; forcing the tool to the permissive
+flag kept the whole suite green at 567. New test
+`test_use_skill_tool_keeps_the_strict_dispatch_bar` spies on the matcher
+through the tool boundary and asserts the strict default is what the tool
+actually passes. Deliberate break (tool forced to `permissive=True`): 1
+failed; reverted: 1 passed.
+
+**Rider two — the refused phone set is locked.** The M12 test for the six
+reviewed commands asserted only that a decision exists and its reason is
+longer than ten characters, so flipping `/dedupe` from refused to allowed
+stayed green (9 passed). New tests lock the refused set itself
+(`{"/dedupe", "/pin", "/exit"}`, each `False` with a reason) and the phone
+behaviour: `/dedupe` on the phone must produce the refusal line, never the
+dedupe dry-run output. Deliberate break (`/dedupe` flipped to allowed): 2
+failed, 3 passed; reverted: 5 passed.
+
+**Rider three — the phone /stats reply no longer leaks a filesystem path.**
+Measured before: the phone reply contained `"path": "/tmp/.../m.db"` — an
+absolute path under the owner's user directory. The M12 reason for allowing
+/stats (counts, no content) was right; the reply was wrong. The phone front
+end now strips the `path` key from the /stats JSON (`_phone_stats_line` in
+`dream/telegram.py`); the terminal reply is unchanged and still shows the
+owner his own path. Deliberate break (strip removed): 1 failed; reverted:
+1 passed.
+
+**What was measured.**
+
+- Baseline suite count before: `567 passed`; ruff `All checks passed!`; with
+  `-W error::DeprecationWarning`: `567 passed`.
+- Full suite count after: `584 passed` (+17); ruff `All checks passed!`; with
+  `-W error::DeprecationWarning`: `584 passed`; the new tests raise no
+  `ResourceWarning` of their own.
+- Red-before-green: written first and run against unchanged source. The
+  end-to-end turn tests failed with a message naming the problem — the owner
+  would see the raw unguarded claim, and the phone reply leaked the exact
+  absolute path. The detector unit tests failed by the guard functions not
+  existing (import), which is the honest red for new machinery.
+- A turn where the reply claims a skill save with no save — before: the
+  owner sees «روش تمدید بیمه ماشین ذخیره شد.» with no annotation (the
+  red-run diff). After: the same claim plus «\n\nتوجه: ادعای ذخیرهشدن این
+  روش تایید نشده است؛ فایل همان روش تغییر نکرده است.» (pasted in the PR).
+- A turn where the reply claims a skill save and the save happened: the
+  reply is untouched, byte for byte (`turn.reply == CLAIM`, asserted and
+  printed in the PR); the skill file exists on disk with its step.
+- A blocked `save_skill` call with a claiming reply (approval policy denying
+  guarded tools): `allowed=False`, result `{"blocked": true}`, no file on
+  disk, warning appended. Nothing reached disk and the owner was not told
+  otherwise.
+- Negation: six Persian denials («ذخیره نشد», «ذخیره نشده است», «اضافه
+  نشد», «نکردم», «در فایل نیست», «ثبت نشده است») — none flagged, by design
+  (closed positive verb set, disjoint from the negative set; invariant
+  asserted in the suite).
+- Five realistic claim phrasings (procedure saved, step added with all three
+  steps recited, skill saved, tea skill saved, all stages saved to file):
+  every one flagged with no call, none flagged with a completed matching
+  save. Notes, facts, reminders, reads, offers, and questions: never
+  flagged.
+- Break-and-restore for every new test, all red then green after restoring
+  the working file from a backup (messages in the PR): guard call removed
+  from the turn seam (2 failed → 3 passed); hole one reopened by accepting
+  any result dict (1 failed → 1 passed); hole two reopened by letting any
+  completed save satisfy the claim (1 failed → 1 passed); hole three
+  reopened by removing دریافت from the claim stems (1 failed → 1 passed);
+  hole four reopened by adding نشد to the positive verbs (1 failed → 1
+  passed); skill-noun scoping reopened (1 failed → 1 passed); over-eager
+  guard flagging every reply (1 failed → 1 passed); rider one permissive
+  break (1 failed → 1 passed); rider two /dedupe break (2 failed, 3 passed
+  → 5 passed); rider three strip removal (1 failed → 1 passed).
+- Standing regression list (27 items, 277 nodes): all pass (list pasted in
+  the PR).
+- Phone path: a phone turn whose reply claims a save with no call reaches
+  the owner with the warning; phone `/stats` has no path key while the
+  terminal `/stats` still shows the owner's absolute database path.
+
+**On scope.** Source diff is 514 new lines across `dream/skills.py` (+483),
+`dream/agent.py` (+10), and `dream/telegram.py` (+21), of which 248 lines
+are the mandated backslash-u Persian constants and 80 are comments; the
+executable logic is ~110 lines. The split point, had it been needed, is the
+constant block: the Persian tables (skill nouns, save stems, positive and
+negative verb forms, veto sets) are pure data, and the ~110 lines of logic
+sit well inside the ~300-line budget. No change to the store, scheduler,
+calendar, extraction, provider, or tool modules; rider one and rider two are
+tests only, as specified.
+
+**What is next.** The same guard for facts and reminders — a reply can claim
+a reminder was set with no call just as easily; skills came first because
+the owner has already been lied to about a skill. The long-listing
+truncation, the second declared hook `expose_tools` (still never called),
+Windows reserved device names, and web search (procurement) remain deferred.
+
+**What is blocked.** Nothing.
+
 ## M12 — Phone skill visibility, interface parity, and permissive search — SHIPPED
 
 **What shipped.** Three defects measured on merged main are resolved without

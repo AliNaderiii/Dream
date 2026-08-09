@@ -25,7 +25,7 @@ from dream.memory import Memory, MemoryStore
 from dream.normalization import normalize_importance, normalize_kind
 from dream.providers import BuiltInMemoryProvider, ProviderManager
 from dream.reminders import Reminder, format_jalali, prompt_reminders
-from dream.skills import SkillPromptProvider
+from dream.skills import SkillPromptProvider, guard_skill_save_claim
 from dream.tools import REGISTRY, execute, openai_schemas, tool
 
 # Sampling temperatures. Conversation gets 0.3: calm but not robotic. The
@@ -689,6 +689,14 @@ class Dream:
             calls = response.get("tool_calls", [])
             if not calls:
                 reply = response.get("content") or reply
+                # The save-claim guard: a reply that says a skill was saved is
+                # only truthful when a save_skill call actually completed in
+                # this turn (allowed and reported ok). The M11 prompt sentence
+                # is a request; this is the property. A truthful reply passes
+                # through byte for byte; an unconfirmed claim gets a Persian
+                # warning appended so the owner is never left believing a
+                # durable write happened.
+                reply = guard_skill_save_claim(reply, calls_made)
                 self.history.append({"role": "assistant", "content": reply})
                 if self.store is not None:
                     self.store.log("assistant", reply)

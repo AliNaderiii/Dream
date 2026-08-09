@@ -76,6 +76,25 @@ REMINDER_LABEL = (
 # generated from the same allowlist and help fragments.
 
 
+def _phone_stats_line(line: str) -> str:
+    """Strip the database path from one /stats JSON line before the phone.
+
+    The terminal owner reading his own terminal may see his own path; the
+    phone travels to a chat, so the path is removed there. Counts are kept:
+    the M12 reason for allowing /stats was that it returns counts and no
+    content, and a path is not content — the reason was right, the reply
+    was wrong.
+    """
+    try:
+        payload = json.loads(line)
+    except (TypeError, ValueError):
+        return line
+    if not isinstance(payload, dict):
+        return line
+    payload.pop("path", None)
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
 class TelegramConfigurationError(ValueError):
     """A safe-to-display Telegram configuration failure."""
 
@@ -504,6 +523,8 @@ class TelegramBot:
             return "This command is not available in Telegram. Type /help."
         lines: list[str] = []
         dispatch_command(rebuilt, conversation, output=lines.append, quiet=True)
+        if command == "/stats":
+            lines = [_phone_stats_line(line) for line in lines]
         return "\n".join(lines) if lines else "Command completed."
 
     def _send_message(self, chat_id: int, text: str) -> None:
