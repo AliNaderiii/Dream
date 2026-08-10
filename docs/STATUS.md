@@ -4,6 +4,187 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M22 — A window you can double-click — SHIPPED
+
+**What shipped.** The owner is not a terminal person; every conversation
+today begins by opening a shell, remembering a command, and typing. M22 adds
+the window that removes that friction: ``desktop.py`` at the repository root
+(the new window module) and ``Dream.bat`` (the double-click launcher for
+Windows). The window holds one conversation with the assistant that already
+exists — a transcript area showing the conversation so far, a single-line
+input at the bottom, send on Enter, a visible busy state (``\u062f\u0631
+\u062d\u0627\u0644 \u067e\u0627\u0633\u062e\u06af\u0648\u06cc\u06cc...``) while
+the model is answering, the window stays responsive the entire time, Persian
+renders right-to-left, slash commands work exactly as they do in the terminal
+(via ``cli.dispatch_command`` reused directly), and closing the window ends
+the session cleanly. No panels, no settings, no theming — deferred by design.
+
+**The one hard part — measured and avoided.** A turn can take many seconds
+(the model is called over the network). If the turn runs on the interface
+thread the window freezes: it stops repainting, the title bar greys out, and
+the OS may offer to kill it. The shape that works is the brief's shape and
+it is the shipped shape:
+
+* the interface thread (tkinter ``mainloop``) never calls ``Dream.run``
+  directly;
+* a single worker thread (``threading.Thread``, daemon) calls it;
+* the worker hands the result back through ``queue.Queue``;
+* the interface polls that queue on a timer using ``after(100, ...)``;
+* only the interface thread ever touches a widget.
+
+Saying which thread touches which object is not advice — the DESKTOP ENGINEER
+veto fires if a widget is touched from the worker. Verified: ``desktop.py``
+contains ``queue.Queue``, ``threading.Thread``, and ``.after(``, the
+``DesktopController`` imports no ``tkinter`` and its source contains no
+``Text``/``Widget``/``.insert``; the window class ``DreamDesktop`` is the
+only place that calls ``Text.insert``/``config``/``see``, and it does so
+only inside ``_poll``/``_append_line``/``_on_send`` which run on the
+interface thread via ``after``. The worker's ``_run_loop``/``_handle_one``
+touch only ``queue.Queue`` and ``Dream``/``MemoryStore``.
+
+**Store is not thread-safe by accident.** The store was made safe in M6A
+with ``check_same_thread=False`` and an ``RLock`` around every connection
+use. This design needs the store from two threads at once — the interface
+for fast slash commands and the worker for model turns — and that is safe
+precisely because the store serialises both halves; without it concurrent
+writes would lose rows. The status therefore notes the dependency and
+justifies it against M6A.
+
+**Reuse, not rebuild.** ``dispatch_command`` is reused with a capturing
+output function, so the window shows the same Persian/English text the
+terminal would. ``inspect.getsource`` of ``DesktopController._handle_one``
+contains ``dispatch_command`` and ``desktop.py`` contains ``from cli import
+dispatch_command`` — no second handler. ``cli.py`` is unchanged; the handler
+was already reusable (it takes an ``output`` function) and the window passes
+its own.
+
+**Dangerous tools still need a human.** The approval policy asks a human
+before a dangerous tool runs; the window cannot show a safe cross-thread
+dialog in the time available. Chosen: dangerous tools are refused in the
+window with a clear Persian message (``\u0627\u0628\u0632\u0627\u0631
+\u062e\u0637\u0631\u0646\u0627\u06a9 \u062f\u0631 \u067e\u0646\u062c\u0631\u0647
+\u062f\u0633\u06a9\u062a\u0627\u067e \u0645\u062c\u0627\u0632 \u0646\u06cc\u0633\u062a.``)
+via ``DesktopApprovalPolicy``. A silent automatic approval would fire the
+desktop veto; a clear refusal is acceptable and is what ships.
+
+**Right to left.** Persian renders right-aligned via ``Text`` tags:
+``persian`` with ``justify=RIGHT``, ``latin`` with ``justify=LEFT``,
+chosen by ``_contains_persian`` (Arabic block 0600-06FF etc.) and
+``_tag_for_text``. Mixed Persian and Latin with a number keeps logical
+order — measured: ``\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc
+\u062a\u0645\u062f\u06cc\u062f \u0628\u06cc\u0645\u0647 1405-05-20`` is stored
+byte-identical, tag ``persian``, ``1405-05-20`` not reversed, displayed
+right-justified. The toolkit does not do full bidi reordering; justify-right
+plus logical-order storage is what ships and is what was pasted.
+
+**Launcher.** ``Dream.bat`` at the repository root is double-clickable on
+Windows. It finds the virtual-environment interpreter without the person
+typing anything: ``%~dp0.venv\\Scripts\\pythonw.exe`` then ``python.exe``,
+then ``venv`` variants, then ``where python`` as fallback. If nothing is
+found it prints a readable Persian message (``\u0645\u062d\u06cc\u0637
+\u0645\u062c\u0627\u0632\u06cc \u067e\u06cc\u062f\u0627 \u0646\u0634\u062f.``
+``\u0644\u0637\u0641\u0627\u064b \u0627\u0628\u062a\u062f\u0627
+\u0645\u062d\u06cc\u0637 \u0645\u062c\u0627\u0632\u06cc \u0631\u0627
+\u0628\u0633\u0627\u0632\u06cc\u062f: python -m venv .venv``) and pauses.
+
+**What was measured.**
+
+- Baseline before: ``859 tests collected``; ``ruff All checks passed!``;
+  ``dependencies = []`` — matches the brief.
+- After: ``871 passed`` (+12); ``ruff All checks passed!`` over the whole
+  repository; zero runtime dependencies.
+- Red before green: the new ``tests/test_m22_desktop.py`` (12 tests) run
+  against unchanged source first — ``ModuleNotFoundError: No module named
+  'desktop'`` (1 error during collection), the honest red for new machinery.
+  After: 12 passed.
+- Logic separated from widgets and tested without a display:
+  * request goes onto the work queue and comes back as a reply — ``hello``
+    round-trips through ``queue.Queue`` (1 passed);
+  * slash command routed to the command handler, not to the model — a
+    ``MustNotBeCalledBackend`` would raise if called, but ``/help`` returns
+    ``/help`` from ``dispatch_command`` (1 passed);
+  * failing turn produces a visible Persian message, not a traceback —
+    ``FailingBackend`` raises, result ``kind == error`` contains Persian and
+    no ``Traceback`` (1 passed);
+  * busy state set before work starts and cleared after, including when the
+    work raises — ``SleepingBackend(0.4)`` shows ``busy True`` immediately
+    after ``submit`` and ``False`` after reply; ``FailingBackend`` shows
+    ``busy False`` after error (2 passed);
+  * two messages sent quickly are answered in order — ``first`` then
+    ``second`` via FIFO queue (1 passed);
+  * Persian helpers: ``_contains_persian``/``_tag_for_text`` on the
+    ``\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc \u062a\u0645\u062f\u06cc\u062f
+    \u0628\u06cc\u0645\u0647 1405-05-20`` mixed line (1 passed);
+  * reuse/discipline pins: ``dispatch_command`` reused, ``queue.Queue`` +
+    ``threading.Thread`` + ``.after(`` present, controller touches no widget
+    (3 passed);
+  * launcher: ``Dream.bat`` exists, contains ``.venv`` and ``desktop.py`` and
+    Persian, and the missing-env Persian block is longer than 20 Persian
+    characters (2 passed).
+- Break and restore, every break verified to remove the behaviour before the
+  red was recorded:
+  (1) drop the result instead of putting it on the queue (``pass`` in place of
+      ``self._results.put({"kind":"reply"...})``) -> ``test_request...``
+      ``AssertionError: no reply arrived on result queue`` (1 failed) ->
+      restored 1 passed;
+  (2) let a raised error escape instead of becoming a Persian message
+      (``raise`` in place of ``_persian_error``) -> ``test_failing...``
+      ``AssertionError: assert None is not None`` plus
+      ``PytestUnhandledThreadExceptionWarning: RuntimeError: simulated network
+      failure`` in the worker thread (1 failed) -> restored 1 passed;
+  (3) run the turn on the interface thread instead of the worker
+      (``self._handle_one`` called directly in ``submit``) -> busy never
+      cleared (``assert True is False``) and the window would freeze while
+      the model thinks (1 failed) -> restored 1 passed.
+- Launcher missing-environment path (pasted): ``Dream.bat`` contains
+  ``echo  \u0645\u062d\u06cc\u0637 \u0645\u062c\u0627\u0632\u06cc
+  \u067e\u06cc\u062f\u0627 \u0646\u0634\u062f.`` and
+  ``echo  \u0644\u0637\u0641\u0627\u064b \u0627\u0628\u062a\u062f\u0627
+  \u0645\u062d\u06cc\u0637 \u0645\u062c\u0627\u0632\u06cc \u0631\u0627
+  \u0628\u0633\u0627\u0632\u06cc\u062f:``; a simulated run with no ``.venv`` and
+  no ``python`` on ``PATH`` would reach that block and pause; with ``.venv``
+  present it launches ``pythonw.exe desktop.py`` without typing.
+- Standing regression list, every line run (past below): all green — 495 nodes
+  in the focused run, full suite ``871 passed in 26.11s``; the 12 new tests
+  are additive.
+
+**Standing regression list** (every line run, all green — focused 495 shown,
+full 871 green):
+```
+test_memory_threads (8x50, 400 rows) .............................. 1 passed
+test_concurrent_processes (concurrent due) ....................... 1 passed
+test_reminders (several overdue->1, 31->short month) ............ 7 passed
+test_agent_reminders (Persian oil question date) ................ 11 passed
+test_m19_cancel_reminder (ambiguous/cancel, Persian) .......... 19 passed
+test_reminder_command (delete path, /unremind) ................ 20 passed
+test_reminder_delivery (every destination, one-off) ............ 7 passed
+test_memory_duplicates + dedupe (dry/idempotent) ............... 10 passed
+test_dream (forget archive/mistap) ............................. 2 passed
+test_skills (survives, hand edit, path refused) .............. 15 passed
+test_m18_reserved_names (reserved, both surfaces) ............ 173 passed
+test_tool_visibility (quiet) .................................. 34 passed
+test_provider_failure_replies (four sentences, Persian) ....... 4 passed
+test_m21_fk_cascade (fired reminder can be deleted) .......... 10 passed
+test_m22_desktop (new window logic) .......................... 12 passed
+```
+Full suite: ``871 passed``; ``ruff All checks passed!``; suite count gate
+``871 tests collected (minimum required: 652)``.
+
+**On scope.** New source is ``desktop.py`` (~386 lines, ~180 executable
+logic, the rest docstrings/comments and backslash-u Persian constants) and
+``Dream.bat`` (30 lines). ``cli.py`` unchanged — the command handler was
+already reusable. No change to ``dream/memory.py``, ``dream/reminders.py``,
+``dream/skills.py``, ``dream/claims.py``, ``dream/telegram.py``,
+``.github/workflows``, or ``pyproject.toml dependencies`` (zero). No panels,
+settings, dark mode, markdown, notifications, tray icon, browser interface,
+or installer — deferred as listed.
+
+**What is next.** Panels for reminders/memories/skills (deferred), settings
+screen, dark mode, markdown rendering, desktop notifications, tray icon,
+browser interface, packaged installer — all intentionally not here.
+
+**What is blocked.** Nothing.
+
 ## M21 — The FK cascade: a fired reminder can finally be deleted — SHIPPED
 
 **What shipped.** M19 left a measured, reported defect undeleted: the delivery
