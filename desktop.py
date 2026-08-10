@@ -1,6 +1,13 @@
-"""Dream desktop window — Milestone M22.
+"""Dream desktop window — Milestone M22, repaired in M23.
 
 A single window that holds a conversation with the Dream assistant.
+
+M23 repairs three defects on top of the M22 window without changing how a
+turn is produced: the settings example only names variables the code reads
+(see .env.example); Persian transcript lines are wrapped in the right-to-left
+mark so their base direction is RTL, not merely right-aligned; both speaker
+labels are Persian so a line has one direction; and the input box is
+right-justified for a Persian typist.
 
 Threading shape (DESKTOP ENGINEER veto):
   * The interface thread (tkinter mainloop) never calls Dream.run directly.
@@ -99,6 +106,77 @@ def _contains_persian(text: str) -> bool:
 def _tag_for_text(text: str) -> str:
     """Return the transcript tag for *text*: ``persian`` or ``latin``."""
     return "persian" if _contains_persian(text) else "latin"
+
+
+# ---------------------------------------------------------------------------
+# Display direction (M23) — alignment is not direction
+# ---------------------------------------------------------------------------
+# Right-justifying a Persian region is not enough: the paragraph stays a
+# left-to-right paragraph pushed to the right edge, so a trailing full stop
+# lands on the right, where a Persian sentence begins. The toolkit in use
+# (Tk 8.6.16) has no paragraph-direction option on the Text widget. The
+# remedy that needs no toolkit support is the right-to-left mark U+200F: it
+# is a strong R character, so wrapping a line in it at the start and the end
+# makes the bidirectional algorithm take the paragraph's base direction from
+# it. The mark is DISPLAY LAYER ONLY — it must never reach the memory
+# database, a reminder, or anything the model sees.
+RLM = "\u200f"
+
+
+def format_display_line(text: str) -> str:
+    """Return the display-only form of one transcript line.
+
+    Persian lines are wrapped in the right-to-left mark at the start and at
+    the end so the line's base direction is RTL and a trailing full stop
+    renders on the left edge, where a Persian sentence ends. Purely Latin
+    lines come back byte-identical and keep reading left to right.
+    """
+    if _contains_persian(text):
+        return RLM + text + RLM
+    return text
+
+
+def build_transcript_line(prefix: str, text: str) -> tuple[str, str]:
+    """Return ``(logical, display)`` for one transcript line.
+
+    * ``logical`` is the line as it flows to the store and to the model —
+      it never carries a direction mark.
+    * ``display`` is what the widget inserts — for a Persian *text* it is the
+      logical line wrapped in the right-to-left mark at both ends.
+
+    The decision is made on the message *text*, not on the prefix, so a
+    purely Latin message stays an unmarked left-to-right line even when a
+    Persian speaker label stands in front of it.
+    """
+    logical = f"{prefix}: {text}" if prefix else text
+    if _contains_persian(text):
+        return logical, RLM + logical + RLM
+    return logical, logical
+
+
+# ---------------------------------------------------------------------------
+# Speaker labels (M23) — Persian, so the whole line has one direction
+# ---------------------------------------------------------------------------
+# A Latin label at the start of a right-to-left line is dragged to the far
+# end by the bidirectional algorithm; both labels are therefore Persian.
+# Gloss: \u0634\u0645\u0627 — "shomaa", you: the person at the keyboard.
+USER_LABEL = "\u0634\u0645\u0627"
+# Gloss: \u0631\u0648\u06cc\u0627 — "royaa", dream: the assistant's Persian name.
+ASSISTANT_LABEL = "\u0631\u0648\u06cc\u0627"
+
+# ---------------------------------------------------------------------------
+# Input box justification (M23)
+# ---------------------------------------------------------------------------
+# The entry is right-justified so a Persian typist sees the cursor on the
+# right edge, where Persian typing happens, instead of watching it sit on the
+# wrong side while text grows away from the eye. Lesser harm, chosen
+# deliberately: a Latin string in a right-justified entry sits against the
+# right edge of the box, but the toolkit does not reorder its characters —
+# it still reads left to right and the caret stays after the last character.
+# That cosmetic alignment costs less than a wrong-side cursor for every
+# Persian sentence. tk.RIGHT is the string "right"; the fallback keeps the
+# constant testable in builds without tkinter.
+ENTRY_JUSTIFY = tk.RIGHT if tk is not None else "right"
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +347,11 @@ class DreamDesktop(tk.Tk if tk is not None else object):  # type: ignore[misc]
         scrollbar.config(command=self.transcript.yview)
 
         # Tags for left/right rendering. INTERNATIONALISATION veto:  # noqa: E501
-        # Persian must render right-aligned; mixed lines keep logical order.
+        # Persian must render right-aligned AND right-to-left based; alignment
+        # alone is not direction. The base direction comes from the bounding
+        # right-to-left marks added by build_transcript_line (M23), so a
+        # trailing full stop lands on the left edge and mixed lines keep
+        # logical order. The tag choice is made on the message text alone.
         self.transcript.tag_configure(
             "persian", justify=tk.RIGHT, lmargin1=8, lmargin2=8, rmargin=8
         )
@@ -287,7 +369,7 @@ class DreamDesktop(tk.Tk if tk is not None else object):  # type: ignore[misc]
         bottom = tk.Frame(self)
         bottom.pack(fill=tk.X, padx=8, pady=(0, 8))
 
-        self.entry = tk.Entry(bottom, font=("Tahoma", 10))
+        self.entry = tk.Entry(bottom, font=("Tahoma", 10), justify=ENTRY_JUSTIFY)
         self.entry.pack(fill=tk.X, side=tk.LEFT, expand=True)
         self.entry.bind("<Return>", self._on_send)
         self.entry.focus_set()
@@ -307,13 +389,15 @@ class DreamDesktop(tk.Tk if tk is not None else object):  # type: ignore[misc]
     def _append_line(self, prefix: str, text: str, base_tag: str) -> None:
         """Insert one logical line, choosing persian/latin justification.
 
-        Only the interface thread calls this (via ``after``-polled ``_poll``).
-        The worker never touches a widget.
+        The display form may carry bounding right-to-left marks (M23); the
+        logical form is what the store and the model ever see. Only the
+        interface thread calls this (via ``after``-polled ``_poll``). The
+        worker never touches a widget.
         """
-        tag = _tag_for_text(text + prefix)
+        tag = _tag_for_text(text)
+        _logical, display = build_transcript_line(prefix, text)
         self.transcript.configure(state=tk.NORMAL)
-        line = f"{prefix}: {text}\n" if prefix else f"{text}\n"
-        self.transcript.insert(tk.END, line, (tag, base_tag))
+        self.transcript.insert(tk.END, display + "\n", (tag, base_tag))
         self.transcript.configure(state=tk.DISABLED)
         self.transcript.see(tk.END)
 
@@ -323,7 +407,7 @@ class DreamDesktop(tk.Tk if tk is not None else object):  # type: ignore[misc]
             return
         self.entry.delete(0, tk.END)
         # Show user line immediately (interface thread)
-        self._append_line("\u0634\u0645\u0627", text, "user")
+        self._append_line(USER_LABEL, text, "user")
         # Hand work to worker via queue; worker never touches widgets
         self.controller.submit(text)
 
@@ -345,7 +429,7 @@ class DreamDesktop(tk.Tk if tk is not None else object):  # type: ignore[misc]
                     self._on_close()
                     return
             elif kind == "reply":
-                self._append_line("Dream", text, "assistant")
+                self._append_line(ASSISTANT_LABEL, text, "assistant")
                 # Surface dangerous-tool refusal if present (Persian)
                 turn = result.get("turn")
                 if turn is not None:
