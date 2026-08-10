@@ -4,6 +4,175 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M23 — Three defects on top of the window — SHIPPED
+
+**What shipped.** M22's window works and none of it is being changed. Three
+defects sat on top of it; all three are fixed in ``desktop.py`` (the window
+module) and ``.env.example`` (the settings example file), with tests under
+``tests/``. How a turn is produced, the store, the reminders, the skills, the
+claim guards, the phone front end, the workflow file, and the dependency list
+are all untouched.
+
+**Defect one — the settings example lied.** The example documented provider
+variable names the code never looks at: ``DREAM_OPENAI_API_KEY``,
+``DREAM_OPENAI_BASE_URL``, ``DREAM_OPENAI_MODEL`` (code reads
+``OPENAI_API_KEY``, ``OPENAI_BASE_URL``, ``DREAM_MODEL``),
+``DREAM_OLLAMA_BASE_URL`` and ``DREAM_OLLAMA_MODEL`` (code reads
+``OLLAMA_HOST`` and ``DREAM_MODEL``), and ``DREAM_OWNER``, which no code
+reads at all — six names in total, caught by the new scan, not just the three
+the reviewer measured. With the documented names the key arrives empty and the
+request goes to the default vendor host, producing an authorisation failure
+that names the wrong service; the owner lost an evening to this. The defect
+was in the repository, not in the owner. The fix repairs the example to the
+names the code reads. CONFIGURATION ENGINEER argument on renaming: no rename.
+``DREAM_OPENAI_*``-style names would read tidier, but other installs already
+depend on the shipped names, and dual-name support would create a second
+source of truth for the same setting; the defect was the example, not the
+names. The dead ``DREAM_OWNER`` line is replaced by the real ``DREAM_USER``
+(the store's tenant variable, default ``local``). New
+``tests/test_m23_env_example_names.py`` reads the example file, extracts every
+variable name (including commented-out example lines), scans every product
+``*.py`` for ``os.environ`` reads, and asserts the example names only variables
+the code reads. Red before green (pasted):
+``AssertionError: .env.example documents variables the code never reads:
+['DREAM_OLLAMA_BASE_URL', 'DREAM_OLLAMA_MODEL', 'DREAM_OPENAI_API_KEY',
+'DREAM_OPENAI_BASE_URL', 'DREAM_OPENAI_MODEL', 'DREAM_OWNER']``.
+
+**Defect two — the sentences read inside out.** The transcript tagged a
+Persian region with right alignment. Alignment is not direction: the paragraph
+stayed a left-to-right paragraph pushed to the right edge, so a trailing full
+stop landed on the right, where a Persian sentence begins. Measured on the
+toolkit in use (Tk 8.6.16) the Text widget has no paragraph-direction option.
+The remedy that needs no toolkit support: wrap each displayed Persian line in
+the right-to-left mark U+200F at the start and at the end — the mark is a
+strong R character, so the bidirectional algorithm takes the paragraph's base
+direction from it. The separation the brief requires was created: the line
+construction that used to live inline inside ``DreamDesktop._append_line``
+moved into two pure functions in ``desktop.py`` — ``format_display_line``
+(wraps a Persian line in the mark, leaves a Latin line byte-identical) and
+``build_transcript_line`` (returns ``(logical, display)``: the logical line
+that flows to the store and the model, and the display line the widget
+inserts). ``_append_line`` now only calls ``build_transcript_line`` and
+inserts the display form; the ``persian``/``latin`` tag choice is made on the
+message text alone, so a purely Latin message stays an unmarked left-to-right
+line even with a Persian speaker label in front. The mark is display layer
+only: ``tests/test_m23_display_direction.py`` proves the stored text
+(journal/memories/reminders rows after a real turn) and the model-facing text
+(every message of every captured backend call) are free of the mark while the
+displayed line carries it at character index 0 and at the end. Acceptance,
+each line proven by character index against a UAX #9 subset resolver that is
+itself validated against the standard's published examples:
+
+- Persian sentence ending in a full stop puts the stop at the LEFT edge:
+  ``display[0] == '\u200f'``, ``display[-2] == '.'`` (the stop is the last
+  logical character), and the resolved visual order has ``vis[0] == '.'``.
+  Proven for both the ASCII full stop and the Persian full stop U+06D4, with
+  and without a speaker label in front.
+- A line mixing Persian, a Latin word, and a Jalali date keeps all three in
+  logical order: the display payload is ``RLM + logical + RLM`` (byte-identical
+  content), the Latin word is never mirrored internally, each digit group
+  keeps its internal order while the groups mirror (UAX #9 W4 converts a
+  common separator between like numbers but not a European separator between
+  Arabic numbers), and reading the line right-to-left reconstructs the logical
+  sentence — Persian run right of the Latin word, right of the date.
+- A purely Latin line is unchanged: ``display == logical``, no mark, LTR base,
+  visual order equals the input.
+- The text written to the store contains no direction mark (asserted above).
+
+The break-state is also pinned by the model: without the mark the widget's
+base stays LTR and the trailing neutral keeps the paragraph direction, so the
+stop sits on the RIGHT edge — the defect, reproduced by character index.
+
+**Defect three — the speaker labels fought the line.** The assistant's label
+was the Latin word ``Dream``; a Latin word at the start of a right-to-left
+line is dragged to the far end by the bidirectional algorithm. Both labels are
+now Persian module constants: ``USER_LABEL`` is ``\u0634\u0645\u0627``
+("shomaa", you — the person at the keyboard), ``ASSISTANT_LABEL`` is
+``\u0631\u0648\u06cc\u0627`` ("royaa", dream — the assistant's Persian name).
+Both are Persian, short (3 and 4 letters), and distinguishable at a glance.
+The visual weight that already separates them is kept: the bold ``user`` tag
+and the coloured ``assistant`` tag are unchanged. The window title stays the
+single Latin word it was; a title bar is not part of a sentence. Labels are
+display layer only and never reach the worker or the model (pinned by source
+inspection).
+
+**The input box.** The entry is now right-justified
+(``ENTRY_JUSTIFY = tk.RIGHT``, passed as ``justify=ENTRY_JUSTIFY``) so a
+Persian typist sees the cursor on the right edge, where Persian typing
+happens. Lesser harm, chosen deliberately: in a right-justified entry a Latin
+string sits against the right edge of the box instead of the left; the toolkit
+does not reorder its characters — it still reads left to right and the caret
+stays after the last character. That cosmetic alignment costs less than a
+cursor on the wrong side for every Persian sentence.
+
+**What was measured.**
+
+- Baseline before: ``871 passed in 27.35s``; ruff ``All checks passed!``;
+  ``dependencies = []`` — matches the brief exactly. (pytest 9.1.1 / ruff
+  0.16.2 installed in a local venv; the suite itself added nothing.)
+- After: ``899 passed in 26.64s`` (+28: 5 settings-example, 13 display
+  direction, 7 speaker labels, 3 entry); ruff ``All checks passed!``; zero
+  runtime dependencies; suite count gate satisfied (minimum 652).
+- Red before green: the 28 new tests run against unchanged source — 17 failed
+  / 11 passed. The failures name the defects: ``module 'desktop' has no
+  attribute 'ENTRY_JUSTIFY'`` / ``'USER_LABEL'`` / ``'build_transcript_line'``
+  (not written yet), and the settings scan pasted above. The 11 that passed
+  unchanged are the test-model self-defence (UAX #9 examples, extraction
+  pins), which must not depend on the fix.
+- Break and restore (three breaks, each verified to remove the behaviour
+  before the red was recorded):
+  (1) remove the RLM wrap from ``build_transcript_line`` — displayed line
+      confirmed mark-free (``display carries the mark? False``) —
+      4 failed: ``assert 'گ' == '\u200f'`` (index 0 no longer the mark),
+      ``assert 'ت' == '۔'`` (stop no longer last logical char),
+      ``assert 'ر' == '\u200f'``, and the mixed-line equality — restored:
+      13 passed;
+  (2) put the Latin label back (``ASSISTANT_LABEL = "Dream"``) — 2 failed:
+      ``AssertionError: label not Persian: 'Dream'`` and the model-facing
+      path pin — restored: 7 passed;
+  (3) add ``DREAM_FAKE_SETTING`` to the example — 1 failed:
+      ``.env.example documents variables the code never reads:
+      ['DREAM_FAKE_SETTING']`` — restored: 5 passed.
+- Acceptance pasted (character index, run and watched):
+  ``display[0] == RLM? True``; ``visual leftmost char (idx 0): '.'``;
+  ``STOP ON LEFT EDGE: True``; ``names code never reads: []``;
+  ``EXAMPLE CLEAN: True``.
+
+**Standing regression list** (every line run, all green):
+```
+test_memory_threads (8 threads x 50 memories, 400 rows) ........ 5 passed
+test_concurrent_processes (due checks fire once, real procs) ... 1 passed
+test_reminders (several overdue->1 notice, 31->short month) ... 24 passed
+test_agent_reminders (Persian oil question, stored date) ........ 11 passed
+test_m19_cancel_reminder (ambiguous refuses/names, Persian) ..... 19 passed
+test_reminder_command (fired reminder deleted from terminal) .... 20 passed
+test_reminder_delivery (every destination exactly once) ......... 6 passed
+test_memory_duplicates (cleanup dry by default, idempotent) ..... 46 passed
+test_memory_dedupe .............................................. 13 passed
+test_dream (forget archives, mistap destroys nothing) .......... 111 passed
+test_skills (survives sessions, hand edits take effect) ......... 15 passed
+test_m18_reserved_names (refused on both surfaces) ............. 173 passed
+test_tool_visibility (quiet hides diagnostics, keeps replies) ... 37 passed
+test_m21_fk_cascade (fired reminder can be deleted) ............. 10 passed
+test_m22_desktop (interface thread, refusals, slash routing) .... 12 passed
+```
+Full suite: ``899 passed``; ruff clean.
+
+**On scope.** Changed: ``desktop.py`` (formatter separated from the widget,
+labels, entry justification, docstrings), ``.env.example`` (repaired names),
+four new test files. Unchanged on purpose: ``cli.py``, ``dream/*``,
+``Dream.bat``, ``.github/workflows``, ``pyproject.toml``, the phone front
+end. No panels, no settings screen, no theming — deferred as listed. The
+window cannot be opened in this build (no tkinter, no display); everything
+above is proven through the separated formatting layer and the store/model
+machinery, which is exactly what the brief permits and requires.
+
+**What is next.** Panels for reminders/memories/skills, settings screen, dark
+mode, markdown rendering, desktop notifications, tray icon, reading the
+settings file from inside the program — all still deferred.
+
+**What is blocked.** Nothing.
+
 ## M22 — A window you can double-click — SHIPPED
 
 **What shipped.** The owner is not a terminal person; every conversation
