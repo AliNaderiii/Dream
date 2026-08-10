@@ -8,8 +8,15 @@ This module verifies that pyproject.toml configures filterwarnings to treat
 DeprecationWarning as an error by default.
 """
 
-import tomllib
+import sys
 
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    tomllib = None
+    if tomllib is None:
+        import pytest
+        pytest.skip("tomllib requires Python 3.11 or newer")
 
 def test_pyproject_toml_enforces_deprecation_warnings_as_errors():
     """Verify pyproject.toml pytest ini_options contains error::DeprecationWarning."""

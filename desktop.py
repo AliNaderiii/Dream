@@ -123,35 +123,115 @@ def _tag_for_text(text: str) -> str:
 RLM = "\u200f"
 
 
-def format_display_line(text: str) -> str:
-    """Return the display-only form of one transcript line.
+def _braced_group(text: str, start: int) -> tuple[str, int] | None:
+    """Return the balanced braced group at *start* and its end index."""
+    if start >= len(text) or text[start] != "{":
+        return None
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start + 1 : index], index + 1
+    return None
 
-    Persian lines are wrapped in the right-to-left mark at the start and at
-    the end so the line's base direction is RTL and a trailing full stop
-    renders on the left edge, where a Persian sentence ends. Purely Latin
-    lines come back byte-identical and keep reading left to right.
+
+def reduce_markup_for_display(text: str) -> str:
+    """Reduce model markup to readable plain text without changing logical text.
+
+    The window has no Markdown or TeX renderer. This intentionally small,
+    dependency-free reducer keeps the human content while removing syntax the
+    Text widget would otherwise show literally. It is called only from the
+    display formatting path; the reply sent to the store and model is untouched.
     """
-    if _contains_persian(text):
-        return RLM + text + RLM
-    return text
+    # Markdown emphasis and both TeX/Markdown math delimiters are syntax, not
+    # content. A pair of dollar signs is treated as a math delimiter; a lone
+    # dollar remains useful ordinary text (for example, a price).
+    reduced = text.replace("**", "")
+    had_markup = reduced != text
+    for marker in ("\\(", "\\)", "\\[", "\\]", "$$"):
+        if marker in reduced:
+            had_markup = True
+            reduced = reduced.replace(marker, "")
+    if reduced.count("$") % 2 == 0:
+        had_markup = had_markup or "$" in reduced
+        reduced = reduced.replace("$", "")
+
+    # Work from innermost source commands outward. The group parser preserves
+    # all argument letters, digits, and Persian words while making the two
+    # common structured constructs readable as ordinary text.
+    while "\\frac" in reduced:
+        start = reduced.find("\\frac")
+        numerator = _braced_group(reduced, start + len("\\frac"))
+        if numerator is None:
+            break
+        denominator = _braced_group(reduced, numerator[1])
+        if denominator is None:
+            break
+        top = reduce_markup_for_display(numerator[0])
+        bottom = reduce_markup_for_display(denominator[0])
+        reduced = reduced[:start] + f"({top})/({bottom})" + reduced[denominator[1] :]
+
+    while "\\sqrt" in reduced:
+        start = reduced.find("\\sqrt")
+        argument = _braced_group(reduced, start + len("\\sqrt"))
+        if argument is None:
+            break
+        content = reduce_markup_for_display(argument[0])
+        reduced = reduced[:start] + f"√({content})" + reduced[argument[1] :]
+
+    operators = {
+        "\\pm": "±",
+        "\\times": "×",
+        "\\cdot": "·",
+        "\\leq": "≤",
+        "\\le": "≤",
+        "\\geq": "≥",
+        "\\ge": "≥",
+        "\\neq": "≠",
+        "\\ne": "≠",
+        "\\approx": "≈",
+        "\\in": "∈",
+        "\\left": "",
+        "\\right": "",
+    }
+    for command, symbol in operators.items():
+        reduced = reduced.replace(command, symbol)
+
+    # Never show an unrenderable command name. Its braced argument, if any,
+    # stays in the text; braces are TeX grouping punctuation, not prose.
+    import re
+
+    reduced = re.sub(r"\\[A-Za-z]+", "", reduced)
+    reduced = reduced.replace("{", "").replace("}", "")
+    if had_markup:
+        reduced = "\n".join(line for line in reduced.splitlines() if line.strip())
+    return reduced
+
+
+def format_display_line(text: str) -> str:
+    """Return a readable, direction-correct display-only transcript line."""
+    reduced = reduce_markup_for_display(text)
+    if _contains_persian(reduced):
+        return RLM + reduced + RLM
+    return reduced
 
 
 def build_transcript_line(prefix: str, text: str) -> tuple[str, str]:
-    """Return ``(logical, display)`` for one transcript line.
+    """Return raw logical and reduced, direction-correct display forms.
 
-    * ``logical`` is the line as it flows to the store and to the model —
-      it never carries a direction mark.
-    * ``display`` is what the widget inserts — for a Persian *text* it is the
-      logical line wrapped in the right-to-left mark at both ends.
-
-    The decision is made on the message *text*, not on the prefix, so a
-    purely Latin message stays an unmarked left-to-right line even when a
-    Persian speaker label stands in front of it.
+    The logical form is the exact model/store text. Markup reduction happens
+    only for display, before RLM marks are applied, and direction is chosen
+    from message text rather than its speaker label.
     """
     logical = f"{prefix}: {text}" if prefix else text
-    if _contains_persian(text):
-        return logical, RLM + logical + RLM
-    return logical, logical
+    display_text = reduce_markup_for_display(text)
+    display = f"{prefix}: {display_text}" if prefix else display_text
+    if _contains_persian(display_text):
+        return logical, RLM + display + RLM
+    return logical, display
 
 
 # ---------------------------------------------------------------------------

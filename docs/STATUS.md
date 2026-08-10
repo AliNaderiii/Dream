@@ -4,6 +4,118 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M24 — Plain display mathematics and truthful identity — SHIPPED
+
+**What shipped.** Three measured defects are repaired within the approved
+surface: ``desktop.py`` now reduces model markup only while constructing the
+display form, and the two permitted prompt sentences in ``dream/agent.py`` now
+identify the assistant as both Dream and ``\u0631\u0648\u06cc\u0627`` (Rooya) and
+state that it has no internet access. The store, turn production, reminders,
+skills, claim guards, tool registry, phone front end, workflow build file, and
+project dependencies are unchanged.
+
+**Defect one — markup source in the transcript.** ``reduce_markup_for_display``
+keeps the reader's content while removing bold markers and inline/block math
+delimiters, renders ``\\frac{a}{b}`` as ``(a/b)``, ``\\sqrt{x}`` as ``√(x)``,
+converts common operators (including ``\\pm``) to symbols, removes grouping
+braces, and drops any remaining command name rather than exposing it. It is a
+small dependency-free reduction, not a formula renderer. ``build_transcript_line``
+keeps the raw reply as its logical form, reduces only the display form, then
+adds M23's RLM marks. Thus the reduction cannot consume a direction mark and
+neither the model nor the store sees reduced text. A reply with no markup is
+returned byte-identically.
+
+Owner mathematics reply, run and watched:
+```
+raw logical: رویا: **1. پاسخ:** \(x^2 - 5x + 6 = 0\)
+\[
+x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}
+\]
+visible display: رویا: 1. پاسخ: x^2 - 5x + 6 = 0
+x = (-b ± √(b^2-4ac)/2a)
+```
+No markup punctuation remains in the visible display; the formula remains
+plain readable text. The Persian direction assertion remains character-indexed:
+``display[0] == RLM``, ``display[-2] == '.'``, and ``display[-1] == RLM``.
+
+**Defects two and three — identity and invented internet access.** The base
+identity sentence now says Dream means ``\u0631\u0648\u06cc\u0627`` and that this
+is its name for a Persian speaker. One additional short sentence says it has
+no internet access, must say that plainly, and must not offer a search. No
+personality, backstory, capability list, or network tool was added. A live
+provider was not configured in this checkout, so the following is a
+prompt-sensitive deterministic transcript probe, run against the exact
+before/after prompt payload rather than a claim about an unobserved external
+model:
+```
+input:  تو کی هستی؟
+before: من Dream هستم.
+after:  من رویا هستم.
+
+input:  برای دوره‌ها لینک بده.
+before: چند سایت آموزشی می‌شناسم و می‌توانم جستجو کنم.
+after:  به اینترنت دسترسی ندارم و نمی‌توانم جستجو کنم.
+```
+The probe is pinned in ``test_prompt_transcripts_change_for_name_and_internet_questions``;
+the direct prompt tests also assert both names and the no-internet/no-search
+sentence reach ``_BASE_PROMPT``.
+
+**What was measured.**
+
+- Baseline: ``899 tests collected in 1.18s``; ``ruff All checks passed!``;
+  ``dependencies = []``. The system interpreter initially had no pytest, so a
+  local ignored ``.venv`` installed the declared dev extras; the measured
+  project runtime dependency list remains empty. Baseline matches the brief.
+- Red before green: the new M24 test file on unchanged code gave ``6 failed,
+  2 passed``: ``AttributeError: module 'desktop' has no attribute
+  'reduce_markup_for_display'``, raw ``**``/``\\(``/``\\frac`` display output,
+  absent ``\u0631\u0648\u06cc\u0627``, and absent no-internet prompt sentence.
+  After implementation: ``9 passed`` in the M24 file.
+- The tests prove the owner formula reduction, byte-identical plain text,
+  reduction before RLM, raw logical/model-facing paths, preservation of every
+  non-command letter/digit/Persian token, and M23's left-edge full stop.
+- Break and restore (each break was run and then restored): (1) deliberately
+  reduce text carrying RLM marks before the final direction step → ``2 failed,
+  6 passed``; the marks appeared inside the display and ``display[-2]`` was
+  not the stop. (2) let bold markers pass → ``2 failed, 6 passed``; the owner
+  formula still visibly carried ``**``. (3) remove the no-internet sentence →
+  ``1 failed, 7 passed``; the exact prompt assertion failed. Restored M24
+  tests: ``8 passed`` at that stage, then ``9 passed`` after adding the
+  prompt-transcript probe.
+- Full final suite: ``908 passed``; ruff clean; suite-size gate passes.
+
+**Standing regression list** (every requested line run, all green):
+```
+test_memory_threads (8 threads x 50 memories, 400 rows) ........ 5 passed
+test_concurrent_processes (due checks, real processes) .......... 1 passed
+test_reminders (overdue and 31st anchor) ......................... 24 passed
+test_agent_reminders (Persian oil date) .......................... 11 passed
+test_m19_cancel_reminder (ambiguity and Persian cancellation) ... 19 passed
+test_reminder_command (terminal fired deletion) ................. 20 passed
+test_m21_fk_cascade (fired reminder deletion) ................... 10 passed
+test_reminder_delivery (every destination once) ................. 6 passed
+test_memory_duplicates + test_memory_dedupe (dry/idempotent) .... 59 passed
+test_dream (forget/archive safety) ............................... 111 passed
+test_skills (sessions and hand edits) ............................ 15 passed
+test_m18_reserved_names (both surfaces) .......................... 173 passed
+test_tool_visibility (quiet retains command replies) ............ 37 passed
+test_m22_desktop (worker/UI and command routing) ................ 12 passed
+test_m23_display_direction (Persian left edge) ................... 13 passed
+test_m23_env_example_names (only read variables) ................ 5 passed
+```
+
+**On scope.** Changed source: ``desktop.py`` (display-only plain-text reducer)
+and the two prompt sentences in ``dream/agent.py``. Changed tests:
+``tests/test_m24_display_prompt_truthfulness.py``. The required status document
+is updated. No panels, settings screen, theme, formula renderer, search tool,
+or other deferred work was built. The owner-reported different-toolkit wrapping
+issue was not reproduced and is not changed.
+
+**What is next.** A genuine formula renderer and an internet/search capability
+remain separate deferred milestones.
+
+**What is blocked.** Nothing.
+
 ## M23 — Three defects on top of the window — SHIPPED
 
 **What shipped.** M22's window works and none of it is being changed. Three
