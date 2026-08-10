@@ -10,14 +10,14 @@ DeprecationWarning as an error by default.
 
 import sys
 
+import pytest
+
 if sys.version_info >= (3, 11):
     import tomllib
-else:
+else:  # Python 3.10 has no tomllib in the standard library
     tomllib = None
-    if tomllib is None:
-        import pytest
-        pytest.skip("tomllib requires Python 3.11 or newer")
 
+@pytest.mark.skipif(tomllib is None, reason="tomllib requires Python 3.11 or newer")
 def test_pyproject_toml_enforces_deprecation_warnings_as_errors():
     """Verify pyproject.toml pytest ini_options contains error::DeprecationWarning."""
     with open("pyproject.toml", "rb") as f:
