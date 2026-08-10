@@ -842,25 +842,10 @@ class Dream:
             if len(matches) > 1:
                 raise ValueError(_cancel_ambiguous_message(text.strip(), matches))
             victim = matches[0]
-            # Delivery bookkeeping in ``reminder_deliveries`` references the
-            # reminder by foreign key with no ON DELETE CASCADE, so any
-            # reminder that has already fired cannot be deleted at all —
-            # measured on trunk, where ``/unremind`` raises IntegrityError
-            # and the row survives. Removal of the child rows belongs with
-            # removal of the parent: the rows prove a delivery happened, and
-            # the FK's own intent is that they not outlive the reminder.
-            # Until the store grows that cascade (reported finding), the
-            # conversational path removes them through the store's own lock
-            # and connection, immediately before the parent row; ids are
-            # AUTOINCREMENT and never reused, so no future reminder can be
-            # affected by the cleanup. The re-delivery window between the
-            # two commits exists only if the process dies mid-cancellation.
-            with store._lock:
-                store.conn.execute(
-                    "DELETE FROM reminder_deliveries WHERE reminder_id = ?",
-                    (victim.id,),
-                )
-                store.conn.commit()
+            # The store cascades reminder deletion to its delivery rows, so a
+            # fired reminder deletes cleanly and the child rows go with the
+            # parent. No hand cleanup here: that duty belongs under the store,
+            # where every caller gets it.
             if not store.delete_reminder(victim.id):
                 raise ValueError(_cancel_not_found_message(text.strip()))
             return {

@@ -748,12 +748,91 @@ class MemoryStore:
             reminder_id INTEGER NOT NULL, destination TEXT NOT NULL,
             fired_at REAL NOT NULL, delivered_at REAL NOT NULL,
             PRIMARY KEY (reminder_id, destination, fired_at),
-            FOREIGN KEY (reminder_id) REFERENCES reminders(id)
+            FOREIGN KEY (reminder_id) REFERENCES reminders(id) ON DELETE CASCADE
         )""")
         self.conn.execute("""CREATE TABLE IF NOT EXISTS reminder_destinations (
             user_id TEXT NOT NULL, destination TEXT NOT NULL, first_seen REAL NOT NULL,
             PRIMARY KEY (user_id, destination)
         )""")
+        self._migrate_reminder_deliveries_cascade()
+
+    def _migrate_reminder_deliveries_cascade(self) -> None:
+        """Rebuild reminder_deliveries with ON DELETE CASCADE on old databases.
+
+        The delivery table references ``reminders(id)``. Without
+        ``ON DELETE CASCADE`` a reminder that has already fired — and
+        therefore owns delivery rows — cannot be deleted: the foreign key
+        raises ``IntegrityError`` and the row survives. Fresh databases are
+        created with the cascade (see :meth:`_ensure_reminders_table`), so this
+        only rebuilds the table on databases created before the cascade
+        existed.
+
+        Idempotent: the stored schema text is read back and the rebuild runs
+        only when the cascade is absent, so opening the same file twice changes
+        nothing the second time. The rebuild copies every row to a new table,
+        drops the old one, and renames the new one into place, all inside one
+        transaction so an interrupted migration can never lose rows while leaving
+        the new table absent.
+
+        The ``foreign_keys`` pragma is turned off BEFORE the transaction and
+        back on after it commits: SQLite silently ignores the switch while a
+        transaction is open (verified in ``tests/test_m21_fk_cascade.py``), so
+        setting it inside the transaction would leave enforcement on and the
+        rebuild unable to move the child table.
+        """
+        schema = self.conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='reminder_deliveries'"
+        ).fetchone()
+        if schema is None or not schema[0]:
+            return  # table not created yet; nothing to migrate
+        if "ON DELETE CASCADE" in schema[0].upper():
+            return  # already cascades — idempotent, a no-op second open
+        # Commit any pending transaction from the schema-setup DDL before
+        # touching the pragma: PRAGMA foreign_keys is a no-op inside a
+        # transaction (trap two), and _ensure_reminders_table may have left an
+        # open implicit transaction. Committing first guarantees the switch is
+        # applied outside any transaction.
+        self.conn.commit()
+        # Turn enforcement off before opening the transaction. See trap two:
+        # the pragma is a no-op inside a transaction, so it MUST go here.
+        self.conn.execute("PRAGMA foreign_keys = OFF")
+        # Read it back and prove the switch took effect: if this pragma were
+        # (mis)placed inside the transaction, SQLite would silently ignore it
+        # and the read-back would still be 1 — the rebuild would then proceed
+        # under enforcement and could fail loudly on a schema it cannot move.
+        fk_off = self.conn.execute("PRAGMA foreign_keys").fetchone()[0]
+        if fk_off != 0:
+            raise RuntimeError(
+                "could not disable foreign key enforcement before rebuilding "
+                "reminder_deliveries: the PRAGMA foreign_keys switch is a no-op "
+                "inside a transaction, so it must be set before BEGIN"
+            )
+        try:
+            self.conn.execute("BEGIN IMMEDIATE")
+            self.conn.execute(
+                """CREATE TABLE reminder_deliveries_new (
+                    reminder_id INTEGER NOT NULL, destination TEXT NOT NULL,
+                    fired_at REAL NOT NULL, delivered_at REAL NOT NULL,
+                    PRIMARY KEY (reminder_id, destination, fired_at),
+                    FOREIGN KEY (reminder_id) REFERENCES reminders(id) ON DELETE CASCADE
+                )"""
+            )
+            self.conn.execute(
+                """INSERT INTO reminder_deliveries_new
+                       (reminder_id, destination, fired_at, delivered_at)
+                   SELECT reminder_id, destination, fired_at, delivered_at
+                   FROM reminder_deliveries"""
+            )
+            self.conn.execute("DROP TABLE reminder_deliveries")
+            self.conn.execute(
+                "ALTER TABLE reminder_deliveries_new RENAME TO reminder_deliveries"
+            )
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+        finally:
+            self.conn.execute("PRAGMA foreign_keys = ON")
 
     # -- lifecycle ---------------------------------------------------------
 
