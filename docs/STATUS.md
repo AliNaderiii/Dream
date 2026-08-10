@@ -4,6 +4,144 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M21 — The FK cascade: a fired reminder can finally be deleted — SHIPPED
+
+**What shipped.** M19 left a measured, reported defect undeleted: the delivery
+table ``reminder_deliveries`` references ``reminders(id)`` with no
+``ON DELETE CASCADE``, and the store turns foreign key enforcement on, so a
+reminder that has already fired — and therefore owns delivery rows — cannot be
+deleted at all. Reproduced on unmodified merged trunk with the real store
+class: ``store.delete_reminder`` raises ``IntegrityError: FOREIGN KEY
+constraint failed`` and the row survives; the shipped ``/unremind`` command
+raises the same and the conversational path worked around it by hand-deleting
+the child rows immediately before the parent. That split was the shape of the
+bug — one caller patched, the other not, the next caller broken again — and
+the fix belongs under the store, where every caller gets it. This milestone
+adds the cascade. Two changes to ``dream/memory.py``: the ``CREATE TABLE``
+now carries ``ON DELETE CASCADE`` (so fresh databases are correct on first
+open), and a migration ``_migrate_reminder_deliveries_cascade`` rebuilds the
+existing table on databases created before the cascade existed — read the
+stored schema text, and if the cascade is absent, create the new table, copy
+every row, drop the old one, rename the new one into place, inside one
+transaction. The migration is idempotent (a second open changes nothing) and
+preserves every delivery row, counted before and after. The agent's
+``cancel_reminder`` workaround is removed; the store now owns child removal,
+and conversational cancellation still works.
+
+**The two traps, both measured, both avoided.** The reviewer measured both
+before writing the brief; I reproduced both on the merged trunk before
+designing the fix.
+
+*Trap one — changing the ``CREATE TABLE`` fixes nothing on the owner's
+database.* The statement is guarded by ``IF NOT EXISTS``; on a database where
+the table already exists the new text is never applied. Measured: adding
+``ON DELETE CASCADE`` to the ``CREATE`` and reopening an existing database
+leaves the cascade absent (``CASCADE present afterwards?  False``) and the
+delete still fails. So the ``CREATE`` change is necessary for new databases
+and not sufficient for old ones; the migration does the repair. Verified:
+an old database (simulated by rebuilding the table without the cascade) gains
+the cascade on the next open, read back from the stored schema text.
+
+*Trap two — ``PRAGMA foreign_keys`` inside a transaction is ignored.* SQLite
+silently refuses the switch while a transaction is open and reports no error.
+Measured: ``BEGIN; PRAGMA foreign_keys OFF; read it back`` returns ``1`` (the
+switch did nothing); the same pragma outside a transaction returns ``0``. So
+the order matters and there is no error to tell you that you got it wrong. The
+migration sets the pragma before ``BEGIN`` and turns it back on after
+``COMMIT``, and reads it back after setting it off: if the read-back is not
+``0`` the migration raises ``RuntimeError`` rather than rebuild under
+enforcement. The pragma read-back values, pasted: baseline ``1``; outside txn
+after OFF ``0``; outside txn after ON ``1``; inside txn after OFF ``1``
+(ignored — trap two); after commit ``1``.
+
+**What was measured.**
+
+- Baseline before: `849 passed in 24.54s`; ruff `All checks passed!` — matches
+  the brief exactly.
+- After: `858 passed` (+9); ruff `All checks passed!` over the whole
+  repository, no path argument.
+- Red before green: the new ``tests/test_m21_fk_cascade.py` ran against
+  unchanged source first — **9 failed, 0 passed**, the messages naming the
+  problem (``IntegrityError: FOREIGN KEY constraint failed``; the old schema
+  lacking ``ON DELETE CASCADE``; the agent workaround still present). After:
+  9 passed (a 10th, the pragma read-back proof, added when trap two was
+  pinned).
+- Reproduction on trunk (pasted):
+  ```
+  created reminder id = 1
+  fired count = 1
+  delivery rows = 1
+  calling delete_reminder
+  CRASH: IntegrityError - FOREIGN KEY constraint failed
+  reminder still on disk = 1
+  CASCADE present afterwards? False
+  ```
+- Trap one proof (pasted): re-ran the ``CREATE`` with cascade on an existing
+  database; ``CASCADE present afterwards? False``; delete still fails.
+- Trap two proof (pasted): ``BEGIN; PRAGMA foreign_keys OFF; read back = 1``
+  (ignored); outside txn ``= 0`` (worked).
+- Fired reminder deleted through the store: parent gone, deliveries ``1 ->
+  0``, no residue.
+- Terminal ``/unremind`` on a fired reminder: succeeds, says ``deleted
+  permanently``; deliveries cascaded to ``0``.
+- Old database gains the cascade on open (schema text read back carries
+  ``ON DELETE CASCADE``); rows preserved; delete then works.
+- Rows preserved across the migration, counted before/after (two reminders,
+  two destinations each: ``{a:2, b:2}`` before and after).
+- ``PRAGMA foreign_key_check`` clean before and after the cascaded delete.
+- Opening the same file twice is a no-op the second time (schema and row
+  counts unchanged on the second open).
+- Deleting one reminder leaves another's delivery row alone (isolation:
+  ``a:1->0``, ``b:1`` stays).
+- Agent workaround removed: ``inspect.getsource`` of
+  ``Dream._register_reminder_tools`` no longer contains
+  ``reminder_deliveries`` or a raw ``DELETE FROM reminder``; conversational
+  cancel of a fired reminder still succeeds and cascades the deliveries.
+- Break and restore, every break verified to remove the behaviour before the
+  red was recorded:
+  (1) cascade removed from the migration's ``CREATE`` → 4 failed
+      (``IntegrityError`` / cascade absent) → restored 9 passed;
+  (2) row copy skipped during the rebuild → 3 failed (rows lost,
+      ``assert 0 == 1``) → restored;
+  (3) pragma moved inside the transaction instead of before it → 4 failed
+      loudly (``RuntimeError: ... no-op inside a transaction`` — trap two
+      caught by the read-back) → restored.
+- Standing regression list, every line run (pasted below): all green.
+
+**On scope.** Source diff ``dream/memory.py`` (+~75: the ``CREATE`` cascade,
+the migration, and the read-back guard — ~45 executable logic, the rest
+docstring/comments) and ``dream/agent.py`` (−15: the workaround block
+removed, ~3 executable lines net). Well inside budget. No change to the
+build file under ``.github/workflows`` (M20's wall does not recur), the phone
+front end, the skills subsystem, or the claim guards. The delete function in
+``dream/reminders.py`` is unchanged — the cascade is enforced by the store's
+schema, so ``delete_reminder`` needs no hand edit and every caller (store,
+agent, terminal) gets the behaviour for free.
+
+**Standing regression list** (every line run, all green):
+```
+test_reminders (several overdue->1, 31->short month) ................ 7 passed
+test_reminder_delivery (every destination, one-off second dest) ..... 7 passed
+test_concurrent_processes (concurrent due) ........................... 1 passed
+test_agent_reminders (Persian oil question date) ..................... 11 passed
+test_m19_cancel_reminder (ambiguous/cancel/removes one, Persian) .... 19 passed
+test_reminder_command (delete path, /unremind) ...................... 20 passed
+test_memory_threads (8x50, 400 rows) ................................ 1 passed
+test_memory_duplicates + dedupe (dry/idempotent) ..................... 10 passed
+test_dream (forget archive/mistap) ................................... 2 passed
+test_m21_fk_cascade (new) ........................................... 10 passed
+```
+Full suite: 858 passed in 24.58s; ruff ``All checks passed!``; suite count
+gate ``858 tests collected (minimum required: 652)``.
+
+**What is next.** Rescheduling a reminder (shares the M19 identification
+seam, argued deferred), the store-level reminder archive + reactivation
+surface (reported in M19), the store-side reminder listing with identifiers
+for the read-back tool, ``expose_tools``, long listings, web search.
+
+**What is blocked.** Nothing.
+
+
 ## M19 — Taking a reminder back by asking — SHIPPED
 
 **What shipped.** The owner can take a reminder back in conversation, in
