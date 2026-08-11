@@ -17,6 +17,21 @@ skill name) and supports select / delete after confirmation / edit via form
 / create via same form. After any change the affected list redraws from the
 store, never from a cached copy of what was clicked.
 
+M26 repairs two defects that appeared only with real rows:
+
+* Long rows are reachable. A memory row is longer than the list is wide;
+  the Listbox does not wrap and draws one line per item. Remedy: a
+  horizontal scrollbar on every list (xscrollcommand connects it,
+  ``lb.xview`` is what it drives — the honest fix for the widget), plus a
+  wrap-capable detail line under the memories list showing the full text of
+  the selected row (kinder for reading).
+* The duplicate cleanup is wired. The store's ``cleanup_duplicates``
+  already existed with a dry-run default; the window now has a control near
+  the memories list. The first pass is always dry, the report (how many
+  pairs, which rows) is shown to the owner, and nothing is removed until
+  the owner accepts — DATA ENGINEER veto. After acceptance the memories
+  list redraws from the store.
+
 Threading shape (DESKTOP ENGINEER veto):
   * The interface thread (tkinter mainloop) never calls Dream.run directly.
   * A single worker thread calls Dream.run (which may take many seconds).
@@ -298,6 +313,19 @@ def format_memory_panel_line(memory) -> str:
     return format_display_line(raw)
 
 
+def format_memory_detail_text(memory) -> str:
+    """Full text of one memory for the wrap-capable detail line (M26).
+
+    A memory row can be longer than the list is wide; the Listbox draws one
+    line per item and does not wrap, so even with the sideways bar the tail
+    of a long row is only reachable by scrolling. The detail line shows the
+    same full row in a Text widget that wraps — kinder for reading. Same
+    direction rule as every other display row: Persian keeps the RLM marks
+    at both ends; a Latin row is byte-identical.
+    """
+    return format_memory_panel_line(memory)
+
+
 def format_skill_panel_line(skill) -> str:
     """Format one skill row: name, direction-correct."""
     return format_display_line(skill.name)
@@ -497,6 +525,117 @@ def panel_update_skill(name: str, description: str, steps):
 
 
 # ---------------------------------------------------------------------------
+# Duplicate cleanup (M26) — dry first, report, accept, then apply
+# ---------------------------------------------------------------------------
+# The store's ``cleanup_duplicates(dry_run=True)`` already works and is
+# already tested; the window only wires it. The first pass is always the
+# dry one: nothing is removed and the report names how many duplicate pairs
+# exist and which rows they hold. The report is shown to the owner; nothing
+# is removed until the owner accepts (DATA ENGINEER veto). Every report
+# line goes through ``format_display_line`` so Persian keeps its marks.
+#
+# Gloss: \u062a\u06a9\u0631\u0627\u0631\u06cc \u06cc\u0627\u0641\u062a
+# \u0634\u062f: {merged} \u062c\u0641\u062a \u0627\u0632 {examined}
+# \u062e\u0627\u0637\u0631\u0647 — "duplicates found: N pairs of M memories"
+_CLEANUP_HEADER = (  # noqa: E501
+    "\u062a\u06a9\u0631\u0627\u0631\u06cc \u06cc\u0627\u0641\u062a "
+    "\u0634\u062f: {merged} \u062c\u0641\u062a \u0627\u0632 "
+    "{examined} \u062e\u0627\u0637\u0631\u0647"
+)
+# Gloss: \u062c\u0641\u062a — "pair"
+_CLEANUP_PAIR = "\u062c\u0641\u062a"
+# Gloss: \u0646\u06af\u0647 \u062f\u0627\u0634\u062a\u0647
+# \u0645\u06cc\u200c\u0634\u0648\u062f: — "kept: "
+_CLEANUP_KEPT = "\u0646\u06af\u0647 \u062f\u0627\u0634\u062a\u0647 \u0645\u06cc\u200c\u0634\u0648\u062f: "  # noqa: E501
+# Gloss: \u062d\u0630\u0641 \u0645\u06cc\u200c\u0634\u0648\u062f: — "removed: "
+_CLEANUP_REMOVED = "\u062d\u0630\u0641 \u0645\u06cc\u200c\u0634\u0648\u062f: "  # noqa: E501
+# Gloss: \u062a\u06a9\u0631\u0627\u0631\u06cc \u06cc\u0627\u0641\u062a
+# \u0646\u0634\u062f. — "no duplicates found."
+_CLEANUP_NONE = "\u062a\u06a9\u0631\u0627\u0631\u06cc \u06cc\u0627\u0641\u062a \u0646\u0634\u062f."  # noqa: E501
+# Gloss: \u0628\u0627 \u062a\u0627\u06cc\u06cc\u062f\u060c
+# \u0631\u062f\u06cc\u0641\u200c\u0647\u0627\u06cc \u062a\u06a9\u0631\u0627\u0631\u06cc
+# \u062d\u0630\u0641 \u0648 \u062f\u0631
+# \u0642\u062f\u06cc\u0645\u06cc\u200c\u062a\u0631\u06cc\u0646 \u0631\u062f\u06cc\u0641
+# \u0627\u062f\u063a\u0627\u0645 \u0645\u06cc\u200c\u0634\u0648\u0646\u062f.
+# — "on acceptance the duplicate rows are removed and merged into the oldest"
+_CLEANUP_ACCEPT_NOTE = (  # noqa: E501
+    "\u0628\u0627 \u062a\u0627\u06cc\u06cc\u062f\u060c "
+    "\u0631\u062f\u06cc\u0641\u200c\u0647\u0627\u06cc "
+    "\u062a\u06a9\u0631\u0627\u0631\u06cc \u062d\u0630\u0641 \u0648 \u062f\u0631 "
+    "\u0642\u062f\u06cc\u0645\u06cc\u200c\u062a\u0631\u06cc\u0646 \u0631\u062f\u06cc\u0641 "
+    "\u0627\u062f\u063a\u0627\u0645 \u0645\u06cc\u200c\u0634\u0648\u0646\u062f."
+)
+# Gloss: \u067e\u0627\u06a9\u0633\u0627\u0632\u06cc \u062a\u06a9\u0631\u0627\u0631\u06cc —
+# "duplicate cleanup"
+_CLEANUP_DIALOG_TITLE = (
+    "\u067e\u0627\u06a9\u0633\u0627\u0632\u06cc \u062a\u06a9\u0631\u0627\u0631\u06cc"
+)
+# Gloss: \u0627\u062f\u063a\u0627\u0645 \u06a9\u0646 — "merge" (accept)
+_CLEANUP_ACCEPT_LABEL = "\u0627\u062f\u063a\u0627\u0645 \u06a9\u0646"
+# Gloss: \u0627\u0646\u0635\u0631\u0627\u0641 — "cancel"
+_CLEANUP_CANCEL_LABEL = "\u0627\u0646\u0635\u0631\u0627\u0641"
+# Gloss: \u062a\u0627\u06cc\u06cc\u062f — "OK"
+_CLEANUP_OK_LABEL = "\u062a\u0627\u06cc\u06cc\u062f"
+
+
+def format_cleanup_report_lines(report: dict) -> list[str]:
+    """Human-readable display lines for a duplicate-cleanup report.
+
+    The store's pass returns counts plus ``details`` pairs; the owner needs
+    to see how many pairs were found and which rows each pair holds before
+    accepting anything. Every line goes through ``format_display_line`` so
+    Persian content keeps its direction marks; the store rows themselves
+    never carry a mark.
+    """
+    merged = int(report.get("merged", 0))
+    examined = int(report.get("examined", 0))
+    details = report.get("details", [])
+    lines = [format_display_line(_CLEANUP_HEADER.format(merged=merged, examined=examined))]
+    for index, (_old_id, _new_id, kept, removed) in enumerate(details, start=1):
+        lines.append(format_display_line(f"{_CLEANUP_PAIR} {index}:"))
+        lines.append(format_display_line(f"{_CLEANUP_KEPT}{kept}"))
+        lines.append(format_display_line(f"{_CLEANUP_REMOVED}{removed}"))
+    if merged == 0:
+        lines.append(format_display_line(_CLEANUP_NONE))
+    else:
+        lines.append(format_display_line(_CLEANUP_ACCEPT_NOTE))
+    return lines
+
+
+def _ask_cleanup_accept(report: dict) -> bool:
+    """Default confirmation for the cleanup report (messagebox fallback)."""
+    if messagebox is None:
+        return False
+    return messagebox.askyesno(
+        _CLEANUP_DIALOG_TITLE, "\n".join(format_cleanup_report_lines(report))
+    )
+
+
+def panel_cleanup_memories(store, confirm_fn=None) -> dict | None:
+    """Run the duplicate cleanup behind the DATA ENGINEER veto.
+
+    The first pass is always the dry one: nothing is removed, and the
+    report names how many duplicate pairs exist and which rows they hold.
+    The report is shown to the owner via ``confirm_fn``; the wet pass runs
+    only when the owner accepts. Returns the wet report when accepted, the
+    dry report when refused (nothing removed), or None when the dry pass
+    raised. The window runs the same two-phase contract through the worker
+    (dry op, report dialog, apply op); this helper pins the contract
+    headlessly.
+    """
+    if confirm_fn is None:
+
+        def _default(report: dict) -> bool:  # noqa: ANN001
+            return _ask_cleanup_accept(report)
+
+        confirm_fn = _default
+    dry = store.cleanup_duplicates(dry_run=True)
+    if not confirm_fn(dry):
+        return dry
+    return store.cleanup_duplicates(dry_run=False)
+
+
+# ---------------------------------------------------------------------------
 # Speaker labels (M23) — Persian, so the whole line has one direction
 # ---------------------------------------------------------------------------
 # A Latin label at the start of a right-to-left line is dragged to the far
@@ -611,6 +750,22 @@ class DesktopController:
 
     def request_panel_update_skill(self, name: str, description: str, steps) -> None:
         self._work.put({"op": "update_skill", "name": name, "description": description, "steps": steps})  # noqa: E501
+
+    def request_cleanup_dry(self) -> None:
+        """Ask the worker for the dry duplicate-cleanup pass (removes nothing).
+
+        The first pass is always the dry one; the report comes back and the
+        interface shows it before anything can be removed.
+        """
+        self._work.put({"op": "cleanup_dry"})
+
+    def request_cleanup_apply(self) -> None:
+        """Ask the worker to apply the accepted cleanup (removes only named rows).
+
+        The interface calls this only after the owner accepted the shown
+        report (DATA ENGINEER veto).
+        """
+        self._work.put({"op": "cleanup_apply"})
 
     def poll(self) -> dict | None:
         """Return one result if available, else None. Non-blocking. Interface thread."""
@@ -759,6 +914,19 @@ class DesktopController:
                     skills, _ = _ls3()
                     self._results.put({"kind": "skills_list", "rows": skills})
                     self._results.put({"kind": "panel_op", "op": "update_skill"})
+                elif op == "cleanup_dry":
+                    # DATA ENGINEER veto: the first pass is always dry and
+                    # removes nothing; the report is shown to the owner and
+                    # the apply op runs only after an accepted confirmation.
+                    report = self.dream.store.cleanup_duplicates(dry_run=True)
+                    self._results.put({"kind": "cleanup_report", "report": report})
+                elif op == "cleanup_apply":
+                    report = self.dream.store.cleanup_duplicates(dry_run=False)
+                    rows = self.dream.store.all()
+                    self._results.put({"kind": "memories_list", "rows": rows})
+                    self._results.put(
+                        {"kind": "panel_op", "op": "cleanup_duplicates", "ok": True, "report": report}  # noqa: E501
+                    )
                 else:
                     self._results.put({"kind": "error", "text": f"unknown panel op: {op}"})
             except Exception as exc:  # noqa: BLE001 — defensive
@@ -857,6 +1025,14 @@ class DreamDesktop(tk.Tk if tk is not None else object):  # type: ignore[misc]
             lb.config(yscrollcommand=sb.set)
             lb.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
             sb.pack(side=tk.RIGHT, fill=tk.Y)
+            # M26: sideways bar. A long row must stay on one line (the list
+            # draws one line per item) and the widget does not wrap, so the
+            # honest fix is scrolling the row sideways: xscrollcommand
+            # connects this bar to the list, and the bar drives the list's
+            # xview. Without it the tail of every long row is unreachable.
+            sb_x = tk.Scrollbar(lb_frame, orient=tk.HORIZONTAL, command=lb.xview)
+            lb.config(xscrollcommand=sb_x.set)
+            sb_x.pack(side=tk.BOTTOM, fill=tk.X)
             # Buttons
             btn = tk.Frame(frame)
             btn.pack(fill=tk.X, pady=(4, 0))
@@ -869,10 +1045,23 @@ class DreamDesktop(tk.Tk if tk is not None else object):  # type: ignore[misc]
         tk.Button(rem_btn, text="Delete", command=self._on_delete_reminder, width=6).pack(side=tk.LEFT, padx=2)  # noqa: E501
 
         # Memories panel
-        _, self.memory_listbox, mem_btn = make_panel(self.sidebar, "Memories")
+        mem_frame, self.memory_listbox, mem_btn = make_panel(self.sidebar, "Memories")
         tk.Button(mem_btn, text="New", command=self._on_new_memory, width=6).pack(side=tk.LEFT, padx=2)  # noqa: E501
         tk.Button(mem_btn, text="Edit", command=self._on_edit_memory, width=6).pack(side=tk.LEFT, padx=2)  # noqa: E501
         tk.Button(mem_btn, text="Delete", command=self._on_delete_memory, width=6).pack(side=tk.LEFT, padx=2)  # noqa: E501
+        # M26: the cleanup control lives near the memories list. The store's
+        # cleanup_duplicates already exists; this button wires it — dry pass
+        # first, report shown, nothing removed until the owner accepts.
+        tk.Button(mem_btn, text="Dedupe", command=self._on_dedupe, width=6).pack(side=tk.LEFT, padx=2)  # noqa: E501
+        # M26: detail line — the full text of the selected memory in a
+        # wrap-capable Text. Kinder for reading long rows than scrolling
+        # every one sideways; keeps the direction marks. Gloss:
+        # \u0645\u062a\u0646 \u06a9\u0627\u0645\u0644 — "full text"
+        detail_lf = tk.LabelFrame(mem_frame, text="\u0645\u062a\u0646 \u06a9\u0627\u0645\u0644", padx=4, pady=4)  # noqa: E501
+        detail_lf.pack(fill=tk.X, padx=4, pady=(0, 4))
+        self.memory_detail = tk.Text(detail_lf, height=4, wrap=tk.WORD, state=tk.DISABLED, font=("Tahoma", 9))  # noqa: E501
+        self.memory_detail.pack(fill=tk.BOTH, expand=True)
+        self.memory_listbox.bind("<<ListboxSelect>>", self._on_select_memory)
 
         # Skills panel
         _, self.skill_listbox, skill_btn = make_panel(self.sidebar, "Skills")
@@ -952,6 +1141,7 @@ class DreamDesktop(tk.Tk if tk is not None else object):  # type: ignore[misc]
         self.memory_listbox.delete(0, tk.END)
         for m in self._memory_rows:
             self.memory_listbox.insert(tk.END, format_memory_panel_line(m))
+        self._update_memory_detail()
 
     def _refresh_skills(self, rows) -> None:
         self._skill_rows = list(rows)
@@ -985,6 +1175,67 @@ class DreamDesktop(tk.Tk if tk is not None else object):  # type: ignore[misc]
         if 0 <= idx < len(self._skill_rows):
             return self._skill_rows[idx]
         return None
+
+    # -- M26: detail line for the selected memory ----------------------------
+
+    def _update_memory_detail(self) -> None:
+        """Show the selected memory's full text in the wrap-capable detail.
+
+        The detail line keeps the direction marks (INTERNATIONALISATION
+        veto); only the interface thread touches the widget.
+        """
+        mem = self._selected_memory()
+        self.memory_detail.configure(state=tk.NORMAL)
+        self.memory_detail.delete("1.0", tk.END)
+        if mem is not None:
+            self.memory_detail.insert("1.0", format_memory_detail_text(mem))
+        self.memory_detail.configure(state=tk.DISABLED)
+
+    def _on_select_memory(self, event=None) -> None:  # noqa: ARG002
+        self._update_memory_detail()
+
+    # -- M26: duplicate cleanup (dry first, report, accept) ------------------
+
+    def _on_dedupe(self) -> None:
+        """Start duplicate cleanup. The first pass is always the dry one.
+
+        The worker runs the dry pass and posts the report; the interface
+        shows it and only on the owner's acceptance queues the wet pass.
+        DATA ENGINEER veto: no removal before a shown report and an accepted
+        confirmation.
+        """
+        self.controller.request_cleanup_dry()
+
+    def _show_cleanup_report(self, report: dict) -> None:
+        """Show the dry-run report; nothing is removed unless the owner accepts.
+
+        The report names how many pairs and which rows. With zero pairs
+        there is nothing to accept; otherwise the owner chooses merge or
+        cancel — cancel destroys the dialog and nothing is removed.
+        """
+        if tk is None:
+            return
+        top = tk.Toplevel(self)
+        top.title(_CLEANUP_DIALOG_TITLE)
+        top.geometry("560x380")
+        top.transient(self)
+        top.grab_set()
+        body = tk.Text(top, wrap=tk.WORD, state=tk.DISABLED, font=("Tahoma", 10))
+        body.pack(fill=tk.BOTH, expand=True, padx=8, pady=(8, 4))
+        body.configure(state=tk.NORMAL)
+        for line in format_cleanup_report_lines(report):
+            body.insert(tk.END, line + "\n")
+        body.configure(state=tk.DISABLED)
+        if int(report.get("merged", 0)) == 0:
+            tk.Button(top, text=_CLEANUP_OK_LABEL, command=top.destroy).pack(pady=6)
+            return
+
+        def accept() -> None:  # noqa: ANN202
+            top.destroy()
+            self.controller.request_cleanup_apply()
+
+        tk.Button(top, text=_CLEANUP_ACCEPT_LABEL, command=accept).pack(pady=6)
+        tk.Button(top, text=_CLEANUP_CANCEL_LABEL, command=top.destroy).pack()
 
     # -- delete handlers (confirm first, then queue worker) ------------------
 
@@ -1251,6 +1502,10 @@ class DreamDesktop(tk.Tk if tk is not None else object):  # type: ignore[misc]
                 continue
             if kind == "skills_list":
                 self._refresh_skills(result.get("rows", []))
+                continue
+            if kind == "cleanup_report":
+                # dry pass finished: show the report; the owner decides
+                self._show_cleanup_report(result.get("report", {}))
                 continue
             if kind == "panel_op":
                 # panel operation done; lists already refreshed via the preceding list result

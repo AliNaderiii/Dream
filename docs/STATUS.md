@@ -4,6 +4,142 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M26 — Long rows readable, duplicates cleanable — SHIPPED
+
+**What shipped.** Two defects that appeared only once real rows filled the
+M25 lists, plus the one addition the brief allows (the cleanup control).
+Changed source: `desktop.py` only. The store — including the
+``cleanup_duplicates`` method itself — is untouched; the milestone wires it,
+it does not rewrite it.
+
+**Defect one — rows the owner cannot read, remedy chosen and why
+(DESKTOP ENGINEER).** A memory row is longer than the list is wide; the
+Listbox does not wrap and draws one line per item, and there was no sideways
+bar, so the tail of every long row was unreachable. The row must stay on one
+line, so the two options were a sideways bar or a wrap-capable detail line.
+**Both are built, and why:** the sideways bar is the honest fix for the
+widget itself — `xscrollcommand` connects the bar to the list and the bar
+drives the list's `xview`, so every character of every row becomes reachable
+by any action, in all three lists (the bar lives in the shared panel
+builder). The detail line is the kinder reading fix: the full text of the
+selected memory appears in a wrap-capable Text under the memories list, so
+the owner reads a long row without scrolling it. Neither changes the row
+shape: the list still draws one line per item, and the display line is the
+full row, never a truncation.
+
+**Defect two — the duplicates he cannot clean (DATA ENGINEER veto
+observed).** The store's `cleanup_duplicates(dry_run=True)` already existed,
+tested, and defaulting to dry; nothing in the window mentioned it. The
+window now has a ``Dedupe`` control near the memories list. The first pass
+is always the dry one; the report — how many pairs, and which rows (kept and
+removed content of every pair) — is shown to the owner in a dialog; nothing
+is removed until the owner accepts; after acceptance the memories list
+redraws from the store, never from a cached copy. The flow runs through the
+existing worker bridge (dry op, report dialog on the interface thread,
+apply op), so the interface thread never blocks on the store lock. A
+headless ``panel_cleanup_memories(store, confirm_fn)`` pins the same
+two-phase contract: dry first, report to ``confirm_fn``, wet only on
+acceptance.
+
+**What was measured.**
+
+- Baseline before: ``931 tests collected``; ``931 passed in 27.31s``; ``ruff
+  All checks passed!``; ``dependencies = []`` — matches the brief.
+- After: ``947 passed in 27.05s`` (+16); ``ruff All checks passed!``; zero
+  runtime dependencies; suite-size gate passes (minimum 652).
+- Red before green: ``tests/test_m26_panels_reachability_cleanup.py`` run
+  against unchanged source first — ``13 failed, 3 passed``. The failures
+  name the defects: ``AttributeError: module 'desktop' has no attribute
+  'format_cleanup_report_lines'`` / ``'format_memory_detail_text'``, the
+  source pins for the missing sideways bar and cleanup ops, and the
+  cleanup-flow behaviour tests. The 3 that passed unchanged are the honest
+  baseline pins: the 90-character row measurement, the M25 display line
+  already carrying the full row, and the reminder-ordering check.
+- The owner's long row, pasted with its evidence (run and watched):
+  row length ``90`` characters; ``display line length`` 102 (row + kind
+  label + two RLM marks); every character of the row is in the display line
+  the list inserts (``True``) and in the detail line (``True``); the
+  sideways bar is wired (``xscrollcommand=sb_x.set`` present in
+  ``_build_widgets``). A short Latin row is byte-identical
+  (``line == "semantic: hello world"``, no mark); a short Persian row keeps
+  the marks.
+- Direction, proven by character index exactly as M23/M25: a Persian memory
+  row in the detail line has ``detail[0] == RLM`` and ``detail[-1] == RLM``;
+  the logical text between the marks is byte-identical to ``kind: content``;
+  the stored row carries no RLM. The cleanup report lines all carry the
+  marks at index 0 and -1, and after an accepted cleanup the stored rows and
+  every model-facing message carry no RLM (capturing-backend probe).
+- Cleanup, refused at the confirmation: rows ``5 -> 5`` (nothing removed),
+  the report names ``merged: 2`` with pairs ``[(2, 1), (3, 1)]`` and shows
+  kept/removed content of every pair in Persian. Accepted: rows ``5 -> 3``,
+  remaining ids ``[1, 4, 5]`` — the removed ids are exactly the ids the
+  report named, the two unique rows are untouched, the kept row is the
+  report's kept content.
+- The list redraws from the store after the accepted cleanup: the apply op
+  posts a fresh ``memories_list`` whose row ids equal ``store.all()`` ids.
+- Break and restore (each break verified to remove the behaviour, failure
+  pasted, restored, green re-pasted):
+  (1) ``cleanup_dry`` op changed to run wet on the first pass →
+  ``2 failed``: the source pin and ``AssertionError: dry pass changed
+  nothing`` ``assert 3 == 5`` → restored 16 passed;
+  (2) confirmation bypassed in ``panel_cleanup_memories`` →
+  ``3 failed``: ``AssertionError: wet pass must not run when refused:
+  [True, False]`` → restored 16 passed;
+  (3) sideways bar code dropped (the first attempt removed the lines but
+  the pin matched comment text, so the break silently passed — the pin was
+  tightened to the actual code ``xscrollcommand=sb_x.set`` and
+  ``orient=tk.HORIZONTAL, command=lb.xview``, then the break was re-run and
+  failed ``1 failed``) → restored 16 passed;
+  (4) detail line widget dropped → ``1 failed``
+  (``test_detail_line_shows_full_text_of_selected_memory``) → restored
+  16 passed.
+- Ordering: checked, found correct, NOT changed. Four reminders inserted out
+  of order (1405-07-18, 1405-05-21, 1405-08-18, 1405-06-09) list ascending:
+  ``1405-05-21, 1405-06-09, 1405-07-18, 1405-08-18``. The store returns them
+  by due date and the screen matches the store; a new test pins the order.
+
+**Standing regression list** (every line run, all green):
+
+```
+test_memory_threads (8 threads x 50 memories, 400 rows) ........ 5 passed
+test_concurrent_processes (due checks, real processes) .......... 1 passed
+test_reminders (overdue and 31st anchor) ......................... 24 passed
+test_agent_reminders (Persian oil question, stored date) ........ 11 passed
+test_m19_cancel_reminder (ambiguity and Persian cancellation) ... 19 passed
+test_reminder_command (terminal fired deletion) ................. 20 passed
+test_m21_fk_cascade (fired reminder deletion) ................... 10 passed
+test_reminder_delivery (every destination once) ................. 6 passed
+test_memory_duplicates + test_memory_dedupe (dry/idempotent) .... 59 passed
+test_dream (forget/archive safety) ............................... 111 passed
+test_skills (sessions and hand edits take effect) ............ 15 passed
+test_m18_reserved_names (both surfaces) .......................... 173 passed
+test_tool_visibility (quiet retains command replies) ............ 37 passed
+test_m22_desktop (worker/UI and command routing) ................ 12 passed
+test_m23_display_direction (Persian left edge) ................... 13 passed
+test_m23_env_example_names (only read variables) ................ 5 passed
+test_m24_display_prompt_truthfulness (formula) ................... 9 passed
+test_m25_panels (store update, panel CRUD, direction, skips) .... 23 passed
+test_m26_panels_reachability_cleanup (reachability, cleanup) .... 16 passed
+```
+
+**On scope.** Changed source: ``desktop.py`` only (sideways bar in the
+shared panel builder, memory detail line, Dedupe control + report dialog +
+two worker ops + ``panel_cleanup_memories`` + report formatter, all Persian
+strings backslash-u escaped per the enforced convention). Changed tests:
+``tests/test_m26_panels_reachability_cleanup.py`` (16 tests). Required
+status document updated. Unchanged on purpose: ``dream/memory.py``
+including ``cleanup_duplicates`` itself (wired, not rewritten), how a turn
+is produced, the prompt, the reminders scheduler, the skills matcher, the
+claim guards, the phone front end, the build file under
+``.github/workflows``, the project dependency list. No settings screen,
+theming, notifications, search tool, new panel, or sorting controls
+(PROJECT MANAGER veto).
+
+**What is next.** Settings screen, dark mode, desktop notifications, tray
+icon, search inside a panel, and the search tool remain deferred.
+
+**What is blocked.** Nothing.
+
 ## M25 — Panels the owner can click — SHIPPED
 
 **What shipped.** The typed-command wall is removed. The desktop window now
