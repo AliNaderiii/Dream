@@ -20,7 +20,10 @@ from __future__ import annotations
 
 import multiprocessing
 import sqlite3
+import sys
 import time
+
+import pytest
 
 from dream.memory import MemoryStore
 
@@ -50,6 +53,10 @@ def _due_check_worker(db_path, barrier, result_queue):
         store.close()
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="fork start method exists only on Unix (multiprocessing.get_context('fork') not available on Windows)",  # noqa: E501
+)
 def test_two_real_processes_hitting_the_due_check_at_once_are_never_refused(tmp_path):
     """Thirty barrier trials: zero raises, and the reminder fires exactly once.
 

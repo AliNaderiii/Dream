@@ -4,6 +4,156 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M25 — Panels the owner can click — SHIPPED
+
+**What shipped.** The typed-command wall is removed. The desktop window now
+shows an always-open sidebar beside the conversation. The sidebar holds three
+lists the owner asked for — reminders (text + Jalali due), memories (kind +
+content), skills (name) — with a sensible share of the width (320 px sidebar,
+PanedWindow, draggable divider if the toolkit makes it cheap). Each list
+supports by clicking: select one row, delete the selected row after a
+confirmation the person must accept (DATA ENGINEER veto), edit the selected row
+opening a small form prefilled with current values, and create a new row
+opening the same form empty. After any change the affected list redraws from
+the store, never from a cached copy of what was clicked. The store gains two
+update methods that keep the identifier: ``MemoryStore.update_reminder`` and
+``MemoryStore.update_memory`` in ``dream/memory.py``. Deleting and re-creating
+a reminder is NOT an edit — the identifier changes and delivery history is
+lost — so the edit path calls ``update_reminder`` and preserves every
+``reminder_deliveries`` row; a probe with a fired repeating reminder (delivery
+row 1 before edit, 1 after) proves it. Skill editing needs no new function:
+overwriting an existing name with ``save_skill`` replaces the file. The two
+platform-bound tests that were noisy on the owner's Windows machine now skip
+on that platform with a reason string naming why, and the skip is on the test
+itself (M24 lesson: skip at file load breaks collection).
+
+**Threading — decided, not guessed.** Listing is usually fast, but the store
+shares one connection behind an RLock and a listing can queue behind a running
+turn. The decision: panel reads and writes are routed through the existing
+worker bridge (the same ``queue.Queue`` + ``threading.Thread`` + ``after``
+shape M22 established), not run on the interface thread. Measured: listing
+400 rows while the worker holds the lock takes 12 ms median, 28 ms p95; a
+direct call on the interface thread would freeze the window for that duration
+(>16 ms is a dropped frame). Routing through the worker keeps the window
+responsive; the interface polls the result queue and updates widgets via
+``after(100)``. ``DesktopController`` source contains no ``tkinter``,
+``Listbox`` or ``Widget``; only ``DreamDesktop`` (interface thread, via
+``after``) touches ``Listbox``/``Text``/``.insert``. Proven by source
+inspection and by the standing M22 test that the controller never touches a
+widget.
+
+**Direction — same mark as transcript.** Panel rows hold Persian, so they must
+read right to left. Alignment is not direction: Listbox on Tk has no
+paragraph-direction option either — a list item left-aligned in its box is still
+an LTR container. The remedy is the same as M23: wrap each display row in
+RLM U+200F at both ends via ``format_display_line`` (which first reduces markup
+then wraps if ``_contains_persian``). The mark is display-only; the store and
+the model never see it. Lesser harm, chosen deliberately: Listbox items stay
+left-aligned in the box, but their internal bidi is correct (trailing full stop
+lands on the left edge of the text, digits keep internal logical order). A
+right-aligned Listbox would need a Text per row and costs more; the cost of
+left-aligned boxes is less than a wrong-side stop for every Persian sentence.
+Proven by character index, exactly as M23: ``line[0] == RLM`` and
+``line[-1] == RLM`` for a reminder, a memory, and a skill row holding Persian;
+``line[1:-1]`` is byte-identical to the logical text plus Jalali date; the
+stored text and every model-facing message carries no ``RLM``.
+
+**The fourth item — test repair.** Two tests failed on the owner's Windows
+and passed in CI:
+
+* ``test_concurrent_processes.test_two_real_processes_hitting_the_due_check_at_once_are_never_refused``
+  calls ``multiprocessing.get_context("fork")`` — ``fork`` exists only on Unix.
+* ``test_m13_phone_policy_guards.test_terminal_stats_keeps_the_filesystem_path``
+  asserts the raw ``tmp_path`` string appears inside the JSON report — on
+  Windows the separator ``\`` is escaped to ``\\`` when JSON-encoded, so the
+  raw path is not found.
+
+Both now carry ``@pytest.mark.skipif(sys.platform == "win32", reason=...)``
+on the test itself (not at module load), naming the platform reason. On Linux
+they run and pass; on Windows they skip instead of failing.
+
+**What was measured.**
+
+- Baseline before: ``908 tests collected in 1.02s``; ``ruff All checks passed!``;
+  ``dependencies = []`` — matches the brief.
+- After: ``931 passed in 28.71s`` (+23: 2 store-update, 9 panel-format, 8
+  CRUD, 3 desktop-shape, 1 platform-skip meta); ``ruff All checks passed!``;
+  zero runtime dependencies; suite-size gate passes (minimum 652).
+- Red before green: the new ``tests/test_m25_panels.py`` run against unchanged
+  source gave ``20 failed, 3 passed`` — ``AttributeError: module 'desktop' has
+  no attribute 'get_skill_panel_rows'``, ``'panel_update_reminder'``,
+  ``'update_reminder'``, missing sidebar/``PanedWindow``, missing worker
+  routing and RLM in panel file. After implementation: ``23 passed``. One
+  direction-documentation test initially failed on the literal ``RLM in file``
+  check because the file holds the escape ``\\u200f``, not the character —
+  corrected to check ``RLM`` constant name and ``\\u200f``, then ``23 passed``.
+- The tests prove each list renders the rows the store holds (2+2+2 rows),
+  deleting the selected row removes exactly one row (1 -> 0, the other stays),
+  a delete refused at confirmation removes nothing (1 -> 1), editing a reminder
+  keeps its identifier (id 1 -> 1), editing a memory keeps its identifier,
+  creating a row appears in the next redraw (0 -> 1, format_jalali in row),
+  a Persian row carries the direction mark at index 0 and -1, and the store
+  and model never see the mark.
+- Break and restore (each break was run and then restored, failure pasted):
+
+  (1) let confirmation return true without asking (``if not confirm_fn: pass``
+  in ``panel_delete_reminder``) → ``test_delete_refused_at_confirmation_removes_nothing``
+  ``AssertionError: assert True is False`` (1 failed) → restored 1 passed;
+
+  (2) make edit delete and re-create instead of updating
+  (``delete_reminder`` + ``add_reminder`` in ``panel_update_reminder``) →
+  ``test_edit_reminder_keeps_identifier_via_panel`` ``AssertionError: assert 2 == 1``
+  (id changed, delivery lost) → restored 1 passed;
+
+  (3) drop RLM from panel rows (``format_reminder_panel_line`` returning
+  ``reduce_markup_for_display`` without ``format_display_line``) →
+  ``3 failed``: ``assert 's' == '\u200f'``, ``assert 'ت' == '\u200f'`` (no mark) →
+  restored 3 passed.
+
+- Full final suite: ``931 passed``; ruff clean.
+- Dependencies: ``[]`` still after (measured ``dependencies = []``).
+
+**Standing regression list** (every line run, all green):
+
+```
+test_memory_threads (8 threads x 50 memories, 400 rows) ........ 5 passed
+test_concurrent_processes (due checks, real processes) .......... 1 passed
+test_reminders (overdue and 31st anchor) ......................... 24 passed
+test_agent_reminders (Persian oil question, stored date) ........ 11 passed
+test_m19_cancel_reminder (ambiguity and Persian cancellation) ... 19 passed
+test_reminder_command (terminal fired deletion) ................. 20 passed
+test_m21_fk_cascade (fired reminder deletion) ................... 10 passed
+test_reminder_delivery (every destination once) ................. 6 passed
+test_memory_duplicates + test_memory_dedupe (dry/idempotent) .... 59 passed
+test_dream (forget/archive safety) ............................... 111 passed
+test_skills (sessions and hand edits take effect) ............ 15 passed
+test_m18_reserved_names (both surfaces) .......................... 173 passed
+test_tool_visibility (quiet retains command replies) ............ 37 passed
+test_m22_desktop (worker/UI and command routing) ................ 12 passed
+test_m23_display_direction (Persian left edge) ................... 13 passed
+test_m23_env_example_names (only read variables) ................ 5 passed
+test_m24_display_prompt_truthfulness (formula) ................... 9 passed
+test_m25_panels (store update, panel CRUD, direction, skips) .... 23 passed
+```
+
+**On scope.** Changed source: ``desktop.py`` (sidebar, PanedWindow, Listbox
+x3, format helpers, panel CRUD via worker, forms, docstrings) and
+``dream/memory.py`` (two update methods, sentinel, ~80 executable logic, rest
+comments). Changed tests: ``tests/test_m25_panels.py`` (23 tests) and two
+skip annotations in ``tests/test_concurrent_processes.py`` and
+``tests/test_m13_phone_policy_guards.py`` (only adding ``@pytest.mark.skipif``
+on the test). Required status document updated. Unchanged on purpose: how a
+turn is produced, the prompt, the reminders scheduler, the skills matcher,
+the claim guards, the phone front end, the build file under
+``.github/workflows``, the project dependency list. No settings screen,
+theming, notifications, tray icon, search inside a panel, or search tool
+(``PROJECT MANAGER`` veto).
+
+**What is next.** Settings screen, dark mode, desktop notifications, tray
+icon, search inside a panel, and the search tool remain deferred.
+
+**What is blocked.** Nothing.
+
 ## M24 — Plain display mathematics and truthful identity — SHIPPED
 
 **What shipped.** Three measured defects are repaired within the approved

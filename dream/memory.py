@@ -36,6 +36,9 @@ __all__ = [
 
 KINDS: tuple[str, ...] = ("semantic", "episodic", "procedural")
 
+# Sentinel for update methods: distinguishes “not provided” from explicit None
+_MISSING = object()
+
 # A 0.80 threshold requires the shared leading subject and predicate to cover
 # four fifths of the longer fact. It catches a one-token value swap in a
 # five-token statement while leaving the riskier three-of-four case untouched.
@@ -1310,6 +1313,163 @@ class MemoryStore:
         from dream.reminders import delete_reminder as _delete
 
         return _delete(self, reminder_id)
+
+    def update_reminder(
+        self,
+        reminder_id: int,
+        *,
+        text: str | None = _MISSING,  # type: ignore[assignment]
+        due_at: float | None = _MISSING,  # type: ignore[assignment]
+        repeat_days: int | None = _MISSING,  # type: ignore[assignment]
+        repeat_months: int | None = _MISSING,  # type: ignore[assignment]
+    ):
+        """Update a reminder in place, keeping its identifier.
+
+        An edit must keep the same row so delivery history is not lost.
+        Deleting and re-creating would change the identifier and drop
+        ``reminder_deliveries`` rows. This method updates the existing row
+        and preserves every delivery row.
+
+        Only supplied fields are changed; others keep their stored value.
+        Validates the same constraints as :func:`dream.reminders.add_reminder`.
+
+        Returns the updated :class:`dream.reminders.Reminder` or ``None`` when
+        no row with that id exists for this user.
+        """
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT * FROM reminders WHERE user_id = ? AND id = ?",
+                (self.user_id, reminder_id),
+            ).fetchone()
+            if row is None:
+                return None
+            # Determine new values
+            new_text: str
+            if text is _MISSING:
+                new_text = str(row["text"])
+            else:
+                if not isinstance(text, str):
+                    raise ValueError("text must be a string")
+                new_text = text.strip()
+                if not new_text:
+                    raise ValueError("text must not be empty")
+            new_due = float(due_at) if due_at is not _MISSING else float(row["due_at"])
+            new_repeat_days = repeat_days if repeat_days is not _MISSING else row["repeat_days"]
+            if new_repeat_days is not None:
+                new_repeat_days = int(new_repeat_days)  # type: ignore[arg-type]
+            new_repeat_months = (
+                repeat_months if repeat_months is not _MISSING else row["repeat_months"]
+            )
+            if new_repeat_months is not None:
+                new_repeat_months = int(new_repeat_months)  # type: ignore[arg-type]
+            if new_repeat_days == 0 or new_repeat_months == 0:
+                raise ValueError("repeat must be non-zero")
+            if new_repeat_days is not None and new_repeat_months is not None:
+                raise ValueError("repeat must be either days or months, not both")
+            # Anchor recomputation: when due_at changes or monthly repeat changes,
+            # recompute the Jalali anchor day from the new due timestamp.
+            anchor = row["anchor_day"]
+            need_anchor = (
+                due_at is not _MISSING
+                or (repeat_months is not _MISSING and repeat_months != row["repeat_months"])
+            )
+            if need_anchor and new_repeat_months is not None:
+                try:
+                    import datetime
+
+                    from dream.jalali import gregorian_to_jalali
+
+                    dt = datetime.datetime.fromtimestamp(new_due, tz=datetime.timezone.utc)
+                    _, _, jd = gregorian_to_jalali(dt.year, dt.month, dt.day)
+                    anchor = jd
+                except Exception:
+                    pass
+            self.conn.execute(
+                "UPDATE reminders SET text = ?, due_at = ?, next_due = ?, "
+                "repeat_days = ?, repeat_months = ?, anchor_day = ? "
+                "WHERE user_id = ? AND id = ?",
+                (
+                    new_text,
+                    float(new_due),
+                    float(new_due),
+                    new_repeat_days,
+                    new_repeat_months,
+                    anchor,
+                    self.user_id,
+                    reminder_id,
+                ),
+            )
+            self.conn.commit()
+            return self.get_reminder(reminder_id)
+
+    def update_memory(
+        self,
+        memory_id: int,
+        *,
+        content: str | None = _MISSING,  # type: ignore[assignment]
+        kind: str | None = _MISSING,  # type: ignore[assignment]
+        tags: Sequence[str] | None = _MISSING,  # type: ignore[assignment]
+        importance: float | None = _MISSING,  # type: ignore[assignment]
+    ):
+        """Update a memory in place, keeping its identifier.
+
+        Deleting and re-creating would change the identifier and lose the
+        ``created_at`` lineage. This method updates the existing row, keeps
+        its ``id`` and ``created_at``, refreshes ``norm`` and the FTS index
+        via the ``UPDATE`` trigger, and bumps ``last_used_at``.
+        """
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT * FROM memories WHERE user_id = ? AND id = ?",
+                (self.user_id, memory_id),
+            ).fetchone()
+            if row is None:
+                return None
+            new_content = content if content is not _MISSING else str(row["content"])  # type: ignore[assignment]
+            if not isinstance(new_content, str):
+                raise ValueError("content must be a string")
+            new_content = new_content.strip()
+            if not new_content:
+                raise ValueError("content must not be empty")
+            new_kind = kind if kind is not _MISSING else str(row["kind"])  # type: ignore[assignment]
+            if new_kind not in KINDS:
+                raise ValueError(f"kind must be one of {KINDS}, got {new_kind!r}")
+            if tags is _MISSING:
+                # keep existing tags as stored list
+                try:
+                    new_tags = json.loads(row["tags"] or "[]")
+                except (TypeError, ValueError):
+                    new_tags = []
+            else:
+                if tags is None:
+                    new_tags = []
+                else:
+                    new_tags = [normalize_fa(t) for t in tags if isinstance(t, str) and t.strip()]
+            if importance is _MISSING:
+                new_importance = float(row["importance"])
+            else:
+                new_importance = float(importance)  # type: ignore[arg-type]
+                if not 0.0 <= new_importance <= 1.0:
+                    # keep as float but allow any [0,1]; storage already does
+                    pass
+            new_norm = normalize_fa(new_content)
+            now = time.time()
+            self.conn.execute(
+                "UPDATE memories SET kind = ?, content = ?, norm = ?, tags = ?, "
+                "importance = ?, last_used_at = ? WHERE user_id = ? AND id = ?",
+                (
+                    new_kind,
+                    new_content,
+                    new_norm,
+                    json.dumps(new_tags, ensure_ascii=False),
+                    float(new_importance),
+                    now,
+                    self.user_id,
+                    memory_id,
+                ),
+            )
+            self.conn.commit()
+            return self.get(memory_id)
 
     def check_due_reminders(self, now: float | None = None, destination: str = "terminal"):
         """Run the due check for one notification destination."""

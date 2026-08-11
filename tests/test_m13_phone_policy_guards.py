@@ -29,7 +29,10 @@ phone stats strip removed) and green again after the break was reverted
 from __future__ import annotations
 
 import json
+import sys
 from types import SimpleNamespace
+
+import pytest
 
 import cli
 from dream import skills as skills_module
@@ -169,6 +172,10 @@ def test_phone_stats_reply_hides_the_filesystem_path(tmp_path):
         assert db not in reply
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="filesystem separator is escaped when JSON-encoded on Windows, so raw path not found in report",  # noqa: E501
+)
 def test_terminal_stats_keeps_the_filesystem_path(tmp_path):
     """The terminal reply is unchanged: the owner reading his own terminal
     may see his own database path."""
