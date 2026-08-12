@@ -1,5 +1,126 @@
 # Status
 
+## M27 — Owner-enabled public web search and page reading — SHIPPED
+
+**What shipped (TOOL ENGINEER).** Two guarded registry tools now provide the
+small, bounded capability the prompt describes: `search_web(query)` calls the
+key-free DuckDuckGo instant-answer endpoint (not a search-result page), returns
+plain readable abstract text plus at most four titled related public links, and
+never returns markup; `read_page(address)` reads one public HTTP(S) page,
+removes markup, and appends `[truncated at 200000 characters]` whenever either
+its readable text or bounded response had to be shortened. Both use the Python
+standard library only: `urllib.request`, `json`, and `html.parser`; runtime
+dependencies remain `[]`. The registry now has 14 tools (the previous 12 plus
+M15/M19 reminder placeholders were already present, and these two are new);
+`search_web` and `read_page` are both `guarded`.
+
+**Boundaries (SECURITY ENGINEER).** Network access is disabled unless
+`DREAM_ALLOW_NETWORK` is one of `1`, `true`, `yes`, or `on`. With it off, both
+tools return the normal Persian result `مالک دسترسی شبکه را فعال نکرده است.`
+before DNS or an opener is touched. Each request uses an explicit 10-second
+hard timeout. Search reads at most 100,000 response bytes; page reads at most
+250,000 response bytes and caps readable output at 200,000 characters. The
+reader asks the response for bounded chunks while reading (`cap + 1` only to
+detect truncation), never after an unbounded read.
+
+A model-selected page address is allowed only for HTTP(S), with no URL
+credentials. Literal and DNS-resolved destinations must all be globally
+routable; private, loopback, link-local, multicast, reserved and unspecified
+addresses are refused, as are `localhost` and `*.localhost`. The custom
+`HTTPRedirectHandler` calls the same validator on each redirect target *before*
+`urllib` follows it; the final `response.geturl()` is validated again. Thus a
+redirect to `127.0.0.1` cannot escape the boundary. Any resolution, address,
+timeout, HTTP, decoding, or empty-result failure is contained and returns the
+short Persian refusal `امکان دریافت اینترنتی نیست.` rather than an exception.
+
+**Prompt correction (PROMPT ENGINEER).** Exactly the obsolete no-internet
+sentence in `_BASE_PROMPT` was replaced. The new one names `DREAM_ALLOW_NETWORK`,
+`search_web`, and `read_page`, says the assistant can search/read when enabled,
+and requires a plain statement when it is off. No personality or capability
+list was added. Deterministic prompt-sensitive transcript probe for the same
+Persian question, run and watched:
+
+```
+question: برای دوره‌ها لینک بده.
+before:   به اینترنت دسترسی ندارم و نمی‌توانم جستجو کنم.
+after:    اگر مالک دسترسی شبکه را فعال کند، می‌توانم جستجو کنم.
+```
+
+**Settings (CONFIGURATION ENGINEER).** `.env.example` now documents exactly the
+name the code reads: `DREAM_ALLOW_NETWORK=true`, explains that it enables only
+the two guarded tools, and says it is off by default. The existing settings
+example scan passes.
+
+**Tests and measured evidence (TEST ENGINEER).** `tests/test_m27_network_tools.py`
+was written first and run against unchanged source: **4 failed, 5 errors**.
+The red named the absent `tools.socket`, missing `search_web` registry entry,
+old prompt assertion, and missing injectable opener. After implementation it
+passes **9 passed in 0.06s**, using only fake DNS and fake response/open
+functions; no test reaches the network. It proves: plain-answer search has no
+markup; page text has no markup and declares its cap/truncation; scheme,
+loopback, and private addresses refuse; redirect-to-loopback raises the
+boundary refusal before following; `URLError` timeout becomes Persian refusal;
+setting-off touches neither DNS nor opener; both risks are guarded; timeout and
+both response caps are exact constants; and the fetching seam is patchable
+while production defaults to the standard-library restricted opener.
+
+**Break and restore.** Every break was verified against code, run, then restored:
+
+```
+NETWORK_TIMEOUT_SECONDS = None
+  -> 1 failed, 6 passed: assert None == 10
+private-literal guard changed to `if False`
+  -> 1 failed, 2 passed: loopback reached the fake opener (TypeError), proving
+     the private-address behaviour had actually been removed
+_network_enabled() changed to `return True`
+  -> 1 failed, 5 passed: AssertionError: network must not be touched when disabled
+restored -> ruff clean; M27 file 9 passed
+```
+
+**Final measurement (INTEGRATION REVIEWER).** Baseline before source work:
+`947 tests collected in 1.21s`; `ruff All checks passed!`; runtime
+dependencies `[]` — exactly the brief's baseline (the system shell lacked the
+dev commands, so they were installed into ignored `.venv` only). Final:
+`956 passed in 29.24s`; `ruff All checks passed!`; suite-count gate `956 tests
+collected (minimum required: 652)`; runtime dependencies remain `[]`.
+
+**Standing regression list** (all requested files run together, green):
+
+```
+test_memory_threads (8 threads x 50 memories, 400 rows) .............. included
+test_concurrent_processes (due checks, real processes) ................ included
+test_reminders (overdue and 31st anchor) ............................... included
+test_agent_reminders (Persian oil question, stored date) .............. included
+test_m19_cancel_reminder (ambiguity and Persian cancellation) ......... included
+test_reminder_command (terminal fired deletion) ........................ included
+test_m21_fk_cascade (fired reminder deletion) .......................... included
+test_reminder_delivery (every destination once) ........................ included
+test_memory_duplicates + test_memory_dedupe (dry/idempotent) .......... included
+test_dream (forget/archive safety) ..................................... included
+test_skills (sessions and hand edits take effect) ...................... included
+test_m18_reserved_names (both surfaces) ................................ included
+test_tool_visibility (quiet retains command replies) ................... included
+test_m22_desktop (worker/UI and command routing) ....................... included
+test_m23_display_direction (Persian left edge) .......................... included
+test_m23_env_example_names (only read variables) ....................... included
+test_m24_display_prompt_truthfulness (formula/prompt) .................. included
+test_m25_panels (panel CRUD) ............................................ included
+test_m26_panels_reachability_cleanup (cleanup confirmation) ............ included
+
+focused standing run .............................................. 569 passed in 13.38s
+```
+
+**On scope (PROJECT MANAGER).** Changed only `dream/tools.py`, the one prompt
+sentence in `dream/agent.py`, `.env.example`, tests, and this required status
+document. The store, reminders, skills, claim guards, desktop window, phone
+front end, workflow build file, and dependency list are untouched. No browser,
+crawler, summariser, panel, or settings screen was added.
+
+**What is next.** Browser automation, crawling, model summarisation, and a
+settings screen remain deferred.
+
+**What is blocked.** Nothing.
+
 Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
