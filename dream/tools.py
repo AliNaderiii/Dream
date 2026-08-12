@@ -9,16 +9,22 @@ from __future__ import annotations
 
 import ast
 import inspect
+import ipaddress
 import json
 import logging
 import os
+import socket
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from html.parser import HTMLParser
 from pathlib import Path
 from types import UnionType
 from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode, urljoin, urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from zoneinfo import ZoneInfo
 
 from dream.memory import normalize_fa
@@ -464,6 +470,389 @@ def send_email(to: str, subject: str, body: str) -> dict[str, str]:
         "message": f"Would send email to {to!r} with subject {subject!r}",
         "body": body,
     }
+
+
+# ---------------------------------------------------------------------------
+# Network tools. Reaching the network is not a safe act: both tools are
+# guarded, off unless DREAM_ALLOW_NETWORK is on, and every address the model
+# invents is checked before a byte is read. Tests inject fetch_bytes and
+# resolve_host so the suite never touches the live network.
+# ---------------------------------------------------------------------------
+
+NETWORK_TIMEOUT_SECONDS = 10.0
+NETWORK_MAX_BYTES = 2_000_000
+PAGE_TEXT_CHAR_LIMIT = 200_000
+NETWORK_MAX_REDIRECTS = 5
+_SEARCH_HOST = "api.duckduckgo.com"
+_CGNAT = ipaddress.ip_network("100.64.0.0/10")
+_BLOCKED_HOSTS = frozenset(
+    {
+        "localhost",
+        "localhost.localdomain",
+        "metadata",
+        "metadata.google.internal",
+    }
+)
+_BLOCKED_HOST_SUFFIXES = (".localhost", ".local", ".internal", ".intranet")
+
+# Gloss: «دسترسی به شبکه فعال نیست.»
+NETWORK_DISABLED_MESSAGE = (
+    "\u062f\u0633\u062a\u0631\u0633\u06cc \u0628\u0647 "
+    "\u0634\u0628\u06a9\u0647 \u0641\u0639\u0627\u0644 \u0646\u06cc\u0633\u062a."
+)
+# Gloss: «این نشانی مجاز نیست.»
+REFUSED_ADDRESS_MESSAGE = (
+    "\u0627\u06cc\u0646 \u0646\u0634\u0627\u0646\u06cc "
+    "\u0645\u062c\u0627\u0632 \u0646\u06cc\u0633\u062a."
+)
+# Gloss: «نشانی داخلی یا خصوصی پذیرفته نمی‌شود.»
+PRIVATE_ADDRESS_MESSAGE = (
+    "\u0646\u0634\u0627\u0646\u06cc \u062f\u0627\u062e\u0644\u06cc \u06cc\u0627 "
+    "\u062e\u0635\u0648\u0635\u06cc \u067e\u0630\u06cc\u0631\u0641\u062a\u0647 "
+    "\u0646\u0645\u06cc\u200c\u0634\u0648\u062f."
+)
+# Gloss: «تغییر مسیر به نشانی غیرمجاز رد شد.»
+REDIRECT_REFUSED_MESSAGE = (
+    "\u062a\u063a\u06cc\u06cc\u0631 \u0645\u0633\u06cc\u0631 \u0628\u0647 "
+    "\u0646\u0634\u0627\u0646\u06cc \u063a\u06cc\u0631\u0645\u062c\u0627\u0632 "
+    "\u0631\u062f \u0634\u062f."
+)
+# Gloss: «درخواست به شبکه زمانش تمام شد.»
+TIMEOUT_MESSAGE = (
+    "\u062f\u0631\u062e\u0648\u0627\u0633\u062a \u0628\u0647 "
+    "\u0634\u0628\u06a9\u0647 \u0632\u0645\u0627\u0646\u0634 \u062a\u0645\u0627\u0645 "
+    "\u0634\u062f."
+)
+# Gloss: «متن کوتاه شد.»
+TRUNCATED_MESSAGE = (
+    "\u0645\u062a\u0646 \u06a9\u0648\u062a\u0627\u0647 \u0634\u062f."
+)
+# Gloss: «خواندن صفحه ممکن نشد.»
+FETCH_FAILED_MESSAGE = (
+    "\u062e\u0648\u0627\u0646\u062f\u0646 \u0635\u0641\u062d\u0647 "
+    "\u0645\u0645\u06a9\u0646 \u0646\u0634\u062f."
+)
+
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+
+
+def network_access_enabled() -> bool:
+    """Whether the owner has turned the network tools on."""
+    raw = os.environ.get("DREAM_ALLOW_NETWORK", "") or ""
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _refusal(message: str) -> dict[str, Any]:
+    return {"refused": True, "message": message}
+
+
+def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        return _is_blocked_ip(ip.ipv4_mapped)
+    if (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    ):
+        return True
+    return ip in _CGNAT
+
+
+def resolve_host(host: str) -> list[str]:
+    """Resolve a hostname. Tests replace this so DNS is never touched."""
+    infos = socket.getaddrinfo(host, None)
+    addresses: list[str] = []
+    for info in infos:
+        packed = info[4]
+        if packed:
+            addresses.append(str(packed[0]))
+    return addresses
+
+
+def _host_is_blocked_name(host: str) -> bool:
+    lowered = host.lower().rstrip(".")
+    if lowered in _BLOCKED_HOSTS:
+        return True
+    return any(lowered.endswith(suffix) for suffix in _BLOCKED_HOST_SUFFIXES)
+
+
+def _refuse_url(url: str) -> str | None:
+    """Return a Persian refusal for a forbidden address, or None if allowed."""
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"}:
+        return REFUSED_ADDRESS_MESSAGE
+    if parsed.username is not None or parsed.password is not None:
+        return REFUSED_ADDRESS_MESSAGE
+    host = parsed.hostname
+    if not host:
+        return REFUSED_ADDRESS_MESSAGE
+    if _host_is_blocked_name(host):
+        return PRIVATE_ADDRESS_MESSAGE
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+    if ip is not None:
+        if _is_blocked_ip(ip):
+            return PRIVATE_ADDRESS_MESSAGE
+        return None
+    try:
+        addresses = resolve_host(host)
+    except OSError:
+        return REFUSED_ADDRESS_MESSAGE
+    if not addresses:
+        return REFUSED_ADDRESS_MESSAGE
+    for address in addresses:
+        try:
+            resolved = ipaddress.ip_address(address)
+        except ValueError:
+            return REFUSED_ADDRESS_MESSAGE
+        if _is_blocked_ip(resolved):
+            return PRIVATE_ADDRESS_MESSAGE
+    return None
+
+
+def _read_capped(stream: Any, max_bytes: int) -> bytes:
+    """Read at most *max_bytes* from *stream*, stopping while reading."""
+    chunks: list[bytes] = []
+    remaining = max_bytes
+    while remaining > 0:
+        chunk = stream.read(min(8192, remaining))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Leave 3xx responses in place so the caller can inspect Location."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        del req, fp, code, msg, headers, newurl
+        return None
+
+
+def _urllib_fetch_bytes(url: str, *, timeout: float, max_bytes: int) -> dict[str, Any]:
+    """One GET. Does not follow redirects. Caps the body while reading."""
+    request = Request(
+        url,
+        headers={"User-Agent": "dream-assistant/0.1.0"},
+        method="GET",
+    )
+    opener = build_opener(_NoRedirectHandler)
+    try:
+        with opener.open(request, timeout=timeout) as response:  # nosec B310: checked URL
+            body = _read_capped(response, max_bytes=max_bytes)
+            headers = {str(key): str(value) for key, value in response.headers.items()}
+            status = int(getattr(response, "status", 200) or 200)
+            return {"status": status, "headers": headers, "body": body, "url": url}
+    except HTTPError as exc:
+        headers = {}
+        if exc.headers is not None:
+            headers = {str(key): str(value) for key, value in exc.headers.items()}
+        return {"status": int(exc.code), "headers": headers, "body": b"", "url": url}
+    except TimeoutError:
+        raise
+    except URLError as exc:
+        reason = exc.reason
+        if isinstance(reason, (TimeoutError, socket.timeout)):
+            raise TimeoutError(str(reason)) from exc
+        raise
+
+
+fetch_bytes = _urllib_fetch_bytes
+
+
+def _header(headers: dict[str, str], name: str) -> str:
+    wanted = name.lower()
+    for key, value in headers.items():
+        if key.lower() == wanted:
+            return value
+    return ""
+
+
+def _network_get(url: str) -> dict[str, Any]:
+    """Validate, fetch, and refuse a redirect that lands on a blocked host."""
+    if not network_access_enabled():
+        return _refusal(NETWORK_DISABLED_MESSAGE)
+    current = url
+    hops = 0
+    while True:
+        blocked = _refuse_url(current)
+        if blocked:
+            return _refusal(blocked)
+        try:
+            response = fetch_bytes(
+                current,
+                timeout=NETWORK_TIMEOUT_SECONDS,
+                max_bytes=NETWORK_MAX_BYTES,
+            )
+        except TimeoutError:
+            return _refusal(TIMEOUT_MESSAGE)
+        except Exception:
+            return _refusal(FETCH_FAILED_MESSAGE)
+        status = int(response.get("status") or 0)
+        if status in _REDIRECT_STATUSES:
+            location = _header(response.get("headers") or {}, "Location")
+            if not location:
+                return _refusal(REFUSED_ADDRESS_MESSAGE)
+            destination = urljoin(current, location)
+            dest_blocked = _refuse_url(destination)
+            if dest_blocked:
+                return _refusal(REDIRECT_REFUSED_MESSAGE)
+            hops += 1
+            if hops > NETWORK_MAX_REDIRECTS:
+                return _refusal(FETCH_FAILED_MESSAGE)
+            current = destination
+            continue
+        if not (200 <= status < 300):
+            return _refusal(FETCH_FAILED_MESSAGE)
+        return response
+
+
+class _HTMLTextExtractor(HTMLParser):
+    _SKIP = frozenset({"script", "style", "noscript", "template"})
+    _BREAK = frozenset(
+        {"p", "div", "br", "tr", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"}
+    )
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._skip = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        del attrs
+        if tag in self._SKIP:
+            self._skip += 1
+        if tag in self._BREAK:
+            self._parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._SKIP and self._skip:
+            self._skip -= 1
+        if tag in self._BREAK:
+            self._parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if self._skip:
+            return
+        self._parts.append(data)
+
+    def text(self) -> str:
+        raw = "".join(self._parts)
+        lines = [" ".join(line.split()) for line in raw.splitlines()]
+        return "\n".join(line for line in lines if line)
+
+
+def _strip_markup(raw: str) -> str:
+    extractor = _HTMLTextExtractor()
+    try:
+        extractor.feed(raw)
+        extractor.close()
+    except Exception:
+        return " ".join(raw.split())
+    return extractor.text()
+
+
+def _search_endpoint(query: str) -> str:
+    return "https://{}/?{}".format(
+        _SEARCH_HOST,
+        urlencode({"q": query, "format": "json", "no_html": "1", "no_redirect": "1"}),
+    )
+
+
+def _topic_items(items: Any) -> list[dict[str, str]]:
+    results: list[dict[str, str]] = []
+    if not isinstance(items, list):
+        return results
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        nested = item.get("Topics")
+        if isinstance(nested, list):
+            results.extend(_topic_items(nested))
+            continue
+        url = item.get("FirstURL")
+        title = item.get("Text") or url
+        if isinstance(url, str) and url.startswith("http") and isinstance(title, str):
+            results.append({"title": _strip_markup(title), "url": url})
+    return results
+
+
+@tool(risk="guarded")
+def search_web(query: str) -> dict[str, Any]:
+    """Search the public web for a short answer and a few results.
+
+    Uses the key-free instant-answer endpoint. The bot-challenged HTML
+    search page is never requested.
+
+    :param query: What to search for.
+    """
+    if not network_access_enabled():
+        return _refusal(NETWORK_DISABLED_MESSAGE)
+    if not query or not str(query).strip():
+        return _refusal(REFUSED_ADDRESS_MESSAGE)
+    response = _network_get(_search_endpoint(str(query).strip()))
+    if response.get("refused"):
+        return response
+    body = response.get("body") or b""
+    text = body.decode("utf-8", "replace")
+    try:
+        payload = json.loads(text)
+    except (TypeError, ValueError):
+        return {
+            "refused": False,
+            "answer": _strip_markup(text)[:PAGE_TEXT_CHAR_LIMIT],
+            "results": [],
+        }
+    if not isinstance(payload, dict):
+        return {"refused": False, "answer": "", "results": []}
+    answer = payload.get("AbstractText") or payload.get("Abstract") or ""
+    if not isinstance(answer, str):
+        answer = ""
+    answer = _strip_markup(answer)
+    results = _topic_items(payload.get("Results"))
+    results.extend(_topic_items(payload.get("RelatedTopics")))
+    seen: set[str] = set()
+    unique: list[dict[str, str]] = []
+    for item in results:
+        if item["url"] in seen:
+            continue
+        seen.add(item["url"])
+        unique.append(item)
+        if len(unique) >= 5:
+            break
+    return {"refused": False, "answer": answer, "results": unique}
+
+
+@tool(risk="guarded")
+def read_page(url: str) -> dict[str, Any]:
+    """Read one web page as plain text, with markup removed.
+
+    :param url: Address of the page to read.
+    """
+    if not network_access_enabled():
+        return _refusal(NETWORK_DISABLED_MESSAGE)
+    if not url or not str(url).strip():
+        return _refusal(REFUSED_ADDRESS_MESSAGE)
+    response = _network_get(str(url).strip())
+    if response.get("refused"):
+        return response
+    body = response.get("body") or b""
+    raw = body.decode("utf-8", "replace")
+    text = _strip_markup(raw)
+    truncated = len(text) > PAGE_TEXT_CHAR_LIMIT
+    if truncated:
+        text = text[:PAGE_TEXT_CHAR_LIMIT]
+    result: dict[str, Any] = {"refused": False, "text": text, "truncated": truncated}
+    if truncated:
+        result["message"] = TRUNCATED_MESSAGE
+    return result
 
 
 def _failure_payload(error_type: str, message: str) -> dict[str, Any]:

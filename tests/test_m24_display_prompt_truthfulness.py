@@ -74,19 +74,21 @@ def test_prompt_knows_both_names_and_uses_persian_for_persian_speakers():
     assert "رویا" in _BASE_PROMPT
 
 
-def test_prompt_plainly_refuses_internet_access_and_never_offers_search():
-    assert "دسترسی به اینترنت نداری" in _BASE_PROMPT
-    assert "پیشنهاد جستجو نده" in _BASE_PROMPT
+def test_prompt_names_search_when_the_owner_enables_network():
+    assert "search_web" in _BASE_PROMPT
+    assert "read_page" in _BASE_PROMPT
+    assert "دسترسی به اینترنت نداری" not in _BASE_PROMPT
+    assert "پیشنهاد جستجو نده" not in _BASE_PROMPT
 
 
 class PromptFollowingTranscriptProbe:
     """Small deterministic stand-in: its reply is driven only by the prompt."""
 
     def reply(self, prompt: str, question: str) -> str:
-        if "دوره" in question and "دسترسی به اینترنت نداری" not in prompt:
+        if "دوره" in question and "search_web" not in prompt:
             return "چند سایت آموزشی می‌شناسم و می‌توانم جستجو کنم."
         if "دوره" in question:
-            return "به اینترنت دسترسی ندارم و نمی‌توانم جستجو کنم."
+            return "اگر شبکه روشن باشد جستجو می‌کنم؛ اگر خاموش باشد می‌گویم روشن نیست."
         if "تو Dream، یعنی رویا" not in prompt:
             return "من Dream هستم."
         return "من رویا هستم."
@@ -95,12 +97,15 @@ class PromptFollowingTranscriptProbe:
 def test_prompt_transcripts_change_for_name_and_internet_questions():
     probe = PromptFollowingTranscriptProbe()
     identity = "تو Dream، یعنی رویا، هستی؛ برای کاربر فارسی‌زبان نامت رویا است."
-    internet_rule = "دسترسی به اینترنت نداری؛ این را روشن بگو و پیشنهاد جستجو نده. "
+    internet_rule = (
+        "وقتی مالک شبکه را روشن کرده می‌توانی با search_web جستجو کنی و با read_page "
+        "صفحه بخوانی؛ اگر خاموش باشد روشن بگو. "
+    )
     before = _BASE_PROMPT.replace(identity, "تو Dream هستی.").replace(internet_rule, "")
     name_question = "تو کی هستی؟"
     course_question = "برای دوره‌ها لینک بده."
     before_course_reply = "چند سایت آموزشی می‌شناسم و می‌توانم جستجو کنم."
-    after_course_reply = "به اینترنت دسترسی ندارم و نمی‌توانم جستجو کنم."
+    after_course_reply = "اگر شبکه روشن باشد جستجو می‌کنم؛ اگر خاموش باشد می‌گویم روشن نیست."
 
     assert probe.reply(before, name_question) == "من Dream هستم."
     assert probe.reply(_BASE_PROMPT, name_question) == "من رویا هستم."

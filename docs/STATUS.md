@@ -4,6 +4,136 @@ Running status of the Dream multi-role build programme. Updated at the end of
 every milestone with what shipped, what was measured, what is next, and what
 is blocked.
 
+## M27 — Look something up, and answer in the owner's voice — SHIPPED
+
+**What shipped.** Two defects the owner wrote down after a week of use.
+Twelve tools were registered and none of them reached the network; the
+prompt had no instruction about manner and still claimed the assistant
+could not look anything up. This milestone adds two guarded network
+tools, one setting that keeps them off until the owner turns them on,
+and two prompt sentences: one that tells the truth about search, and
+one that asks the model to match the writer's register.
+
+**Defect one — it cannot look anything up (TOOL ENGINEER + SECURITY
+ENGINEER).** `search_web` and `read_page` live in `dream/tools.py`.
+Search uses the key-free instant-answer endpoint on `api.duckduckgo.com`
+with `format=json` and `no_html=1`; the bot-challenged HTML search page
+is never requested. A page read strips markup with the standard-library
+HTML parser, truncates at a stated character cap, and says that it
+truncated. Both tools are **guarded**, not safe: reaching the network is
+not a safe act. Network access is off unless `DREAM_ALLOW_NETWORK` is
+on; when it is off both tools return a Persian sentence
+(«دسترسی به شبکه فعال نیست.») as a normal result, not an error, and
+they touch no transport. The settings example documents the name the
+code actually reads.
+
+Hard timeout (10s) and a 2 MB size cap are applied while reading, not
+after. A refused address, a private or loopback destination, a timeout,
+and a redirect that would land on a refused destination each return a
+Persian refusal; none of them raise out of the tool. Tests inject
+`fetch_bytes` and `resolve_host`; one test asserts the real urllib
+transport is the default and does not call it.
+
+**The redirect case (SECURITY ENGINEER).** urllib's default handler
+follows 3xx. That is the usual hole: the first URL is checked, the
+`Location` is not. The transport therefore uses a handler that does
+**not** follow redirects. `_network_get` inspects a 3xx, joins the
+`Location` onto the current URL, and runs the same scheme and
+private/loopback/link-local check on the destination **before** any
+second fetch. A `Location` of `http://127.0.0.1/secret` is refused with
+«تغییر مسیر به نشانی غیرمجاز رد شد.» and `fetch_bytes` is never called
+on that address. Measured: one fetch of the public start URL, zero
+fetches of the loopback target.
+
+**Defect two — it only knows one voice (PROMPT ENGINEER).** One short
+instruction was added to `_BASE_PROMPT`: match the writer's register —
+casual with casual, formal with formal, distress plainly and warmly,
+not with a template. No personality, backstory, name list, or
+capability list. The disagree and no-guess sentences are unchanged.
+
+**The correction the first defect forces.** The sentence «دسترسی به
+اینترنت نداری؛ این را روشن بگو و پیشنهاد جستجو نده.» is now false.
+It is replaced by one sentence that names `search_web` and `read_page`,
+says they work when the owner has enabled the network, and says to
+speak plainly when the setting is off.
+
+Before and after, same casual Persian input, prompt-following probe
+(no live model in this checkout):
+
+```
+input:  سلام خوبی؟ یه کم کمک می‌خوام، گیج شدم.
+before: با سلام و احترام. در خدمت جنابعالی هستم. لطفاً موضوع را به صورت کامل مرقوم فرمایید.
+after:  سلام، باشه کمک می‌کنم. بگو کجا گیر کردی.
+```
+
+**What was measured.**
+
+- Baseline before: ``947 tests collected``; ruff ``All checks passed!``;
+  ``dependencies = []`` — matches the brief.
+- Red before green: ``tests/test_m27_network_tools_and_register.py``
+  against unchanged source — ``26 failed``. Failures named the missing
+  tools (``search_web must be a registered tool``), the missing fetch
+  injection point, the old no-internet prompt sentence, and the absent
+  register instruction. After implementation: ``25 passed`` (one
+  self-matching pin was dropped; it was not evidence).
+- After: ``972 passed in 30.06s`` (+25); ruff ``All checks passed!``;
+  zero runtime dependencies; suite-size gate
+  ``972 tests collected (minimum required: 652)``.
+- Break and restore (each break verified to remove the behaviour):
+  (1) ``timeout=timeout`` removed from the urllib transport →
+  ``test_default_transport_has_a_hard_timeout`` failed
+  (``assert 'timeout=timeout' in source``) → restored 2 passed;
+  (2) private-IP refusal dropped → 6 failed (127.0.0.1, 192.168.1.10,
+  10.1.2.3, 169.254.169.254, ::1, fe80::1) → restored 11 passed;
+  (3) ``network_access_enabled`` forced True → setting-off test failed
+  because ``resolve_host`` ran for ``api.duckduckgo.com`` → restored
+  1 passed;
+  (4) register instruction removed from the prompt → 2 failed
+  (``assert 'لحن' in _BASE_PROMPT``; before and after transcripts
+  identical) → restored 2 passed.
+
+**Standing regression list** (every line run, all green):
+
+```
+test_memory_threads (8 threads x 50 memories, 400 rows) ........ 5 passed
+test_concurrent_processes (due checks, real processes) .......... 1 passed
+test_reminders (overdue and 31st anchor) ......................... 24 passed
+test_agent_reminders (Persian oil question, stored date) ........ 11 passed
+test_m19_cancel_reminder (ambiguity and Persian cancellation) ... 19 passed
+test_reminder_command (terminal fired deletion) ................. 20 passed
+test_m21_fk_cascade (fired reminder deletion) ................... 10 passed
+test_reminder_delivery (every destination once) ................. 6 passed
+test_memory_duplicates + test_memory_dedupe (dry/idempotent) .... 59 passed
+test_dream (forget/archive safety) ............................... 111 passed
+test_skills (sessions and hand edits take effect) ............ 15 passed
+test_m18_reserved_names (both surfaces) .......................... 173 passed
+test_tool_visibility (quiet retains command replies) ............ 37 passed
+test_m22_desktop (worker/UI and command routing) ................ 12 passed
+test_m23_display_direction (Persian left edge) ................... 13 passed
+test_m23_env_example_names (only read variables) ................ 5 passed
+test_m24_display_prompt_truthfulness (formula) ................... 9 passed
+test_m25_panels (store update, panel CRUD, direction, skips) .... 23 passed
+test_m26_panels_reachability_cleanup (reachability, cleanup) .... 16 passed
+```
+
+**On scope.** Changed source: `dream/tools.py` (the two tools, the
+injected fetch, the address and redirect checks), the two named prompt
+sentences in `dream/agent.py`, `.env.example` (documents
+`DREAM_ALLOW_NETWORK`). Changed tests: new
+`tests/test_m27_network_tools_and_register.py` and the M24 prompt pins
+that the replaced internet sentence had made false. Required status
+document updated. Unchanged on purpose: the store, the reminders, the
+skills, the claim guards, the window, the phone front end, the build
+file under `.github/workflows`, the project dependency list. No mail
+client, calendar, messaging bridge, sub-agent system, or browser
+(PROJECT MANAGER veto).
+
+**What is next.** Reading and answering mail; several roles arguing a
+request before answering; calendar, drive, and messaging bridges; a
+browser; summarising a page with the model. In that order.
+
+**What is blocked.** Nothing.
+
 ## M26 — Long rows readable, duplicates cleanable — SHIPPED
 
 **What shipped.** Two defects that appeared only once real rows filled the
