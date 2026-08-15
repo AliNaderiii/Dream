@@ -1,0 +1,78 @@
+/**
+ * App shell: title bar → [activity rail | sidebar | workspace] → status bar.
+ *
+ * Mirrors automatically in RTL because every edge uses logical properties.
+ */
+
+import { useLocation, useMatch } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
+
+import { ActivityRail } from '@/components/layout/activity-rail';
+import { Sidebar } from '@/components/layout/sidebar';
+import { StatusBar } from '@/components/layout/status-bar';
+import { TitleBar } from '@/components/layout/title-bar';
+import { TopBar } from '@/components/layout/top-bar';
+import { CommandPalette } from '@/components/shared/command-palette';
+import { ErrorBoundary } from '@/components/shared/error-boundary';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { useFileDrop } from '@/hooks/use-file-drop';
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
+import { useNativeBridge } from '@/hooks/use-native-bridge';
+import { useTheme } from '@/hooks/use-theme';
+
+/** Maps a pathname to the title shown in the top bar. */
+const TITLES: Record<string, string> = {
+  '/': 'Dashboard',
+  '/projects': 'Projects',
+  '/memory': 'Memory',
+  '/skills': 'Skills',
+  '/subagents': 'Subagents',
+  '/data': 'Data',
+  '/provenance': 'Provenance',
+  '/providers': 'Providers',
+  '/settings': 'Settings',
+};
+
+export function AppShell() {
+  const location = useLocation();
+  const chatMatch = useMatch('/chat/:sessionId');
+
+  useTheme();
+  useNativeBridge();
+  const shortcuts = useKeyboardShortcuts();
+  const { isDragging } = useFileDrop();
+
+  const title = chatMatch ? 'Conversation' : (TITLES[location.pathname] ?? 'Dream');
+
+  return (
+    <TooltipProvider>
+      <div className="flex h-screen flex-col overflow-hidden bg-canvas text-fg-primary">
+        <TitleBar />
+
+        <div className="flex min-h-0 flex-1">
+          <ActivityRail />
+          <Sidebar />
+
+          <main className="relative flex min-w-0 flex-1 flex-col">
+            <TopBar title={title} />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <ErrorBoundary>
+                <Outlet />
+              </ErrorBoundary>
+            </div>
+
+            {/* Drop overlay: shown while files hover the window. */}
+            {isDragging && (
+              <div className="pointer-events-none absolute inset-0 z-40 m-3 flex items-center justify-center rounded-lg border-2 border-dashed border-accent bg-accent-soft/60">
+                <p className="text-h3 font-semibold text-accent-text">Drop files to attach</p>
+              </div>
+            )}
+          </main>
+        </div>
+
+        <StatusBar />
+        <CommandPalette commands={shortcuts} />
+      </div>
+    </TooltipProvider>
+  );
+}

@@ -1,0 +1,275 @@
+/* Dream design tokens — "Rooya" v1.0.
+ * Mirrors docs/design/tokens/dream.css, re-expressed for Tailwind v4's @theme so
+ * every token is reachable as a utility (bg-canvas, text-fg-primary, ...).
+ * Themes: [data-theme="light"] / [data-theme="dark"] · Direction: dir="ltr" / dir="rtl"
+ */
+
+@import 'tailwindcss';
+
+/* Dark mode is driven by the data-theme attribute the theme store writes, not by
+   the OS query, so an explicit user choice always wins over `prefers-color-scheme`. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  /* ---- primitives ---- */
+  --color-n-50: #f8f8fa;
+  --color-n-100: #f1f1f4;
+  --color-n-200: #e4e4e9;
+  --color-n-300: #cfcfd8;
+  --color-n-400: #a2a2b0;
+  --color-n-500: #77778a;
+  --color-n-600: #5b5b70;
+  --color-n-700: #474759;
+  --color-n-800: #333342;
+  --color-n-900: #212129;
+  --color-n-950: #141419;
+
+  --color-p-50: #f1effe;
+  --color-p-100: #e4e0fd;
+  --color-p-200: #ccc5fb;
+  --color-p-300: #ada1f7;
+  --color-p-400: #8f82f0;
+  --color-p-500: #7263e8;
+  --color-p-600: #5d4dd3;
+  --color-p-700: #4c3eb2;
+  --color-p-800: #3d3390;
+  --color-p-900: #2f2870;
+  --color-p-950: #1d1946;
+
+  /* categorical chart palette (Okabe–Ito, colorblind-safe) */
+  --color-chart-1: #0072b2;
+  --color-chart-2: #e69f00;
+  --color-chart-3: #009e73;
+  --color-chart-4: #cc79a7;
+  --color-chart-5: #56b4e9;
+  --color-chart-6: #d55e00;
+  --color-chart-7: #f0e442;
+  --color-chart-8: #999999;
+
+  /* ---- semantic aliases (resolved per theme below) ---- */
+  --color-canvas: var(--bg-canvas);
+  --color-surface: var(--bg-surface);
+  --color-surface-2: var(--bg-surface2);
+  --color-sunken: var(--bg-sunken);
+  --color-overlay: var(--bg-overlay);
+
+  --color-fg-primary: var(--fg-primary);
+  --color-fg-secondary: var(--fg-secondary);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-inverse: var(--fg-inverse);
+
+  --color-accent: var(--accent-solid);
+  --color-accent-text: var(--accent-text);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-focus-ring: var(--focus-ring);
+
+  --color-success-fg: var(--success-fg);
+  --color-success-bg: var(--success-bg);
+  --color-warning-fg: var(--warning-fg);
+  --color-warning-bg: var(--warning-bg);
+  --color-danger-fg: var(--danger-fg);
+  --color-danger-bg: var(--danger-bg);
+  --color-info-fg: var(--info-fg);
+  --color-info-bg: var(--info-bg);
+
+  /* ---- typography ---- */
+  --font-sans: 'Inter', 'Vazirmatn', system-ui, sans-serif;
+  --font-persian: 'Vazirmatn', 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --text-display: 30px;
+  --text-display--line-height: 38px;
+  --text-display--font-weight: 700;
+  --text-h1: 24px;
+  --text-h1--line-height: 32px;
+  --text-h2: 20px;
+  --text-h2--line-height: 28px;
+  --text-h3: 16px;
+  --text-h3--line-height: 24px;
+  --text-body: 14px;
+  --text-body--line-height: 22px;
+  --text-body-lg: 16px;
+  --text-body-lg--line-height: 26px;
+  --text-caption: 12px;
+  --text-caption--line-height: 18px;
+  --text-micro: 11px;
+  --text-micro--line-height: 16px;
+  --text-code: 13px;
+  --text-code--line-height: 20px;
+
+  /* ---- radius ---- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* ---- motion ---- */
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 260ms;
+  --duration-slower: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-enter: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ease-exit: cubic-bezier(0.3, 0, 0.8, 0.15);
+
+  /* ---- elevation ---- */
+  --shadow-e1: var(--elev-1);
+  --shadow-e2: var(--elev-2);
+  --shadow-e3: var(--elev-3);
+
+  /* ---- layout ---- */
+  --spacing-rail: 48px;
+  --spacing-sidebar: 260px;
+  --spacing-statusbar: 24px;
+  --spacing-titlebar: 38px;
+}
+
+/* ---- theme definitions ------------------------------------------------- */
+
+[data-theme='light'] {
+  color-scheme: light;
+  --bg-canvas: #f8f8fa;
+  --bg-surface: #ffffff;
+  --bg-surface2: #f1f1f4;
+  --bg-sunken: #e4e4e9;
+  --bg-overlay: #ffffff;
+  --fg-primary: #212129;
+  --fg-secondary: #5b5b70;
+  --fg-muted: #6e6e80;
+  --fg-inverse: #ffffff;
+  --accent-solid: #5d4dd3;
+  --accent-text: #5d4dd3;
+  --accent-soft: #e4e0fd;
+  --border-default: #e4e4e9;
+  --border-strong: #cfcfd8;
+  --focus-ring: #7263e8;
+  --success-fg: #1c6a41;
+  --success-bg: #d8f3e2;
+  --warning-fg: #814e08;
+  --warning-bg: #fdebcf;
+  --danger-fg: #a02222;
+  --danger-bg: #fde3e3;
+  --info-fg: #1d4ed8;
+  --info-bg: #dbeafe;
+  --elev-1: 0 1px 2px rgb(20 20 25 / 0.06), 0 1px 3px rgb(20 20 25 / 0.1);
+  --elev-2: 0 4px 12px rgb(20 20 25 / 0.1), 0 2px 4px rgb(20 20 25 / 0.08);
+  --elev-3: 0 12px 32px rgb(20 20 25 / 0.16), 0 4px 8px rgb(20 20 25 / 0.08);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-canvas: #111116;
+  --bg-surface: #141419;
+  --bg-surface2: #1b1b22;
+  --bg-sunken: #0c0c10;
+  --bg-overlay: #20202a;
+  --fg-primary: #ececf1;
+  --fg-secondary: #a2a2b0;
+  --fg-muted: #8a8a9a;
+  --fg-inverse: #141419;
+  --accent-solid: #8f82f0;
+  --accent-text: #ada1f7;
+  --accent-soft: rgb(47 40 112 / 0.4);
+  --border-default: #2a2a35;
+  --border-strong: #3a3a48;
+  --focus-ring: #ada1f7;
+  --success-fg: #4bba7d;
+  --success-bg: rgb(18 63 39 / 0.4);
+  --warning-fg: #e89b2c;
+  --warning-bg: rgb(75 47 12 / 0.4);
+  --danger-fg: #ea6b6b;
+  --danger-bg: rgb(98 25 25 / 0.4);
+  --info-fg: #60a5fa;
+  --info-bg: rgb(30 58 138 / 0.4);
+  --elev-1: none;
+  --elev-2: 0 4px 16px rgb(0 0 0 / 0.45);
+  --elev-3: 0 12px 40px rgb(0 0 0 / 0.6);
+}
+
+/* ---- base ---------------------------------------------------------------- */
+
+@layer base {
+  * {
+    border-color: var(--border-default);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--bg-canvas);
+    color: var(--fg-primary);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    -webkit-font-smoothing: antialiased;
+    /* The custom title bar owns window dragging; native text selection in chrome
+       would fight it, so selection is opt-in per component. */
+    user-select: none;
+    overflow: hidden;
+  }
+
+  /* Persian/Arabic gets the taller line-height the design system specifies. */
+  [dir='rtl'] body {
+    font-family: var(--font-persian);
+    line-height: 24px;
+  }
+
+  /* Focus contract — never remove. */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+
+  ::selection {
+    background-color: var(--accent-soft);
+    color: var(--fg-primary);
+  }
+}
+
+@layer utilities {
+  /* LTR islands inside RTL: code, URLs, keys, paths, latency numbers. */
+  .ltr-island {
+    direction: ltr;
+    unicode-bidi: isolate;
+    text-align: start;
+    font-family: var(--font-mono);
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .selectable {
+    user-select: text;
+  }
+
+  /* Region the OS treats as the window's drag handle. */
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+}
+
+/* Motion tokens collapse to zero when the user asks for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
