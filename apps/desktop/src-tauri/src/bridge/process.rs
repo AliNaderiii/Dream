@@ -37,8 +37,10 @@ pub struct SidecarConfig {
 impl Default for SidecarConfig {
     fn default() -> Self {
         Self {
-            python: std::env::var("DREAM_SIDECAR_PYTHON").unwrap_or_else(|_| "python3".to_string()),
-            module: std::env::var("DREAM_SIDECAR_MODULE").unwrap_or_else(|_| "dream.bridge".to_string()),
+            python: std::env::var("DREAM_SIDECAR_PYTHON")
+                .unwrap_or_else(|_| "python3".to_string()),
+            module: std::env::var("DREAM_SIDECAR_MODULE")
+                .unwrap_or_else(|_| "dream.bridge".to_string()),
         }
     }
 }
@@ -129,9 +131,10 @@ async fn start_instance<R: Runtime>(
     let writer = tauri::async_runtime::spawn(async move {
         let mut stdin = stdin;
         while let Some(line) = rx.recv().await {
-            if stdin.write_all(line.as_bytes()).await.is_err()
-                || stdin.write_all(b"\n").await.is_err()
-            {
+            if stdin.write_all(line.as_bytes()).await.is_err() {
+                break;
+            }
+            if stdin.write_all(b"\n").await.is_err() {
                 break;
             }
             let _ = stdin.flush().await;
@@ -141,8 +144,15 @@ async fn start_instance<R: Runtime>(
     });
 
     let last_activity = Arc::new(Mutex::new(Instant::now()));
-    let outcome =
-        supervise_reader(app, state, dispatcher, writer_tx, stdout, &last_activity).await;
+    let outcome = supervise_reader(
+        app,
+        state,
+        dispatcher,
+        writer_tx,
+        stdout,
+        &last_activity,
+    )
+    .await;
 
     // Tear down: kill the child if still running and drop the writer sender.
     {
@@ -236,12 +246,12 @@ async fn supervise_reader<R: Runtime>(
 
 /// Spawn the Python sidecar with piped stdio.
 fn spawn(config: &SidecarConfig) -> std::io::Result<Child> {
+    // kill_on_drop prevents the sidecar from outliving the app on POSIX.
     let mut cmd = tokio::process::Command::new(&config.python);
     cmd.args(["-u", "-m", &config.module])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
-        // Prevent the sidecar from outliving the app on POSIX.
         .kill_on_drop(true);
     if let Ok(path) = std::env::var("DREAM_PYTHONPATH") {
         cmd.env("PYTHONPATH", path);
@@ -251,10 +261,7 @@ fn spawn(config: &SidecarConfig) -> std::io::Result<Child> {
 
 /// Reject every in-flight request after a crash/restart.
 async fn reject_pending(dispatcher: &Arc<Mutex<Dispatcher>>) {
-    dispatcher
-        .lock()
-        .await
-        .fail_all(code::INTERNAL_ERROR, "sidecar restarted");
+    dispatcher.lock().await.fail_all(code::INTERNAL_ERROR, "sidecar restarted");
 }
 
 /// Write a state transition and emit it to the frontend.

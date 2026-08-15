@@ -44,11 +44,12 @@ impl Dispatcher {
     pub fn register(&mut self, id: u64) -> RequestChannels {
         let (final_tx, final_rx) = oneshot::channel();
         let (stream_tx, stream_rx) = mpsc::unbounded_channel();
-        if self.pending.insert(id, PendingRequest {
+        let request = PendingRequest {
             final_tx: Some(final_tx),
             stream_tx: Some(stream_tx),
-        }).is_some() {
-            // Re-insert would be a logic bug; the bridge monotonically increments ids.
+        };
+        if self.pending.insert(id, request).is_some() {
+            // Re-insert would be a logic bug; the bridge increments ids monotonically.
             panic!("duplicate bridge request id {id}");
         }
         RequestChannels { final_rx, stream_rx }
@@ -96,14 +97,8 @@ impl Dispatcher {
     pub fn fail_all(&mut self, code: i32, message: &str) {
         let ids: Vec<u64> = self.pending.keys().copied().collect();
         for id in ids {
-            self.resolve(
-                id,
-                Outcome::Error {
-                    code,
-                    message: message.to_string(),
-                    data: None,
-                },
-            );
+            let outcome = Outcome::Error { code, message: message.to_string(), data: None };
+            self.resolve(id, outcome);
         }
     }
 }

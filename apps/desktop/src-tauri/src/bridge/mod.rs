@@ -11,8 +11,8 @@
 //! `bridge_restart`, `bridge_kill` — and listens to `bridge://chunk` /
 //! `bridge://state` events (see `src/lib/bridge/`).
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::Serialize;
 use serde_json::Value;
@@ -153,10 +153,7 @@ impl<R: Runtime> Bridge<R> {
             None => return Err(BridgeError::not_ready()),
         }
 
-        match final_rx
-            .await
-            .map_err(|_| BridgeError::internal("sidecar closed the connection"))?
-        {
+        match final_rx.await.map_err(|_| BridgeError::internal("sidecar closed"))? {
             Outcome::Result(value) => Ok(value),
             Outcome::Error { code, message, data } => Err(BridgeError::rpc(code, message, data)),
         }

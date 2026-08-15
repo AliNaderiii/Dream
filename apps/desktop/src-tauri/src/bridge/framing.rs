@@ -54,12 +54,7 @@ pub fn request_line(id: u64, method: &str, params: &Value) -> String {
 }
 
 /// Build a JSON-RPC error response object.
-pub fn error_response(
-    id: Option<u64>,
-    code: i32,
-    message: &str,
-    data: Option<Value>,
-) -> Value {
+pub fn error_response(id: Option<u64>, code: i32, message: &str, data: Option<Value>) -> Value {
     let mut error = json!({"code": code, "message": message});
     if let Some(data) = data {
         error["data"] = data;
@@ -95,7 +90,8 @@ pub fn parse(line: &str) -> Option<ParsedMessage> {
     }
     if let Some(error) = obj.get("error").cloned() {
         let id = id?;
-        let code = error.get("code").and_then(Value::as_i64).unwrap_or(code::INTERNAL_ERROR) as i32;
+        let err_code = error.get("code").and_then(Value::as_i64);
+        let err_code = err_code.unwrap_or(code::INTERNAL_ERROR) as i32;
         let message = error
             .get("message")
             .and_then(Value::as_str)
@@ -104,7 +100,7 @@ pub fn parse(line: &str) -> Option<ParsedMessage> {
         let data = error.get("data").cloned();
         return Some(ParsedMessage::Response {
             id,
-            outcome: Outcome::Error { code, message, data },
+            outcome: Outcome::Error { code: err_code, message, data },
         });
     }
 
@@ -151,7 +147,8 @@ mod tests {
 
     #[test]
     fn parse_error_response() {
-        let msg = parse(error_response(Some(9), code::METHOD_NOT_FOUND, "x", None).to_string().as_str()).unwrap();
+        let line = error_response(Some(9), code::METHOD_NOT_FOUND, "x", None).to_string();
+        let msg = parse(line.as_str()).unwrap();
         match msg {
             ParsedMessage::Response {
                 id,
