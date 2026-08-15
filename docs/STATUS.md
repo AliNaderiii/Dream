@@ -1,27 +1,5 @@
 # Status
 
-## P-03 — Conversation UI & Session Management — SHIPPED
-
-The desktop now has a virtualized streaming transcript, safe GFM markdown and
-highlighted code, inline images, per-message copy/timestamps, automatic
-Persian RTL direction, tool-call cards, accessible error/retry and bridge-down
-states, attachments, stop generation, and an auto-growing keyboard-friendly
-composer. Dangerous actions use a FIFO approval modal with a 60-second
-auto-deny countdown and allow/deny/per-tool always-allow decisions.
-
-Sessions now persist in `dream/store/sessions.py` using SQLite/WAL with UUID
-session/message models, immediate turn auto-save, paginated content search,
-archive/restore/rename/delete, restart restore, and escaped JSON, Markdown and
-HTML exports. The sidebar includes all date groups, archived view, inline
-rename, confirmation, context actions, and downloads. Browser development uses
-the bridge's deterministic Echo transport while Tauri uses the Python sidecar.
-
-Measured in this sandbox: TypeScript strict typecheck green; 54/54 frontend
-tests green; ESLint has zero errors (two pre-existing Fast Refresh warnings);
-Prettier check and Vite production build green. Python: ruff clean over the full
-repository and **1025/1025 pytest tests pass** in 30.56 seconds, including durable
-create/search/export/reopen and bridge approval/session coverage.
-
 ## P-02 — Python Sidecar Bridge — SHIPPED (Rust pending CI compile)
 
 **What shipped.** The JSON-RPC 2.0 bridge between the Tauri 2 frontend and the

@@ -57,8 +57,8 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
   frontend tested green; Rust written pending CI compile. See `docs/STATUS.md` (P-02).
 
 ## Phase 2 — Conversation & Memory (Prompt P-02)
-- [x] 2.1 Conversation view: streaming, tool-call cards, approval dialog
-- [x] 2.2 Session manager (list, search, date groups)
+- [ ] 2.1 Conversation view: streaming, tool-call cards, approval dialog
+- [ ] 2.2 Session manager (list, search, date groups)
 - [ ] 2.3 Memory explorer + timeline; reminders
 - [ ] 2.4 Skills manager
 

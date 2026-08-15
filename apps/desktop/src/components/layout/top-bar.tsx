@@ -3,7 +3,7 @@
  */
 
 import { Bell, FolderOpen, Moon, PanelLeftOpen, Plus, Sun } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,8 @@ interface TopBarProps {
 
 export function TopBar({ title }: TopBarProps) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const isPaneWorkspace = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
   const collapsed = useAppStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const resolvedTheme = useAppStore((s) => s.resolvedTheme);
@@ -71,36 +73,38 @@ export function TopBar({ title }: TopBarProps) {
 
       <h1 className="flex-1 truncate text-h3 font-semibold">{title}</h1>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="secondary" size="sm" className="gap-1.5">
-            <span className="truncate">{activeProvider?.name ?? 'Select model'}</span>
-            {activeModelId && <span className="ltr-island text-fg-muted">{activeModelId}</span>}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-56">
-          <DropdownMenuLabel>Providers</DropdownMenuLabel>
-          {providers.map((provider) => (
+      {!isPaneWorkspace && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="secondary" size="sm" className="gap-1.5">
+              <span className="truncate">{activeProvider?.name ?? 'Select model'}</span>
+              {activeModelId && <span className="ltr-island text-fg-muted">{activeModelId}</span>}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-56">
+            <DropdownMenuLabel>Providers</DropdownMenuLabel>
+            {providers.map((provider) => (
+              <DropdownMenuCheckboxItem
+                key={provider.id}
+                checked={provider.id === activeProviderId}
+                onCheckedChange={() => setActiveProvider(provider.id)}
+              >
+                <span className="flex-1">{provider.name}</span>
+                <Badge variant={provider.local ? 'success' : 'neutral'}>
+                  {provider.local ? 'Local' : 'Cloud'}
+                </Badge>
+              </DropdownMenuCheckboxItem>
+            ))}
+            <DropdownMenuSeparator />
             <DropdownMenuCheckboxItem
-              key={provider.id}
-              checked={provider.id === activeProviderId}
-              onCheckedChange={() => setActiveProvider(provider.id)}
+              checked={false}
+              onCheckedChange={() => void navigate('/providers')}
             >
-              <span className="flex-1">{provider.name}</span>
-              <Badge variant={provider.local ? 'success' : 'neutral'}>
-                {provider.local ? 'Local' : 'Cloud'}
-              </Badge>
+              Configure providers…
             </DropdownMenuCheckboxItem>
-          ))}
-          <DropdownMenuSeparator />
-          <DropdownMenuCheckboxItem
-            checked={false}
-            onCheckedChange={() => void navigate('/providers')}
-          >
-            Configure providers…
-          </DropdownMenuCheckboxItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
 
       <Tooltip>
         <TooltipTrigger asChild>

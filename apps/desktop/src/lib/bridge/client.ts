@@ -141,6 +141,119 @@ interface EchoSession {
 
 let echoCounter = 0;
 
+const BROWSER_PROVIDER_CATALOG = {
+  openai: {
+    name: 'OpenAI',
+    website: 'https://platform.openai.com',
+    auth_type: 'api_key',
+    endpoint: 'https://api.openai.com/v1',
+    model_list_url: 'https://api.openai.com/v1/models',
+    supports_streaming: true,
+    supports_reasoning: true,
+    default_models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini', 'o4-mini'],
+  },
+  anthropic: {
+    name: 'Anthropic',
+    website: 'https://console.anthropic.com',
+    auth_type: 'api_key',
+    endpoint: 'https://api.anthropic.com',
+    model_list_url: null,
+    supports_streaming: true,
+    supports_reasoning: true,
+    default_models: ['claude-sonnet-4-20250514', 'claude-haiku-3-5-20241022'],
+  },
+  google: {
+    name: 'Google AI',
+    website: 'https://aistudio.google.com',
+    auth_type: 'api_key',
+    endpoint: 'https://generativelanguage.googleapis.com/v1beta',
+    model_list_url: 'https://generativelanguage.googleapis.com/v1beta/models',
+    supports_streaming: true,
+    supports_reasoning: false,
+    oauth_supported: true,
+    default_models: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+  },
+  groq: {
+    name: 'Groq',
+    website: 'https://console.groq.com',
+    auth_type: 'api_key',
+    endpoint: 'https://api.groq.com/openai/v1',
+    model_list_url: 'https://api.groq.com/openai/v1/models',
+    supports_streaming: true,
+    supports_reasoning: false,
+    default_models: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768'],
+  },
+  together: {
+    name: 'Together AI',
+    website: 'https://api.together.xyz',
+    auth_type: 'api_key',
+    endpoint: 'https://api.together.xyz/v1',
+    model_list_url: 'https://api.together.xyz/v1/models',
+    supports_streaming: true,
+    supports_reasoning: false,
+    default_models: ['meta-llama/Llama-3.3-70B-Instruct-Turbo'],
+  },
+  openrouter: {
+    name: 'OpenRouter',
+    website: 'https://openrouter.ai',
+    auth_type: 'api_key',
+    endpoint: 'https://openrouter.ai/api/v1',
+    model_list_url: 'https://openrouter.ai/api/v1/models',
+    supports_streaming: true,
+    supports_reasoning: true,
+    default_models: [],
+  },
+  ollama: {
+    name: 'Ollama (Local)',
+    website: 'https://ollama.com',
+    auth_type: 'none',
+    endpoint: 'http://localhost:11434/v1',
+    model_list_url: 'http://localhost:11434/v1/models',
+    supports_streaming: true,
+    supports_reasoning: false,
+    default_models: [],
+  },
+  vllm: {
+    name: 'vLLM (Custom)',
+    website: 'https://docs.vllm.ai',
+    auth_type: 'custom',
+    endpoint: '',
+    model_list_url: '',
+    supports_streaming: true,
+    supports_reasoning: false,
+    default_models: [],
+  },
+  llamacpp: {
+    name: 'llama.cpp (Local)',
+    website: 'https://github.com/ggerganov/llama.cpp',
+    auth_type: 'none',
+    endpoint: 'http://localhost:8080/v1',
+    model_list_url: 'http://localhost:8080/v1/models',
+    supports_streaming: true,
+    supports_reasoning: false,
+    default_models: [],
+  },
+} as const;
+
+function wireString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+interface EchoProviderConfig {
+  id: string;
+  kind: string;
+  name: string;
+  endpoint: string;
+  model_list_url?: string;
+  models: string[];
+  enabled_models: string[];
+  local: boolean;
+  status: string;
+  credential_configured: boolean;
+  supports_reasoning: boolean;
+  supports_streaming: boolean;
+}
+
 /**
  * An in-memory transport that answers a useful subset of methods locally, so
  * the conversation UI is exercisable in a browser without the Python sidecar.
@@ -149,6 +262,7 @@ let echoCounter = 0;
 export class EchoBridgeTransport implements BridgeTransport {
   readonly kind = 'echo' as const;
   private sessions = new Map<string, EchoSession>();
+  private providers = new Map<string, EchoProviderConfig>();
   private stateHandlers = new Set<(s: BridgeConnectionState) => void>();
   private startedAt = Date.now();
 
@@ -180,7 +294,7 @@ export class EchoBridgeTransport implements BridgeTransport {
   ): Promise<unknown> {
     switch (method) {
       case 'session.create': {
-        const sid = (params['session_id'] as string) || `echo-${++echoCounter}`;
+        const sid = `echo-${++echoCounter}`;
         const now = Date.now();
         this.sessions.set(sid, {
           id: sid,
@@ -201,11 +315,18 @@ export class EchoBridgeTransport implements BridgeTransport {
       case 'session.delete':
         this.sessions.delete(params['session_id'] as string);
         return { deleted: true };
-      case 'session.rename':
-      case 'session.update': {
+      case 'session.rename': {
         const s = this.sessions.get(params['session_id'] as string);
         if (s) {
           s.title = (params['title'] as string) || s.title;
+          s.updated_at = Date.now();
+        }
+        return s ?? null;
+      }
+      case 'session.configure': {
+        const s = this.sessions.get(params['session_id'] as string);
+        if (s) {
+          s.provider = (params['provider'] as string) || s.provider;
           s.updated_at = Date.now();
         }
         return s ?? null;
@@ -237,43 +358,73 @@ export class EchoBridgeTransport implements BridgeTransport {
       }
       case 'conversation.stop':
         return { stopped: true };
-      case 'session.messages':
-        return { messages: [] };
-      case 'session.export': {
-        const session = this.sessions.get(params['session_id'] as string);
-        const rawFormat = params['format'];
-        const format = typeof rawFormat === 'string' ? rawFormat : 'json';
-        const ext = format === 'markdown' ? 'md' : format;
-        const content =
-          format === 'json'
-            ? JSON.stringify({ version: 1, session, messages: [] }, null, 2)
-            : format === 'html'
-              ? `<!doctype html><meta charset="utf-8"><h1>${session?.title ?? 'Session'}</h1>`
-              : `# ${session?.title ?? 'Session'}\n`;
-        return {
-          content,
-          content_type:
-            format === 'html'
-              ? 'text/html'
-              : format === 'json'
-                ? 'application/json'
-                : 'text/markdown',
-          filename: `${session?.id ?? 'session'}.${ext}`,
-        };
-      }
-      case 'approval.list':
-        return { approvals: [], always_allowed: [] };
-      case 'approval.history':
-        return { approvals: [] };
+      case 'provider.catalog':
+        return { catalog: BROWSER_PROVIDER_CATALOG };
       case 'provider.list':
         return {
           providers: [
-            { id: 'echo', kind: 'echo', label: 'Echo', local: true, status: 'connected' },
+            {
+              id: 'echo',
+              kind: 'echo',
+              name: 'Echo (offline)',
+              local: true,
+              status: 'connected',
+              models: ['echo'],
+              enabled_models: ['echo'],
+              credential_configured: true,
+              supports_reasoning: false,
+              supports_streaming: true,
+            },
+            ...this.providers.values(),
           ],
           default: 'echo',
         };
-      case 'provider.test':
-        return { ok: true, provider: params['provider'] ?? 'echo', latency_ms: 0 };
+      case 'provider.get':
+        return { provider: this.providers.get(params['id'] as string) ?? null };
+      case 'provider.create':
+      case 'provider.update': {
+        const draft = (params['provider'] ?? {}) as Record<string, unknown>;
+        const requestedKind = wireString(draft['kind'], 'openai');
+        const kind = (
+          requestedKind in BROWSER_PROVIDER_CATALOG ? requestedKind : 'openai'
+        ) as keyof typeof BROWSER_PROVIDER_CATALOG;
+        const catalog = BROWSER_PROVIDER_CATALOG[kind];
+        const providerId = wireString(params['id'], `${kind}-${this.providers.size + 1}`);
+        const models = (draft['models'] as string[] | undefined) ?? [...catalog.default_models];
+        const provider: EchoProviderConfig = {
+          id: providerId,
+          kind,
+          name: wireString(draft['name'], catalog.name),
+          endpoint: wireString(draft['endpoint'], catalog.endpoint),
+          model_list_url: wireString(draft['model_list_url'], catalog.model_list_url ?? ''),
+          models,
+          enabled_models: (draft['enabled_models'] as string[] | undefined) ?? models,
+          local: kind === 'ollama' || kind === 'llamacpp' || kind === 'vllm',
+          status: 'disconnected',
+          // Browser preview never retains the credential; this bit only lets the
+          // mock UI represent that a value was handed to the sidecar.
+          credential_configured:
+            Boolean(params['credential']) ||
+            this.providers.get(providerId)?.credential_configured === true,
+          supports_reasoning: catalog.supports_reasoning,
+          supports_streaming: catalog.supports_streaming,
+        };
+        this.providers.set(providerId, provider);
+        return { saved: true, id: providerId, provider, default: 'echo' };
+      }
+      case 'provider.delete':
+        this.providers.delete(params['id'] as string);
+        return { deleted: true, id: params['id'], default: 'echo' };
+      case 'provider.models': {
+        const provider = this.providers.get(params['id'] as string);
+        return { provider: params['id'], models: provider?.models ?? [] };
+      }
+      case 'provider.test': {
+        const providerId = (params['id'] ?? params['provider'] ?? 'echo') as string;
+        const provider = this.providers.get(providerId);
+        if (provider) provider.status = 'connected';
+        return { ok: true, provider: providerId, latency_ms: 8 };
+      }
       case 'memory.list':
       case 'memory.search':
         return { memories: [] };
