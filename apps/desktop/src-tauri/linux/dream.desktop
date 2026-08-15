@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Dream
+GenericName=AI Assistant
+Comment=A personal AI assistant with first-class Persian support
+Exec={{exec}} %U
+Icon={{icon}}
+Terminal=false
+Categories={{categories}}
+Keywords=AI;Assistant;Agent;Persian;Farsi;Memory;
+StartupNotify=true
+StartupWMClass=Dream
