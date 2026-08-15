@@ -1,0 +1,94 @@
+/* Dream Design System — "Rooya" v1.0
+ * CSS custom properties export. Drop into Tailwind v4 via @theme, or use directly.
+ * Themes: [data-theme="light"] / [data-theme="dark"]  ·  Direction: dir="ltr" / dir="rtl"
+ */
+
+:root {
+  /* ---- primitives ---- */
+  --n-50:#F8F8FA; --n-100:#F1F1F4; --n-200:#E4E4E9; --n-300:#CFCFD8; --n-400:#A2A2B0;
+  --n-500:#77778A; --n-600:#5B5B70; --n-700:#474759; --n-800:#333342; --n-900:#212129; --n-950:#141419;
+  --p-50:#F1EFFE; --p-100:#E4E0FD; --p-200:#CCC5FB; --p-300:#ADA1F7; --p-400:#8F82F0;
+  --p-500:#7263E8; --p-600:#5D4DD3; --p-700:#4C3EB2; --p-800:#3D3390; --p-900:#2F2870; --p-950:#1D1946;
+  --suc-100:#D8F3E2; --suc-400:#4BBA7D; --suc-600:#22824F; --suc-700:#1C6A41; --suc-900:#123F27;
+  --war-100:#FDEBCF; --war-400:#E89B2C; --war-600:#A36305; --war-700:#814E08; --war-900:#4B2F0C;
+  --dan-100:#FDE3E3; --dan-400:#EA6B6B; --dan-600:#C22B2B; --dan-700:#A02222; --dan-900:#621919;
+  --inf-100:#DBEAFE; --inf-400:#60A5FA; --inf-600:#2563EB; --inf-700:#1D4ED8; --inf-900:#1E3A8A;
+  --chart-1:#0072B2; --chart-2:#E69F00; --chart-3:#009E73; --chart-4:#CC79A7;
+  --chart-5:#56B4E9; --chart-6:#D55E00; --chart-7:#F0E442; --chart-8:#999999;
+
+  /* ---- spacing (4px base) ---- */
+  --sp-05:2px; --sp-1:4px; --sp-15:6px; --sp-2:8px; --sp-3:12px; --sp-4:16px;
+  --sp-5:20px; --sp-6:24px; --sp-8:32px; --sp-10:40px; --sp-12:48px; --sp-16:64px;
+  --density-scale:1; /* compact mode sets 0.75 */
+
+  /* ---- radius ---- */
+  --r-xs:4px; --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:16px; --r-full:9999px;
+
+  /* ---- type ---- */
+  --font-latin:"Inter","Vazirmatn",system-ui,sans-serif;
+  --font-persian:"Vazirmatn","Inter",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,monospace;
+  --fs-display:30px; --lh-display:38px;
+  --fs-h1:24px; --lh-h1:32px;  --fs-h2:20px; --lh-h2:28px;  --fs-h3:16px; --lh-h3:24px;
+  --fs-body:14px; --lh-body:22px; --lh-body-fa:24px;
+  --fs-body-lg:16px; --lh-body-lg:26px; --lh-body-lg-fa:28px;
+  --fs-caption:12px; --lh-caption:18px;  --fs-micro:11px; --lh-micro:16px;
+  --fs-code:13px; --lh-code:20px;
+
+  /* ---- motion ---- */
+  --dur-fast:120ms; --dur-base:180ms; --dur-slow:260ms; --dur-slower:320ms;
+  --ease-standard:cubic-bezier(.2,0,0,1);
+  --ease-enter:cubic-bezier(.05,.7,.1,1);
+  --ease-exit:cubic-bezier(.3,0,.8,.15);
+
+  /* ---- layout ---- */
+  --rail-w:48px; --sidebar-w:260px; --statusbar-h:24px; --pane-min-w:320px;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-canvas:var(--n-50); --bg-surface:#FFFFFF; --bg-surface2:var(--n-100);
+  --bg-sunken:var(--n-200); --bg-overlay:#FFFFFF;
+  --fg-primary:var(--n-900); --fg-secondary:var(--n-600); --fg-muted:#6E6E80; --fg-inverse:#FFFFFF;
+  --accent-solid:var(--p-600); --accent-text:var(--p-600); --accent-soft:var(--p-100);
+  --border-default:var(--n-200); --border-strong:var(--n-300);
+  --focus-ring:var(--p-500);
+  --success-fg:var(--suc-700); --success-bg:var(--suc-100);
+  --warning-fg:var(--war-700); --warning-bg:var(--war-100);
+  --danger-fg:var(--dan-700);  --danger-bg:var(--dan-100);
+  --info-fg:var(--inf-700);    --info-bg:var(--inf-100);
+  --shadow-e1:0 1px 2px rgba(20,20,25,.06),0 1px 3px rgba(20,20,25,.10);
+  --shadow-e2:0 4px 12px rgba(20,20,25,.10),0 2px 4px rgba(20,20,25,.08);
+  --shadow-e3:0 12px 32px rgba(20,20,25,.16),0 4px 8px rgba(20,20,25,.08);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-canvas:#111116; --bg-surface:var(--n-950); --bg-surface2:#1B1B22;
+  --bg-sunken:#0C0C10; --bg-overlay:#20202A;
+  --fg-primary:#ECECF1; --fg-secondary:var(--n-400); --fg-muted:#8A8A9A; --fg-inverse:#141419;
+  --accent-solid:var(--p-400); --accent-text:var(--p-300); --accent-soft:rgba(47,40,112,.4);
+  --border-default:#2A2A35; --border-strong:#3A3A48;
+  --focus-ring:var(--p-300);
+  --success-fg:var(--suc-400); --success-bg:rgba(18,63,39,.4);
+  --warning-fg:var(--war-400); --warning-bg:rgba(75,47,12,.4);
+  --danger-fg:var(--dan-400);  --danger-bg:rgba(98,25,25,.4);
+  --info-fg:var(--inf-400);    --info-bg:rgba(30,58,138,.4);
+  --shadow-e1:none;
+  --shadow-e2:0 4px 16px rgba(0,0,0,.45);
+  --shadow-e3:0 12px 40px rgba(0,0,0,.6);
+}
+
+/* Direction-aware base */
+[dir="rtl"] { font-family: var(--font-persian); }
+[dir="ltr"] { font-family: var(--font-latin); }
+
+/* LTR islands inside RTL (code, URLs, keys, paths, latency) */
+.ltr-island { direction: ltr; unicode-bidi: isolate; text-align: start; font-family: var(--font-mono); }
+
+/* Focus contract — never remove */
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--r-xs); }
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast:0ms; --dur-base:0ms; --dur-slow:0ms; --dur-slower:0ms; }
+}
