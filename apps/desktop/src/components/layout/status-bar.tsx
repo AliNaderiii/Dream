@@ -4,6 +4,7 @@
 
 import { Circle, Globe, HardDrive, Languages } from 'lucide-react';
 
+import { BridgeStatusIndicator } from '@/components/bridge/bridge-status';
 import { useAppStore } from '@/stores/use-app-store';
 import { useProviderStore } from '@/stores/use-provider-store';
 import type { AgentStatus } from '@/types';
@@ -36,6 +37,8 @@ export function StatusBar() {
         <Circle className={cn('size-2 fill-current', status.className)} aria-hidden />
         <span>{status.label}</span>
       </span>
+
+      <BridgeStatusIndicator />
 
       {activeProvider && (
         <span className="flex items-center gap-1.5">

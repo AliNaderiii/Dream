@@ -8,6 +8,10 @@ pub mod commands;
 pub mod error;
 pub mod state;
 
+// The Python sidecar bridge is desktop-only: mobile platforms cannot spawn the
+// sidecar process. Its commands degrade to a `not_ready` error when uninitialised.
+pub mod bridge;
+
 #[cfg(test)]
 mod tests;
 
@@ -84,10 +88,20 @@ pub fn run() {
             dialogs::select_folder_dialog,
             dialogs::set_workspace_root,
             dialogs::validate_paths,
+            // bridge (Python sidecar)
+            bridge::bridge_send,
+            bridge::bridge_status,
+            bridge::bridge_restart,
+            bridge::bridge_kill,
         ])
         .setup(|app| {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            tray::init(app.handle())?;
+            {
+                tray::init(app.handle())?;
+                // Spawn the Python sidecar and begin supervision. The frontend
+                // learns the connection state via `bridge://state` events.
+                bridge::init(app.handle());
+            }
 
             Ok(())
         })
