@@ -91,7 +91,7 @@ pub fn parse(line: &str) -> Option<ParsedMessage> {
     if let Some(error) = obj.get("error").cloned() {
         let id = id?;
         let err_code = error.get("code").and_then(Value::as_i64);
-        let err_code = err_code.unwrap_or(code::INTERNAL_ERROR) as i32;
+        let err_code = err_code.unwrap_or(code::INTERNAL_ERROR as i64) as i32;
         let message = error
             .get("message")
             .and_then(Value::as_str)
@@ -100,7 +100,11 @@ pub fn parse(line: &str) -> Option<ParsedMessage> {
         let data = error.get("data").cloned();
         return Some(ParsedMessage::Response {
             id,
-            outcome: Outcome::Error { code: err_code, message, data },
+            outcome: Outcome::Error {
+                code: err_code,
+                message,
+                data,
+            },
         });
     }
 
@@ -163,10 +167,9 @@ mod tests {
 
     #[test]
     fn parse_stream_chunk_notification() {
-        let msg = parse(
-            r#"{"jsonrpc":"2.0","method":"stream.chunk","params":{"id":2,"token":"hi"}}"#,
-        )
-        .unwrap();
+        let msg =
+            parse(r#"{"jsonrpc":"2.0","method":"stream.chunk","params":{"id":2,"token":"hi"}}"#)
+                .unwrap();
         match msg {
             ParsedMessage::Notification { method, params } => {
                 assert_eq!(method, "stream.chunk");

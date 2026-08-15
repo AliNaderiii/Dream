@@ -11,8 +11,8 @@
 //! `bridge_restart`, `bridge_kill` — and listens to `bridge://chunk` /
 //! `bridge://state` events (see `src/lib/bridge/`).
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -20,7 +20,7 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::Mutex;
 
 use crate::bridge::dispatcher::{Dispatcher, RequestChannels};
-use crate::bridge::framing::{self, Outcome};
+use crate::bridge::framing::Outcome;
 use crate::bridge::process::{run_supervisor, SidecarConfig};
 use crate::bridge::state::{ConnectionState, SharedState};
 
@@ -46,7 +46,11 @@ pub struct BridgeError {
 impl BridgeError {
     /// Wrap a structured RPC error from the sidecar.
     pub fn rpc(code: i32, message: String, data: Option<Value>) -> Self {
-        Self { code, message, data }
+        Self {
+            code,
+            message,
+            data,
+        }
     }
 
     /// The sidecar is not connected / not yet ready.
@@ -133,7 +137,10 @@ impl<R: Runtime> Bridge<R> {
             return Err(BridgeError::not_ready());
         }
 
-        let RequestChannels { final_rx, stream_rx } = self.dispatcher.lock().await.register(id);
+        let RequestChannels {
+            final_rx,
+            stream_rx,
+        } = self.dispatcher.lock().await.register(id);
 
         // Forward stream chunks to the frontend as they arrive.
         let app = self.app.clone();
@@ -153,9 +160,16 @@ impl<R: Runtime> Bridge<R> {
             None => return Err(BridgeError::not_ready()),
         }
 
-        match final_rx.await.map_err(|_| BridgeError::internal("sidecar closed"))? {
+        match final_rx
+            .await
+            .map_err(|_| BridgeError::internal("sidecar closed"))?
+        {
             Outcome::Result(value) => Ok(value),
-            Outcome::Error { code, message, data } => Err(BridgeError::rpc(code, message, data)),
+            Outcome::Error {
+                code,
+                message,
+                data,
+            } => Err(BridgeError::rpc(code, message, data)),
         }
     }
 

@@ -11,10 +11,11 @@ use serde::{Deserialize, Serialize};
 ///
 /// Stored as a `u8` atomic so reads are lock-free; the string form is what the
 /// frontend and tray see.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ConnectionState {
     /// Spawning the sidecar / awaiting the protocol header.
+    #[default]
     Connecting,
     /// Sidecar is up and answering heartbeats.
     Ready,
@@ -22,12 +23,6 @@ pub enum ConnectionState {
     Restarting,
     /// Out of retries; the frontend shows "Disconnected" and offers manual reconnect.
     Disconnected,
-}
-
-impl Default for ConnectionState {
-    fn default() -> Self {
-        Self::Connecting
-    }
 }
 
 impl ConnectionState {

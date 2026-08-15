@@ -52,7 +52,10 @@ impl Dispatcher {
             // Re-insert would be a logic bug; the bridge increments ids monotonically.
             panic!("duplicate bridge request id {id}");
         }
-        RequestChannels { final_rx, stream_rx }
+        RequestChannels {
+            final_rx,
+            stream_rx,
+        }
     }
 
     /// Deliver a stream chunk to the request with this id, if any. Returns
@@ -97,7 +100,11 @@ impl Dispatcher {
     pub fn fail_all(&mut self, code: i32, message: &str) {
         let ids: Vec<u64> = self.pending.keys().copied().collect();
         for id in ids {
-            let outcome = Outcome::Error { code, message: message.to_string(), data: None };
+            let outcome = Outcome::Error {
+                code,
+                message: message.to_string(),
+                data: None,
+            };
             self.resolve(id, outcome);
         }
     }
@@ -112,7 +119,10 @@ mod tests {
     #[tokio::test]
     async fn register_then_resolve_delivers_outcome() {
         let mut d = Dispatcher::new();
-        let RequestChannels { mut final_rx, mut stream_rx } = d.register(1);
+        let RequestChannels {
+            final_rx,
+            mut stream_rx,
+        } = d.register(1);
         assert!(d.route_stream(1, json!({"token": "hi"})));
         // The chunk is buffered and readable.
         assert_eq!(stream_rx.recv().await.unwrap()["token"], "hi");
@@ -140,8 +150,11 @@ mod tests {
     #[tokio::test]
     async fn resolving_closes_the_stream_channel() {
         let mut d = Dispatcher::new();
-        let RequestChannels { final_rx, mut stream_rx } = d.register(7);
-        let _ = final_rx; // unused here
+        let RequestChannels {
+            final_rx,
+            mut stream_rx,
+        } = d.register(7);
+        drop(final_rx);
         d.resolve(7, Outcome::Result(json!(null)));
         // After resolve, the stream sender is dropped → recv returns None.
         assert!(stream_rx.recv().await.is_none());
