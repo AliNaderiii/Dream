@@ -42,7 +42,9 @@ def _round_trip(payload: str, env: dict[str, str], timeout: float = 30) -> list[
     assert proc.returncode == 0, f"sidecar exited {proc.returncode}\nstderr:\n{stderr}"
 
     lines = stdout.splitlines()
-    assert lines and lines[0] == HEADER, f"missing/incorrect header: {lines[:1]!r}\nstderr:\n{stderr}"
+    assert lines and lines[0] == HEADER, (
+        f"missing/incorrect header: {lines[:1]!r}\nstderr:\n{stderr}"
+    )
     return [json.loads(line) for line in lines[1:] if line.strip()]
 
 
@@ -80,36 +82,25 @@ def test_sidecar_version_round_trip():
 
 
 def test_parse_error_does_not_crash_sidecar():
-    out = _round_trip("this is not json\n" + json.dumps({"jsonrpc": "2.0", "id": 7, "method": "health.check"}), _env())
+    raw = "this is not json\n" + json.dumps(
+        {"jsonrpc": "2.0", "id": 7, "method": "health.check"}
+    )
+    out = _round_trip(raw, _env())
     parse_err = next(m for m in out if m.get("error", {}).get("code") == -32700)
     assert parse_err["id"] is None
     assert any(m.get("id") == 7 for m in out)
 
 
 def test_streaming_conversation_over_subprocess():
+    """Create a session and stream a reply through one long-lived sidecar."""
     env = _env()
-    # First process: create a session, capture the id.
-    create = _round_trip(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "session.create", "params": {"title": "sub"}}), env)
-    # session ids are random; the in-memory session won't persist across two
-    # sidecar processes, so do everything in ONE process below.
-
-    payload = "\n".join(
-        [
-            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "session.create"}),
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "conversation.send",
-                    "params": {"session_id": "__placeholder__"},
-                }
-            ),
-        ]
-    )
-    # We need the real session id, so drive it in a single long-lived process.
     proc = _start_sidecar(env)
-    proc.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "session.create"}) + "\n")
+
+    proc.stdin.write(
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": "session.create"}) + "\n"
+    )
     proc.stdin.flush()
+
     # Read the create response (header + 1 line).
     header = proc.stdout.readline()
     assert header.strip() == HEADER
@@ -150,21 +141,14 @@ def test_streaming_conversation_over_subprocess():
     assert methods[0] == "stream.start"
     assert "stream.chunk" in methods
     assert methods[-1] == "stream.end"
-    chunks = "".join(m["params"]["token"] for m in messages if m.get("method") == "stream.chunk")
+    chunk_tokens = [m for m in messages if m.get("method") == "stream.chunk"]
+    chunks = "".join(m["params"]["token"] for m in chunk_tokens)
     final = next(m for m in messages if m.get("id") == 2 and "result" in m)
     assert chunks == final["result"]["reply"] == "Echo: hello subprocess"
 
 
-def test_cli_bridge_flag_starts_sidecar():
-    """`dream --bridge` (cli.main) must also start the sidecar."""
-    env = _env()
-    out = _round_trip(
-        json.dumps({"jsonrpc": "2.0", "id": 1, "method": "sidecar.version"}),
-        env,
-    )
-    # The env above uses `python -m dream.bridge`; here we additionally assert
-    # that the --bridge flag is wired by invoking cli.main directly is covered
-    # by the import smoke below. This test guards the entry point exists.
+def test_cli_bridge_flag_is_wired():
+    """The `--bridge` flag must be accepted and select the sidecar entry point."""
     import cli
 
     parser = cli.build_parser()

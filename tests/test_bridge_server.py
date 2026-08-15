@@ -132,7 +132,8 @@ def test_conversation_send_emits_stream_events_then_result():
     methods = make_methods()
     sid = methods.session_create({})["session_id"]
     out, _ = run_server(
-        [req(1, "conversation.send", {"session_id": sid, "message": "hello there"})], methods=methods
+        [req(1, "conversation.send", {"session_id": sid, "message": "hello there"})],
+        methods=methods,
     )
     ids = [m for m in out if m.get("id") == 1 or m.get("params", {}).get("id") == 1]
     methods_seen = [m["method"] for m in ids if "method" in m]
@@ -168,7 +169,10 @@ def test_streaming_error_before_start_is_error_only():
 def test_concurrent_requests_all_complete():
     methods = make_methods()
     sids = [methods.session_create({})["session_id"] for _ in range(5)]
-    lines = [req(i, "conversation.send", {"session_id": sids[i], "message": f"msg {i}"}) for i in range(5)]
+    lines = [
+        req(i, "conversation.send", {"session_id": sids[i], "message": f"msg {i}"})
+        for i in range(5)
+    ]
     out, _ = run_server(lines, methods=methods, concurrency=5)
     results = [m for m in out if "result" in m and "reply" in (m.get("result") or {})]
     assert len(results) == 5

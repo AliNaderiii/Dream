@@ -8,9 +8,8 @@ import tempfile
 import pytest
 
 from dream.bridge.errors import APPROVAL_REQUIRED, BridgeError, invalid_params
-from dream.bridge.methods import BridgeMethods, memory_to_dict, turn_to_dict
+from dream.bridge.methods import BridgeMethods, memory_to_dict
 from dream.memory import MemoryStore
-
 
 # --------------------------------------------------------------------------- #
 # Fixtures.
@@ -130,7 +129,11 @@ def test_provider_list_includes_echo_default():
 def test_provider_configure_then_list_and_default():
     m = make_methods()
     saved = m.provider_configure(
-        {"id": "my-ollama", "provider": {"kind": "ollama", "model": "llama3.2"}, "set_default": True}
+        {
+            "id": "my-ollama",
+            "provider": {"kind": "ollama", "model": "llama3.2"},
+            "set_default": True,
+        }
     )
     assert saved["default"] == "my-ollama"
     listed = m.provider_list({})
@@ -213,16 +216,11 @@ def test_memory_to_dict_round_trip():
 
 
 def test_skill_install_get_list_remove(tmp_path, monkeypatch):
-    # Skills are written under DREAM_WORKSPACE_ROOT; point it at a temp dir.
-    monkeypatch.setenv("DREAM_WORKSPACE_ROOT", str(tmp_path))
-    # Reload tools so WORKSPACE_ROOT picks up the new env.
-    import importlib
-
+    # Skills are written under tools.WORKSPACE_ROOT; point it at a temp dir for
+    # the duration of this test (no module reload — that would reset REGISTRY).
     import dream.tools as tools_mod
-    import dream.skills as skills_mod
 
-    importlib.reload(tools_mod)
-    importlib.reload(skills_mod)
+    monkeypatch.setattr(tools_mod, "WORKSPACE_ROOT", tmp_path)
 
     m = make_methods()
     installed = m.skill_install(
@@ -315,16 +313,16 @@ def test_approval_request_then_resolve_allowed_executes():
 
 def test_approval_resolve_denied_returns_blocked():
     m = make_methods()
-    aid = m.approval_request({"name": "run_shell", "arguments": {"command": "rm -rf /"}})[
-        "approval_id"
-    ]
+    req = m.approval_request({"name": "run_shell", "arguments": {"command": "rm -rf /"}})
+    aid = req["approval_id"]
     out = m.approval_resolve({"approval_id": aid, "allowed": False})
     assert out["blocked"] is True
 
 
 def test_approval_resolve_twice_rejected():
     m = make_methods()
-    aid = m.approval_request({"name": "run_shell", "arguments": {"command": "echo x"}})["approval_id"]
+    req = m.approval_request({"name": "run_shell", "arguments": {"command": "echo x"}})
+    aid = req["approval_id"]
     m.approval_resolve({"approval_id": aid, "allowed": False})
     with pytest.raises(BridgeError):
         m.approval_resolve({"approval_id": aid, "allowed": True})

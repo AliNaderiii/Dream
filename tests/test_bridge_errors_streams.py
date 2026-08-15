@@ -17,7 +17,6 @@ from dream.bridge.streams import (
     tokenise,
 )
 
-
 # --------------------------------------------------------------------------- #
 # Error taxonomy.
 # --------------------------------------------------------------------------- #
@@ -81,9 +80,13 @@ def test_serialise_error_includes_traceback_in_dev_mode(monkeypatch):
 
 
 def test_rate_limit_and_context_and_auth_classification():
-    assert E.serialise_error(Exception("HTTP 429 too many requests"))["error"]["code"] == E.RATE_LIMITED
     assert (
-        E.serialise_error(Exception("context length exceeded"))["error"]["code"] == E.CONTEXT_OVERFLOW
+        E.serialise_error(Exception("HTTP 429 too many requests"))["error"]["code"]
+        == E.RATE_LIMITED
+    )
+    assert (
+        E.serialise_error(Exception("context length exceeded"))["error"]["code"]
+        == E.CONTEXT_OVERFLOW
     )
     assert E.serialise_error(Exception("401 Unauthorized"))["error"]["code"] == E.AUTH_ERROR
 
