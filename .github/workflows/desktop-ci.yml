@@ -114,6 +114,12 @@ jobs:
         working-directory: apps/desktop/src-tauri
         run: cargo build --verbose
 
+      # `cargo test` is skipped on Windows: tauri-winres only embeds the Windows
+      # app manifest into the main binary, so test EXEs load ComCtl32 v5 instead
+      # of v6 and fail to start with STATUS_ENTRYPOINT_NOT_FOUND (0xc0000139).
+      # See https://github.com/tauri-apps/tauri/issues/13419
+      # The tests are platform-agnostic logic and are covered by the Linux/macOS jobs.
       - name: Cargo test
+        if: runner.os != 'Windows'
         working-directory: apps/desktop/src-tauri
         run: cargo test --verbose
