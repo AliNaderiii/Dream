@@ -102,13 +102,14 @@ object. **`*` = supports streaming** (§5).
 
 | Method | Params | Result |
 | --- | --- | --- |
-| `session.create` | `{title?: string, provider?: string}` | `{session_id, title, created_at}` |
+| `session.create` | `{title?: string, provider?: string, model?: string, reasoning_effort?: number}` | `{session_id, title, created_at}` |
 | `session.list` | `{}` | `{sessions: Session[]}` |
 | `session.get` | `{session_id}` | `Session` |
 | `session.delete` | `{session_id}` | `{deleted: true}` |
 | `session.rename` | `{session_id, title}` | `Session` |
+| `session.configure` | `{session_id, provider, model, reasoning_effort}` | `Session` |
 
-`Session = {id, title, created_at, updated_at, message_count, provider}`
+`Session = {id, title, created_at, updated_at, message_count, provider, model, reasoning_effort}`
 
 A session holds one independent conversation context (its own history). All
 sessions share the same **durable** memory store, so memories created in one
@@ -147,16 +148,27 @@ termination of an in-flight generation (best-effort — see §5.3).
 
 | Method | Params | Result |
 | --- | --- | --- |
+| `provider.catalog` | `{}` | `{catalog: Record<string, CatalogEntry>}` |
 | `provider.list` | `{}` | `{providers: Provider[], default: string}` |
-| `provider.test` | `{provider: string}` | `{ok: boolean, latency_ms?: number, detail?: string}` |
-| `provider.configure` | `{provider: ProviderConfig, set_default?: boolean}` | `{saved: true, default: string}` |
+| `provider.get` | `{id}` | `{provider: Provider}` |
+| `provider.create` | `{id?, provider: ProviderConfig, credential?, set_default?}` | `{saved: true, provider, default}` |
+| `provider.update` | `{id, provider: ProviderConfig, credential?, clear_credential?, set_default?}` | `{saved: true, provider, default}` |
+| `provider.delete` | `{id}` | `{deleted: true, default}` |
+| `provider.models` | `{id, force?}` | `{provider, models, error?}` |
+| `provider.test` | `{id}` | `{ok: boolean, latency_ms?: number, detail?: string}` |
+| `provider.oauth.begin` | `{id, redirect_uri}` | `{authorization_url, state}` |
+| `provider.oauth.complete` | `{id, state, code}` | `{connected: true, provider, expires_in?}` |
+| `provider.configure` | P-02 upsert shape | Alias of create/update for backward compatibility |
 
-`Provider = {id, kind, label, model?, base_url?, local, status}`
-`ProviderConfig = {kind: "echo"\|"openai"\|"ollama", model?, base_url?, api_key?}`
+`Provider` includes non-secret metadata, enabled models, capabilities, connection status, and a
+`credential_configured` boolean. `ProviderConfig` never returns a credential. A `credential`
+request value goes directly to the OS keychain and is omitted from JSON persistence and every
+response.
 
-`provider.test` performs a minimal probe (one tiny chat completion for HTTP
-providers; instant for the offline `echo` backend). Failures are **not** errors
-— they return `{ok: false, detail}`.
+`provider.test` performs a minimal chat completion (instant for offline `echo`). Failures are
+**not** RPC errors — they return `{ok: false, detail}` using fixed, credential-safe detail text.
+Model lists are cached for fifteen minutes. OAuth requires state and an S256 PKCE verifier; access
+and refresh tokens are stored only in the keychain.
 
 ### 3.4 `memory.*` — durable memory
 

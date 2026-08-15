@@ -41,13 +41,20 @@ from dream.agent import (
     build_backend,
 )
 from dream.memory import KINDS, Memory, MemoryStore
-from dream.store.sessions import SessionStore
+from dream.model_providers import (
+    PROVIDER_CATALOG,
+    AnthropicBackend,
+    GoogleBackend,
+    KeychainCredentialStore,
+    OAuthPKCEManager,
+    ProviderRegistry,
+)
 
 from .errors import APPROVAL_REQUIRED, BridgeError, invalid_params
 from .streams import Chunk, Stream, stream_text, tokenise
 
 #: Provider kinds the bridge knows how to build and persist.
-PROVIDER_KINDS: tuple[str, ...] = ("echo", "openai", "ollama")
+PROVIDER_KINDS: tuple[str, ...] = ("echo", *PROVIDER_CATALOG.keys())
 
 #: How long a provider probe may take before it is reported unreachable.
 PROBE_TIMEOUT_SECONDS = 10.0
@@ -144,23 +151,49 @@ def reminder_to_dict(reminder: Any) -> dict[str, Any]:
 
 
 def build_configured_backend(config: dict[str, Any] | None) -> Any:
-    """Build a backend instance from a provider config dict.
+    """Build a backend from non-secret metadata plus an in-memory credential.
 
-    Falls back to :func:`build_backend` (which honours ``DREAM_BACKEND``) when no
-    config or an unknown kind is given, so the bridge always produces a working
-    backend.
+    ``credential`` is injected only after a keychain read and must never be
+    passed to the registry's persistence layer. OpenAI-compatible providers all
+    share :class:`OpenAIBackend`; Anthropic and Google use small wire adapters.
     """
-    kind = ((config or {}).get("kind") or "").lower()
-    if kind == "openai":
+    config = config or {}
+    kind = str(config.get("kind") or "").lower()
+    model = str(
+        config.get("model")
+        or next(iter(config.get("enabled_models") or []), "")
+        or next(iter(config.get("models") or []), "")
+    )
+    endpoint = config.get("endpoint") or config.get("base_url") or None
+    credential = str(config.get("credential") or config.get("api_key") or "")
+    effort = config.get("reasoning_effort")
+
+    if kind in {"openai", "groq", "together", "openrouter", "vllm", "llamacpp"}:
         return OpenAIBackend(
-            model=config.get("model") or None,
-            api_key=config.get("api_key") or None,
-            base_url=config.get("base_url") or None,
+            model=model or None,
+            api_key=credential,
+            base_url=endpoint,
+            reasoning_effort=effort if kind in {"openai", "openrouter"} else None,
         )
     if kind == "ollama":
-        return OllamaBackend(
-            model=config.get("model") or None,
-            base_url=config.get("base_url") or None,
+        # Catalog endpoints already end in /v1. Legacy P-02 configs stored the
+        # host only and still need OllamaBackend's suffix handling.
+        if endpoint and str(endpoint).rstrip("/").endswith("/v1"):
+            return OpenAIBackend(model=model or None, api_key="", base_url=endpoint)
+        return OllamaBackend(model=model or None, base_url=endpoint)
+    if kind == "anthropic":
+        return AnthropicBackend(
+            model,
+            credential,
+            str(endpoint or "https://api.anthropic.com"),
+            reasoning_effort=effort,
+        )
+    if kind == "google":
+        return GoogleBackend(
+            model,
+            credential,
+            str(endpoint or "https://generativelanguage.googleapis.com/v1beta"),
+            oauth=bool(config.get("oauth")),
         )
     if kind == "echo":
         return EchoBackend()
@@ -182,6 +215,8 @@ class SessionState:
     updated_at: float
     message_count: int = 0
     provider: str = "echo"
+    model: str = ""
+    reasoning_effort: float = 0.0
     dream: Dream = None  # type: ignore[assignment]
     stop_event: asyncio.Event = field(default_factory=asyncio.Event)
 
@@ -194,6 +229,8 @@ class SessionState:
             "updated_at": self.updated_at,
             "message_count": self.message_count,
             "provider": self.provider,
+            "model": self.model,
+            "reasoning_effort": self.reasoning_effort,
         }
 
 
@@ -207,11 +244,6 @@ class ApprovalState:
     risk: str
     summary: str
     resolved: bool = False
-    created_at: float = field(default_factory=time.time)
-    expires_at: float = field(default_factory=lambda: time.time() + 60.0)
-    decision: str | None = None
-    execute_on_resolve: bool = True
-    waiter: threading.Event = field(default_factory=threading.Event, repr=False)
 
 
 @dataclass
@@ -238,13 +270,11 @@ class BridgeMethods:
         sessions_path: str | None = None,
         providers_path: str | None = None,
         default_provider: str | None = None,
-        sessions_db_path: str | None = None,
+        credential_store: KeychainCredentialStore | None = None,
     ) -> None:
         self.store = store or MemoryStore(os.environ.get("DREAM_DB", "data/dream.db"))
         self.sessions: dict[str, SessionState] = {}
         self.approvals: dict[str, ApprovalState] = {}
-        self.approval_history: list[dict[str, Any]] = []
-        self.always_allowed: set[str] = set()
         self.subagents: dict[str, SubagentState] = {}
         self._lock = threading.RLock()
 
@@ -254,18 +284,13 @@ class BridgeMethods:
         self._providers_path = providers_path or os.environ.get(
             "DREAM_PROVIDERS_PATH", "data/bridge_providers.json"
         )
-        self._approvals_path = os.environ.get(
-            "DREAM_APPROVALS_PATH", f"{self._sessions_path}.approvals.json"
+        self.provider_registry = ProviderRegistry(
+            self._providers_path, credentials=credential_store
         )
-        self._load_approval_settings()
-        if sessions_db_path is None:
-            sessions_db_path = os.environ.get("DREAM_SESSIONS_DB")
-        if sessions_db_path is None:
-            sessions_db_path = f"{self._sessions_path}.db" if sessions_path else "data/sessions.db"
-        self.session_store = SessionStore(sessions_db_path)
-        self._providers, self._default_provider = self._load_providers()
-        if default_provider:
-            self._default_provider = default_provider
+        # Kept as aliases for P-02 callers that introspect these attributes.
+        self._providers = self.provider_registry._providers
+        self._default_provider = default_provider or self.provider_registry.default_provider
+        self.oauth = OAuthPKCEManager(self.provider_registry)
 
         self._started_at = time.time()
         self._load_sessions_index()
@@ -279,13 +304,8 @@ class BridgeMethods:
         """Persist state and close the store. Safe to call more than once."""
         self._save_sessions_index()
         self._save_providers()
-        self._save_approval_settings()
         try:
             self.store.close()
-        except Exception:
-            pass
-        try:
-            self.session_store.close()
         except Exception:
             pass
 
@@ -298,14 +318,20 @@ class BridgeMethods:
             "session.get": self.session_get,
             "session.delete": self.session_delete,
             "session.rename": self.session_rename,
-            "session.update": self.session_update,
-            "session.messages": self.session_messages,
-            "session.export": self.session_export,
+            "session.configure": self.session_configure,
             "conversation.send": self.conversation_send,
             "conversation.stop": self.conversation_stop,
+            "provider.catalog": self.provider_catalog,
             "provider.list": self.provider_list,
+            "provider.get": self.provider_get,
+            "provider.create": self.provider_create,
+            "provider.update": self.provider_update,
+            "provider.delete": self.provider_delete,
+            "provider.models": self.provider_models,
             "provider.test": self.provider_test,
             "provider.configure": self.provider_configure,
+            "provider.oauth.begin": self.provider_oauth_begin,
+            "provider.oauth.complete": self.provider_oauth_complete,
             "memory.list": self.memory_list,
             "memory.search": self.memory_search,
             "memory.get": self.memory_get,
@@ -319,8 +345,6 @@ class BridgeMethods:
             "tool.execute": self.tool_execute,
             "approval.request": self.approval_request,
             "approval.resolve": self.approval_resolve,
-            "approval.list": self.approval_list,
-            "approval.history": self.approval_history_list,
             "subagent.spawn": self.subagent_spawn,
             "subagent.list": self.subagent_list,
             "subagent.status": self.subagent_status,
@@ -333,46 +357,57 @@ class BridgeMethods:
     # session.*
     # ------------------------------------------------------------------ #
 
-    def _new_dream(self, provider: str | None) -> Dream:
-        config = self._providers.get(provider or self._default_provider)
-        backend = build_configured_backend(config)
+    @staticmethod
+    def _effort_label(value: Any) -> str | None:
+        try:
+            effort = float(value)
+        except (TypeError, ValueError):
+            return None
+        if effort <= 0:
+            return None
+        if effort < 0.5:
+            return "low"
+        if effort < 0.85:
+            return "medium"
+        return "high"
 
-        def ask(name: str, arguments: dict[str, Any]) -> bool:
-            if name in self.always_allowed:
-                return True
-            approval = self._register_approval(
-                name, arguments, "dangerous", execute_on_resolve=False
-            )
-            approval.waiter.wait(timeout=60.0)
-            if not approval.resolved:
-                with self._lock:
-                    approval.resolved = True
-                    approval.decision = "deny"
-                    self.approval_history.append(self._approval_to_dict(approval))
-                    self._save_approval_settings()
-            return approval.decision in {"allow", "always_allow"}
+    def _backend_for(
+        self, provider: str | None, model: str | None = None, reasoning_effort: Any = 0.0
+    ) -> Any:
+        provider_id = provider or self._default_provider
+        if provider_id == "echo":
+            return EchoBackend()
+        config = self.provider_registry.raw(provider_id)
+        if config is None:
+            return build_configured_backend({"kind": provider_id})
+        try:
+            credential = self.provider_registry.credential(provider_id) or ""
+            oauth = self.provider_registry.credentials.has(provider_id, "oauth_access_token")
+        except Exception:
+            credential, oauth = "", False
+        return build_configured_backend(
+            {
+                **config,
+                "model": model or None,
+                "credential": credential,
+                "oauth": oauth,
+                "reasoning_effort": self._effort_label(reasoning_effort),
+            }
+        )
 
-        return Dream(self.store, backend, ApprovalPolicy(ask=ask))
+    def _new_dream(
+        self, provider: str | None, model: str | None = None, reasoning_effort: Any = 0.0
+    ) -> Dream:
+        backend = self._backend_for(provider, model, reasoning_effort)
+        return Dream(self.store, backend, ApprovalPolicy())
 
     def session_create(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
         title = str(params.get("title") or "New session").strip()
         provider = str(params.get("provider") or self._default_provider)
-        requested_id = params.get("session_id")
-        sid = (
-            str(requested_id)
-            if isinstance(requested_id, str) and requested_id
-            else f"sess_{uuid.uuid4().hex[:20]}"
-        )
-        with self._lock:
-            existing = self.sessions.get(sid)
-        if existing is not None:
-            return {
-                "session_id": sid,
-                "id": sid,
-                "title": existing.title,
-                "created_at": existing.created_at,
-            }
+        model = str(params.get("model") or "")
+        reasoning_effort = min(1.0, max(0.0, float(params.get("reasoning_effort") or 0.0)))
+        sid = f"sess_{uuid.uuid4().hex[:20]}"
         now = time.time()
         session = SessionState(
             id=sid,
@@ -380,17 +415,12 @@ class BridgeMethods:
             created_at=now,
             updated_at=now,
             provider=provider,
-            dream=self._new_dream(provider),
+            model=model,
+            reasoning_effort=reasoning_effort,
+            dream=self._new_dream(provider, model, reasoning_effort),
         )
         with self._lock:
             self.sessions[sid] = session
-            self.session_store.create(
-                title,
-                session_id=sid,
-                model_provider=provider,
-                model_name=str(params.get("model") or ""),
-                project_id=params.get("project_id"),
-            )
             self._save_sessions_index()
         return {
             "session_id": sid,
@@ -400,34 +430,14 @@ class BridgeMethods:
         }
 
     def session_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        params = params or {}
-        rows, total = self.session_store.list(
-            limit=int(params.get("limit", 50)),
-            offset=int(params.get("offset", 0)),
-            search=str(params.get("search") or ""),
-            archived=bool(params.get("archived", False)),
-        )
-        sessions = [
-            {
-                "id": row.id,
-                "title": row.name,
-                "name": row.name,
-                "created_at": row.created_at,
-                "updated_at": row.updated_at,
-                "message_count": row.message_count,
-                "provider": row.model_provider,
-                "model_name": row.model_name,
-                "is_archived": row.is_archived,
-                "project_id": row.project_id,
-            }
-            for row in rows
-        ]
-        return {
-            "sessions": sessions,
-            "total": total,
-            "limit": int(params.get("limit", 50)),
-            "offset": int(params.get("offset", 0)),
-        }
+        del params
+        with self._lock:
+            sessions = sorted(
+                (s.to_index() for s in self.sessions.values()),
+                key=lambda s: s["updated_at"],
+                reverse=True,
+            )
+        return {"sessions": sessions}
 
     def session_get(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         session = self._require_session(params)
@@ -437,7 +447,6 @@ class BridgeMethods:
         session = self._require_session(params)
         with self._lock:
             self.sessions.pop(session.id, None)
-            self.session_store.delete(session.id)
             self._save_sessions_index()
         return {"deleted": True, "session_id": session.id}
 
@@ -450,55 +459,32 @@ class BridgeMethods:
         session.title = title
         session.updated_at = time.time()
         with self._lock:
-            self.session_store.update(session.id, name=title)
             self._save_sessions_index()
         return session.to_index()
 
-    def session_update(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def session_configure(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Switch one session's backend without affecting any other pane."""
         params = params or {}
         session = self._require_session(params)
-        if "title" in params or "name" in params:
-            return self.session_rename(
-                {"session_id": session.id, "title": params.get("title", params.get("name"))}
-            )
-        archived = params.get("is_archived")
-        if archived is not None:
-            row = self.session_store.update(session.id, is_archived=bool(archived))
-            return {
-                **session.to_index(),
-                "is_archived": bool(getattr(row, "is_archived", archived)),
-            }
-        return session.to_index()
-
-    def session_messages(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        params = params or {}
-        session = self._require_session(params)
-        messages = self.session_store.messages(session.id, limit=int(params.get("limit", 10_000)))
-        return {
-            "messages": [
-                {
-                    "id": m.id,
-                    "session_id": m.session_id,
-                    "role": m.role,
-                    "content": m.content,
-                    "tool_calls": m.tool_calls,
-                    "created_at": m.created_at,
-                    "token_count": m.token_count,
-                }
-                for m in messages
-            ]
-        }
-
-    def session_export(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        params = params or {}
-        session = self._require_session(params)
+        provider = str(params.get("provider") or session.provider)
+        if provider != "echo" and self.provider_registry.raw(provider) is None:
+            raise invalid_params(f"no provider with id {provider!r}")
+        model = str(params.get("model") or session.model)
         try:
-            content, content_type, filename = self.session_store.export(
-                session.id, str(params.get("format") or "json")
+            effort = min(
+                1.0, max(0.0, float(params.get("reasoning_effort", session.reasoning_effort)))
             )
-        except ValueError as exc:
-            raise invalid_params(str(exc)) from exc
-        return {"content": content, "content_type": content_type, "filename": filename}
+        except (TypeError, ValueError) as exc:
+            raise invalid_params("reasoning_effort must be between 0 and 1") from exc
+        session.provider = provider
+        session.model = model
+        session.reasoning_effort = effort
+        # Preserve the conversation history while replacing only the backend.
+        session.dream.backend = self._backend_for(provider, model, effort)
+        session.updated_at = time.time()
+        with self._lock:
+            self._save_sessions_index()
+        return session.to_index()
 
     # ------------------------------------------------------------------ #
     # conversation.*
@@ -512,12 +498,6 @@ class BridgeMethods:
         if not isinstance(message, str) or not message.strip():
             raise invalid_params("message must be a non-empty string")
 
-        if len(message) > 100_000:
-            raise invalid_params("message exceeds the 100000 character limit")
-
-        # Auto-save the user half before provider work, so even a network/provider
-        # failure leaves a recoverable transcript.
-        self.session_store.add_message(session.id, "user", message)
         session.stop_event.clear()
         dream = session.dream
         cancellation = session.stop_event
@@ -542,12 +522,6 @@ class BridgeMethods:
             )
 
         turn_dict = turn_to_dict(result)
-        self.session_store.add_message(
-            session.id,
-            "assistant",
-            turn_dict["reply"],
-            tool_calls=turn_dict.get("tool_calls", []),
-        )
         cancel = cancellation
 
         async def _chunks() -> AsyncIterator[Chunk]:
@@ -567,68 +541,170 @@ class BridgeMethods:
     # provider.*
     # ------------------------------------------------------------------ #
 
+    def provider_catalog(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        del params
+        return {"catalog": self.provider_registry.catalog()}
+
     def provider_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         del params
         providers = [
             {
-                "id": pid,
-                "kind": cfg.get("kind", "echo"),
-                "label": cfg.get("label") or pid,
-                "model": cfg.get("model"),
-                "base_url": cfg.get("base_url"),
-                "local": cfg.get("kind", "echo") in {"echo", "ollama"},
-                "status": "connected" if cfg.get("kind") == "echo" else "untested",
-            }
-            for pid, cfg in self._providers.items()
+                "id": "echo",
+                "kind": "echo",
+                "name": "Echo (offline)",
+                "label": "Echo (offline)",
+                "local": True,
+                "status": "connected",
+                "models": ["echo"],
+                "enabled_models": ["echo"],
+                "credential_configured": True,
+                "supports_reasoning": False,
+            },
+            *self.provider_registry.list(),
         ]
         return {"providers": providers, "default": self._default_provider}
 
-    async def provider_test(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        params = params or {}
-        provider_id = str(params.get("provider") or self._default_provider)
-        config = self._providers.get(provider_id) or {"kind": provider_id}
-        kind = (config.get("kind") or provider_id).lower()
+    def provider_get(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        provider_id = self._provider_id(params)
+        if provider_id == "echo":
+            return {"provider": self.provider_list({})["providers"][0]}
+        provider = self.provider_registry.get(provider_id)
+        if provider is None:
+            raise invalid_params(f"no provider with id {provider_id!r}")
+        return {"provider": provider}
 
-        if kind == "echo":
-            return {"ok": True, "provider": provider_id, "latency_ms": 0}
-
-        backend = build_configured_backend(config)
-
-        def probe() -> Any:
-            return backend.chat([{"role": "user", "content": "ping"}])
-
-        started = time.monotonic()
-        try:
-            await asyncio.wait_for(asyncio.to_thread(probe), timeout=PROBE_TIMEOUT_SECONDS)
-        except TimeoutError:
-            return {"ok": False, "provider": provider_id, "detail": "timed out"}
-        except Exception as exc:
-            return {"ok": False, "provider": provider_id, "detail": f"{type(exc).__name__}: {exc}"}
-        latency_ms = round((time.monotonic() - started) * 1000.0, 2)
-        return {"ok": True, "provider": provider_id, "latency_ms": latency_ms}
-
-    def provider_configure(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def provider_create(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
         config = params.get("provider")
         if not isinstance(config, dict):
             raise invalid_params("provider config must be an object")
-        kind = str(config.get("kind", "")).lower()
-        if kind not in PROVIDER_KINDS:
-            raise invalid_params(f"kind must be one of {PROVIDER_KINDS}, got {kind!r}")
-        provider_id = str(params.get("id") or config.get("label") or kind)
-        stored = {
-            "kind": kind,
-            "label": str(config.get("label") or provider_id),
-            "model": config.get("model"),
-            "base_url": config.get("base_url"),
-            "api_key": config.get("api_key"),
+        credential = params.get("credential") or config.get("api_key")
+        try:
+            provider = self.provider_registry.add(
+                config,
+                provider_id=str(params.get("id") or config.get("id") or "") or None,
+                credential=str(credential) if credential else None,
+                set_default=bool(params.get("set_default")),
+            )
+        except (KeyError, ValueError, RuntimeError) as exc:
+            raise invalid_params(str(exc)) from exc
+        self._default_provider = self.provider_registry.default_provider
+        return {
+            "saved": True,
+            "id": provider["id"],
+            "provider": provider,
+            "default": self._default_provider,
         }
-        with self._lock:
-            self._providers[provider_id] = stored
-            if params.get("set_default") or not self._default_provider:
-                self._default_provider = provider_id
-            self._save_providers()
-        return {"saved": True, "id": provider_id, "default": self._default_provider}
+
+    def provider_update(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        provider_id = self._provider_id(params)
+        changes = params.get("provider")
+        if not isinstance(changes, dict):
+            raise invalid_params("provider config must be an object")
+        credential = params.get("credential") or changes.get("api_key")
+        try:
+            provider = self.provider_registry.update(
+                provider_id,
+                changes,
+                credential=str(credential) if credential else None,
+                clear_credential=bool(params.get("clear_credential")),
+                set_default=bool(params.get("set_default")),
+            )
+        except KeyError as exc:
+            raise invalid_params(f"no provider with id {provider_id!r}") from exc
+        except (ValueError, RuntimeError) as exc:
+            raise invalid_params(str(exc)) from exc
+        self._default_provider = self.provider_registry.default_provider
+        return {
+            "saved": True,
+            "id": provider_id,
+            "provider": provider,
+            "default": self._default_provider,
+        }
+
+    def provider_delete(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        provider_id = self._provider_id(params)
+        if provider_id == "echo":
+            raise invalid_params("the offline Echo provider cannot be deleted")
+        try:
+            deleted = self.provider_registry.delete(provider_id)
+        except RuntimeError as exc:
+            raise invalid_params(str(exc)) from exc
+        if not deleted:
+            raise invalid_params(f"no provider with id {provider_id!r}")
+        self._default_provider = self.provider_registry.default_provider
+        return {"deleted": True, "id": provider_id, "default": self._default_provider}
+
+    async def provider_models(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        provider_id = self._provider_id(params)
+        if provider_id == "echo":
+            return {"provider": "echo", "models": ["echo"], "cached": True}
+        try:
+            models = await asyncio.to_thread(
+                self.provider_registry.models, provider_id, force=bool(params.get("force"))
+            )
+        except KeyError as exc:
+            raise invalid_params(f"no provider with id {provider_id!r}") from exc
+        except ConnectionError as exc:
+            return {"provider": provider_id, "models": [], "error": str(exc)}
+        return {"provider": provider_id, "models": models}
+
+    async def provider_test(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        provider_id = self._provider_id(params, default=self._default_provider)
+        if provider_id == "echo":
+            return {"ok": True, "provider": provider_id, "latency_ms": 0}
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(self.provider_registry.test_connection, provider_id),
+                timeout=PROBE_TIMEOUT_SECONDS + 1,
+            )
+        except KeyError as exc:
+            raise invalid_params(f"no provider with id {provider_id!r}") from exc
+        except TimeoutError:
+            return {"ok": False, "provider": provider_id, "detail": "timed out"}
+        except Exception:
+            # Never include provider-library errors here: they can contain an
+            # Authorization header or a Google key-bearing URL.
+            return {"ok": False, "provider": provider_id, "detail": "Connection failed"}
+
+    def provider_configure(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Backward-compatible P-02 upsert, now backed by secure CRUD."""
+        params = dict(params or {})
+        config = params.get("provider")
+        if not isinstance(config, dict):
+            raise invalid_params("provider config must be an object")
+        if str(config.get("kind") or "").lower() == "echo":
+            if params.get("set_default"):
+                self._default_provider = "echo"
+                self.provider_registry.default_provider = "echo"
+                self._save_providers()
+            return {"saved": True, "id": "echo", "default": self._default_provider}
+        provider_id = str(params.get("id") or config.get("label") or config.get("kind") or "")
+        params["id"] = provider_id
+        if self.provider_registry.get(provider_id):
+            return self.provider_update(params)
+        return self.provider_create(params)
+
+    def provider_oauth_begin(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        provider_id = self._provider_id(params)
+        redirect_uri = str(params.get("redirect_uri") or "")
+        try:
+            return self.oauth.begin(provider_id, redirect_uri)
+        except (KeyError, ValueError) as exc:
+            raise invalid_params(str(exc)) from exc
+
+    async def provider_oauth_complete(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        provider_id = self._provider_id(params)
+        state = str(params.get("state") or "")
+        code = str(params.get("code") or "")
+        try:
+            return await asyncio.to_thread(self.oauth.complete, provider_id, state, code)
+        except (KeyError, ValueError, ConnectionError, RuntimeError) as exc:
+            raise invalid_params(str(exc)) from exc
 
     # ------------------------------------------------------------------ #
     # memory.*
@@ -789,11 +865,7 @@ class BridgeMethods:
             raise invalid_params("arguments must be an object")
 
         # Dangerous tools require an explicit, resolved approval.
-        if (
-            registered.risk == "dangerous"
-            and name not in self.always_allowed
-            and not bool(params.get("approved"))
-        ):
+        if registered.risk == "dangerous" and not bool(params.get("approved")):
             approval = self._register_approval(name, arguments, registered.risk)
             raise BridgeError(
                 APPROVAL_REQUIRED,
@@ -835,42 +907,24 @@ class BridgeMethods:
     def approval_resolve(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
         approval_id = params.get("approval_id")
+        allowed = bool(params.get("allowed"))
         if not isinstance(approval_id, str) or not approval_id:
             raise invalid_params("approval_id must be a non-empty string")
-        requested = params.get("decision")
-        decision = (
-            str(requested)
-            if requested is not None
-            else ("allow" if bool(params.get("allowed")) else "deny")
-        )
-        if decision not in {"allow", "deny", "always_allow"}:
-            raise invalid_params("decision must be allow, deny, or always_allow")
         with self._lock:
             approval = self.approvals.get(approval_id)
             if approval is None:
                 raise invalid_params(f"no pending approval with id {approval_id!r}")
             if approval.resolved:
                 raise invalid_params(f"approval {approval_id!r} already resolved")
-            if time.time() >= approval.expires_at:
-                decision = "deny"
             approval.resolved = True
-            approval.decision = decision
             name, arguments = approval.name, approval.arguments
-            if decision == "always_allow":
-                self.always_allowed.add(name)
-            self.approval_history.append(self._approval_to_dict(approval))
-            self._save_approval_settings()
-            approval.waiter.set()
 
-        if decision == "deny":
+        if not allowed:
             return {
                 "blocked": True,
-                "reason": "denied by user or timed out",
+                "reason": "denied by user",
                 "approval_id": approval_id,
             }
-
-        if not approval.execute_on_resolve:
-            return {"status": "approved", "approval_id": approval_id, "decision": decision}
 
         from dream.tools import execute
 
@@ -880,55 +934,11 @@ class BridgeMethods:
         except (TypeError, ValueError):
             return {"status": "ok", "result": raw}
 
-    def approval_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        del params
-        now = time.time()
-        with self._lock:
-            for approval in self.approvals.values():
-                if not approval.resolved and now >= approval.expires_at:
-                    approval.resolved = True
-                    approval.decision = "deny"
-                    approval.waiter.set()
-                    self.approval_history.append(self._approval_to_dict(approval))
-                    self._save_approval_settings()
-            pending = [self._approval_to_dict(a) for a in self.approvals.values() if not a.resolved]
-        pending.sort(key=lambda item: item["created_at"])
-        return {"approvals": pending, "always_allowed": sorted(self.always_allowed)}
-
-    def approval_history_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        limit = int((params or {}).get("limit", 100))
-        return {"approvals": self.approval_history[-max(1, min(limit, 1000)) :]}
-
-    @staticmethod
-    def _approval_to_dict(approval: ApprovalState) -> dict[str, Any]:
-        return {
-            "approval_id": approval.id,
-            "name": approval.name,
-            "arguments": approval.arguments,
-            "risk": approval.risk,
-            "summary": approval.summary,
-            "created_at": approval.created_at,
-            "expires_at": approval.expires_at,
-            "decision": approval.decision,
-        }
-
-    def _register_approval(
-        self,
-        name: str,
-        arguments: dict[str, Any],
-        risk: str,
-        *,
-        execute_on_resolve: bool = True,
-    ) -> ApprovalState:
+    def _register_approval(self, name: str, arguments: dict[str, Any], risk: str) -> ApprovalState:
         approval_id = f"appr_{uuid.uuid4().hex[:16]}"
         summary = _approval_summary(name, arguments)
         approval = ApprovalState(
-            id=approval_id,
-            name=name,
-            arguments=dict(arguments),
-            risk=risk,
-            summary=summary,
-            execute_on_resolve=execute_on_resolve,
+            id=approval_id, name=name, arguments=dict(arguments), risk=risk, summary=summary
         )
         with self._lock:
             self.approvals[approval_id] = approval
@@ -1037,6 +1047,16 @@ class BridgeMethods:
     # internals
     # ------------------------------------------------------------------ #
 
+    @staticmethod
+    def _provider_id(params: dict[str, Any] | None, *, default: str = "") -> str:
+        params = params or {}
+        provider_id = params.get("id") or params.get("provider") or default
+        if isinstance(provider_id, dict):
+            provider_id = provider_id.get("id")
+        if not isinstance(provider_id, str) or not provider_id:
+            raise invalid_params("provider id must be a non-empty string")
+        return provider_id
+
     def _require_session(self, params: dict[str, Any] | None) -> SessionState:
         params = params or {}
         session_id = params.get("session_id")
@@ -1059,83 +1079,40 @@ class BridgeMethods:
 
     # -- persistence ------------------------------------------------------ #
 
-    def _load_approval_settings(self) -> None:
-        try:
-            with open(self._approvals_path, encoding="utf-8") as handle:
-                blob = json.load(handle)
-        except (OSError, ValueError):
-            return
-        if isinstance(blob, dict):
-            self.always_allowed = {str(name) for name in blob.get("always_allowed", [])}
-            history = blob.get("history", [])
-            if isinstance(history, list):
-                self.approval_history = [item for item in history[-1000:] if isinstance(item, dict)]
-
-    def _save_approval_settings(self) -> None:
-        self._write_json(
-            self._approvals_path,
-            {
-                "always_allowed": sorted(self.always_allowed),
-                "history": self.approval_history[-1000:],
-            },
-        )
-
     def _load_providers(self) -> tuple[dict[str, dict[str, Any]], str]:
-        default = os.environ.get("DREAM_BACKEND", "echo")
-        try:
-            with open(self._providers_path, encoding="utf-8") as handle:
-                blob = json.load(handle)
-        except (OSError, ValueError):
-            return {}, default
-        providers = blob.get("providers", {}) if isinstance(blob, dict) else {}
-        saved_default = blob.get("default") if isinstance(blob, dict) else None
-        return dict(providers), str(saved_default or default)
+        """Legacy helper retained for callers; registry owns loading now."""
+        return self.provider_registry._providers, self.provider_registry.default_provider
 
     def _save_providers(self) -> None:
-        self._write_json(
-            self._providers_path,
-            {"providers": self._providers, "default": self._default_provider},
-        )
+        self.provider_registry.default_provider = self._default_provider
+        self.provider_registry._save()
 
     def _load_sessions_index(self) -> None:
-        # SQLite is authoritative. The legacy JSON index is imported once for
-        # users upgrading from P-02, then kept only for backwards compatibility.
-        stored, _ = self.session_store.list(limit=200, archived=False)
-        archived, _ = self.session_store.list(limit=200, archived=True)
-        rows: list[dict[str, Any]] = [
-            {
-                "id": s.id,
-                "title": s.name,
-                "created_at": s.created_at,
-                "updated_at": s.updated_at,
-                "message_count": s.message_count,
-                "provider": s.model_provider,
-            }
-            for s in [*stored, *archived]
-        ]
-        if not rows:
-            try:
-                with open(self._sessions_path, encoding="utf-8") as handle:
-                    legacy = json.load(handle)
-                rows = legacy if isinstance(legacy, list) else []
-            except (OSError, ValueError):
-                rows = []
+        try:
+            with open(self._sessions_path, encoding="utf-8") as handle:
+                rows = json.load(handle)
+        except (OSError, ValueError):
+            return
+        if not isinstance(rows, list):
+            return
+        # Reconstruct sessions with fresh agent history (history is not persisted
+        # until P-03's session store; the metadata index survives restarts).
         for row in rows:
             if not isinstance(row, dict) or not row.get("id"):
                 continue
             sid = str(row["id"])
-            title = str(row.get("title", "New session"))
-            provider = str(row.get("provider", self._default_provider))
-            if self.session_store.get(sid) is None:
-                self.session_store.create(title, session_id=sid, model_provider=provider)
             self.sessions[sid] = SessionState(
                 id=sid,
-                title=title,
+                title=str(row.get("title", "New session")),
                 created_at=float(row.get("created_at", time.time())),
                 updated_at=float(row.get("updated_at", time.time())),
                 message_count=int(row.get("message_count", 0)),
-                provider=provider,
-                dream=self._new_dream(provider),
+                provider=str(row.get("provider", self._default_provider)),
+                model=str(row.get("model", "")),
+                reasoning_effort=float(row.get("reasoning_effort", 0.0)),
+                dream=self._new_dream(
+                    row.get("provider"), row.get("model"), row.get("reasoning_effort", 0.0)
+                ),
             )
 
     def _save_sessions_index(self) -> None:

@@ -25,7 +25,10 @@ classifiers = [
     "Topic :: Office/Business",
     "Natural Language :: Persian",
 ]
-dependencies = []
+dependencies = [
+    "keyring>=25.0",
+    "Authlib>=1.3",
+]
 
 [project.scripts]
 dream = "cli:main"

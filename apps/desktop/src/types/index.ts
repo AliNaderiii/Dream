@@ -54,26 +54,12 @@ export interface NotificationRequest {
 /** Risk tier of a tool call, per the design system's risk trio. */
 export type RiskTier = 'safe' | 'guarded' | 'dangerous';
 
-/** A rendered tool invocation attached to an assistant turn. */
-export interface MessageToolCall {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-  result?: string;
-  status: 'running' | 'ok' | 'error' | 'blocked';
-  risk: RiskTier;
-}
-
-/** A single transcript row. */
+/** A single message in a conversation. Expanded in P-02. */
 export interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'system' | 'tool' | 'error';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt: number;
-  status?: 'streaming' | 'complete' | 'error';
-  toolCalls?: MessageToolCall[];
-  attachments?: { name: string; path?: string; url?: string; type?: string }[];
-  errorCode?: number;
 }
 
 /** A conversation session. */
@@ -83,14 +69,21 @@ export interface Session {
   createdAt: number;
   updatedAt: number;
   messageCount: number;
-  modelProvider?: string;
-  modelName?: string;
-  isArchived?: boolean;
   projectId?: string;
 }
 
 /** Kind of model provider Dream can talk to. */
-export type ProviderKind = 'openai' | 'anthropic' | 'ollama' | 'openai-compatible' | 'echo';
+export type ProviderKind =
+  | 'openai'
+  | 'anthropic'
+  | 'google'
+  | 'groq'
+  | 'together'
+  | 'openrouter'
+  | 'ollama'
+  | 'vllm'
+  | 'llamacpp'
+  | 'echo';
 
 /** Connection state of a provider, shown in the status bar and provider list. */
 export type ProviderStatus = 'connected' | 'disconnected' | 'testing' | 'error';
@@ -103,7 +96,7 @@ export interface Model {
   contextWindow?: number;
 }
 
-/** A configured model provider. */
+/** A configured model provider. Secrets are intentionally absent. */
 export interface Provider {
   id: string;
   name: string;
@@ -111,7 +104,26 @@ export interface Provider {
   status: ProviderStatus;
   /** True when the provider runs on this machine (no network egress). */
   local: boolean;
-  baseUrl?: string;
+  endpoint?: string;
+  modelListUrl?: string;
   models: Model[];
+  enabledModelIds: string[];
+  credentialConfigured?: boolean;
+  supportsReasoning?: boolean;
+  supportsStreaming?: boolean;
   latencyMs?: number;
+}
+
+export interface ProviderCatalogEntry {
+  id: Exclude<ProviderKind, 'echo'>;
+  name: string;
+  website: string;
+  docs?: string;
+  authType: 'api_key' | 'none' | 'custom';
+  endpoint: string;
+  modelListUrl: string | null;
+  supportsStreaming: boolean;
+  supportsReasoning: boolean;
+  defaultModels: string[];
+  oauthSupported?: boolean;
 }

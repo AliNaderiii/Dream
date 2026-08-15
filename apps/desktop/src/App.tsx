@@ -20,8 +20,7 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route index element={<DashboardRoute />} />
         <Route path="chat/:sessionId" element={<ChatRoute />} />
-        {/* Bare /chat has no session yet — send the user to the dashboard. */}
-        <Route path="chat" element={<Navigate to="/" replace />} />
+        <Route path="chat" element={<ChatRoute />} />
         <Route path="memory" element={<MemoryRoute />} />
         <Route path="skills" element={<SkillsRoute />} />
         <Route path="projects" element={<ProjectsRoute />} />

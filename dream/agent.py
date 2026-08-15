@@ -160,6 +160,7 @@ class OpenAIBackend:
         api_key: str | None = None,
         base_url: str | None = None,
         temperature: float | None = None,
+        reasoning_effort: str | None = None,
     ) -> None:
         self.model = model or os.environ.get("DREAM_MODEL", "")
         self.api_key = api_key if api_key is not None else os.environ.get("OPENAI_API_KEY", "")
@@ -170,6 +171,9 @@ class OpenAIBackend:
             _resolve_temperature(os.environ.get("DREAM_TEMPERATURE"))
             if temperature is None
             else float(temperature)
+        )
+        self.reasoning_effort = (
+            reasoning_effort if reasoning_effort in {"low", "medium", "high"} else None
         )
         self.user_agent = _resolve_user_agent(os.environ.get("DREAM_USER_AGENT"))
         self.max_retries = _resolve_max_retries(os.environ.get("DREAM_MAX_RETRIES"))
@@ -215,6 +219,8 @@ class OpenAIBackend:
         }
         if tools:
             payload["tools"] = tools
+        if self.reasoning_effort:
+            payload["reasoning_effort"] = self.reasoning_effort
         request = Request(
             f"{self.base_url}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
