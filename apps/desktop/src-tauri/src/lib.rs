@@ -96,7 +96,8 @@ pub fn run() {
             // comparable agent apps; secondary windows really close.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == window::MAIN_WINDOW {
-                    let close_to_tray = window.app_handle().state::<AppState>().lock().close_to_tray;
+                    let close_to_tray =
+                        window.app_handle().state::<AppState>().lock().close_to_tray;
                     if close_to_tray {
                         api.prevent_close();
                         let _ = window.hide();

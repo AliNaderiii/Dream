@@ -83,7 +83,9 @@ impl AppState {
     /// is plain data with no invariants to repair, so continuing is safe and is
     /// strongly preferable to taking the whole app down.
     pub fn lock(&self) -> MutexGuard<'_, AppStateSnapshot> {
-        self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// Returns a copy of the current state.

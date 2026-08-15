@@ -5,7 +5,7 @@
 //! on launch. These commands cover the operations the custom title bar needs
 //! (minimise/maximise/close), multi-window management, and minimise-to-tray.
 
-use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder, Window};
+use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::error::{Error, Result};
 use crate::state::AppState;
@@ -13,11 +13,15 @@ use crate::state::AppState;
 /// Label of the primary application window.
 pub const MAIN_WINDOW: &str = "main";
 
-/// Resolves a window by label, or the caller's own window when `label` is `None`.
-fn resolve<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, label: Option<&str>) -> Result<Window<R>> {
+/// Resolves a webview window by label, or the caller's own window when `label` is `None`.
+fn resolve<R: Runtime>(
+    app: &AppHandle<R>,
+    window: &WebviewWindow<R>,
+    label: Option<&str>,
+) -> Result<WebviewWindow<R>> {
     match label {
         Some(label) => app
-            .get_window(label)
+            .get_webview_window(label)
             .ok_or_else(|| Error::WindowNotFound(label.to_string())),
         None => Ok(window.clone()),
     }
@@ -28,7 +32,7 @@ fn resolve<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, label: Option<&st
 #[tauri::command]
 pub fn minimize_window<R: Runtime>(
     app: AppHandle<R>,
-    window: Window<R>,
+    window: WebviewWindow<R>,
     label: Option<String>,
 ) -> Result<()> {
     let target = resolve(&app, &window, label.as_deref())?;
@@ -47,7 +51,7 @@ pub fn minimize_window<R: Runtime>(
 #[tauri::command]
 pub fn toggle_maximize<R: Runtime>(
     app: AppHandle<R>,
-    window: Window<R>,
+    window: WebviewWindow<R>,
     label: Option<String>,
 ) -> Result<bool> {
     let target = resolve(&app, &window, label.as_deref())?;
@@ -64,7 +68,7 @@ pub fn toggle_maximize<R: Runtime>(
 #[tauri::command]
 pub fn toggle_fullscreen<R: Runtime>(
     app: AppHandle<R>,
-    window: Window<R>,
+    window: WebviewWindow<R>,
     label: Option<String>,
 ) -> Result<bool> {
     let target = resolve(&app, &window, label.as_deref())?;
@@ -79,7 +83,7 @@ pub fn toggle_fullscreen<R: Runtime>(
 #[tauri::command]
 pub fn close_window<R: Runtime>(
     app: AppHandle<R>,
-    window: Window<R>,
+    window: WebviewWindow<R>,
     label: Option<String>,
 ) -> Result<()> {
     let target = resolve(&app, &window, label.as_deref())?;
@@ -150,7 +154,14 @@ pub async fn open_window<R: Runtime>(
     // Route is a hash fragment so it works for both the dev server and the
     // bundled `tauri://localhost` asset protocol.
     let route = route.unwrap_or_else(|| "/".to_string());
-    let url = format!("index.html#{}", if route.starts_with('/') { route } else { format!("/{route}") });
+    let url = format!(
+        "index.html#{}",
+        if route.starts_with('/') {
+            route
+        } else {
+            format!("/{route}")
+        }
+    );
 
     let mut builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
         .title(title.unwrap_or_else(|| "Dream".to_string()))

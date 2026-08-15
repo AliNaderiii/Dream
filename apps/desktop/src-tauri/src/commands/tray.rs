@@ -25,8 +25,15 @@ const ICON_TEMPLATE: &[u8] = include_bytes!("../../icons/tray/trayTemplate-32.pn
 /// Builds the tray icon, its menu, and all event handlers. Called once from `setup`.
 pub fn init<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
     let open = MenuItem::with_id(app, "open", "Open Dream", true, None::<&str>)?;
-    let new_session = MenuItem::with_id(app, "new-session", "New Session", true, Some("CmdOrCtrl+N"))?;
-    let quick_ask = MenuItem::with_id(app, "quick-ask", "Quick Ask...", true, Some("CmdOrCtrl+Shift+Space"))?;
+    let new_session =
+        MenuItem::with_id(app, "new-session", "New Session", true, Some("CmdOrCtrl+N"))?;
+    let quick_ask = MenuItem::with_id(
+        app,
+        "quick-ask",
+        "Quick Ask...",
+        true,
+        Some("CmdOrCtrl+Shift+Space"),
+    )?;
     let pause = MenuItem::with_id(app, "pause", "Pause Agent", true, None::<&str>)?;
     let resume = MenuItem::with_id(app, "resume", "Resume Agent", false, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
@@ -34,7 +41,16 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
 
     let menu = Menu::with_items(
         app,
-        &[&open, &new_session, &quick_ask, &separator, &pause, &resume, &separator, &quit],
+        &[
+            &open,
+            &new_session,
+            &quick_ask,
+            &separator,
+            &pause,
+            &resume,
+            &separator,
+            &quit,
+        ],
     )?;
 
     // Keep handles so Pause/Resume enablement can follow agent status.
@@ -75,7 +91,11 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
 
 /// Platform-appropriate idle icon: template on macOS, full colour elsewhere.
 fn default_icon() -> Result<Image<'static>> {
-    let bytes = if cfg!(target_os = "macos") { ICON_TEMPLATE } else { ICON_DEFAULT };
+    let bytes = if cfg!(target_os = "macos") {
+        ICON_TEMPLATE
+    } else {
+        ICON_DEFAULT
+    };
     Image::from_bytes(bytes).map_err(|e| Error::Tray(e.to_string()))
 }
 
@@ -121,8 +141,14 @@ fn refresh<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
 
     let tooltip = match snapshot.pending_approvals {
         0 => format!("Dream — {}", snapshot.agent_status.label()),
-        1 => format!("Dream — {} · 1 approval pending", snapshot.agent_status.label()),
-        n => format!("Dream — {} · {n} approvals pending", snapshot.agent_status.label()),
+        1 => format!(
+            "Dream — {} · 1 approval pending",
+            snapshot.agent_status.label()
+        ),
+        n => format!(
+            "Dream — {} · {n} approvals pending",
+            snapshot.agent_status.label()
+        ),
     };
     tray.set_tooltip(Some(&tooltip))
         .map_err(|e| Error::Tray(e.to_string()))?;
@@ -137,7 +163,8 @@ fn refresh<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
         ICON_DEFAULT
     };
     let icon = Image::from_bytes(bytes).map_err(|e| Error::Tray(e.to_string()))?;
-    tray.set_icon(Some(icon)).map_err(|e| Error::Tray(e.to_string()))?;
+    tray.set_icon(Some(icon))
+        .map_err(|e| Error::Tray(e.to_string()))?;
 
     // A badged icon is coloured, so it must not be drawn as a template.
     #[cfg(target_os = "macos")]

@@ -1,0 +1,288 @@
+diff --git a/apps/desktop/src-tauri/Cargo.toml b/apps/desktop/src-tauri/Cargo.toml
+index 13a03ee..6428ce7 100644
+--- a/apps/desktop/src-tauri/Cargo.toml
++++ b/apps/desktop/src-tauri/Cargo.toml
+@@ -17,7 +17,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
+ tauri-build = { version = "2", features = [] }
+ 
+ [dependencies]
+-tauri = { version = "2", features = ["tray-icon", "image-png"] }
++tauri = { version = "2", features = ["tray-icon", "image-png", "protocol-asset"] }
+ tauri-plugin-dialog = "2"
+ tauri-plugin-fs = "2"
+ tauri-plugin-notification = "2"
+diff --git a/apps/desktop/src-tauri/src/commands/dialogs.rs b/apps/desktop/src-tauri/src/commands/dialogs.rs
+index 4992741..8e0f9ec 100644
+--- a/apps/desktop/src-tauri/src/commands/dialogs.rs
++++ b/apps/desktop/src-tauri/src/commands/dialogs.rs
+@@ -18,7 +18,10 @@ use crate::state::AppState;
+ const FILTERS: &[(&str, &[&str])] = &[
+     ("Data", &["csv", "tsv", "xlsx", "xls", "parquet", "json"]),
+     ("Documents", &["md", "markdown", "txt", "pdf", "docx"]),
+-    ("Notebooks & code", &["ipynb", "py", "r", "sql", "sh", "toml", "yaml", "yml"]),
++    (
++        "Notebooks & code",
++        &["ipynb", "py", "r", "sql", "sh", "toml", "yaml", "yml"],
++    ),
+     ("Spreadsheets", &["csv", "xlsx", "xls"]),
+ ];
+ 
+@@ -47,9 +50,7 @@ impl FileEntry {
+                 .file_name()
+                 .map(|n| n.to_string_lossy().into_owned())
+                 .unwrap_or_default(),
+-            extension: path
+-                .extension()
+-                .map(|e| e.to_string_lossy().to_lowercase()),
++            extension: path.extension().map(|e| e.to_string_lossy().to_lowercase()),
+             size: if meta.is_dir() { 0 } else { meta.len() },
+             is_dir: meta.is_dir(),
+             path,
+@@ -63,7 +64,10 @@ impl FileEntry {
+ /// existence is enforced.
+ pub fn validate_path<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<PathBuf> {
+     let canonical = std::fs::canonicalize(path).map_err(|_| {
+-        Error::InvalidPath(format!("path does not exist or is unreadable: {}", path.display()))
++        Error::InvalidPath(format!(
++            "path does not exist or is unreadable: {}",
++            path.display()
++        ))
+     })?;
+ 
+     let root = app.state::<AppState>().lock().workspace_root.clone();
+@@ -126,14 +130,15 @@ pub async fn open_file_dialog<R: Runtime>(
+     let picked: Vec<FilePath> = if multiple.unwrap_or(false) {
+         builder.blocking_pick_files().unwrap_or_default()
+     } else {
+-        builder.blocking_pick_file().map(|f| vec![f]).unwrap_or_default()
++        builder
++            .blocking_pick_file()
++            .map(|f| vec![f])
++            .unwrap_or_default()
+     };
+ 
+     let mut entries = Vec::with_capacity(picked.len());
+     for file in picked {
+-        let path = file
+-            .into_path()
+-            .map_err(|e| Error::Dialog(e.to_string()))?;
++        let path = file.into_path().map_err(|e| Error::Dialog(e.to_string()))?;
+         let validated = validate_path(&app, &path)?;
+         entries.push(FileEntry::from_path(validated)?);
+     }
+@@ -186,7 +191,9 @@ pub async fn select_folder_dialog<R: Runtime>(
+     let Some(folder) = builder.blocking_pick_folder() else {
+         return Ok(None);
+     };
+-    let path = folder.into_path().map_err(|e| Error::Dialog(e.to_string()))?;
++    let path = folder
++        .into_path()
++        .map_err(|e| Error::Dialog(e.to_string()))?;
+     Ok(Some(std::fs::canonicalize(&path).unwrap_or(path)))
+ }
+ 
+@@ -197,8 +204,9 @@ pub async fn select_folder_dialog<R: Runtime>(
+ pub fn set_workspace_root<R: Runtime>(app: AppHandle<R>, path: Option<PathBuf>) -> Result<()> {
+     let resolved = match path {
+         Some(p) => {
+-            let canonical = std::fs::canonicalize(&p)
+-                .map_err(|_| Error::InvalidPath(format!("workspace does not exist: {}", p.display())))?;
++            let canonical = std::fs::canonicalize(&p).map_err(|_| {
++                Error::InvalidPath(format!("workspace does not exist: {}", p.display()))
++            })?;
+             if !canonical.is_dir() {
+                 return Err(Error::InvalidPath(format!(
+                     "workspace is not a directory: {}",
+diff --git a/apps/desktop/src-tauri/src/commands/tray.rs b/apps/desktop/src-tauri/src/commands/tray.rs
+index 79c05eb..6397112 100644
+--- a/apps/desktop/src-tauri/src/commands/tray.rs
++++ b/apps/desktop/src-tauri/src/commands/tray.rs
+@@ -25,8 +25,15 @@ const ICON_TEMPLATE: &[u8] = include_bytes!("../../icons/tray/trayTemplate-32.pn
+ /// Builds the tray icon, its menu, and all event handlers. Called once from `setup`.
+ pub fn init<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
+     let open = MenuItem::with_id(app, "open", "Open Dream", true, None::<&str>)?;
+-    let new_session = MenuItem::with_id(app, "new-session", "New Session", true, Some("CmdOrCtrl+N"))?;
+-    let quick_ask = MenuItem::with_id(app, "quick-ask", "Quick Ask...", true, Some("CmdOrCtrl+Shift+Space"))?;
++    let new_session =
++        MenuItem::with_id(app, "new-session", "New Session", true, Some("CmdOrCtrl+N"))?;
++    let quick_ask = MenuItem::with_id(
++        app,
++        "quick-ask",
++        "Quick Ask...",
++        true,
++        Some("CmdOrCtrl+Shift+Space"),
++    )?;
+     let pause = MenuItem::with_id(app, "pause", "Pause Agent", true, None::<&str>)?;
+     let resume = MenuItem::with_id(app, "resume", "Resume Agent", false, None::<&str>)?;
+     let separator = PredefinedMenuItem::separator(app)?;
+@@ -34,7 +41,16 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
+ 
+     let menu = Menu::with_items(
+         app,
+-        &[&open, &new_session, &quick_ask, &separator, &pause, &resume, &separator, &quit],
++        &[
++            &open,
++            &new_session,
++            &quick_ask,
++            &separator,
++            &pause,
++            &resume,
++            &separator,
++            &quit,
++        ],
+     )?;
+ 
+     // Keep handles so Pause/Resume enablement can follow agent status.
+@@ -75,7 +91,11 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
+ 
+ /// Platform-appropriate idle icon: template on macOS, full colour elsewhere.
+ fn default_icon() -> Result<Image<'static>> {
+-    let bytes = if cfg!(target_os = "macos") { ICON_TEMPLATE } else { ICON_DEFAULT };
++    let bytes = if cfg!(target_os = "macos") {
++        ICON_TEMPLATE
++    } else {
++        ICON_DEFAULT
++    };
+     Image::from_bytes(bytes).map_err(|e| Error::Tray(e.to_string()))
+ }
+ 
+@@ -121,8 +141,14 @@ fn refresh<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
+ 
+     let tooltip = match snapshot.pending_approvals {
+         0 => format!("Dream — {}", snapshot.agent_status.label()),
+-        1 => format!("Dream — {} · 1 approval pending", snapshot.agent_status.label()),
+-        n => format!("Dream — {} · {n} approvals pending", snapshot.agent_status.label()),
++        1 => format!(
++            "Dream — {} · 1 approval pending",
++            snapshot.agent_status.label()
++        ),
++        n => format!(
++            "Dream — {} · {n} approvals pending",
++            snapshot.agent_status.label()
++        ),
+     };
+     tray.set_tooltip(Some(&tooltip))
+         .map_err(|e| Error::Tray(e.to_string()))?;
+@@ -137,7 +163,8 @@ fn refresh<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
+         ICON_DEFAULT
+     };
+     let icon = Image::from_bytes(bytes).map_err(|e| Error::Tray(e.to_string()))?;
+-    tray.set_icon(Some(icon)).map_err(|e| Error::Tray(e.to_string()))?;
++    tray.set_icon(Some(icon))
++        .map_err(|e| Error::Tray(e.to_string()))?;
+ 
+     // A badged icon is coloured, so it must not be drawn as a template.
+     #[cfg(target_os = "macos")]
+diff --git a/apps/desktop/src-tauri/src/commands/window.rs b/apps/desktop/src-tauri/src/commands/window.rs
+index b597e43..08395b7 100644
+--- a/apps/desktop/src-tauri/src/commands/window.rs
++++ b/apps/desktop/src-tauri/src/commands/window.rs
+@@ -5,7 +5,7 @@
+ //! on launch. These commands cover the operations the custom title bar needs
+ //! (minimise/maximise/close), multi-window management, and minimise-to-tray.
+ 
+-use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindowBuilder, Window};
++use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+ 
+ use crate::error::{Error, Result};
+ use crate::state::AppState;
+@@ -13,11 +13,15 @@ use crate::state::AppState;
+ /// Label of the primary application window.
+ pub const MAIN_WINDOW: &str = "main";
+ 
+-/// Resolves a window by label, or the caller's own window when `label` is `None`.
+-fn resolve<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, label: Option<&str>) -> Result<Window<R>> {
++/// Resolves a webview window by label, or the caller's own window when `label` is `None`.
++fn resolve<R: Runtime>(
++    app: &AppHandle<R>,
++    window: &WebviewWindow<R>,
++    label: Option<&str>,
++) -> Result<WebviewWindow<R>> {
+     match label {
+         Some(label) => app
+-            .get_window(label)
++            .get_webview_window(label)
+             .ok_or_else(|| Error::WindowNotFound(label.to_string())),
+         None => Ok(window.clone()),
+     }
+@@ -28,7 +32,7 @@ fn resolve<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, label: Option<&st
+ #[tauri::command]
+ pub fn minimize_window<R: Runtime>(
+     app: AppHandle<R>,
+-    window: Window<R>,
++    window: WebviewWindow<R>,
+     label: Option<String>,
+ ) -> Result<()> {
+     let target = resolve(&app, &window, label.as_deref())?;
+@@ -47,7 +51,7 @@ pub fn minimize_window<R: Runtime>(
+ #[tauri::command]
+ pub fn toggle_maximize<R: Runtime>(
+     app: AppHandle<R>,
+-    window: Window<R>,
++    window: WebviewWindow<R>,
+     label: Option<String>,
+ ) -> Result<bool> {
+     let target = resolve(&app, &window, label.as_deref())?;
+@@ -64,7 +68,7 @@ pub fn toggle_maximize<R: Runtime>(
+ #[tauri::command]
+ pub fn toggle_fullscreen<R: Runtime>(
+     app: AppHandle<R>,
+-    window: Window<R>,
++    window: WebviewWindow<R>,
+     label: Option<String>,
+ ) -> Result<bool> {
+     let target = resolve(&app, &window, label.as_deref())?;
+@@ -79,7 +83,7 @@ pub fn toggle_fullscreen<R: Runtime>(
+ #[tauri::command]
+ pub fn close_window<R: Runtime>(
+     app: AppHandle<R>,
+-    window: Window<R>,
++    window: WebviewWindow<R>,
+     label: Option<String>,
+ ) -> Result<()> {
+     let target = resolve(&app, &window, label.as_deref())?;
+@@ -150,7 +154,14 @@ pub async fn open_window<R: Runtime>(
+     // Route is a hash fragment so it works for both the dev server and the
+     // bundled `tauri://localhost` asset protocol.
+     let route = route.unwrap_or_else(|| "/".to_string());
+-    let url = format!("index.html#{}", if route.starts_with('/') { route } else { format!("/{route}") });
++    let url = format!(
++        "index.html#{}",
++        if route.starts_with('/') {
++            route
++        } else {
++            format!("/{route}")
++        }
++    );
+ 
+     let mut builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
+         .title(title.unwrap_or_else(|| "Dream".to_string()))
+diff --git a/apps/desktop/src-tauri/src/lib.rs b/apps/desktop/src-tauri/src/lib.rs
+index 7d90349..5ed8553 100644
+--- a/apps/desktop/src-tauri/src/lib.rs
++++ b/apps/desktop/src-tauri/src/lib.rs
+@@ -96,7 +96,8 @@ pub fn run() {
+             // comparable agent apps; secondary windows really close.
+             if let WindowEvent::CloseRequested { api, .. } = event {
+                 if window.label() == window::MAIN_WINDOW {
+-                    let close_to_tray = window.app_handle().state::<AppState>().lock().close_to_tray;
++                    let close_to_tray =
++                        window.app_handle().state::<AppState>().lock().close_to_tray;
+                     if close_to_tray {
+                         api.prevent_close();
+                         let _ = window.hide();
+diff --git a/apps/desktop/src-tauri/src/state.rs b/apps/desktop/src-tauri/src/state.rs
+index c5fd4f4..0fe60bb 100644
+--- a/apps/desktop/src-tauri/src/state.rs
++++ b/apps/desktop/src-tauri/src/state.rs
+@@ -83,7 +83,9 @@ impl AppState {
+     /// is plain data with no invariants to repair, so continuing is safe and is
+     /// strongly preferable to taking the whole app down.
+     pub fn lock(&self) -> MutexGuard<'_, AppStateSnapshot> {
+-        self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
++        self.inner
++            .lock()
++            .unwrap_or_else(|poisoned| poisoned.into_inner())
+     }
+ 
+     /// Returns a copy of the current state.

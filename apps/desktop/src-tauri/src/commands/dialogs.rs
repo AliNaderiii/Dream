@@ -18,7 +18,10 @@ use crate::state::AppState;
 const FILTERS: &[(&str, &[&str])] = &[
     ("Data", &["csv", "tsv", "xlsx", "xls", "parquet", "json"]),
     ("Documents", &["md", "markdown", "txt", "pdf", "docx"]),
-    ("Notebooks & code", &["ipynb", "py", "r", "sql", "sh", "toml", "yaml", "yml"]),
+    (
+        "Notebooks & code",
+        &["ipynb", "py", "r", "sql", "sh", "toml", "yaml", "yml"],
+    ),
     ("Spreadsheets", &["csv", "xlsx", "xls"]),
 ];
 
@@ -47,9 +50,7 @@ impl FileEntry {
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default(),
-            extension: path
-                .extension()
-                .map(|e| e.to_string_lossy().to_lowercase()),
+            extension: path.extension().map(|e| e.to_string_lossy().to_lowercase()),
             size: if meta.is_dir() { 0 } else { meta.len() },
             is_dir: meta.is_dir(),
             path,
@@ -63,7 +64,10 @@ impl FileEntry {
 /// existence is enforced.
 pub fn validate_path<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<PathBuf> {
     let canonical = std::fs::canonicalize(path).map_err(|_| {
-        Error::InvalidPath(format!("path does not exist or is unreadable: {}", path.display()))
+        Error::InvalidPath(format!(
+            "path does not exist or is unreadable: {}",
+            path.display()
+        ))
     })?;
 
     let root = app.state::<AppState>().lock().workspace_root.clone();
@@ -126,14 +130,15 @@ pub async fn open_file_dialog<R: Runtime>(
     let picked: Vec<FilePath> = if multiple.unwrap_or(false) {
         builder.blocking_pick_files().unwrap_or_default()
     } else {
-        builder.blocking_pick_file().map(|f| vec![f]).unwrap_or_default()
+        builder
+            .blocking_pick_file()
+            .map(|f| vec![f])
+            .unwrap_or_default()
     };
 
     let mut entries = Vec::with_capacity(picked.len());
     for file in picked {
-        let path = file
-            .into_path()
-            .map_err(|e| Error::Dialog(e.to_string()))?;
+        let path = file.into_path().map_err(|e| Error::Dialog(e.to_string()))?;
         let validated = validate_path(&app, &path)?;
         entries.push(FileEntry::from_path(validated)?);
     }
@@ -186,7 +191,9 @@ pub async fn select_folder_dialog<R: Runtime>(
     let Some(folder) = builder.blocking_pick_folder() else {
         return Ok(None);
     };
-    let path = folder.into_path().map_err(|e| Error::Dialog(e.to_string()))?;
+    let path = folder
+        .into_path()
+        .map_err(|e| Error::Dialog(e.to_string()))?;
     Ok(Some(std::fs::canonicalize(&path).unwrap_or(path)))
 }
 
@@ -197,8 +204,9 @@ pub async fn select_folder_dialog<R: Runtime>(
 pub fn set_workspace_root<R: Runtime>(app: AppHandle<R>, path: Option<PathBuf>) -> Result<()> {
     let resolved = match path {
         Some(p) => {
-            let canonical = std::fs::canonicalize(&p)
-                .map_err(|_| Error::InvalidPath(format!("workspace does not exist: {}", p.display())))?;
+            let canonical = std::fs::canonicalize(&p).map_err(|_| {
+                Error::InvalidPath(format!("workspace does not exist: {}", p.display()))
+            })?;
             if !canonical.is_dir() {
                 return Err(Error::InvalidPath(format!(
                     "workspace is not a directory: {}",
