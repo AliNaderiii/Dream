@@ -54,12 +54,26 @@ export interface NotificationRequest {
 /** Risk tier of a tool call, per the design system's risk trio. */
 export type RiskTier = 'safe' | 'guarded' | 'dangerous';
 
-/** A single message in a conversation. Expanded in P-02. */
+/** A rendered tool invocation attached to an assistant turn. */
+export interface MessageToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  result?: string;
+  status: 'running' | 'ok' | 'error' | 'blocked';
+  risk: RiskTier;
+}
+
+/** A single transcript row. */
 export interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'tool' | 'error';
   content: string;
   createdAt: number;
+  status?: 'streaming' | 'complete' | 'error';
+  toolCalls?: MessageToolCall[];
+  attachments?: { name: string; path?: string; url?: string; type?: string }[];
+  errorCode?: number;
 }
 
 /** A conversation session. */
@@ -69,6 +83,9 @@ export interface Session {
   createdAt: number;
   updatedAt: number;
   messageCount: number;
+  modelProvider?: string;
+  modelName?: string;
+  isArchived?: boolean;
   projectId?: string;
 }
 

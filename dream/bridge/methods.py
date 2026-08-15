@@ -41,6 +41,7 @@ from dream.agent import (
     build_backend,
 )
 from dream.memory import KINDS, Memory, MemoryStore
+from dream.store.sessions import SessionStore
 
 from .errors import APPROVAL_REQUIRED, BridgeError, invalid_params
 from .streams import Chunk, Stream, stream_text, tokenise
@@ -206,6 +207,11 @@ class ApprovalState:
     risk: str
     summary: str
     resolved: bool = False
+    created_at: float = field(default_factory=time.time)
+    expires_at: float = field(default_factory=lambda: time.time() + 60.0)
+    decision: str | None = None
+    execute_on_resolve: bool = True
+    waiter: threading.Event = field(default_factory=threading.Event, repr=False)
 
 
 @dataclass
@@ -232,10 +238,13 @@ class BridgeMethods:
         sessions_path: str | None = None,
         providers_path: str | None = None,
         default_provider: str | None = None,
+        sessions_db_path: str | None = None,
     ) -> None:
         self.store = store or MemoryStore(os.environ.get("DREAM_DB", "data/dream.db"))
         self.sessions: dict[str, SessionState] = {}
         self.approvals: dict[str, ApprovalState] = {}
+        self.approval_history: list[dict[str, Any]] = []
+        self.always_allowed: set[str] = set()
         self.subagents: dict[str, SubagentState] = {}
         self._lock = threading.RLock()
 
@@ -245,6 +254,15 @@ class BridgeMethods:
         self._providers_path = providers_path or os.environ.get(
             "DREAM_PROVIDERS_PATH", "data/bridge_providers.json"
         )
+        self._approvals_path = os.environ.get(
+            "DREAM_APPROVALS_PATH", f"{self._sessions_path}.approvals.json"
+        )
+        self._load_approval_settings()
+        if sessions_db_path is None:
+            sessions_db_path = os.environ.get("DREAM_SESSIONS_DB")
+        if sessions_db_path is None:
+            sessions_db_path = f"{self._sessions_path}.db" if sessions_path else "data/sessions.db"
+        self.session_store = SessionStore(sessions_db_path)
         self._providers, self._default_provider = self._load_providers()
         if default_provider:
             self._default_provider = default_provider
@@ -261,8 +279,13 @@ class BridgeMethods:
         """Persist state and close the store. Safe to call more than once."""
         self._save_sessions_index()
         self._save_providers()
+        self._save_approval_settings()
         try:
             self.store.close()
+        except Exception:
+            pass
+        try:
+            self.session_store.close()
         except Exception:
             pass
 
@@ -275,6 +298,9 @@ class BridgeMethods:
             "session.get": self.session_get,
             "session.delete": self.session_delete,
             "session.rename": self.session_rename,
+            "session.update": self.session_update,
+            "session.messages": self.session_messages,
+            "session.export": self.session_export,
             "conversation.send": self.conversation_send,
             "conversation.stop": self.conversation_stop,
             "provider.list": self.provider_list,
@@ -293,6 +319,8 @@ class BridgeMethods:
             "tool.execute": self.tool_execute,
             "approval.request": self.approval_request,
             "approval.resolve": self.approval_resolve,
+            "approval.list": self.approval_list,
+            "approval.history": self.approval_history_list,
             "subagent.spawn": self.subagent_spawn,
             "subagent.list": self.subagent_list,
             "subagent.status": self.subagent_status,
@@ -308,13 +336,43 @@ class BridgeMethods:
     def _new_dream(self, provider: str | None) -> Dream:
         config = self._providers.get(provider or self._default_provider)
         backend = build_configured_backend(config)
-        return Dream(self.store, backend, ApprovalPolicy())
+
+        def ask(name: str, arguments: dict[str, Any]) -> bool:
+            if name in self.always_allowed:
+                return True
+            approval = self._register_approval(
+                name, arguments, "dangerous", execute_on_resolve=False
+            )
+            approval.waiter.wait(timeout=60.0)
+            if not approval.resolved:
+                with self._lock:
+                    approval.resolved = True
+                    approval.decision = "deny"
+                    self.approval_history.append(self._approval_to_dict(approval))
+                    self._save_approval_settings()
+            return approval.decision in {"allow", "always_allow"}
+
+        return Dream(self.store, backend, ApprovalPolicy(ask=ask))
 
     def session_create(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
         title = str(params.get("title") or "New session").strip()
         provider = str(params.get("provider") or self._default_provider)
-        sid = f"sess_{uuid.uuid4().hex[:20]}"
+        requested_id = params.get("session_id")
+        sid = (
+            str(requested_id)
+            if isinstance(requested_id, str) and requested_id
+            else f"sess_{uuid.uuid4().hex[:20]}"
+        )
+        with self._lock:
+            existing = self.sessions.get(sid)
+        if existing is not None:
+            return {
+                "session_id": sid,
+                "id": sid,
+                "title": existing.title,
+                "created_at": existing.created_at,
+            }
         now = time.time()
         session = SessionState(
             id=sid,
@@ -326,6 +384,13 @@ class BridgeMethods:
         )
         with self._lock:
             self.sessions[sid] = session
+            self.session_store.create(
+                title,
+                session_id=sid,
+                model_provider=provider,
+                model_name=str(params.get("model") or ""),
+                project_id=params.get("project_id"),
+            )
             self._save_sessions_index()
         return {
             "session_id": sid,
@@ -335,14 +400,34 @@ class BridgeMethods:
         }
 
     def session_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        del params
-        with self._lock:
-            sessions = sorted(
-                (s.to_index() for s in self.sessions.values()),
-                key=lambda s: s["updated_at"],
-                reverse=True,
-            )
-        return {"sessions": sessions}
+        params = params or {}
+        rows, total = self.session_store.list(
+            limit=int(params.get("limit", 50)),
+            offset=int(params.get("offset", 0)),
+            search=str(params.get("search") or ""),
+            archived=bool(params.get("archived", False)),
+        )
+        sessions = [
+            {
+                "id": row.id,
+                "title": row.name,
+                "name": row.name,
+                "created_at": row.created_at,
+                "updated_at": row.updated_at,
+                "message_count": row.message_count,
+                "provider": row.model_provider,
+                "model_name": row.model_name,
+                "is_archived": row.is_archived,
+                "project_id": row.project_id,
+            }
+            for row in rows
+        ]
+        return {
+            "sessions": sessions,
+            "total": total,
+            "limit": int(params.get("limit", 50)),
+            "offset": int(params.get("offset", 0)),
+        }
 
     def session_get(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         session = self._require_session(params)
@@ -352,6 +437,7 @@ class BridgeMethods:
         session = self._require_session(params)
         with self._lock:
             self.sessions.pop(session.id, None)
+            self.session_store.delete(session.id)
             self._save_sessions_index()
         return {"deleted": True, "session_id": session.id}
 
@@ -364,16 +450,61 @@ class BridgeMethods:
         session.title = title
         session.updated_at = time.time()
         with self._lock:
+            self.session_store.update(session.id, name=title)
             self._save_sessions_index()
         return session.to_index()
+
+    def session_update(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        session = self._require_session(params)
+        if "title" in params or "name" in params:
+            return self.session_rename(
+                {"session_id": session.id, "title": params.get("title", params.get("name"))}
+            )
+        archived = params.get("is_archived")
+        if archived is not None:
+            row = self.session_store.update(session.id, is_archived=bool(archived))
+            return {
+                **session.to_index(),
+                "is_archived": bool(getattr(row, "is_archived", archived)),
+            }
+        return session.to_index()
+
+    def session_messages(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        session = self._require_session(params)
+        messages = self.session_store.messages(session.id, limit=int(params.get("limit", 10_000)))
+        return {
+            "messages": [
+                {
+                    "id": m.id,
+                    "session_id": m.session_id,
+                    "role": m.role,
+                    "content": m.content,
+                    "tool_calls": m.tool_calls,
+                    "created_at": m.created_at,
+                    "token_count": m.token_count,
+                }
+                for m in messages
+            ]
+        }
+
+    def session_export(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        session = self._require_session(params)
+        try:
+            content, content_type, filename = self.session_store.export(
+                session.id, str(params.get("format") or "json")
+            )
+        except ValueError as exc:
+            raise invalid_params(str(exc)) from exc
+        return {"content": content, "content_type": content_type, "filename": filename}
 
     # ------------------------------------------------------------------ #
     # conversation.*
     # ------------------------------------------------------------------ #
 
-    async def conversation_send(
-        self, params: dict[str, Any] | None = None
-    ) -> Stream:
+    async def conversation_send(self, params: dict[str, Any] | None = None) -> Stream:
         """Run a turn, streaming the reply token-by-token, returning the full Turn."""
         params = params or {}
         session = self._require_session(params)
@@ -381,6 +512,12 @@ class BridgeMethods:
         if not isinstance(message, str) or not message.strip():
             raise invalid_params("message must be a non-empty string")
 
+        if len(message) > 100_000:
+            raise invalid_params("message exceeds the 100000 character limit")
+
+        # Auto-save the user half before provider work, so even a network/provider
+        # failure leaves a recoverable transcript.
+        self.session_store.add_message(session.id, "user", message)
         session.stop_event.clear()
         dream = session.dream
         cancellation = session.stop_event
@@ -405,6 +542,12 @@ class BridgeMethods:
             )
 
         turn_dict = turn_to_dict(result)
+        self.session_store.add_message(
+            session.id,
+            "assistant",
+            turn_dict["reply"],
+            tool_calls=turn_dict.get("tool_calls", []),
+        )
         cancel = cancellation
 
         async def _chunks() -> AsyncIterator[Chunk]:
@@ -568,9 +711,7 @@ class BridgeMethods:
         loaded, problems = skills_module.load_skills()
         return {
             "skills": [skill_to_dict(s) for s in loaded],
-            "problems": [
-                {"filename": p.filename, "detail": p.detail} for p in problems
-            ],
+            "problems": [{"filename": p.filename, "detail": p.detail} for p in problems],
         }
 
     def skill_get(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -648,7 +789,11 @@ class BridgeMethods:
             raise invalid_params("arguments must be an object")
 
         # Dangerous tools require an explicit, resolved approval.
-        if registered.risk == "dangerous" and not bool(params.get("approved")):
+        if (
+            registered.risk == "dangerous"
+            and name not in self.always_allowed
+            and not bool(params.get("approved"))
+        ):
             approval = self._register_approval(name, arguments, registered.risk)
             raise BridgeError(
                 APPROVAL_REQUIRED,
@@ -690,24 +835,42 @@ class BridgeMethods:
     def approval_resolve(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
         approval_id = params.get("approval_id")
-        allowed = bool(params.get("allowed"))
         if not isinstance(approval_id, str) or not approval_id:
             raise invalid_params("approval_id must be a non-empty string")
+        requested = params.get("decision")
+        decision = (
+            str(requested)
+            if requested is not None
+            else ("allow" if bool(params.get("allowed")) else "deny")
+        )
+        if decision not in {"allow", "deny", "always_allow"}:
+            raise invalid_params("decision must be allow, deny, or always_allow")
         with self._lock:
             approval = self.approvals.get(approval_id)
             if approval is None:
                 raise invalid_params(f"no pending approval with id {approval_id!r}")
             if approval.resolved:
                 raise invalid_params(f"approval {approval_id!r} already resolved")
+            if time.time() >= approval.expires_at:
+                decision = "deny"
             approval.resolved = True
+            approval.decision = decision
             name, arguments = approval.name, approval.arguments
+            if decision == "always_allow":
+                self.always_allowed.add(name)
+            self.approval_history.append(self._approval_to_dict(approval))
+            self._save_approval_settings()
+            approval.waiter.set()
 
-        if not allowed:
+        if decision == "deny":
             return {
                 "blocked": True,
-                "reason": "denied by user",
+                "reason": "denied by user or timed out",
                 "approval_id": approval_id,
             }
+
+        if not approval.execute_on_resolve:
+            return {"status": "approved", "approval_id": approval_id, "decision": decision}
 
         from dream.tools import execute
 
@@ -717,13 +880,55 @@ class BridgeMethods:
         except (TypeError, ValueError):
             return {"status": "ok", "result": raw}
 
+    def approval_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        del params
+        now = time.time()
+        with self._lock:
+            for approval in self.approvals.values():
+                if not approval.resolved and now >= approval.expires_at:
+                    approval.resolved = True
+                    approval.decision = "deny"
+                    approval.waiter.set()
+                    self.approval_history.append(self._approval_to_dict(approval))
+                    self._save_approval_settings()
+            pending = [self._approval_to_dict(a) for a in self.approvals.values() if not a.resolved]
+        pending.sort(key=lambda item: item["created_at"])
+        return {"approvals": pending, "always_allowed": sorted(self.always_allowed)}
+
+    def approval_history_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        limit = int((params or {}).get("limit", 100))
+        return {"approvals": self.approval_history[-max(1, min(limit, 1000)) :]}
+
+    @staticmethod
+    def _approval_to_dict(approval: ApprovalState) -> dict[str, Any]:
+        return {
+            "approval_id": approval.id,
+            "name": approval.name,
+            "arguments": approval.arguments,
+            "risk": approval.risk,
+            "summary": approval.summary,
+            "created_at": approval.created_at,
+            "expires_at": approval.expires_at,
+            "decision": approval.decision,
+        }
+
     def _register_approval(
-        self, name: str, arguments: dict[str, Any], risk: str
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        risk: str,
+        *,
+        execute_on_resolve: bool = True,
     ) -> ApprovalState:
         approval_id = f"appr_{uuid.uuid4().hex[:16]}"
         summary = _approval_summary(name, arguments)
         approval = ApprovalState(
-            id=approval_id, name=name, arguments=dict(arguments), risk=risk, summary=summary
+            id=approval_id,
+            name=name,
+            arguments=dict(arguments),
+            risk=risk,
+            summary=summary,
+            execute_on_resolve=execute_on_resolve,
         )
         with self._lock:
             self.approvals[approval_id] = approval
@@ -854,6 +1059,27 @@ class BridgeMethods:
 
     # -- persistence ------------------------------------------------------ #
 
+    def _load_approval_settings(self) -> None:
+        try:
+            with open(self._approvals_path, encoding="utf-8") as handle:
+                blob = json.load(handle)
+        except (OSError, ValueError):
+            return
+        if isinstance(blob, dict):
+            self.always_allowed = {str(name) for name in blob.get("always_allowed", [])}
+            history = blob.get("history", [])
+            if isinstance(history, list):
+                self.approval_history = [item for item in history[-1000:] if isinstance(item, dict)]
+
+    def _save_approval_settings(self) -> None:
+        self._write_json(
+            self._approvals_path,
+            {
+                "always_allowed": sorted(self.always_allowed),
+                "history": self.approval_history[-1000:],
+            },
+        )
+
     def _load_providers(self) -> tuple[dict[str, dict[str, Any]], str]:
         default = os.environ.get("DREAM_BACKEND", "echo")
         try:
@@ -872,27 +1098,44 @@ class BridgeMethods:
         )
 
     def _load_sessions_index(self) -> None:
-        try:
-            with open(self._sessions_path, encoding="utf-8") as handle:
-                rows = json.load(handle)
-        except (OSError, ValueError):
-            return
-        if not isinstance(rows, list):
-            return
-        # Reconstruct sessions with fresh agent history (history is not persisted
-        # until P-03's session store; the metadata index survives restarts).
+        # SQLite is authoritative. The legacy JSON index is imported once for
+        # users upgrading from P-02, then kept only for backwards compatibility.
+        stored, _ = self.session_store.list(limit=200, archived=False)
+        archived, _ = self.session_store.list(limit=200, archived=True)
+        rows: list[dict[str, Any]] = [
+            {
+                "id": s.id,
+                "title": s.name,
+                "created_at": s.created_at,
+                "updated_at": s.updated_at,
+                "message_count": s.message_count,
+                "provider": s.model_provider,
+            }
+            for s in [*stored, *archived]
+        ]
+        if not rows:
+            try:
+                with open(self._sessions_path, encoding="utf-8") as handle:
+                    legacy = json.load(handle)
+                rows = legacy if isinstance(legacy, list) else []
+            except (OSError, ValueError):
+                rows = []
         for row in rows:
             if not isinstance(row, dict) or not row.get("id"):
                 continue
             sid = str(row["id"])
+            title = str(row.get("title", "New session"))
+            provider = str(row.get("provider", self._default_provider))
+            if self.session_store.get(sid) is None:
+                self.session_store.create(title, session_id=sid, model_provider=provider)
             self.sessions[sid] = SessionState(
                 id=sid,
-                title=str(row.get("title", "New session")),
+                title=title,
                 created_at=float(row.get("created_at", time.time())),
                 updated_at=float(row.get("updated_at", time.time())),
                 message_count=int(row.get("message_count", 0)),
-                provider=str(row.get("provider", self._default_provider)),
-                dream=self._new_dream(row.get("provider")),
+                provider=provider,
+                dream=self._new_dream(provider),
             )
 
     def _save_sessions_index(self) -> None:
