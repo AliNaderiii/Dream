@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dream — Hi-Fi Interactive Prototype (Phase 0 · Gate G5/G6)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700&family=Vazirmatn:wght@400;500;600;700&family=JetBrains+Mono:wght@400;450;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../tokens/dream.css">
+<link rel="stylesheet" href="prototype.css">
+</head>
+<body>
+
+<!-- ======= DEMO CONTROLS (design-review chrome, not product UI) ======= -->
+<div class="demo-bar" id="demoBar">
+  <span class="tag">Dream prototype</span>
+  <span class="grp" id="gTheme">
+    <button data-v="light" class="on">Light</button><button data-v="dark">Dark</button>
+  </span>
+  <span class="grp" id="gLang">
+    <button data-v="en" class="on">EN · LTR</button><button data-v="fa">فارسی · RTL</button>
+  </span>
+  <span class="grp" id="gDensity">
+    <button data-v="comfortable" class="on">Comfortable</button><button data-v="compact">Compact</button>
+  </span>
+  <span class="grp" id="gState">
+    <button data-v="happy" class="on">Happy</button><button data-v="empty">Empty</button><button data-v="loading">Loading</button><button data-v="error">Error</button>
+  </span>
+  <button class="btn btn-secondary" style="height:26px;font-size:11px" id="btnOnb">Replay onboarding</button>
+  <button class="btn btn-secondary" style="height:26px;font-size:11px" id="btnApproval">Trigger approval</button>
+</div>
+
+<div class="shell">
+  <div class="shell-main">
+
+    <!-- activity rail -->
+    <nav class="rail" aria-label="Primary">
+      <button data-view="chat" class="on" title="Chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5z"/></svg></button>
+      <button data-view="memory" title="Memory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2z"/><path d="M4 17h15"/></svg></button>
+      <button data-view="subagents" title="Subagents"><span class="badge">2</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="5" y="7" width="14" height="11" rx="2"/><path d="M12 7V4M8 11h.01M16 11h.01M9 15h6"/></svg></button>
+      <button data-view="provenance" title="Provenance"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M6 8.5v7M8.2 7l7.3 3.7M8.2 17l7.3-3.7"/></svg></button>
+      <button data-view="data" title="Data science"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/></svg></button>
+      <span class="spacer"></span>
+      <button data-view="settings" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.4 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.4-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.5-2-1.5c.1-.4.2-.8.2-1.2z"/></svg></button>
+    </nav>
+
+    <!-- context sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <h2 data-i18n="sessions">Sessions</h2>
+      <div class="search"><input class="input" data-i18n-ph="search" placeholder="Search sessions…"></div>
+      <div class="list" id="sessionList"></div>
+    </aside>
+
+    <!-- workspace -->
+    <main class="workspace" id="workspace"></main>
+  </div>
+
+  <!-- status bar -->
+  <footer class="statusbar">
+    <span class="ok">●</span><span class="ltr-island" style="font-family:inherit">Ollama · qwen2.5:7b</span>
+    <span data-i18n="local_only">local only</span>
+    <span data-i18n="net_off">network tools: off</span>
+    <span class="grow"></span>
+    <span id="sbAgents"></span>
+    <span class="ltr-island" style="font-family:inherit">⌘K</span>
+  </footer>
+
+  <!-- mobile tab bar -->
+  <nav class="tabbar" aria-label="Mobile">
+    <button data-view="chat" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5z"/></svg><span data-i18n="tab_chat">Chat</span></button>
+    <button data-view="memory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2z"/></svg><span data-i18n="tab_mem">Memory</span></button>
+    <button data-view="subagents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="5" y="7" width="14" height="11" rx="2"/><path d="M12 7V4"/></svg><span data-i18n="tab_agents">Agents</span></button>
+    <button data-view="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="3"/></svg><span data-i18n="tab_set">Settings</span></button>
+  </nav>
+</div>
+
+<script src="prototype.js"></script>
+</body>
+</html>

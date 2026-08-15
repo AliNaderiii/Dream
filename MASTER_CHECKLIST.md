@@ -1,0 +1,74 @@
+# Dream — Master Checklist
+
+> Source of truth for phase gating. A phase item is checked only when its gate
+> artifacts exist in the repository and have been reviewed. No frontend code is
+> written before Phase 0 is signed off (Gate G9).
+
+Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
+
+---
+
+## Phase 0 — UI/UX Design (Prompt P-00) `docs/design/`
+
+### 0.1 Research, Personas & User Flows
+- [x] 0.1.1 Study existing Dream CLI (`cli.py`) and Tkinter desktop (`desktop.py`) — capabilities inventory
+- [x] 0.1.2 Reference-app study: Hermes Agent, Open Science Desktop, DeepAnalyze
+- [x] 0.1.3 Competitor study: ChatGPT desktop, Claude desktop, Cursor, VS Code, Linear, Notion
+- [x] 0.1.4 Personas defined (4): privacy-conscious researcher, data analyst, power user, Persian-speaking user
+- [x] 0.1.5 User workflows documented (task inventory)
+- [x] 0.1.6 Primary flow mapped: launch → configure provider → converse → tool use → result
+- [x] 0.1.7 Secondary flows: project / memory / subagent, data science, settings, mobile gateway, RTL
+- [x] **Gate G1 — Research complete** → `docs/design/research.md`
+- [x] **Gate G2 — Flows approved** → `docs/design/user-flows/`
+
+### 0.2 Wireframes & Design System
+- [x] 0.2.1 Low-fidelity wireframes, all 17 screens → `docs/design/wireframes/` (SVG)
+- [x] 0.2.2 Color palette (light + dark), protanopia/deuteranopia-safe semantics
+- [x] 0.2.3 Typography scale — Inter (Latin) + Vazirmatn (Persian/Arabic), matched x-height
+- [x] 0.2.4 Spacing / radius / shadow / elevation / motion tokens
+- [x] 0.2.5 Component library specification (buttons → skeletons, Shadcn/ui-mappable)
+- [x] 0.2.6 Icon set selected: Lucide (ISC license) + usage rules
+- [x] 0.2.7 Tokens exported for tooling → `docs/design/tokens/` (Tokens Studio JSON + CSS custom properties)
+- [x] **Gate G3 — Wireframes approved** → `docs/design/wireframes/`
+- [x] **Gate G4 — Design system complete** → `docs/design/design-system.md`
+
+### 0.3 High-Fidelity Prototype, Motion, A11y, RTL, Sign-off
+- [x] 0.3.1 High-fidelity interactive prototype — core screens, both themes → `docs/design/prototype/`
+- [x] 0.3.2 RTL Persian variants (live direction/language toggle in prototype)
+- [x] 0.3.3 Responsive mobile/tablet behavior (prototype is responsive; resize or use device toolbar)
+- [x] 0.3.4 Micro-interaction & motion specs → `docs/design/animation-specs.md`
+- [x] 0.3.5 Empty / loading / error states designed (see prototype "States" controls + design-system.md)
+- [x] **Gate G5 — Mockups approved** (hi-fi prototype stands in for static mockups)
+- [x] **Gate G6 — Prototype functional** (click-through of main flows)
+- [x] **Gate G7 — Accessibility pass** → `docs/design/accessibility-audit.md` (WCAG 2.1 AA)
+- [x] **Gate G8 — RTL verified** (mirroring rules + overflow checks documented)
+- [ ] **Gate G9 — Final client sign-off** → `docs/design/approval-signoff.md` (awaiting client)
+
+---
+
+## Phase 1 — Desktop Shell (Prompt P-01) — Tauri 2 + React + Tailwind + Shadcn/ui
+- [ ] 1.1 Scaffold Tauri 2 app; import design tokens from `docs/design/tokens/`
+- [ ] 1.2 App shell: title bar, activity rail, session sidebar, status bar
+- [ ] 1.3 Theme engine (light/dark/system) + direction engine (LTR/RTL) from day one
+- [ ] 1.4 Multi-pane layout manager (2/3/4 panes, drag handles, keyboard resize)
+- [ ] 1.5 IPC bridge to Python core (sidecar or service)
+
+## Phase 2 — Conversation & Memory (Prompt P-02)
+- [ ] 2.1 Conversation view: streaming, tool-call cards, approval dialog
+- [ ] 2.2 Session manager (list, search, date groups)
+- [ ] 2.3 Memory explorer + timeline; reminders
+- [ ] 2.4 Skills manager
+
+## Phase 3 — Projects, Subagents & Provenance (Prompt P-03)
+- [ ] 3.1 Project dashboard; file browser
+- [ ] 3.2 Subagent monitor
+- [ ] 3.3 Run history / provenance viewer
+
+## Phase 4 — Data Science Workbench (Prompt P-04)
+- [ ] 4.1 Data preview grid; cleaning steps
+- [ ] 4.2 Chart builder; report preview/export
+
+## Phase 5 — Providers, MCP & Web Gateway (Prompt P-05)
+- [ ] 5.1 Provider configuration + connection test
+- [ ] 5.2 MCP server configuration
+- [ ] 5.3 Web gateway (mobile/tablet responsive) + authentication
