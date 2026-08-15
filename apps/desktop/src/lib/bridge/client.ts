@@ -180,7 +180,7 @@ export class EchoBridgeTransport implements BridgeTransport {
   ): Promise<unknown> {
     switch (method) {
       case 'session.create': {
-        const sid = `echo-${++echoCounter}`;
+        const sid = (params['session_id'] as string) || `echo-${++echoCounter}`;
         const now = Date.now();
         this.sessions.set(sid, {
           id: sid,
@@ -201,7 +201,8 @@ export class EchoBridgeTransport implements BridgeTransport {
       case 'session.delete':
         this.sessions.delete(params['session_id'] as string);
         return { deleted: true };
-      case 'session.rename': {
+      case 'session.rename':
+      case 'session.update': {
         const s = this.sessions.get(params['session_id'] as string);
         if (s) {
           s.title = (params['title'] as string) || s.title;
@@ -236,6 +237,34 @@ export class EchoBridgeTransport implements BridgeTransport {
       }
       case 'conversation.stop':
         return { stopped: true };
+      case 'session.messages':
+        return { messages: [] };
+      case 'session.export': {
+        const session = this.sessions.get(params['session_id'] as string);
+        const rawFormat = params['format'];
+        const format = typeof rawFormat === 'string' ? rawFormat : 'json';
+        const ext = format === 'markdown' ? 'md' : format;
+        const content =
+          format === 'json'
+            ? JSON.stringify({ version: 1, session, messages: [] }, null, 2)
+            : format === 'html'
+              ? `<!doctype html><meta charset="utf-8"><h1>${session?.title ?? 'Session'}</h1>`
+              : `# ${session?.title ?? 'Session'}\n`;
+        return {
+          content,
+          content_type:
+            format === 'html'
+              ? 'text/html'
+              : format === 'json'
+                ? 'application/json'
+                : 'text/markdown',
+          filename: `${session?.id ?? 'session'}.${ext}`,
+        };
+      }
+      case 'approval.list':
+        return { approvals: [], always_allowed: [] };
+      case 'approval.history':
+        return { approvals: [] };
       case 'provider.list':
         return {
           providers: [

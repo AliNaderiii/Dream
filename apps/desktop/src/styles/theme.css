@@ -273,3 +273,111 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Conversation content. Raw HTML is never enabled in react-markdown. */
+.message-markdown > * + * {
+  margin-block-start: 0.75rem;
+}
+.message-markdown h1 {
+  font-size: var(--text-h1);
+  line-height: var(--text-h1--line-height);
+  font-weight: 700;
+}
+.message-markdown h2 {
+  font-size: var(--text-h2);
+  line-height: var(--text-h2--line-height);
+  font-weight: 650;
+}
+.message-markdown h3 {
+  font-size: var(--text-h3);
+  line-height: var(--text-h3--line-height);
+  font-weight: 650;
+}
+.message-markdown ul {
+  list-style: disc;
+  padding-inline-start: 1.5rem;
+}
+.message-markdown ol {
+  list-style: decimal;
+  padding-inline-start: 1.5rem;
+}
+.message-markdown blockquote {
+  border-inline-start: 3px solid var(--accent-solid);
+  padding-inline-start: 0.75rem;
+  color: var(--fg-secondary);
+}
+.message-markdown a {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.message-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.message-markdown th,
+.message-markdown td {
+  border: 1px solid var(--border-default);
+  padding: 0.4rem 0.6rem;
+  text-align: start;
+}
+.message-markdown .hljs-keyword,
+.message-markdown .hljs-selector-tag {
+  color: #c792ea;
+}
+.message-markdown .hljs-string,
+.message-markdown .hljs-attr {
+  color: #c3e88d;
+}
+.message-markdown .hljs-number,
+.message-markdown .hljs-literal {
+  color: #f78c6c;
+}
+.message-markdown .hljs-comment {
+  color: var(--fg-muted);
+  font-style: italic;
+}
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-inline-start: 2px;
+  vertical-align: -0.15em;
+  background: var(--accent-solid);
+  animation: cursor-blink 0.8s steps(2) infinite;
+}
+.typing-dots {
+  display: flex;
+  gap: 5px;
+  padding-block: 0.5rem;
+}
+.typing-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--fg-muted);
+  animation: typing-bounce 1.15s infinite ease-in-out;
+}
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.13s;
+}
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.26s;
+}
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+@keyframes cursor-blink {
+  50% {
+    opacity: 0;
+  }
+}
