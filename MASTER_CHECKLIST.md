@@ -47,11 +47,14 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 ---
 
 ## Phase 1 — Desktop Shell (Prompt P-01) — Tauri 2 + React + Tailwind + Shadcn/ui
-- [ ] 1.1 Scaffold Tauri 2 app; import design tokens from `docs/design/tokens/`
-- [ ] 1.2 App shell: title bar, activity rail, session sidebar, status bar
-- [ ] 1.3 Theme engine (light/dark/system) + direction engine (LTR/RTL) from day one
-- [ ] 1.4 Multi-pane layout manager (2/3/4 panes, drag handles, keyboard resize)
-- [ ] 1.5 IPC bridge to Python core (sidecar or service)
+- [x] 1.1 Scaffold Tauri 2 app; import design tokens from `docs/design/tokens/`
+- [x] 1.2 App shell: title bar, activity rail, session sidebar, status bar
+- [x] 1.3 Theme engine (light/dark/system) + direction engine (LTR/RTL) from day one
+- [x] 1.4 Multi-pane layout manager (2/3/4 panes, drag handles, keyboard resize)
+- [~] 1.5 IPC bridge to Python core (sidecar or service) — **P-02**: JSON-RPC
+  bridge implemented across Python (`dream/bridge/`), Rust (`src-tauri/src/bridge/`),
+  and TypeScript (`src/lib/bridge/`); spec at `docs/bridge/protocol.md`. Python +
+  frontend tested green; Rust written pending CI compile. See `docs/STATUS.md` (P-02).
 
 ## Phase 2 — Conversation & Memory (Prompt P-02)
 - [ ] 2.1 Conversation view: streaming, tool-call cards, approval dialog

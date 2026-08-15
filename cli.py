@@ -653,6 +653,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--owner", default="", help="Optional owner name for the session")
     parser.add_argument("--db", default="data/dream.db", help="SQLite database path")
     parser.add_argument(
+        "--bridge",
+        action="store_true",
+        help="Start the JSON-RPC sidecar (stdin/stdout) instead of the interactive CLI",
+    )
+    parser.add_argument(
         "--demo", action="store_true", help="Run the offline demonstration and exit"
     )
     parser.add_argument("--memories", action="store_true", help="List memories at startup")
@@ -672,6 +677,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.demo:
         run_demo(args.db)
         return 0
+    if args.bridge:
+        # Start the sidecar instead of the interactive CLI. The bridge runs its
+        # own event loop over stdin/stdout; nothing below this branch runs.
+        from dream.bridge.server import run_stdio
+
+        return run_stdio()
     policy = ApprovalPolicy()
     if args.yolo:
         policy.auto_approve.add("dangerous")

@@ -29,6 +29,7 @@ dependencies = []
 
 [project.scripts]
 dream = "cli:main"
+dream-bridge = "dream.bridge.server:run_stdio"
 dream-telegram = "dream.telegram:main"
 
 [project.optional-dependencies]

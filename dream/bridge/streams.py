@@ -1,0 +1,142 @@
+"""Streaming helpers for the Dream bridge.
+
+A handler that wants to stream returns an *async generator*. The server's
+dispatcher detects this and turns each ``yield`` into a ``stream.*``
+notification, and the generator's return value into the final ``result``
+(see ``docs/bridge/protocol.md`` §5.1).
+
+This module provides:
+
+* :func:`is_async_generator` — detect streaming handlers/results.
+* :func:`tokenise` — split text into roughly token-sized pieces (word + trailing
+  whitespace), language-agnostic so Persian and English chunk the same way.
+* :func:`stream_chunks` — the canonical chunker used by ``conversation.send``:
+  it runs a blocking producer in a worker thread, splits the produced text into
+  token-sized fragments, yields them as chunk payloads, and returns the full
+  producer result so the dispatcher can send it as the final ``result``.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import inspect
+import re
+from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any
+
+#: A chunk payload emitted to the frontend. The server adds the request ``id``
+#: and ``session_id`` routing keys before sending.
+Chunk = dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class Stream:
+    """A streaming result: an async iterator of chunks plus a final value.
+
+    Async generators cannot ``return`` a value (it is a ``SyntaxError``), so a
+    streaming handler returns a :class:`Stream` instead: it runs its blocking
+    work up front, hands the tokenised text to ``chunks``, and carries the full
+    result as ``final``. The server emits each chunk as a ``stream.chunk``
+    notification and sends ``final`` as the JSON-RPC ``result``.
+    """
+
+    final: Any
+    chunks: AsyncIterator[Chunk]
+
+#: Regex that splits text into a non-whitespace run plus any trailing whitespace,
+#: so re-joining the tokens reproduces the original text exactly.
+_TOKEN_RE = re.compile(r"\S+\s*|\s+")
+
+#: Default fragment size for hard-splitting an over-long token (a paste with no
+#: whitespace). Twelve characters is a comfortable read-ahead for both Latin and
+#: Persian text.
+DEFAULT_MAX_CHARS = 12
+
+
+def is_async_generator(value: Any) -> bool:
+    """True when *value* is an async generator (i.e. a streaming result)."""
+    return inspect.isasyncgen(value)
+
+
+def tokenise(text: str, *, max_chars: int = DEFAULT_MAX_CHARS) -> list[str]:
+    """Split *text* into roughly token-sized fragments.
+
+    Word boundaries are honoured when present (Latin scripts, or Persian joined
+    by spaces/ZWNJ). A single over-long token (no whitespace) is hard-split at
+    ``max_chars`` so a giant paste still streams in pieces rather than one blob.
+    """
+    if not text:
+        return []
+    fragments: list[str] = []
+    for word in _TOKEN_RE.findall(text):
+        if len(word) <= max_chars:
+            fragments.append(word)
+            continue
+        fragments.extend(word[i : i + max_chars] for i in range(0, len(word), max_chars))
+    return fragments
+
+
+async def stream_chunks(
+    produce: Callable[[], Any],
+    *,
+    to_text: Callable[[Any], str] | None = None,
+    max_chars: int = DEFAULT_MAX_CHARS,
+    delay: float = 0.0,
+) -> Stream:
+    """Run a blocking ``produce()`` call and return a :class:`Stream` of its text.
+
+    ``produce`` runs in a worker thread (Dream's turn loop is blocking and uses
+    threads internally). ``to_text`` extracts the assistant text to stream from
+    the producer's result (default: ``str(result)``). The full producer result
+    is carried as ``Stream.final`` so the dispatcher can send it as the final
+    ``result``; the chunked text becomes ``Stream.chunks``.
+
+    ``delay`` adds an optional inter-chunk await — useful only for tests that
+    want to observe ordering; production passes ``0``.
+    """
+    result = await asyncio.to_thread(produce)
+    text = to_text(result) if to_text is not None else str(result)
+
+    async def _chunks() -> AsyncIterator[Chunk]:
+        for piece in tokenise(text, max_chars=max_chars):
+            yield {"token": piece}
+            if delay:
+                await asyncio.sleep(delay)
+
+    return Stream(final=result, chunks=_chunks())
+
+
+async def stream_text(
+    text: str, *, max_chars: int = DEFAULT_MAX_CHARS, delay: float = 0.0
+) -> AsyncIterator[Chunk]:
+    """Stream an already-available *text* string.
+
+    Convenience wrapper used by handlers that have the text up front and just
+    want it chunked (e.g. echoing a stored reply).
+    """
+    for piece in tokenise(text, max_chars=max_chars):
+        yield {"token": piece}
+        if delay:
+            await asyncio.sleep(delay)
+
+
+async def collect(async_iter: AsyncIterator[Any]) -> list[Any]:
+    """Materialise an async iterator into a list (test helper)."""
+    out: list[Any] = []
+    async for item in async_iter:
+        out.append(item)
+    return out
+
+
+def ensure_awaitable(value: Any) -> Awaitable[Any]:
+    """Wrap a plain (non-async) handler return value into an awaitable.
+
+    Handlers may be ``async def`` or plain ``def``; the dispatcher normalises
+    both to awaitables so a single code path awaits the result.
+    """
+    if inspect.isawaitable(value):
+        return value
+    fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+    fut.set_result(value)
+    return fut

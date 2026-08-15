@@ -1,5 +1,68 @@
 # Status
 
+## P-02 — Python Sidecar Bridge — SHIPPED (Rust pending CI compile)
+
+**What shipped.** The JSON-RPC 2.0 bridge between the Tauri 2 frontend and the
+existing `dream/` Python core (Prompt P-02 / Phase 1 item 1.5). The `dream/`
+package is **100% backward compatible** — the bridge is a new layer above it
+and changes no existing public API. All **1021 tests pass** (956 pre-existing +
+65 new bridge tests); `ruff` clean over `dream/` and `cli.py`.
+
+- **Protocol (Task 1, gate G1).** `docs/bridge/protocol.md` — full spec: version
+  header `DREAM-PROTOCOL: 1.0`, newline-delimited JSON framing, all 29 methods,
+  streaming (`stream.start`/`stream.chunk`/`stream.end` + final result), the
+  12-code error taxonomy, backpressure (concurrency 16 / queue 128 →
+  `RESOURCE_EXHAUSTED`), failure recovery, and security boundaries.
+- **Python server (Task 2, gates G2 + G3).** New `dream/bridge/` package:
+  `errors.py` (taxonomy + deny-by-default `serialise_error` with bearer/secret
+  redaction and dev-mode tracebacks), `streams.py` (`Stream` value + `tokenise`),
+  `methods.py` (every method mapped to the core — sessions, conversation,
+  providers, memory, skills, tools, approval, subagents, health/version), and
+  `server.py` (async loop, line framing, dispatcher, streaming, graceful
+  shutdown, backpressure). Entry points: `dream --bridge`, `python -m
+  dream.bridge`, and the `dream-bridge` console script.
+- **Frontend client (Task 4, gate G5).** New `apps/desktop/src/lib/bridge/`:
+  `types.ts` (RPC + result shapes), `errors.ts` (`BridgeRpcError` with
+  `isRetryable`/`approvalId`), `client.ts` (`BridgeClient` with `call`/`stream`,
+  `TauriBridgeTransport` for the real path and an in-memory `EchoBridgeTransport`
+  fallback so dev/tests work with no sidecar), and `hooks.ts` (`useBridge` with
+  reactive state + exponential-backoff reconnect). New `components/bridge/`:
+  `BridgeStatusIndicator` (wired into the status bar) and `BridgeErrorToast`.
+  Frontend gate green: `typecheck`, `lint` (0 errors), `format:check`, **50
+  tests**, `vite build`.
+
+**Rust bridge (Task 3, gate G4) — written, not compiled in this sandbox.** New
+`apps/desktop/src-tauri/src/bridge/`: `framing.rs` (JSON-RPC encode/decode +
+parse-error recovery, unit-tested), `dispatcher.rs` (pending-request map with
+stream channels + `fail_all`, unit-tested), `state.rs` (lock-free
+`ConnectionState` atomic, unit-tested), `process.rs` (sidecar spawn, read loop,
+5 s heartbeat ping with 15 s hang→kill, restart-with-backoff 2/5/10 s × 3), and
+`mod.rs` (`Bridge` + commands `bridge_send`/`bridge_status`/`bridge_restart`/
+`bridge_kill`, mobile-safe via `try_state`). Wired into `lib.rs` (desktop-only
+`init` in setup, commands registered) and `Cargo.toml` (`tokio` + `log`). **The
+dev sandbox has no Rust toolchain and the network is restricted, so this was
+not compiled here;** the three-OS `Rust` job in `.github/workflows/desktop-ci.yml`
+(`cargo fmt --check`, `cargo clippy -D warnings`, `cargo build`, `cargo test`)
+is the source of truth for compilation.
+
+**What was measured.**
+- Python: baseline `956 passed`; after `1021 passed in 29.34s` (+65 bridge
+  tests across `test_bridge_errors_streams.py`, `test_bridge_methods.py`,
+  `test_bridge_server.py`, and `test_bridge_subprocess.py` — the last spawns
+  the real sidecar and round-trips a streamed `conversation.send`). `ruff` clean.
+- Frontend: baseline `29 tests`; after `50 tests`. `tsc --noEmit` clean;
+  `eslint` 0 errors (2 pre-existing `button`/`badge` warnings untouched);
+  `prettier --check` clean; `vite build` succeeds (430 kB bundle).
+- Backward compatibility: the `dream/` package, `cli.py` dispatch, and all 956
+  existing tests are byte-for-byte unchanged in behaviour.
+
+**What is next.** Compile/verify the Rust bridge in CI; P-03 builds the
+conversation UI and session management on top of this bridge.
+
+**What is blocked.** Nothing in-repo. Rust compilation requires CI (no toolchain
+in the dev sandbox).
+
+
 ## M27 — Owner-enabled public web search and page reading — SHIPPED
 
 **What shipped (TOOL ENGINEER).** Two guarded registry tools now provide the
