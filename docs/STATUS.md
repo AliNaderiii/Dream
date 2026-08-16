@@ -1,5 +1,81 @@
 # Status
 
+## P-07 — Multi-Platform Connectivity — SHIPPED (live-platform smoke pending)
+
+**What shipped.** The six-platform connectivity gateway (Prompt P-07,
+Phase 3.1–3.6): Telegram, Discord, Slack, WhatsApp, Signal, and Email all
+route into the existing `dream/agent.py` loop and shared memory store — one
+agent, one memory, every channel. New `dream/connectivity/` package,
+100% standard library (`urllib`, `http.server`, `imaplib`/`smtplib`/`email`,
+`asyncio`, `subprocess`, plus a local RFC 6455 WebSocket client); no new
+dependencies in `pyproject.toml`.
+
+- **Architecture (gate G1).** `docs/architecture/connectivity.md` — adapter
+  contract (`PlatformAdapter` ABC), the `Gateway` orchestrator on its own
+  event-loop thread, the routing pipeline (log → pre-auth commands → auth →
+  rate limit → command → agent → split → send), session/auth/rate-limit/
+  message-log models, and the security posture.
+- **Core modules (gates G2 + G4 + G5 + G6).** `models.py`, `base.py`
+  (with `split_text`), `ratelimit.py` ({platform, user, minute} counter,
+  20/min default, configurable per platform), `config.py` (per-platform JSON,
+  0600 atomic writes, secret redaction for `*token*/*secret*/password/key`
+  keys), `auth.py` (single-use 6-digit link codes, 10-minute TTL,
+  constant-time compare, persisted linked-user registry), `sessions.py`
+  (one Dream per (platform, user), JSON index), `messagelog.py` (per-platform
+  100-row ring buffer persisted as JSONL; **Signal rows store empty text** —
+  e2e content is never logged, gate G11), and `websocket.py` (minimal RFC 6455
+  client: masking, ping/pong, fragmentation, close handshake, used by both
+  Discord and Slack).
+- **Six adapters (gate G3).** Telegram long-polling (reuses the existing
+  token regex/redaction helpers from `dream/telegram.py`; /start /help
+  /new_session /status /link commands, 4096-char split); Discord gateway
+  (Op 10→2→11 heartbeat ACK, `compress: false`) + REST (slash-command
+  registration, Deferred type-5 interaction ack with PATCH follow-up,
+  multipart uploads, opt-in auto-threads), 2000-char split; Slack Socket Mode
+  over the shared WS client with envelope acks and `response_url` replies,
+  4000-char split; WhatsApp Cloud API webhook (`ThreadingHTTPServer`, GET
+  verify-token challenge, optional HMAC-SHA256 validation, two-step media
+  download), 4096-char split; Signal `signal-cli` receive --json loop with
+  fail-fast binary check and `send --message-from-stdin`; Email IMAP IDLE via
+  the raw-socket trick with a UNSEEN-polling fallback, HTML→text stripping,
+  SMTP replies with `In-Reply-To`/`References`, and reply-loop guards
+  (own-address skip + answered-Message-ID set).
+- **Bridge integration (Task 5).** Nine RPC methods registered in
+  `dream/bridge/methods.py`: `gateway.start|stop|status|configure|logs|
+  link_code|linked_users|unlink_user|platforms`, all async-friendly
+  (`submit_async` onto the gateway loop, never blocking the bridge loop),
+  documented in `docs/bridge/protocol.md` §3.11. Gateway lifecycle is tied to
+  the sidecar (`aclose` stops adapters and the loop thread).
+- **Frontend (Task 6, gates G7 + G8).** Connectivity route
+  (`routes/connectivity.tsx`) with six platform cards (status badge, enable
+  toggle, configure expand, link codes), per-platform secret-hiding forms
+  (`components/connectivity/`), the last-100-per-platform message-log viewer,
+  and a Zustand store (`stores/use-connectivity-store.ts`) where every action
+  goes through the bridge. `EchoBridgeTransport` gained an
+  `EchoGatewayRuntime`, so the whole screen works in `npm run dev` and tests
+  with no sidecar.
+
+**What was measured.**
+
+- Python: baseline `1272 passed`; after `1327 passed in 52.46s` (+55
+  connectivity tests across `test_connectivity_{models,ratelimit,sessions,
+  gateway,websocket,adapters,bridge}.py` — the websocket tests round-trip
+  frames against a local asyncio RFC 6455 server; every adapter test uses an
+  injected fake transport; the WhatsApp webhook test runs a real local
+  `ThreadingHTTPServer`). `ruff check .` clean across `dream/connectivity/`
+  and the new tests.
+- Frontend: baseline `222 tests`; after `245 tests`. `tsc --noEmit` clean;
+  `eslint` 0 errors (pre-existing warnings untouched); `prettier --check`
+  clean; `vite build` succeeds.
+- Backward compatibility (gate G9): all prior suites stay green — no changes
+  to `dream/agent.py`, `dream/memory.py`, or any existing bridge method.
+
+**What is blocked / not verified here.** Real-platform smoke (live Telegram
+bot token, Discord/Slack/WhatsApp credentials, a signal-cli account, a
+mailbox) cannot run in this sandbox; each adapter's transport seam is
+unit-tested against fakes instead, and `signal-cli`/IMAP behaviour is
+exercised through the documented stdlib patterns.
+
 ## P-02 — Python Sidecar Bridge — SHIPPED (Rust pending CI compile)
 
 **What shipped.** The JSON-RPC 2.0 bridge between the Tauri 2 frontend and the

@@ -91,6 +91,56 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 - [x] 2.6.8 Security: children cannot reach parent files or memory; scheduled
   dangerous tools require approval (Gate G11)
 
+## Phase 3 — Multi-Platform Connectivity (Prompt P-07)
+
+> Numbering follows the P-07 master prompt (3.1.1–3.6.7); the adjacent
+> P-03 "Projects, Subagents & Provenance" phase keeps its own numbering.
+
+### 3.1 Gateway architecture (Gate G1)
+- [x] 3.1.1 `PlatformAdapter` ABC contract (classvars, start/stop, send, typing, status)
+- [x] 3.1.2 Normalised `IncomingMessage` model with attachments + raw escape hatch
+- [x] 3.1.3 Rate-limit gate counter `{platform, user_id, minute}` — default 20/min, per-platform configurable
+- [x] 3.1.4 Architecture of record → `docs/architecture/connectivity.md` (Gate G1)
+
+### 3.2 Core modules
+- [x] 3.2.1 `models.py` — Attachment/IncomingMessage/PlatformStatus/LinkedUser/MessageLogEntry
+- [x] 3.2.2 `base.py` — adapter ABC + word-boundary `split_text()`
+- [x] 3.2.3 `ratelimit.py` — fixed-minute window, pruning, per-platform limits
+- [x] 3.2.4 `config.py` — per-platform JSON, atomic 0600 writes, secret redaction (`*token*`, `*secret*`, password, key)
+- [x] 3.2.5 `auth.py` — single-use, time-bounded link codes (constant-time compare) + persisted linked users
+- [x] 3.2.6 `sessions.py` — (platform, user_id) → Dream, persisted JSON index
+- [x] 3.2.7 `messagelog.py` — per-platform ring buffer (JSONL); e2e (Signal) rows carry empty text
+- [x] 3.2.8 `websocket.py` — minimal async RFC 6455 client (shared by Discord + Slack)
+
+### 3.3 Gateway (Gate G2)
+- [x] 3.3.1 Owns adapters, sessions, auth, rate limiter, message log, status aggregator
+- [x] 3.3.2 Dedicated asyncio event-loop thread; `start_loop` / `submit` / `submit_async`
+- [x] 3.3.3 `register_adapter` / `start_all` / `stop_all` / `adapter_status`
+- [x] 3.3.4 `route_message` pipeline: log → pre-auth commands → auth → rate → command → agent → split → send (Gate G4)
+- [x] 3.3.5 Second `route_message` reuses the same Dream instance (Gate G5)
+
+### 3.4 Platform adapters (Gate G3)
+- [x] 3.4.1 Telegram — long-polling getUpdates; /start /help /new_session /status /link; 4096-char split
+- [x] 3.4.2 Discord — gateway WS (Op 10→2→11, compress:false) + REST; Deferred Op-5 ack + PATCH follow-up; threads; uploads; 2000-char split
+- [x] 3.4.3 Slack — Socket Mode via shared WS client; envelope acks; response_url replies; 4000-char split
+- [x] 3.4.4 WhatsApp — Cloud API webhook (ThreadingHTTPServer), verify-token GET, optional HMAC; two-step media; 4096-char split
+- [x] 3.4.5 Signal — signal-cli receive --json loop; binary fail-fast; send --message-from-stdin; privacy e2e (content never logged, Gate G11)
+- [x] 3.4.6 Email — IMAP IDLE (raw-socket) + poll fallback; HTML→text; SMTP threads (In-Reply-To/References); reply-loop guards
+
+### 3.5 Bridge integration & tests (Gates G4–G9, G11)
+- [x] 3.5.1 `gateway.*` methods registered in `dream/bridge/methods.py` (start/stop/status/configure/logs/link_code/linked_users/unlink_user/platforms)
+- [x] 3.5.2 Protocol documentation → `docs/bridge/protocol.md` §3.11
+- [x] 3.5.3 Python suite: 55 new tests (models, ratelimit, sessions, gateway, websocket round-trip, one adapter test per platform with fake transports, bridge RPCs); full suite 1327 passed
+
+### 3.6 Frontend (Gates G7 + G8)
+- [x] 3.6.1 `routes/connectivity.tsx` settings page with six platform cards
+- [x] 3.6.2 `components/connectivity/platform-card.tsx` — status badge, enable toggle, Configure expand
+- [x] 3.6.3 `components/connectivity/platform-config.tsx` — per-platform forms; secrets hidden by default
+- [x] 3.6.4 `components/connectivity/message-log.tsx` — last-100-per-platform viewer
+- [x] 3.6.5 `stores/use-connectivity-store.ts` — Zustand store; all actions through the bridge
+- [x] 3.6.6 Route registered in `App.tsx`; Radio icon added to the activity rail
+- [x] 3.6.7 Echo transport: `gateway.*` handlers + types, so dev/tests need no sidecar; 245 frontend tests, tsc/lint/prettier/build green
+
 ## Phase 3 — Projects, Subagents & Provenance (Prompt P-03)
 - [ ] 3.1 Project dashboard; file browser
 - [ ] 3.2 Subagent monitor
