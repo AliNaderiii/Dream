@@ -334,31 +334,44 @@ def test_approval_resolve_twice_rejected():
 
 
 def test_subagent_spawn_completes_and_lists():
+    """A child runs to completion inside the sidecar's event loop.
+
+    Every call shares one ``asyncio.run``: subagents live in tasks on the
+    loop that spawned them, which in production is the sidecar's single
+    long-lived loop.
+    """
     m = make_methods()
-    spawned = run(m.subagent_spawn({"message": "hello"}))
-    sid = spawned["subagent_id"]
-    assert spawned["status"] == "running"
 
-    # Wait for the background turn to finish (best-effort polling).
-    status = run(_wait_for_terminal(m, sid))
+    async def scenario():
+        spawned = await m.subagent_spawn({"message": "hello"})
+        sid = spawned["subagent_id"]
+        assert spawned["status"] in {"idle", "running"}
+        status = await _wait_for_terminal(m, sid)
+        listed = m.subagent_list({})
+        return sid, status, listed
+
+    sid, status, listed = run(scenario())
     assert status["status"] == "completed", status
-    assert status["result"]["reply"] == "Echo: hello"
-
-    listed = m.subagent_list({})
+    assert status["result"] == "Echo: hello"
     assert any(s["id"] == sid for s in listed["subagents"])
 
 
 def test_subagent_cancel_marks_cancelled():
     m = make_methods()
-    spawned = run(m.subagent_spawn({"message": "hello"}))
-    out = m.subagent_cancel({"subagent_id": spawned["subagent_id"]})
+
+    async def scenario():
+        spawned = await m.subagent_spawn({"message": "hello"})
+        return await m.subagent_cancel({"subagent_id": spawned["subagent_id"]})
+
+    out = run(scenario())
     assert out["cancelled"] is True
+    assert out["status"] in {"cancelled", "completed"}
 
 
 async def _wait_for_terminal(m, sub_id, tries=200):
     for _ in range(tries):
         s = m.subagent_status({"subagent_id": sub_id})
-        if s["status"] != "running":
+        if s["status"] not in {"idle", "running"}:
             return s
         await asyncio.sleep(0.01)
     return m.subagent_status({"subagent_id": sub_id})

@@ -398,10 +398,14 @@ async def serve_forever(methods: BridgeMethods | None = None, **kwargs: Any) -> 
     reader.start(loop)
     server = BridgeServer(methods, reader=reader, **kwargs)
     install_signal_handlers(server, loop)
+    # The scheduler daemon needs a running loop, so it starts here rather than
+    # in the constructor; ``aclose`` stops it (and any live subagent) before the
+    # loop goes away.
+    methods.start_scheduler()
     try:
         await server.serve()
     finally:
-        methods.shutdown()
+        await methods.aclose()
 
 
 def run_stdio(argv: list[str] | None = None) -> int:

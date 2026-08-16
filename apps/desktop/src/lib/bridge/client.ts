@@ -20,6 +20,7 @@ import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen } from '@/lib/tauri';
 import { isTauri } from '@/utils/platform';
 
+import { EchoScheduleRuntime, EchoSubagentRuntime } from './echo-subagents';
 import { BridgeRpcError, toBridgeError } from './errors';
 import type { BridgeConnectionState, RpcId, RpcParams, StreamChunk } from './types';
 
@@ -424,6 +425,13 @@ export class EchoBridgeTransport implements BridgeTransport {
   private memories: EchoMemory[] = seedMemories();
   private skills: EchoSkill[] = seedSkills();
   private nextMemoryId = this.memories.length + 1;
+  private subagents = new EchoSubagentRuntime();
+  private schedules = new EchoScheduleRuntime();
+
+  /** Stops any simulated subagent still ticking (vitest teardown). */
+  dispose(): void {
+    this.subagents.dispose();
+  }
 
   onState(handler: (state: BridgeConnectionState) => void): () => void {
     this.stateHandlers.add(handler);
@@ -723,8 +731,60 @@ export class EchoBridgeTransport implements BridgeTransport {
           tools: [
             { name: 'calculate', risk: 'safe', description: 'Evaluate arithmetic', schema: {} },
             { name: 'get_datetime', risk: 'safe', description: 'Current date/time', schema: {} },
+            { name: 'remember_fact', risk: 'safe', description: 'Store a fact', schema: {} },
+            { name: 'search_memory', risk: 'safe', description: 'Search memory', schema: {} },
+            { name: 'read_file', risk: 'guarded', description: 'Read a file', schema: {} },
+            { name: 'write_file', risk: 'dangerous', description: 'Write a file', schema: {} },
           ],
         };
+      // -- subagents ----------------------------------------------------- //
+      case 'subagent.spawn':
+        return this.subagents.spawn(params);
+      case 'subagent.pipeline':
+        return this.subagents.spawnPipeline(params);
+      case 'subagent.list':
+        return this.subagents.list(params);
+      case 'subagent.get':
+      case 'subagent.status':
+        return this.subagents.get(params);
+      case 'subagent.cancel':
+        return this.subagents.cancel(params);
+      case 'subagent.pause':
+        return this.subagents.pause(params);
+      case 'subagent.resume':
+        return this.subagents.resume(params);
+      case 'subagent.logs':
+        // Matches the sidecar: a chunk per log line, then the final agent.
+        return this.subagents.follow(params, (entry, subagentId) => {
+          onChunk?.({
+            id,
+            token: entry.message,
+            event: 'log',
+            subagent_id: subagentId,
+            entry,
+          });
+        });
+
+      // -- schedules ------------------------------------------------------ //
+      case 'schedule.create':
+        return this.schedules.create(params);
+      case 'schedule.list':
+        return this.schedules.list(params);
+      case 'schedule.get':
+        return this.schedules.get(params);
+      case 'schedule.update':
+        return this.schedules.update(params);
+      case 'schedule.delete':
+        return this.schedules.delete(params);
+      case 'schedule.toggle':
+        return this.schedules.toggle(params);
+      case 'schedule.history':
+        return this.schedules.history(params);
+      case 'schedule.preview':
+        return this.schedules.preview(params);
+      case 'schedule.run_now':
+        return this.schedules.runNow(params);
+
       case 'health.check':
         return {
           status: 'ok',

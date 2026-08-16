@@ -9,7 +9,7 @@ import re
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -451,9 +451,16 @@ class ApprovalPolicy:
     auto_approve: set[str] = field(default_factory=lambda: {"safe", "guarded"})
     always_ask: set[str] = field(default_factory=lambda: {"dangerous"})
     ask: Callable[[str, dict[str, Any]], bool] | None = None
+    registry: Mapping[str, Any] | None = None
+    """Private tool table to resolve risk from; ``None`` uses the global one.
+
+    A subagent dispatches against its own grant, so its policy must judge risk
+    from the same mapping. Reading the global registry here would let a name
+    the subagent was never granted resolve to a real risk tier.
+    """
 
     def allows(self, tool_name: str, arguments: dict[str, Any]) -> tuple[bool, str]:
-        registered = REGISTRY.get(tool_name)
+        registered = (REGISTRY if self.registry is None else self.registry).get(tool_name)
         if registered is None:
             return False, "unknown tool"
         risk = registered.risk
