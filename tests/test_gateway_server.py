@@ -6,7 +6,6 @@ The FastAPI application is tested with mocked HTTP requests.
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
 import pytest
@@ -213,6 +212,7 @@ class TestGatewayConfig:
 
         # Fresh import with env set.
         import importlib
+
         from dream import gateway_server as gs
         importlib.reload(gs)
 

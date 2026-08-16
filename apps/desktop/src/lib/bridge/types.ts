@@ -650,3 +650,148 @@ export interface GatewayConnection {
   user_agent: string;
   connected_at: number;
 }
+
+// --------------------------------------------------------------------------- //
+// Provenance & Artifacts types (P-10).
+// --------------------------------------------------------------------------- //
+
+export interface FileSnapshotDto {
+  path: string;
+  hash: string;
+  size: number;
+  modified_at: number;
+  mime_type?: string | null;
+}
+
+export interface ModelSnapshotDto {
+  provider: string;
+  model?: string | null;
+  base_url?: string | null;
+  config?: Record<string, unknown>;
+}
+
+export interface ProvenanceRecordDto {
+  record_id: string;
+  timestamp: string;
+  event_type:
+    | 'tool_call'
+    | 'code_execution'
+    | 'file_write'
+    | 'file_read'
+    | 'model_response'
+    | 'user_message'
+    | 'agent_message'
+    | 'subagent_spawn'
+    | 'subagent_result'
+    | 'schedule_fire'
+    | 'session_create'
+    | 'session_export'
+    | 'approval_granted'
+    | 'approval_denied';
+  agent_id: string;
+  parent_record_id?: string | null;
+  payload: Record<string, unknown>;
+  input_snapshot: FileSnapshotDto[];
+  output_snapshot: FileSnapshotDto[];
+  model_snapshot?: ModelSnapshotDto | null;
+  token_count?: number | null;
+  duration_ms?: number | null;
+  prev_hash?: string | null;
+  hash: string;
+}
+
+export interface ProvenanceTreeNodeDto {
+  id: string;
+  label: string;
+  event_type: string;
+  agent_id: string;
+  timestamp: string;
+  duration_ms?: number | null;
+  payload: Record<string, unknown>;
+  inputs: FileSnapshotDto[];
+  outputs: FileSnapshotDto[];
+  model?: ModelSnapshotDto | null;
+}
+
+export interface ProvenanceTreeEdgeDto {
+  source: string;
+  target: string;
+  type: string;
+}
+
+export interface ProvenanceTreeDto {
+  nodes: ProvenanceTreeNodeDto[];
+  edges: ProvenanceTreeEdgeDto[];
+  count: number;
+}
+
+export interface ArtifactDto {
+  artifact_path: string;
+  exists: boolean;
+  size: number;
+  hash: string;
+  record_id: string;
+  tool_name: string;
+  agent_id: string;
+  created_at: string;
+  model: string;
+  lineage_statement: string;
+  generating_record?: ProvenanceRecordDto | null;
+  lineage_tree?: ProvenanceTreeDto;
+  sidecar?: Record<string, unknown>;
+}
+
+// --------------------------------------------------------------------------- //
+// MCP (Model Context Protocol) types (P-10).
+// --------------------------------------------------------------------------- //
+
+export interface MCPServerDto {
+  id: string;
+  name: string;
+  type: 'stdio' | 'sse' | 'ws';
+  command?: string | null;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string | null;
+  headers?: Record<string, string>;
+  enabled: boolean;
+  disabled_tools: string[];
+  status?: 'connected' | 'disconnected' | 'disabled' | 'error';
+  is_connected?: boolean;
+  tools_count?: number;
+  resources_count?: number;
+}
+
+export interface MCPToolDto {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+  server_id: string;
+  server_name?: string;
+  enabled: boolean;
+  risk: 'safe' | 'guarded' | 'dangerous';
+}
+
+export interface MCPResourceDto {
+  uri: string;
+  name: string;
+  description: string;
+  mime_type: string;
+  server_id: string;
+}
+
+// --------------------------------------------------------------------------- //
+// ACP (Agent Client Protocol) types (P-10).
+// --------------------------------------------------------------------------- //
+
+export interface ACPAgentDto {
+  id: string;
+  name: string;
+  endpoint: string;
+  token?: string | null;
+  label: string;
+  description: string;
+  model?: string | null;
+  enabled: boolean;
+  status?: 'ready' | 'untested' | 'error';
+}

@@ -13,14 +13,12 @@ import asyncio
 import os
 import platform
 import shutil
-import subprocess
 import tempfile
 import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-
 
 # ---------------------------------------------------------------------------
 # Types
@@ -267,10 +265,10 @@ class BrowserController:
             content = await self._extract_content()
             self._page_content = content
             return content
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError as exc:
             raise BrowserTimeoutError(
                 f"Navigation to {url} timed out after {timeout}s"
-            )
+            ) from exc
 
     async def get_content(self) -> PageContent:
         """Return the content of the current page."""
@@ -454,11 +452,11 @@ class BrowserController:
 
             self._playwright = await async_playwright().start()
             return self._playwright
-        except ImportError:
+        except ImportError as exc:
             raise BrowserUnavailableError(
                 "Playwright is not installed. Install it with: "
                 "pip install playwright && playwright install chromium"
-            )
+            ) from exc
 
     async def _extract_content(self) -> PageContent:
         """Extract structured content from the current page."""

@@ -31,7 +31,9 @@ export function GatewaySettings() {
   const [error, setError] = useState<string | null>(null);
   const [gatewayEnabled, setGatewayEnabled] = useState(true);
   const [showTokenValues, setShowTokenValues] = useState(false);
-  const [newTokenResult, setNewTokenResult] = useState<{ token: string; scope: string } | null>(null);
+  const [newTokenResult, setNewTokenResult] = useState<{ token: string; scope: string } | null>(
+    null,
+  );
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -52,8 +54,31 @@ export function GatewaySettings() {
   }, [call]);
 
   useEffect(() => {
-    if (gatewayEnabled) void refresh();
-  }, [gatewayEnabled, refresh]);
+    let ignore = false;
+    const run = async () => {
+      if (!gatewayEnabled) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const [statusResult, tokensResult] = await Promise.all([
+          call<GatewayStatus>('gateway.status'),
+          call<{ tokens: Record<string, GatewayTokenFull> }>('gateway.get_tokens'),
+        ]);
+        if (!ignore) {
+          setStatus(statusResult);
+          setTokens(tokensResult.tokens);
+        }
+      } catch (err: unknown) {
+        if (!ignore) setError(err instanceof Error ? err.message : 'Failed to load gateway state');
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, [gatewayEnabled, call]);
 
   const handleCreateToken = async (scope: 'read' | 'write') => {
     setError(null);
@@ -147,7 +172,14 @@ export function GatewaySettings() {
                     : 'No tokens configured — create one to enable access'}
                 </p>
               </div>
-              <Button size="sm" variant="secondary" onClick={refresh} disabled={loading}>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  void refresh();
+                }}
+                disabled={loading}
+              >
                 {loading ? '…' : <RefreshCw className="size-3" />}
                 <span className="ml-1">Refresh</span>
               </Button>
@@ -214,7 +246,9 @@ export function GatewaySettings() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleRotateToken(tokenValue)}
+                        onClick={() => {
+                          void handleRotateToken(tokenValue);
+                        }}
                         className="rounded-xs p-1 text-fg-muted hover:text-fg-primary"
                         title="Rotate (regenerate) token"
                       >
@@ -222,7 +256,9 @@ export function GatewaySettings() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleRevokeToken(tokenValue)}
+                        onClick={() => {
+                          void handleRevokeToken(tokenValue);
+                        }}
                         className="rounded-xs p-1 text-danger-fg hover:text-danger-fg"
                         title="Revoke token"
                       >
@@ -241,22 +277,29 @@ export function GatewaySettings() {
                 onClick={() => setShowTokenValues((v) => !v)}
                 className="mb-2 flex items-center gap-1 text-caption text-fg-muted hover:text-fg-primary"
               >
-                {showTokenValues ? (
-                  <EyeOff className="size-3" />
-                ) : (
-                  <Eye className="size-3" />
-                )}
+                {showTokenValues ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
                 {showTokenValues ? 'Hide tokens' : 'Show tokens'}
               </button>
             )}
 
             {/* Create new token */}
             <div className="flex gap-2">
-              <Button size="sm" onClick={() => handleCreateToken('write')}>
+              <Button
+                size="sm"
+                onClick={() => {
+                  void handleCreateToken('write');
+                }}
+              >
                 <Plus className="mr-1 size-3" />
                 New Full Access Token
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => handleCreateToken('read')}>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  void handleCreateToken('read');
+                }}
+              >
                 <Plus className="mr-1 size-3" />
                 New Read-Only Token
               </Button>

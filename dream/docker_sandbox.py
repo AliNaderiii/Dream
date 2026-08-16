@@ -16,12 +16,10 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
@@ -306,15 +304,17 @@ class DockerSandbox:
         if kernel == "python3":
             # Execute via nbconvert.
             exec_cmd = (
-                f"jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout={timeout} "
+                f"jupyter nbconvert --to notebook --execute "
+                f"--ExecutePreprocessor.timeout={timeout} "
                 f"--ExecutePreprocessor.kernel_name={kernel} "
                 f"{code_filename} --output {code_filename}.executed"
             )
         else:
             # R kernel: use rmarkdown.
             exec_cmd = (
-                f"Rscript -e "
-                f'"rmarkdown::render(\'{code_filename}\', output_file=\'{code_filename}.executed.html\')"'
+                "Rscript -e "
+                f"\"rmarkdown::render('{code_filename}', "
+                f"output_file='{code_filename}.executed.html')\""
             )
 
         result = await self._exec_in_container(
@@ -379,7 +379,9 @@ class DockerSandbox:
         try:
             (build_dir / "Dockerfile").write_text(dockerfile, encoding="utf-8")
             cmd = ["build", "-t", tag, "-f", "Dockerfile", "."]
-            stdout, stderr = await self._run_docker_cmd_with_output(cmd, cwd=str(build_dir), timeout=limits.timeout_seconds)
+            stdout, stderr = await self._run_docker_cmd_with_output(
+                cmd, cwd=str(build_dir), timeout=limits.timeout_seconds
+            )
             # Update the default image for this language.
             self.DEFAULT_IMAGES[lang] = tag
             return True
@@ -529,8 +531,8 @@ class DockerSandbox:
             result.stdout = exc.stdout or ""
             result.stderr = exc.stderr or ""
             result.return_code = exc.returncode
-        except FileNotFoundError:
-            raise DockerUnavailableError("Docker executable not found in PATH")
+        except FileNotFoundError as exc:
+            raise DockerUnavailableError("Docker executable not found in PATH") from exc
 
         result.elapsed_seconds = round(time.monotonic() - started_at, 3)
 
@@ -699,12 +701,12 @@ class DockerSandbox:
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(), timeout=timeout
             )
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError as exc:
             proc.kill()
             await proc.wait()
             raise subprocess.TimeoutExpired(
                 cmd=" ".join(docker_cmd), timeout=timeout
-            )
+            ) from exc
 
         if proc.returncode != 0:
             raise subprocess.CalledProcessError(

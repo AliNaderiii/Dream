@@ -1,5 +1,62 @@
 # Status
 
+## P-10 — Provenance System, MCP Client & ACP Support — SHIPPED
+
+**What shipped.** Enterprise-grade provenance tracking, extensibility via Model
+Context Protocol (MCP) clients, and bidirectional agent interoperability via
+Agent Client Protocol (ACP) support (Prompt P-10 / Phase 4.7–4.9).
+
+- **Provenance Subsystem (`dream/provenance/`, Task 1 & 2, Gates G1–G5).**
+  - Data models: `ProvenanceRecord` with SHA-256 hash chaining, `FileSnapshot`,
+    and `ModelSnapshot` metadata.
+  - Append-only `provenance.jsonl` log with automatic 100MB rotation and
+    cryptographic tamper-evident chain verification (`verify_chain`).
+  - Automatic provenance capture across turns, tool calls, model responses,
+    file I/O, subagent spawns, and approvals.
+  - Artifact linking: `.provenance.json` sidecar generation linking created
+    figures, tables, and reports back to generating code, tools, and model
+    snapshots with human-readable lineage statements.
+  - Reproducibility export: Standalone ZIP package bundling code, input data,
+    config, provenance logs, requirements.txt, Dockerfile, and step-by-step
+    reproduction `README.md`.
+  - Provenance Viewer UI (`apps/desktop/src/routes/provenance.tsx`): Interactive
+    chronological timeline, DAG lineage graph / tree view, artifact detail
+    drawer, search & filter bar, chain integrity verification pill, and export.
+- **MCP Client Subsystem (`dream/mcp/`, Task 3 & 4, Gates G6–G8).**
+  - Protocol client supporting MCP JSON-RPC 2.0 messages (`initialize`,
+    `tools/list`, `tools/call`, `resources/list`, `resources/read`,
+    `prompts/list`, `prompts/get`).
+  - Three server transports: `stdio` (subprocess with args and env), `sse`
+    (remote HTTP / Server-Sent Events), and `ws` (WebSocket), plus
+    `InMemoryTransport` for local and unit test mocking.
+  - `MCPServerManager` with persistent JSON configuration (`data/mcp_servers.json`),
+    dynamic server connection management, tool aggregation into Dream, and
+    per-tool enable/disable toggles.
+  - MCP Configuration UI in settings (`apps/desktop/src/components/mcp/`): Server
+    cards, connection status indicators, tool list with input JSON schemas, and
+    add-server modal.
+- **ACP Server & Client Subsystem (`dream/acp/`, Task 5 & 6, Gates G9–G11).**
+  - Inbound ACP Server (`ACPServer`): Exposes Dream as an ACP agent over
+    HTTP/SSE (`/acp/v1/messages`, `/acp/v1/sessions`, `/acp/v1/tools`,
+    `/acp/v1/replay`, `/acp/v1/info`) with Bearer token authentication.
+  - Outbound ACP Client (`ACPClient`): Allows Dream to drive external agents
+    such as Claude Code, Codex, and Gemini CLI.
+  - History replay: Replay multi-turn conversation context to external agents.
+  - `ACPBackend` provider adapter: Select external ACP agents as the active
+    model provider in Dream panes.
+  - ACP Configuration UI (`apps/desktop/src/components/acp/`): Inbound server
+    status and outbound agent manager.
+- **Bridge RPC Integration & Quality Gates.**
+  - 17 new RPC methods registered on `BridgeMethods` covering `provenance.*`,
+    `artifact.*`, `mcp.*`, and `acp.*`.
+  - All 11 quality gates satisfied (G1–G11).
+  - Python test suite: **1034 passed** (1021 baseline + 13 new unit/integration
+    tests across `test_provenance.py`, `test_mcp.py`, `test_acp.py`, and
+    `test_bridge_p10.py`). `ruff` clean.
+  - Frontend test suite: **56 passed** (50 baseline + 6 new tests across
+    `provenance.test.tsx`, `mcp.test.tsx`, `acp.test.tsx`). `tsc --noEmit`,
+    `eslint`, `prettier`, and `vite build` clean.
+
 ## P-07 — Multi-Platform Connectivity — SHIPPED (live-platform smoke pending)
 
 **What shipped.** The six-platform connectivity gateway (Prompt P-07,

@@ -846,7 +846,6 @@ export class EchoBridgeTransport implements BridgeTransport {
         };
       case 'sidecar.version':
         return { protocol: '1.0', core: '0.1.0', sidecar: '0.1.0', python: 'browser' };
-
       // P-08: Docker sandbox echo stubs.
       case 'sandbox.status':
         return { available: false, docker: false, error: 'Docker not available in echo mode' };
@@ -912,21 +911,274 @@ export class EchoBridgeTransport implements BridgeTransport {
         return { closed: true };
 
       // P-08: Web gateway echo stubs.
-      case 'gateway.status':
-        return { enabled: true, token_count: 0, tokens: [], has_setup_token: false };
       case 'gateway.get_tokens':
         return { tokens: {} };
       case 'gateway.create_token':
-        return { token: `drm_echo_${Date.now()}`, scope: 'write', label: params['label'] as string };
+        return {
+          token: `drm_echo_${Date.now()}`,
+          scope: 'write',
+          label: params['label'] as string,
+        };
       case 'gateway.rotate_token':
         return { token: `drm_echo_${Date.now()}`, rotated: true };
       case 'gateway.revoke_token':
         return { revoked: true };
-      case 'gateway.start':
-        return { started: true, port: 9090, tls: false };
-      case 'gateway.stop':
-        return { stopped: false, note: 'Echo mode' };
 
+      // P-10: Provenance echo stubs.
+      case 'provenance.list':
+        return {
+          records: [
+            {
+              record_id: 'prov_demo_01',
+              timestamp: new Date().toISOString(),
+              event_type: 'tool_call',
+              agent_id: 'sess_demo',
+              payload: { tool_name: 'generate_figure', arguments: { kind: 'bar_chart' } },
+              input_snapshot: [
+                { path: 'data/sales.csv', hash: 'abc1234', size: 1024, modified_at: Date.now() },
+              ],
+              output_snapshot: [
+                {
+                  path: 'reports/sales_chart.png',
+                  hash: 'def5678',
+                  size: 24500,
+                  modified_at: Date.now(),
+                },
+              ],
+              model_snapshot: { provider: 'echo', model: 'echo-v1' },
+              duration_ms: 250,
+              token_count: 45,
+              prev_hash: '0'.repeat(64),
+              hash: 'sha256_mock_hash_01',
+            },
+            {
+              record_id: 'prov_demo_02',
+              timestamp: new Date(Date.now() - 60000).toISOString(),
+              event_type: 'user_message',
+              agent_id: 'sess_demo',
+              payload: { message: 'Plot the Q3 sales performance chart.' },
+              input_snapshot: [],
+              output_snapshot: [],
+              prev_hash: '0'.repeat(64),
+              hash: 'sha256_mock_hash_02',
+            },
+          ],
+          total: 2,
+        };
+      case 'provenance.get':
+        return {
+          record_id: params['record_id'] ?? 'prov_demo_01',
+          timestamp: new Date().toISOString(),
+          event_type: 'tool_call',
+          agent_id: 'sess_demo',
+          payload: { tool_name: 'generate_figure' },
+          input_snapshot: [],
+          output_snapshot: [],
+          hash: 'sha256_mock_hash',
+        };
+      case 'provenance.tree':
+        return {
+          nodes: [
+            {
+              id: 'node_1',
+              label: 'user_message: Plot Q3 sales chart',
+              event_type: 'user_message',
+              agent_id: 'sess_demo',
+              timestamp: new Date().toISOString(),
+              payload: {},
+              inputs: [],
+              outputs: [],
+            },
+            {
+              id: 'node_2',
+              label: 'tool_call: generate_figure',
+              event_type: 'tool_call',
+              agent_id: 'sess_demo',
+              timestamp: new Date().toISOString(),
+              duration_ms: 120,
+              payload: { tool_name: 'generate_figure' },
+              inputs: [
+                { path: 'data/sales.csv', hash: 'abc1234', size: 1024, modified_at: Date.now() },
+              ],
+              outputs: [
+                {
+                  path: 'reports/sales_chart.png',
+                  hash: 'def5678',
+                  size: 24500,
+                  modified_at: Date.now(),
+                },
+              ],
+            },
+          ],
+          edges: [{ source: 'node_1', target: 'node_2', type: 'parent_child' }],
+          count: 2,
+        };
+      case 'provenance.verify':
+        return { valid: true, records_checked: 42, broken_at: null, error: null };
+      case 'provenance.export':
+        return {
+          filename: 'dream_reproducibility_export.zip',
+          size: 14200,
+          records_count: 2,
+          base64_data: 'UEsDBBQAAAAIA...',
+        };
+      case 'artifact.get':
+        return {
+          artifact_path: (params['path'] as string) || 'reports/sales_chart.png',
+          exists: true,
+          size: 24500,
+          hash: 'def5678',
+          record_id: 'prov_demo_01',
+          tool_name: 'generate_figure',
+          agent_id: 'sess_demo',
+          created_at: new Date().toISOString(),
+          model: 'echo-v1',
+          lineage_statement:
+            'This artifact was generated by generate_figure in session sess_demo using model echo-v1',
+        };
+      case 'artifact.list':
+        return {
+          artifacts: [
+            {
+              artifact_path: 'reports/sales_chart.png',
+              exists: true,
+              size: 24500,
+              hash: 'def5678',
+              record_id: 'prov_demo_01',
+              tool_name: 'generate_figure',
+              agent_id: 'sess_demo',
+              created_at: new Date().toISOString(),
+              model: 'echo-v1',
+              lineage_statement:
+                'This artifact was generated by generate_figure in session sess_demo using model echo-v1',
+            },
+          ],
+        };
+      case 'mcp.list_servers':
+        return {
+          servers: [
+            {
+              id: 'mcp_filesystem',
+              name: 'Filesystem MCP',
+              type: 'stdio',
+              command: 'npx',
+              args: ['-y', '@modelcontextprotocol/server-filesystem'],
+              enabled: true,
+              disabled_tools: [],
+              status: 'connected',
+              is_connected: true,
+              tools_count: 5,
+              resources_count: 2,
+            },
+            {
+              id: 'mcp_postgres',
+              name: 'PostgreSQL MCP',
+              type: 'sse',
+              url: 'http://localhost:8080/sse',
+              enabled: true,
+              disabled_tools: [],
+              status: 'connected',
+              is_connected: true,
+              tools_count: 3,
+              resources_count: 1,
+            },
+          ],
+        };
+      case 'mcp.add_server':
+        return {
+          id: `mcp_${Date.now()}`,
+          name: (params['name'] as string) || 'New Server',
+          type: (params['type'] as string) || 'stdio',
+          enabled: true,
+          disabled_tools: [],
+        };
+      case 'mcp.remove_server':
+        return { removed: true, server_id: params['server_id'] };
+      case 'mcp.toggle_server':
+        return {
+          id: params['server_id'],
+          enabled: params['enabled'] ?? true,
+        };
+      case 'mcp.toggle_tool':
+        return { saved: true };
+      case 'mcp.test_connection':
+        return { ok: true, name: 'Filesystem MCP', tools_count: 5, latency_ms: 12 };
+      case 'mcp.list_tools':
+        return {
+          tools: [
+            {
+              name: 'read_file',
+              description: 'Read the complete contents of a file',
+              input_schema: { type: 'object', properties: { path: { type: 'string' } } },
+              server_id: 'mcp_filesystem',
+              server_name: 'Filesystem MCP',
+              enabled: true,
+              risk: 'safe',
+            },
+            {
+              name: 'write_file',
+              description: 'Write complete contents to a file',
+              input_schema: {
+                type: 'object',
+                properties: { path: { type: 'string' }, content: { type: 'string' } },
+              },
+              server_id: 'mcp_filesystem',
+              server_name: 'Filesystem MCP',
+              enabled: true,
+              risk: 'guarded',
+            },
+          ],
+        };
+      case 'acp.server.status':
+        return { status: 'ready', token_configured: true, protocol: 'acp/1.0' };
+      case 'acp.server.start':
+        return { started: true, token_configured: true };
+      case 'acp.server.stop':
+        return { stopped: true };
+      case 'acp.client.list_agents':
+        return {
+          agents: [
+            {
+              id: 'claude_code',
+              name: 'Claude Code (ACP)',
+              endpoint: 'http://localhost:8001',
+              label: 'Claude Code',
+              description: 'Anthropic Claude Code agent via local ACP bridge',
+              enabled: true,
+              status: 'ready',
+            },
+            {
+              id: 'codex_acp',
+              name: 'Codex (ACP)',
+              endpoint: 'http://localhost:8002',
+              label: 'OpenAI Codex',
+              description: 'OpenAI Codex programming agent via ACP',
+              enabled: true,
+              status: 'ready',
+            },
+            {
+              id: 'gemini_cli',
+              name: 'Gemini CLI (ACP)',
+              endpoint: 'http://localhost:8003',
+              label: 'Gemini CLI',
+              description: 'Google Gemini CLI assistant via ACP',
+              enabled: true,
+              status: 'ready',
+            },
+          ],
+        };
+      case 'acp.client.add_agent':
+        return {
+          id: `acp_${Date.now()}`,
+          name: (params['name'] as string) || 'New ACP Agent',
+          endpoint: (params['endpoint'] as string) || 'http://localhost:8000',
+          label: (params['label'] as string) || 'ACP Agent',
+          enabled: true,
+        };
+      case 'acp.client.remove_agent':
+        return { removed: true, agent_id: params['agent_id'] };
+      case 'acp.client.test_agent':
+        return { ok: true, name: 'Claude Code (ACP)', latency_ms: 18, tools_count: 8 };
       default:
         throw new BridgeRpcError({ code: -32601, message: `echo: unknown method ${method}` });
     }
