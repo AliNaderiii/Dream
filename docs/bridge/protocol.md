@@ -357,6 +357,33 @@ recovery table in the master prompt).
 
 ---
 
+### 3.11 `gateway.*` — multi-platform connectivity (Prompt P-07)
+
+The connectivity gateway (see `docs/architecture/connectivity.md`) routes
+Telegram, Discord, Slack, WhatsApp, Signal, and Email traffic through the
+same Dream agent and memory store. The gateway runs its own asyncio
+event-loop thread; every `gateway.*` handler ferries work across with
+`submit_async`, so the bridge loop is never blocked by adapter I/O.
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `gateway.platforms` | `{}` | `{platforms: GatewayPlatform[]}` — the six-platform catalog (capabilities, fields) joined with **redacted** public config: `{name, label, description, privacy, max_message_length, supports_inline, supports_attachments, fields[], enabled, configured}` |
+| `gateway.status` | `{}` | `{running, started_at, adapters: GatewayAdapterStatus[], linked_users, messages: {inbound, outbound}, rate_limit}` — `GatewayAdapterStatus = {platform, running, connected, last_activity, error, detail}` |
+| `gateway.start` | `{}` | same as `gateway.status` — starts every enabled, configured adapter |
+| `gateway.stop` | `{}` | same as `gateway.status` — stops every adapter (the loop stays up) |
+| `gateway.configure` | `{platform, config}` | `{saved, platform, config}` — merges config for one platform (blank secrets keep the stored value) and restarts its adapter when running. The returned `config` is always **redacted**: secret values are `"••••••••"`, plus `enabled` / `configured` / `secret_fields` |
+| `gateway.logs` | `{platform?, limit?}` | `{platform, entries: GatewayLogEntry[], total}` — newest-first, default 100 per platform. `GatewayLogEntry = {platform, direction: "in"\|"out", user_id, text, timestamp, message_id, attachments}`. **End-to-end-encrypted platforms (Signal) always have `text: ""`.** |
+| `gateway.link_code` | `{platform}` | `{platform, code, issued_at, expires_at, user_id}` — single-use 6-digit code, 10-minute TTL; issuing again returns the pending code |
+| `gateway.linked_users` | `{platform?}` | `{linked_users: [{platform, user_id, display_name, linked_at}]}` |
+| `gateway.unlink_user` | `{platform, user_id}` | `{unlinked, platform, user_id}` |
+
+Param validation mirrors the rest of the protocol: unknown platforms, missing
+keys, or non-integer `limit` raise `INVALID_PARAMS` (-32602). Adapter
+failures never fail the RPC — they surface in the per-adapter
+`error`/`detail` fields of `gateway.status`.
+
+---
+
 ## 4. Error taxonomy
 
 JSON-RPC reserves `-32000` to `-32099` for implementation-defined server errors;
@@ -520,3 +547,4 @@ The sidecar may emit notifications with **no** `id`:
 | Connection state | — | `bridge/state.rs` | `lib/bridge/hooks.ts` |
 | Subagent runtime | `dream/subagents.py` | — | `routes/subagents.tsx` |
 | Scheduler & cron | `dream/scheduler.py`, `dream/cron.py`, `dream/nl_schedule.py` | — | `routes/schedules.tsx` |
+| Connectivity gateway | `dream/connectivity/` (`gateway.py`, `adapters/`) | — | `lib/bridge/echo-gateway.ts`, `routes/connectivity.tsx` |

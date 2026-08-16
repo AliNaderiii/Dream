@@ -20,9 +20,16 @@ import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen } from '@/lib/tauri';
 import { isTauri } from '@/utils/platform';
 
+import { EchoGatewayRuntime, requireGatewayPlatform } from './echo-gateway';
 import { EchoScheduleRuntime, EchoSubagentRuntime } from './echo-subagents';
 import { BridgeRpcError, toBridgeError } from './errors';
-import type { BridgeConnectionState, RpcId, RpcParams, StreamChunk } from './types';
+import type {
+  BridgeConnectionState,
+  GatewayPlatformName,
+  RpcId,
+  RpcParams,
+  StreamChunk,
+} from './types';
 
 /** Events the client re-emits for hooks/components. */
 export type BridgeClientEvent =
@@ -427,10 +434,12 @@ export class EchoBridgeTransport implements BridgeTransport {
   private nextMemoryId = this.memories.length + 1;
   private subagents = new EchoSubagentRuntime();
   private schedules = new EchoScheduleRuntime();
+  private gateway = new EchoGatewayRuntime();
 
   /** Stops any simulated subagent still ticking (vitest teardown). */
   dispose(): void {
     this.subagents.dispose();
+    this.gateway.dispose();
   }
 
   onState(handler: (state: BridgeConnectionState) => void): () => void {
@@ -784,6 +793,49 @@ export class EchoBridgeTransport implements BridgeTransport {
         return this.schedules.preview(params);
       case 'schedule.run_now':
         return this.schedules.runNow(params);
+
+      // -- connectivity gateway ------------------------------------------ //
+      case 'gateway.platforms':
+        return { platforms: this.gateway.platforms() };
+      case 'gateway.status':
+        return this.gateway.status();
+      case 'gateway.start':
+        return this.gateway.start();
+      case 'gateway.stop':
+        return this.gateway.stop();
+      case 'gateway.configure': {
+        const platform = requireGatewayPlatform(params);
+        const values = params['config'];
+        if (!values || typeof values !== 'object' || Array.isArray(values)) {
+          throw new BridgeRpcError({ code: -32602, message: 'config must be an object' });
+        }
+        const config = this.gateway.configure(platform, values as Record<string, unknown>);
+        return { saved: true, platform, config };
+      }
+      case 'gateway.logs': {
+        const rawPlatform = params['platform'];
+        const platform =
+          typeof rawPlatform === 'string' ? (rawPlatform as GatewayPlatformName) : null;
+        const limit = typeof params['limit'] === 'number' ? params['limit'] : null;
+        return this.gateway.logs(platform, limit);
+      }
+      case 'gateway.link_code': {
+        const platform = requireGatewayPlatform(params);
+        return this.gateway.linkCode(platform);
+      }
+      case 'gateway.linked_users': {
+        const rawPlatform = params['platform'];
+        const platform = typeof rawPlatform === 'string' ? rawPlatform : null;
+        return { linked_users: this.gateway.linkedUsers(platform) };
+      }
+      case 'gateway.unlink_user': {
+        const platform = requireGatewayPlatform(params);
+        const userId = readString(params['user_id']);
+        if (!userId) {
+          throw new BridgeRpcError({ code: -32602, message: 'user_id must be a non-empty string' });
+        }
+        return { unlinked: this.gateway.unlinkUser(platform, userId), platform, user_id: userId };
+      }
 
       case 'health.check':
         return {

@@ -409,6 +409,124 @@ export interface SchedulePreview {
   error: string | null;
 }
 
+// --------------------------------------------------------------------------- //
+// Connectivity gateway — mirrors `gateway.*` in `dream/connectivity/gateway.py`.
+// --------------------------------------------------------------------------- //
+
+/** The six platforms the gateway serves, in catalog order. */
+export const GATEWAY_PLATFORM_NAMES = [
+  'telegram',
+  'discord',
+  'slack',
+  'whatsapp',
+  'signal',
+  'email',
+] as const;
+
+export type GatewayPlatformName = (typeof GATEWAY_PLATFORM_NAMES)[number];
+
+/** Content privacy of one platform: `e2e` content is never logged. */
+export type GatewayPrivacy = 'plaintext' | 'e2e';
+
+/** One config field of a platform (drives the configure form). */
+export interface GatewayPlatformField {
+  key: string;
+  label: string;
+  type: 'text' | 'secret' | 'number' | 'boolean';
+  secret?: boolean;
+  required?: boolean;
+  placeholder?: string;
+  default?: string | number | boolean;
+}
+
+/** A platform's static capabilities plus its public (redacted) config. */
+export interface GatewayPlatform {
+  name: GatewayPlatformName;
+  label: string;
+  description: string;
+  privacy: GatewayPrivacy;
+  max_message_length: number;
+  supports_inline: boolean;
+  supports_attachments: boolean;
+  fields: GatewayPlatformField[];
+  enabled: boolean;
+  configured: boolean;
+}
+
+/** One adapter's observable state inside `gateway.status`. */
+export interface GatewayAdapterStatus {
+  platform: string;
+  running: boolean;
+  connected: boolean;
+  last_activity: string | null;
+  error: string | null;
+  detail: string;
+}
+
+/** A chat identity authorised to talk to the agent on one platform. */
+export interface GatewayLinkedUser {
+  platform: string;
+  user_id: string;
+  display_name: string;
+  linked_at: number;
+}
+
+/** `gateway.status` result. */
+export interface GatewayStatusResult {
+  running: boolean;
+  started_at: number | null;
+  adapters: GatewayAdapterStatus[];
+  linked_users: GatewayLinkedUser[];
+  messages: { inbound: number; outbound: number };
+  rate_limit: {
+    limits: Record<string, number>;
+    default: number;
+    active: Record<string, Record<string, number>>;
+  };
+}
+
+/** One message-log row (`gateway.logs`). `text` is empty for e2e platforms. */
+export interface GatewayLogEntry {
+  platform: string;
+  direction: 'in' | 'out';
+  user_id: string;
+  text: string;
+  timestamp: string;
+  message_id: string | null;
+  attachments: number;
+}
+
+/** `gateway.logs` result. */
+export interface GatewayLogsResult {
+  platform: string | null;
+  entries: GatewayLogEntry[];
+  total: number;
+}
+
+/** `gateway.link_code` result. */
+export interface GatewayLinkCodeResult {
+  platform: string;
+  code: string;
+  issued_at: number;
+  expires_at: number;
+  user_id: string | null;
+}
+
+/** `gateway.configure` result — `config` is always redacted. */
+export interface GatewayConfigureResult {
+  saved: boolean;
+  platform: string;
+  config: Record<string, unknown>;
+}
+
+/** Redacted public config for one platform (secrets are masked). */
+export interface GatewayPlatformConfig {
+  [key: string]: unknown;
+  enabled: boolean;
+  configured: boolean;
+  secret_fields: string[];
+}
+
 /** Connection lifecycle of the bridge, surfaced in the status bar. */
 export type BridgeConnectionState = 'connecting' | 'ready' | 'reconnecting' | 'disconnected';
 

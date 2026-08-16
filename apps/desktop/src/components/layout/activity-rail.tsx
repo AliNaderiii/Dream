@@ -11,6 +11,7 @@ import {
   FolderKanban,
   GitBranch,
   MessageSquare,
+  Radio,
   Settings,
   Sparkles,
   Wrench,
@@ -40,6 +41,7 @@ const PRIMARY_ITEMS: RailItem[] = [
   { to: '/skills', label: 'Skills', icon: Wrench, shortcut: ['mod', '4'] },
   { to: '/subagents', label: 'Subagents', icon: Bot },
   { to: '/data', label: 'Data', icon: GitBranch },
+  { to: '/connectivity', label: 'Connectivity', icon: Radio, shortcut: ['mod', '5'] },
 ];
 
 const FOOTER_ITEMS: RailItem[] = [

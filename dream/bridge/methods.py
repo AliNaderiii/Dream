@@ -416,6 +416,12 @@ class BridgeMethods:
             )
         )
         self._disabled_skills: set[str] = self._load_disabled_skills()
+        # The connectivity gateway (P-07) is created lazily on the first
+        # gateway.* call; its loop thread is independent of the bridge loop.
+        self._gateway: Any | None = None
+        self._connectivity_config_path = os.environ.get(
+            "DREAM_CONNECTIVITY_PATH", "data/connectivity.json"
+        )
         scheduler.ensure_schedule_tables(self.store)
         self._load_sessions_index()
 
@@ -432,6 +438,7 @@ class BridgeMethods:
         first and keeps :meth:`shutdown` as the synchronous fallback.
         """
         await self.stop_scheduler()
+        await self._stop_gateway()
         try:
             await self.subagents.cancel_all()
         except Exception:  # pragma: no cover - teardown must never mask exit
@@ -509,6 +516,15 @@ class BridgeMethods:
             "schedule.preview": self.schedule_preview,
             "schedule.run_now": self.schedule_run_now,
             "schedule.approve": self.schedule_approve,
+            "gateway.start": self.gateway_start,
+            "gateway.stop": self.gateway_stop,
+            "gateway.status": self.gateway_status,
+            "gateway.configure": self.gateway_configure,
+            "gateway.logs": self.gateway_logs,
+            "gateway.link_code": self.gateway_link_code,
+            "gateway.linked_users": self.gateway_linked_users,
+            "gateway.unlink_user": self.gateway_unlink_user,
+            "gateway.platforms": self.gateway_platforms,
             "health.check": self.health_check,
             "sidecar.version": self.sidecar_version,
         }
@@ -1700,6 +1716,138 @@ class BridgeMethods:
             approval.decision = bool(params.get("allowed", False))
             approval.resolved = True
         return {"approval_id": approval_id, "allowed": approval.decision}
+
+    # ------------------------------------------------------------------ #
+    # gateway.* — multi-platform connectivity (P-07, §3.11)
+    # ------------------------------------------------------------------ #
+
+    def _ensure_gateway(self) -> Any:
+        """Lazily build the connectivity gateway and start its loop thread.
+
+        The gateway owns its own asyncio event loop on a dedicated thread, so
+        adapter websockets and webhook servers stay alive between RPC calls.
+        """
+        if self._gateway is None:
+            from dream.connectivity.config import ConnectivityConfig
+            from dream.connectivity.gateway import Gateway
+
+            base_dir = os.path.dirname(os.path.abspath(self._connectivity_config_path))
+            gateway = Gateway(
+                ConnectivityConfig(self._connectivity_config_path),
+                store=self.store,
+                sessions_path=os.path.join(base_dir, "connectivity_sessions.json"),
+                links_path=os.path.join(base_dir, "connectivity_links.json"),
+                log_path=os.path.join(base_dir, "connectivity_log.jsonl"),
+                dream_factory=lambda: self._new_dream(self._default_provider),
+            )
+            gateway.register_default_adapters()
+            gateway.start_loop()
+            self._gateway = gateway
+        return self._gateway
+
+    async def _stop_gateway(self) -> None:
+        """Stop every adapter and tear down the gateway loop (best-effort)."""
+        gateway = self._gateway
+        if gateway is None:
+            return
+        try:
+            await gateway.submit_async(gateway.stop_all())
+        except Exception:
+            logger.exception("failed to stop connectivity adapters during shutdown")
+        try:
+            gateway.stop_loop()
+        except Exception:
+            logger.exception("failed to stop the connectivity loop during shutdown")
+
+    async def gateway_start(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Start every enabled, configured platform adapter."""
+        del params
+        gateway = self._ensure_gateway()
+        await gateway.submit_async(gateway.start_all())
+        return gateway.status()
+
+    async def gateway_stop(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Stop every platform adapter (the gateway loop stays up)."""
+        del params
+        gateway = self._ensure_gateway()
+        await gateway.submit_async(gateway.stop_all())
+        return gateway.status()
+
+    def gateway_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Aggregate gateway status: adapters, linked users, counters."""
+        del params
+        return self._ensure_gateway().status()
+
+    async def gateway_configure(
+        self, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Merge one platform's config (secrets stay on disk, redacted in reply)."""
+        params = params or {}
+        from dream.connectivity.platforms import PLATFORM_CATALOG
+
+        platform = str(params.get("platform") or "")
+        if platform not in PLATFORM_CATALOG:
+            raise invalid_params(
+                f"platform must be one of {', '.join(PLATFORM_CATALOG)}"
+            )
+        config = params.get("config")
+        if not isinstance(config, dict):
+            raise invalid_params("config must be an object")
+        gateway = self._ensure_gateway()
+        redacted = gateway.configure(platform, config)
+        # Restart the adapter when its configuration changed under it.
+        adapter = gateway.adapter(platform)
+        if adapter is not None and adapter.is_running:
+            try:
+                await gateway.submit_async(gateway.stop_adapter(platform))
+                await gateway.submit_async(gateway.start_adapter(platform))
+            except ValueError as exc:
+                logger.warning("gateway adapter %s restart skipped: %s", platform, exc)
+        return {"saved": True, "platform": platform, "config": redacted}
+
+    def gateway_logs(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Last-N message-log entries for one platform (all when omitted)."""
+        params = params or {}
+        platform = params.get("platform")
+        if platform is not None and not isinstance(platform, str):
+            raise invalid_params("platform must be a string")
+        try:
+            limit = int(params.get("limit", 100)) if params.get("limit") is not None else None
+        except (TypeError, ValueError) as exc:
+            raise invalid_params("limit must be an integer") from exc
+        return self._ensure_gateway().logs(platform, limit)
+
+    def gateway_link_code(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Issue a single-use, 10-minute link code for one platform."""
+        params = params or {}
+        platform = str(params.get("platform") or "")
+        if not platform:
+            raise invalid_params("platform must be a non-empty string")
+        return self._ensure_gateway().link_code(platform)
+
+    def gateway_linked_users(
+        self, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Chat identities authorised to talk to the agent."""
+        params = params or {}
+        platform = params.get("platform")
+        if platform is not None and not isinstance(platform, str):
+            raise invalid_params("platform must be a string")
+        return {"linked_users": self._ensure_gateway().linked_users(platform)}
+
+    def gateway_unlink_user(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Revoke one identity's access on one platform."""
+        params = params or {}
+        platform = str(params.get("platform") or "")
+        user_id = str(params.get("user_id") or "")
+        if not platform or not user_id:
+            raise invalid_params("platform and user_id must be non-empty strings")
+        return self._ensure_gateway().unlink_user(platform, user_id)
+
+    def gateway_platforms(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """The six-platform catalog joined with redacted public config."""
+        del params
+        return {"platforms": self._ensure_gateway().platforms()}
 
     # ------------------------------------------------------------------ #
     # health / version
