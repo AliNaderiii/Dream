@@ -174,30 +174,50 @@ and refresh tokens are stored only in the keychain.
 
 | Method | Params | Result |
 | --- | --- | --- |
-| `memory.list` | `{kind?, include_archived?, limit?}` | `{memories: Memory[]}` |
-| `memory.search` | `{query, limit?}` | `{memories: Memory[]}` |
-| `memory.get` | `{memory_id}` | `Memory \| null` |
-| `memory.update` | `{memory_id, content?, kind?, tags?, importance?}` | `Memory` |
+| `memory.list` | `{cursor?, limit?, kind_filter?, search_query?, date_from?, date_to?, min_importance?, sort_by?, include_archived?}` | `{memories: Memory[], total, next_cursor, has_more}` |
+| `memory.count` | `{kind_filter?}` | `{total, by_kind: {semantic, episodic, procedural}, archived}` |
+| `memory.search` | `{query, kinds?, limit?}` | `{memories: Memory[]}` |
+| `memory.get` | `{memory_id, include_archived?}` | `Memory \| null` |
+| `memory.create` | `{content, kind?, importance?, tags?, source?}` | `{memory: Memory}` |
+| `memory.update` | `{memory_id, content?, kind?, tags?, importance?}` | `{memory: Memory}` |
 | `memory.delete` | `{memory_id, hard?}` | `{deleted: true}` |
 
 `Memory = {id, kind, content, tags[], importance, created_at, last_used_at, use_count, source, archived, pinned, score}`
 
-These map 1:1 to `MemoryStore` (`all`, `recall`, `get`, `update_memory`, `forget`).
+These consume — but never mutate — `MemoryStore` (`all`, `recall`, `get`,
+`update_memory`, `remember`, `forget`). `memory.list` adds cursor pagination,
+kind/search/date/importance filters, and `sort_by` (`relevance` |
+`date_newest` | `date_oldest` | `importance`); `next_cursor` is a stringified
+offset (or `null` when exhausted). `memory.create` sanitises HTML/script tags,
+enforces a 50 KB cap, and stores `kind ∈ {semantic, episodic, procedural}` with
+`importance ∈ [0.0, 1.0]` (the UI scales 0–10 stars to this range).
 
 ### 3.5 `skill.*` — skills
 
 | Method | Params | Result |
 | --- | --- | --- |
-| `skill.list` | `{}` | `{skills: Skill[], problems: SkillProblem[]}` |
-| `skill.get` | `{query}` | `{match: Skill \| null}` |
-| `skill.install` | `{name, description, steps[]}` | `{filename, status}` |
-| `skill.remove` | `{name}` | `{removed: true, filename}` |
+| `skill.list` | `{}` | `{skills: SkillEx[], problems: SkillProblem[]}` |
+| `skill.get` | `{skill_id? \| query?}` | `{match: SkillDetail \| null}` |
+| `skill.install` | `{name?, description?, steps[]?, content?, overwrite?}` | `{filename, status: "installed" \| "conflict", name, conflict?, existing_filename?}` |
+| `skill.delete` / `skill.remove` | `{skill_id? \| name?}` | `{deleted: true, filename, name}` / `{removed: true, filename}` |
+| `skill.enable` | `{skill_id}` | `{name, filename, enabled: true}` |
+| `skill.disable` | `{skill_id}` | `{name, filename, enabled: false}` |
+| `skill.export` | `{skill_id}` | `{name, filename, content}` |
 
-`Skill = {name, description, steps[], filename}`
-`SkillProblem = {filename, detail}`
+`SkillEx = {name, description, steps[], filename, enabled}` (the `enabled` flag
+is bridge-side state persisted to `data/bridge_disabled_skills.json`).
+`SkillDetail = {name, description, steps[], filename, enabled, created_at, content}`
+where `content` is the canonical rendered skill file for preview/export.
+`SkillProblem = {filename, detail}`.
 
-All file access is confined to the workspace root via the core's `_safe_path`
-boundary; path-traversal and reserved-device-name attempts are refused.
+`skill_id` resolves from a filename (`skills/foo.txt`), a bare name (`foo`), or a
+`skills/foo.txt` id. `skill.install` accepts either structured fields *or* a
+pasted/imported `content` body (parsed via `parse_skill_text`); `overwrite:
+false` (default) returns `status: "conflict"` when a same-named skill already
+exists so the UI can offer overwrite/rename. Safety gate (100 KB cap, no
+absolute paths / `..` traversal, no dangerous module imports) rejects malicious
+content with `INVALID_PARAMS`. All file access is confined to the workspace root
+via the core's `_safe_path` boundary.
 
 ### 3.6 `tool.*` — the tool registry
 

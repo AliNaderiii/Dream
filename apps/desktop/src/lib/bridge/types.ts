@@ -147,12 +147,126 @@ export interface BridgeTool {
   schema: Record<string, unknown>;
 }
 
+/** The three memory kinds Dream stores. Mirrors `dream.memory.KINDS`. */
+export const MEMORY_KINDS = ['semantic', 'episodic', 'procedural'] as const;
+export type MemoryKind = (typeof MEMORY_KINDS)[number];
+
+/** Sort orders accepted by `memory.list`. */
+export const MEMORY_SORTS = ['relevance', 'date_newest', 'date_oldest', 'importance'] as const;
+export type MemorySort = (typeof MEMORY_SORTS)[number];
+
+/** Filter/paging arguments for `memory.list`. */
+export interface MemoryListParams {
+  cursor?: string | null;
+  limit?: number;
+  kind_filter?: MemoryKind | MemoryKind[] | null;
+  search_query?: string | null;
+  /** Unix seconds, inclusive lower bound on `created_at`. */
+  date_from?: number | null;
+  /** Unix seconds, inclusive upper bound on `created_at`. */
+  date_to?: number | null;
+  /** Backend scale, 0.0–1.0. */
+  min_importance?: number | null;
+  sort_by?: MemorySort;
+  include_archived?: boolean;
+}
+
+/** One page of memories plus cursor metadata. */
+export interface MemoryListResult {
+  memories: BridgeMemory[];
+  total: number;
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
+/** Per-kind totals used by the filter-tab badges. */
+export interface MemoryCountResult {
+  total: number;
+  by_kind: Record<string, number>;
+  archived: number;
+}
+
+/** Result of `memory.create` / `memory.update`. */
+export interface MemoryMutationResult {
+  memory: BridgeMemory;
+}
+
+/** Result of `memory.delete`. */
+export interface MemoryDeleteResult {
+  deleted: boolean;
+  memory_id: number;
+}
+
+/** Result of `memory.search`. */
+export interface MemorySearchResult {
+  memories: BridgeMemory[];
+}
+
 /** A skill. */
 export interface BridgeSkill {
   name: string;
   description: string;
   steps: string[];
   filename: string;
+}
+
+/** A skill row from `skill.list`, carrying the bridge-side enabled flag. */
+export interface BridgeSkillEx extends BridgeSkill {
+  enabled: boolean;
+}
+
+/** Full skill detail from `skill.get`, including the rendered file text. */
+export interface BridgeSkillDetail extends BridgeSkillEx {
+  /** Unix seconds from the file's mtime; 0 when unknown. */
+  created_at: number;
+  content: string;
+}
+
+/** A skill file that failed to parse. */
+export interface BridgeSkillProblem {
+  filename: string;
+  detail: string;
+}
+
+/** Result of `skill.list`. */
+export interface SkillListResult {
+  skills: BridgeSkillEx[];
+  problems: BridgeSkillProblem[];
+}
+
+/** Result of `skill.get`. */
+export interface SkillGetResult {
+  match: BridgeSkillDetail | null;
+}
+
+/** Result of `skill.install` — `conflict` when a same-named skill exists. */
+export interface SkillInstallResult {
+  filename: string;
+  status: 'installed' | 'conflict';
+  name: string;
+  conflict?: boolean;
+  existing_filename?: string;
+}
+
+/** Result of `skill.delete`. */
+export interface SkillDeleteResult {
+  deleted: boolean;
+  filename: string;
+  name: string;
+}
+
+/** Result of `skill.enable` / `skill.disable`. */
+export interface SkillToggleResult {
+  name: string;
+  filename: string;
+  enabled: boolean;
+}
+
+/** Result of `skill.export`. */
+export interface SkillExportResult {
+  name: string;
+  filename: string;
+  content: string;
 }
 
 /** Connection lifecycle of the bridge, surfaced in the status bar. */
