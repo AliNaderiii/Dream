@@ -154,3 +154,59 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 - [ ] 5.1 Provider configuration + connection test
 - [ ] 5.2 MCP server configuration
 - [ ] 5.3 Web gateway (mobile/tablet responsive) + authentication
+
+## Phase 3.7–3.9 — Docker Sandbox, Chrome Control & Web Gateway (Prompt P-08)
+### Docker Sandbox Core (Task 1)
+- [x] 1.1 Implement ``DockerSandbox`` class with ``run_code``, ``run_notebook``, ``install_packages``
+- [x] 1.2 Docker image management: auto-pull, base images (python:3.12-slim, rocker/r-ver:4.4)
+- [x] 1.3 Container lifecycle: create, resource limits, execute, auto-remove, timeout
+- [x] 1.4 Security hardening: seccomp, --cap-drop=ALL, no-new-privileges, read-only fs, network disabled, swap disabled, PIDs limit, user namespace
+- [x] 1.5 Result extraction: stdout/stderr capture, output file detection (images, CSVs, etc.)
+- [x] 1.6 Docker readiness check at startup
+- [x] 1.7 RPC methods registered: ``sandbox.run_code``, ``sandbox.run_notebook``, ``sandbox.install_packages``, ``sandbox.status``
+- [x] **Gate G1 — Docker executes** → `dream/docker_sandbox.py`
+- [x] **Gate G2 — Docker security** → seccomp profile, no capabilities, no network, no-new-privileges
+
+### Docker Sandbox UI (Task 2)
+- [x] 2.1 Sandbox configuration in settings: enable/disable, default resource limits, image selection
+- [x] 2.2 Sandbox status indicator (Docker available/unavailable/error)
+- [x] 2.3 Execution result display in chat: return code, stdout, stderr, output files
+- [x] 2.4 Approval gate for first execution
+- [x] **Gate** — Sandbox settings render, status visible, results displayed
+
+### Chrome Browser Control (Task 3)
+- [x] 3.1 ``BrowserController`` class: attach, launch, navigate, get_content, execute_js, fill_form, click, screenshot, get_cookies, close
+- [x] 3.2 User's real Chrome attachment via CDP (preserves sessions/logins)
+- [x] 3.3 Isolated browser mode (temporary user data dir, incognito-equivalent)
+- [x] 3.4 Page interaction: navigation, content extraction, form filling, screenshot, cookie inspection
+- [x] 3.5 Security: user approval per session, no profile copying, local screenshots, 5-minute timeout
+- [x] 3.6 RPC methods registered: ``browser.*`` (attach, launch, navigate, screenshot, etc.)
+- [x] **Gate G4 — Chrome attaches** → `dream/browser_controller.py`
+- [x] **Gate G5 — Browser control** → navigation, content extraction, form fill, screenshot
+- [x] **Gate G6 — Browser security** → approval required, local-only screenshots, no cookie transmission
+
+### Browser Control UI (Task 4)
+- [x] 4.1 Browser session approval dialog (URL, purpose, Allow Once / Allow Domain / Deny)
+- [x] 4.2 Browser status indicator (Chrome attached/isolated/offline)
+- [x] 4.3 Screenshot display in chat (thumbnail, click to expand)
+- [x] **Gate** — Approval dialog, screenshots, status indicator
+
+### Web Gateway (Task 5)
+- [x] 5.1 FastAPI HTTP server with routes for /, /api/chat, /api/sessions
+- [x] 5.2 Serve the React SPA (single-page app)
+- [x] 5.3 Token authentication: one-time setup token, token scopes (read/write)
+- [x] 5.4 Read-only vs. full-access mode enforcement
+- [x] 5.5 LAN discovery via mDNS/Bonjour (dream.local)
+- [x] 5.6 TLS support (self-signed cert generation)
+- [x] 5.7 CORS and security headers (CSP, HSTS, X-Frame-Options)
+- [x] 5.8 Connection indicator in desktop app
+- [x] **Gate G7 — Gateway serves UI** → `dream/gateway_server.py`
+- [x] **Gate G8 — Gateway auth** → token verification, scope enforcement
+- [x] **Gate G9 — LAN discovery** → mDNS advertisement
+- [x] **Gate G10 — TLS works** → self-signed cert generation
+
+### Gateway Settings UI (Task 6)
+- [x] 6.1 Gateway settings page: enable/disable, port, token display/regenerate, TLS toggle, LAN-only toggle
+- [x] 6.2 Active connections list
+- [x] 6.3 QR code for easy mobile connection
+- [x] **Gate** — Settings render, token management works, connections visible, QR code

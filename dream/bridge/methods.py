@@ -70,6 +70,31 @@ from .streams import Chunk, Stream, stream_text, tokenise
 
 logger = logging.getLogger(__name__)
 
+#: Optional infrastructure imports — enabled lazily so the sidecar runs even
+#: when Docker/Playwright/FastAPI are not installed.
+try:  # pragma: no cover - import guard
+    from dream.docker_sandbox import DockerSandbox, ResourceLimits
+except ImportError:  # pragma: no cover
+    DockerSandbox = None  # type: ignore[assignment,misc]
+    ResourceLimits = None  # type: ignore[assignment,misc]
+
+try:  # pragma: no cover - import guard
+    from dream.browser_controller import (
+        BrowserController,
+        BrowserSecurityError,
+        PageContent,
+    )
+except ImportError:  # pragma: no cover
+    BrowserController = None  # type: ignore[assignment,misc]
+    BrowserSecurityError = None  # type: ignore[assignment,misc]
+    PageContent = None  # type: ignore[assignment,misc]
+
+try:  # pragma: no cover - import guard
+    from dream.gateway_server import TokenManager, TokenScope
+except ImportError:  # pragma: no cover
+    TokenManager = None  # type: ignore[assignment,misc]
+    TokenScope = None  # type: ignore[assignment,misc]
+
 #: Provider kinds the bridge knows how to build and persist.
 PROVIDER_KINDS: tuple[str, ...] = ("echo", *PROVIDER_CATALOG.keys())
 
@@ -384,6 +409,9 @@ class BridgeMethods:
         disabled_skills_path: str | None = None,
         default_provider: str | None = None,
         credential_store: KeychainCredentialStore | None = None,
+        sandbox: Any = None,
+        browser: Any = None,
+        token_manager: Any = None,
     ) -> None:
         self.store = store or MemoryStore(os.environ.get("DREAM_DB", "data/dream.db"))
         self.sessions: dict[str, SessionState] = {}
@@ -393,6 +421,30 @@ class BridgeMethods:
         self.subagents = SubAgentManager()
         self._daemon: scheduler.SchedulerDaemon | None = None
         self._lock = threading.RLock()
+
+        # Infrastructure services (P-08): Docker sandbox, browser control,
+        # web gateway tokens. Lazily created so an unavailable dependency
+        # degrades to a clear error instead of failing startup.
+        if sandbox is not None:
+            self.sandbox: Any = sandbox
+        elif DockerSandbox is not None:
+            self.sandbox = DockerSandbox()
+        else:
+            self.sandbox = None
+
+        if browser is not None:
+            self.browser: Any = browser
+        elif BrowserController is not None:
+            self.browser = BrowserController()
+        else:
+            self.browser = None
+
+        if token_manager is not None:
+            self.gateway_tokens: Any = token_manager
+        elif TokenManager is not None:
+            self.gateway_tokens = TokenManager()
+        else:
+            self.gateway_tokens = None
 
         self._sessions_path = sessions_path or os.environ.get(
             "DREAM_SESSIONS_PATH", "data/bridge_sessions.json"
@@ -454,6 +506,18 @@ class BridgeMethods:
             self.store.close()
         except Exception:
             pass
+        # Clean up infrastructure services.
+        if self.browser is not None:
+            try:
+                import asyncio
+                try:
+                    loop = asyncio.get_running_loop()
+                    if loop.is_running():
+                        loop.create_task(self._close_browser())
+                except RuntimeError:
+                    pass
+            except Exception:
+                pass
 
     # -- handler table ---------------------------------------------------- #
 
@@ -527,6 +591,34 @@ class BridgeMethods:
             "gateway.platforms": self.gateway_platforms,
             "health.check": self.health_check,
             "sidecar.version": self.sidecar_version,
+            # P-08: Docker sandbox.
+            "sandbox.status": self.sandbox_status,
+            "sandbox.run_code": self.sandbox_run_code,
+            "sandbox.run_notebook": self.sandbox_run_notebook,
+            "sandbox.install_packages": self.sandbox_install_packages,
+            # P-08: Chrome browser control.
+            "browser.attach": self.browser_attach,
+            "browser.launch_isolated": self.browser_launch_isolated,
+            "browser.request_approval": self.browser_request_approval,
+            "browser.approve": self.browser_approve,
+            "browser.deny": self.browser_deny,
+            "browser.navigate": self.browser_navigate,
+            "browser.get_content": self.browser_get_content,
+            "browser.execute_js": self.browser_execute_js,
+            "browser.fill_form": self.browser_fill_form,
+            "browser.click": self.browser_click,
+            "browser.screenshot": self.browser_screenshot,
+            "browser.get_cookies": self.browser_get_cookies,
+            "browser.status": self.browser_status,
+            "browser.close": self.browser_close,
+            # P-08: Web gateway.
+            "gateway.status": self.gateway_status,
+            "gateway.get_tokens": self.gateway_get_tokens,
+            "gateway.create_token": self.gateway_create_token,
+            "gateway.rotate_token": self.gateway_rotate_token,
+            "gateway.revoke_token": self.gateway_revoke_token,
+            "gateway.start": self.gateway_start,
+            "gateway.stop": self.gateway_stop,
         }
 
     # ------------------------------------------------------------------ #
@@ -1875,6 +1967,408 @@ class BridgeMethods:
             "sidecar": sidecar_version,
             "python": ".".join(map(str, sys.version_info[:3])),
         }
+
+    # ------------------------------------------------------------------ #
+    # sandbox.* — Docker sandbox (P-08)
+    # ------------------------------------------------------------------ #
+
+    def _require_sandbox(self) -> Any:
+        if self.sandbox is None:
+            raise BridgeError(-32010, "Docker sandbox is not available. "
+                                      "Install docker and the dream package with Docker support.")
+        return self.sandbox
+
+    def sandbox_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Check Docker availability and return sandbox status."""
+        del params
+        sb = self._require_sandbox()
+        try:
+            # Use asyncio to run the async check in a synchronous context.
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    fut = asyncio.run_coroutine_threadsafe(sb.check_docker(), loop)
+                    return fut.result(timeout=10)
+            except RuntimeError:
+                pass
+        except Exception as exc:
+            return {"available": False, "error": str(exc)}
+        return {"available": False, "error": "Could not check Docker status"}
+
+    async def sandbox_run_code(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Execute code inside a Docker sandbox container."""
+        params = params or {}
+        sb = self._require_sandbox()
+        code = params.get("code")
+        if not isinstance(code, str) or not code.strip():
+            raise invalid_params("code must be a non-empty string")
+        language = params.get("language", "python")
+        if language not in ("python", "r", "bash"):
+            raise invalid_params("language must be one of: python, r, bash")
+
+        # Build resource limits.
+        limits = ResourceLimits() if ResourceLimits is not None else None
+        if limits is not None and "resource_limits" in params:
+            rl = params["resource_limits"]
+            if isinstance(rl, dict):
+                limits.cpu_count = float(rl.get("cpu_count", 1.0))
+                limits.memory_mb = int(rl.get("memory_mb", 2048))
+                limits.timeout_seconds = int(rl.get("timeout_seconds", 60))
+                limits.network_enabled = bool(rl.get("network_enabled", False))
+
+        workspace_path = None
+        if params.get("workspace_path"):
+            from pathlib import Path
+            workspace_path = Path(str(params["workspace_path"]))
+
+        mount_rw = bool(params.get("mount_workspace_read_write", False))
+        timeout = params.get("timeout")
+
+        result = await sb.run_code(
+            code=code,
+            language=language,
+            workspace_path=workspace_path,
+            resource_limits=limits,
+            mount_workspace_read_write=mount_rw,
+            timeout=timeout,
+        )
+        return {
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "return_code": result.return_code,
+            "timed_out": result.timed_out,
+            "output_files": result.output_files,
+            "elapsed_seconds": result.elapsed_seconds,
+            "error": result.error,
+        }
+
+    async def sandbox_run_notebook(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Execute a Jupyter notebook inside the sandbox."""
+        params = params or {}
+        sb = self._require_sandbox()
+        notebook_path = params.get("notebook_path")
+        if not isinstance(notebook_path, str) or not notebook_path:
+            raise invalid_params("notebook_path must be a non-empty string")
+        kernel = params.get("kernel", "python3")
+        if kernel not in ("python3", "ir"):
+            raise invalid_params("kernel must be one of: python3, ir")
+        timeout = int(params.get("timeout", 300))
+
+        from pathlib import Path
+        result = await sb.run_notebook(
+            notebook_path=Path(notebook_path),
+            kernel=kernel,
+            timeout=timeout,
+        )
+        return {
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "return_code": result.return_code,
+            "timed_out": result.timed_out,
+            "output_files": result.output_files,
+            "elapsed_seconds": result.elapsed_seconds,
+            "error": result.error,
+        }
+
+    async def sandbox_install_packages(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Install packages in the sandbox image."""
+        params = params or {}
+        sb = self._require_sandbox()
+        packages = params.get("packages")
+        if not isinstance(packages, list) or not packages:
+            raise invalid_params("packages must be a non-empty list of strings")
+        language = params.get("language", "python")
+        if language not in ("python", "r"):
+            raise invalid_params("language must be one of: python, r")
+        success = await sb.install_packages(packages, language=language)
+        return {"success": success, "packages": packages, "language": language}
+
+    # ------------------------------------------------------------------ #
+    # browser.* — Chrome browser control (P-08)
+    # ------------------------------------------------------------------ #
+
+    def _require_browser(self) -> Any:
+        if self.browser is None:
+            raise BridgeError(-32011, "Browser controller is not available. "
+                                      "Install it with: pip install playwright")
+        return self.browser
+
+    async def browser_attach(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Attach to the user's existing Chrome browser via CDP."""
+        params = params or {}
+        bc = self._require_browser()
+        port = int(params.get("port", 9222))
+        try:
+            result = await bc.attach_existing_browser(port=port)
+            return result
+        except Exception as exc:
+            raise BridgeError(-32012, f"Failed to attach Chrome: {exc}")
+
+    async def browser_launch_isolated(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Launch a fresh isolated Chrome instance."""
+        del params
+        bc = self._require_browser()
+        try:
+            result = await bc.launch_isolated_browser()
+            return result
+        except Exception as exc:
+            raise BridgeError(-32012, f"Failed to launch Chrome: {exc}")
+
+    def browser_request_approval(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Request approval for a browser navigation."""
+        params = params or {}
+        bc = self._require_browser()
+        url = params.get("url")
+        purpose = params.get("purpose", "Web browsing")
+        if not isinstance(url, str) or not url:
+            raise invalid_params("url must be a non-empty string")
+        session = bc.request_approval(url, purpose)
+        return {
+            "session_id": session.id,
+            "url": session.url,
+            "purpose": session.purpose,
+            "domain": session.domain,
+            "status": session.status,
+        }
+
+    def browser_approve(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Approve a pending browser navigation."""
+        params = params or {}
+        bc = self._require_browser()
+        session_id = params.get("session_id")
+        if not isinstance(session_id, str) or not session_id:
+            raise invalid_params("session_id must be a non-empty string")
+        always_allow = bool(params.get("always_allow", False))
+        session = bc.approve_session(session_id, always_allow=always_allow)
+        if session is None:
+            raise invalid_params(f"No pending session with id {session_id!r}")
+        return {"approved": True, "session_id": session_id, "always_allow": always_allow}
+
+    def browser_deny(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Deny a pending browser navigation."""
+        params = params or {}
+        bc = self._require_browser()
+        session_id = params.get("session_id")
+        if not isinstance(session_id, str) or not session_id:
+            raise invalid_params("session_id must be a non-empty string")
+        session = bc.deny_session(session_id)
+        if session is None:
+            raise invalid_params(f"No pending session with id {session_id!r}")
+        return {"denied": True, "session_id": session_id}
+
+    async def browser_navigate(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Navigate to a URL and return page content."""
+        params = params or {}
+        bc = self._require_browser()
+        url = params.get("url")
+        if not isinstance(url, str) or not url:
+            raise invalid_params("url must be a non-empty string")
+        purpose = params.get("purpose", "Web browsing")
+        wait_until = params.get("wait_until", "load")
+        timeout = int(params.get("timeout", 30))
+
+        try:
+            # If the domain is not approved, this raises BrowserSecurityError
+            # with enough info for the frontend to show an approval dialog.
+            content = await bc.navigate(url, purpose=purpose, wait_until=wait_until, timeout=timeout)
+            return {
+                "url": content.url,
+                "title": content.title,
+                "text": content.text,
+                "links": content.links,
+                "tables": content.tables,
+            }
+        except BrowserSecurityError as exc:
+            # Return the approval-required info for the frontend.
+            # The browser controller has registered a pending session.
+            status = bc.get_status()
+            pending = status.get("current_session", {})
+            raise BridgeError(
+                -32013,
+                str(exc),
+                data={
+                    "approval_required": True,
+                    "url": url,
+                    "session_id": pending.get("id") if pending else None,
+                },
+            )
+        except Exception as exc:
+            raise BridgeError(-32014, f"Navigation failed: {exc}")
+
+    async def browser_get_content(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Get the content of the current page."""
+        del params
+        bc = self._require_browser()
+        content = await bc.get_content()
+        return {
+            "url": content.url,
+            "title": content.title,
+            "text": content.text,
+            "links": content.links,
+            "tables": content.tables,
+        }
+
+    async def browser_execute_js(self, params: dict[str, Any] | None = None) -> Any:
+        """Execute JavaScript in the current page."""
+        params = params or {}
+        bc = self._require_browser()
+        script = params.get("script")
+        if not isinstance(script, str) or not script:
+            raise invalid_params("script must be a non-empty string")
+        return await bc.execute_js(script)
+
+    async def browser_fill_form(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Fill a form field identified by CSS selector."""
+        params = params or {}
+        bc = self._require_browser()
+        selector = params.get("selector")
+        value = params.get("value")
+        if not isinstance(selector, str) or not selector:
+            raise invalid_params("selector must be a non-empty string")
+        if not isinstance(value, str):
+            raise invalid_params("value must be a string")
+        await bc.fill_form(selector, value)
+        return {"filled": True, "selector": selector}
+
+    async def browser_click(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Click an element identified by CSS selector."""
+        params = params or {}
+        bc = self._require_browser()
+        selector = params.get("selector")
+        if not isinstance(selector, str) or not selector:
+            raise invalid_params("selector must be a non-empty string")
+        await bc.click(selector)
+        return {"clicked": True, "selector": selector}
+
+    async def browser_screenshot(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Take a screenshot of the current page."""
+        params = params or {}
+        bc = self._require_browser()
+        path = params.get("path")
+        screenshot_path = await bc.screenshot(path=path)
+        return {"screenshot_path": str(screenshot_path)}
+
+    async def browser_get_cookies(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Get cookies from the current browser context."""
+        del params
+        bc = self._require_browser()
+        cookies = await bc.get_cookies()
+        return {"cookies": cookies}
+
+    def browser_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Get browser controller status."""
+        del params
+        bc = self._require_browser()
+        return bc.get_status()
+
+    async def browser_close(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Close the browser and clean up."""
+        del params
+        bc = self._require_browser()
+        await bc.close()
+        return {"closed": True}
+
+    async def _close_browser(self) -> None:
+        """Internal helper to close browser on shutdown."""
+        if self.browser is not None:
+            try:
+                await self.browser.close()
+            except Exception:
+                pass
+
+    # ------------------------------------------------------------------ #
+    # gateway.* — Web gateway tokens (P-08)
+    # ------------------------------------------------------------------ #
+
+    def _require_gateway_tokens(self) -> Any:
+        if self.gateway_tokens is None:
+            raise BridgeError(-32015, "Gateway token manager is not available.")
+        return self.gateway_tokens
+
+    def gateway_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Get gateway status, including token count and active connections."""
+        del params
+        tm = self._require_gateway_tokens()
+        tokens = tm.list_tokens()
+        return {
+            "enabled": True,
+            "token_count": len(tokens),
+            "tokens": tokens,
+            "has_setup_token": tm.get_setup_token() is not None,
+        }
+
+    def gateway_get_tokens(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Get all tokens (with full values for display)."""
+        del params
+        tm = self._require_gateway_tokens()
+        tokens = tm.all_tokens()
+        return {"tokens": tokens}
+
+    def gateway_create_token(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Create a new gateway token."""
+        params = params or {}
+        tm = self._require_gateway_tokens()
+        scope_str = params.get("scope", "write")
+        label = params.get("label", "New Token")
+        scope = TokenScope.WRITE if scope_str == "write" else TokenScope.READ
+        token = tm.create_token(scope=scope, label=label)
+        return {"token": token, "scope": scope.value, "label": label}
+
+    def gateway_rotate_token(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Rotate (regenerate) a gateway token."""
+        params = params or {}
+        tm = self._require_gateway_tokens()
+        token = params.get("token")
+        if not isinstance(token, str) or not token:
+            raise invalid_params("token must be a non-empty string")
+        new_token = tm.rotate_token(token)
+        if new_token is None:
+            raise invalid_params("Token not found")
+        return {"token": new_token, "rotated": True}
+
+    def gateway_revoke_token(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Revoke a gateway token."""
+        params = params or {}
+        tm = self._require_gateway_tokens()
+        token = params.get("token")
+        if not isinstance(token, str) or not token:
+            raise invalid_params("token must be a non-empty string")
+        revoked = tm.revoke_token(token)
+        if not revoked:
+            # Try matching by prefix.
+            for t in list(tm.all_tokens().keys()):
+                if t.startswith(token):
+                    tm.revoke_token(t)
+                    revoked = True
+                    break
+        return {"revoked": revoked}
+
+    def gateway_start(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Start the gateway HTTP server (standalone; starts a background thread)."""
+        params = params or {}
+        del params
+        try:
+            from dream.gateway_server import run_gateway
+            import threading
+            port = int(os.environ.get("DREAM_GATEWAY_PORT", "9090"))
+            tls = os.environ.get("DREAM_GATEWAY_TLS", "false").lower() in ("1", "true", "yes")
+            thread = threading.Thread(
+                target=run_gateway,
+                kwargs={"host": "0.0.0.0", "port": port, "tls": tls},
+                daemon=True,
+            )
+            thread.start()
+            return {"started": True, "port": port, "tls": tls}
+        except Exception as exc:
+            raise BridgeError(-32016, f"Failed to start gateway: {exc}")
+
+    def gateway_stop(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Stop the gateway server (signal)."""
+        del params
+        # Gateway is run in a daemon thread; stopping it requires signals
+        # which are complex. For now, indicate it can't be stopped via RPC.
+        return {"stopped": False, "note": "Restart the sidecar to stop the gateway."}
 
     # ------------------------------------------------------------------ #
     # internals

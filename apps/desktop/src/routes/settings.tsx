@@ -1,10 +1,13 @@
 /**
- * Settings — appearance and window behaviour are live in P-01; the remaining
- * categories arrive with the features they configure.
+ * Settings — appearance, window, workspace, plus P-08 infrastructure features:
+ * Docker sandbox, browser control, and web gateway.
  */
 
 import { useEffect, useState } from 'react';
 
+import { BrowserSettings } from '@/components/browser/browser-settings';
+import { GatewaySettings } from '@/components/gateway/gateway-settings';
+import { SandboxSettings } from '@/components/sandbox/sandbox-settings';
 import { Button } from '@/components/ui/button';
 import { dialogApi, windowApi } from '@/lib/tauri';
 import { useAppStore } from '@/stores/use-app-store';
@@ -159,6 +162,15 @@ export function SettingsRoute() {
           </Button>
         </Row>
       </section>
+
+      {/* P-08: Docker sandbox */}
+      <SandboxSettings />
+
+      {/* P-08: Browser control */}
+      <BrowserSettings />
+
+      {/* P-08: Web gateway */}
+      <GatewaySettings />
     </div>
   );
 }

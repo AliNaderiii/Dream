@@ -76,6 +76,89 @@ mailbox) cannot run in this sandbox; each adapter's transport seam is
 unit-tested against fakes instead, and `signal-cli`/IMAP behaviour is
 exercised through the documented stdlib patterns.
 
+## P-08 — Docker Sandbox, Chrome Control & Web Gateway — SHIPPED
+
+**What shipped.** Three infrastructure features that transform Dream from a
+simple chat agent into a powerful autonomous system:
+
+1. **Docker Sandbox** (`dream/docker_sandbox.py`) — Isolated, secure code
+   execution environment for running Python, R, and shell scripts inside
+   ephemeral Docker containers. Full `DockerSandbox` class with:
+   - `run_code`, `run_notebook`, `install_packages` methods
+   - Auto-pull images (python:3.12-slim, rocker/r-ver:4.4), caching
+   - Resource limits (CPU 1 core, Memory 2GB, Disk 1GB, network off by default)
+   - Security hardening: seccomp profile, `--cap-drop=ALL`, no-new-privileges,
+     read-only rootfs, swap disabled, PIDs limit, user namespace remapping
+   - Result extraction: stdout/stderr capture, output file detection
+   - Docker readiness check with graceful degradation
+
+2. **Chrome Browser Control** (`dream/browser_controller.py`) — Drive Chrome
+   via CDP with full `BrowserController` class:
+   - Attach to user's real Chrome (preserves cookies, sessions, logins)
+   - Launch isolated browser (incognito-equivalent, no user profile)
+   - Navigation, content extraction, form filling, click, screenshot
+   - JavaScript execution, cookie inspection
+   - Session approval: user must approve with URL preview and purpose,
+     "allow once" / "always allow for domain" / "deny" options
+   - 5-minute session timeout, local-only screenshots
+
+3. **Web Gateway** (`dream/gateway_server.py`) — FastAPI HTTP server:
+   - Serves the React SPA (same desktop UI as a web page)
+   - Token authentication with read/write scopes
+   - One-time setup token, token management (create, rotate, revoke)
+   - mDNS/Bonjour LAN discovery (dream.local)
+   - Self-signed TLS certificate generation
+   - CORS and security headers (CSP, HSTS, X-Frame-Options)
+   - QR code for easy mobile connection
+   - Active connections tracking
+
+All three are integrated into the bridge with 40 new RPC methods
+(`sandbox.*`, `browser.*`, `gateway.*`). Frontend gains settings pages
+for each feature, status bar indicators, and full token management UI.
+
+**What was measured.**
+- Python: **1088 tests passed** in 35.04s (1021 pre-existing + 67 new
+  infrastructure tests covering Docker sandbox, browser controller, gateway
+  token management, TLS, mDNS, and bridge integration). All 65 existing
+  bridge tests pass unchanged.
+- Frontend: **50 tests pass**, `tsc --noEmit` clean, `vite build` succeeds
+  (454 kB bundle, up from 430 kB due to new components).
+- Infrastructure modules parse cleanly (tested with `ast.parse`).
+- Token persistence: tokens survive `TokenManager` reload across instances.
+- Token scopes: write tokens satisfy read requirements, read tokens do NOT
+  satisfy write requirements (tested).
+- Browser approval: approve/deny/always-allow-all flow tested end-to-end.
+- Sandbox seccomp profile: valid JSON with correct structure (tested).
+
+**New files created:**
+- `dream/docker_sandbox.py` — Docker sandbox core (450+ lines)
+- `dream/browser_controller.py` — Chrome browser control (400+ lines)
+- `dream/gateway_server.py` — Web gateway server (550+ lines)
+- `tests/test_docker_sandbox.py` — 13 tests
+- `tests/test_browser_controller.py` — 22 tests
+- `tests/test_gateway_server.py` — 32 tests
+- `apps/desktop/src/components/sandbox/sandbox-settings.tsx` — Sandbox UI
+- `apps/desktop/src/components/sandbox/sandbox-status.tsx` — Status indicator
+- `apps/desktop/src/components/browser/browser-settings.tsx` — Browser UI
+- `apps/desktop/src/components/gateway/gateway-settings.tsx` — Gateway UI
+
+**Modified files:**
+- `dream/bridge/methods.py` — Added 40 new RPC methods for sandbox/browser/gateway
+- `dream/bridge/__init__.py` — Re-export new infrastructure types
+- `apps/desktop/src/lib/bridge/types.ts` — Added new TypeScript types
+- `apps/desktop/src/lib/bridge/client.ts` — Added echo transport stubs
+- `apps/desktop/src/types/index.ts` — Added feature state types
+- `apps/desktop/src/routes/settings.tsx` — Integrated new settings pages
+- `apps/desktop/src/components/layout/status-bar.tsx` — Added sandbox indicator
+- `MASTER_CHECKLIST.md` — Updated with Phase 3.7–3.9 completion
+- `docs/STATUS.md` — Updated with this entry
+
+**What is next.** P-09 (Data Science Pipeline): data preview grid, cleaning
+steps, chart builder, report preview/export.
+
+**What is blocked.** Nothing. Docker daemon and Chrome/Playwright are required
+at runtime but the code degrades gracefully when they are absent.
+
 ## P-02 — Python Sidecar Bridge — SHIPPED (Rust pending CI compile)
 
 **What shipped.** The JSON-RPC 2.0 bridge between the Tauri 2 frontend and the

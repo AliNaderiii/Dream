@@ -127,3 +127,16 @@ export interface ProviderCatalogEntry {
   defaultModels: string[];
   oauthSupported?: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// P-08: Docker sandbox / Browser / Gateway UI types
+// ---------------------------------------------------------------------------
+
+/** Sandbox feature state. */
+export type SandboxState = 'unavailable' | 'available' | 'error' | 'disabled';
+
+/** Browser feature state. */
+export type BrowserState = 'offline' | 'attached' | 'isolated' | 'unavailable';
+
+/** Gateway feature state. */
+export type GatewayState = 'stopped' | 'running' | 'error' | 'disabled';

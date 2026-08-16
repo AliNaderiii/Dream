@@ -1,10 +1,12 @@
 /**
- * 24px status bar: agent status, provider reachability, workspace, language.
+ * 24px status bar: agent status, provider reachability, workspace, language,
+ * sandbox, browser, and gateway indicators.
  */
 
 import { Circle, Globe, HardDrive, Languages } from 'lucide-react';
 
 import { BridgeStatusIndicator } from '@/components/bridge/bridge-status';
+import { SandboxStatusIndicator } from '@/components/sandbox/sandbox-status';
 import { useAppStore } from '@/stores/use-app-store';
 import { useProviderStore } from '@/stores/use-provider-store';
 import type { AgentStatus } from '@/types';
@@ -39,6 +41,8 @@ export function StatusBar() {
       </span>
 
       <BridgeStatusIndicator />
+
+      <SandboxStatusIndicator />
 
       {activeProvider && (
         <span className="flex items-center gap-1.5">

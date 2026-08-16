@@ -44,6 +44,42 @@ from dream.bridge.methods import (
     skill_to_dict,
     turn_to_dict,
 )
+
+try:  # pragma: no cover - optional infrastructure
+    from dream.browser_controller import (
+        BrowserController,
+        BrowserSession,
+        BrowserSecurityError,
+        BrowserTimeoutError,
+        BrowserUnavailableError,
+        PageContent,
+    )
+except ImportError:  # pragma: no cover
+    pass
+
+try:  # pragma: no cover - optional infrastructure
+    from dream.docker_sandbox import (
+        DockerSandbox,
+        DockerUnavailableError,
+        Language,
+        ResourceLimits,
+        SandboxResult,
+    )
+except ImportError:  # pragma: no cover
+    pass
+
+try:  # pragma: no cover - optional infrastructure
+    from dream.gateway_server import (
+        MDNSAdvertiser,
+        TLSCertificateManager,
+        TokenManager,
+        TokenScope,
+        gateway_config,
+        run_gateway,
+        token_manager,
+    )
+except ImportError:  # pragma: no cover
+    pass
 from dream.bridge.server import (
     PROTOCOL_HEADER,
     BridgeServer,
