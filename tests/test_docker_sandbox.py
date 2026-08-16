@@ -64,7 +64,6 @@ def test_docker_sandbox_initialisation():
 
 def test_check_available_returns_false_without_docker():
     """When Docker is not installed, check_available returns False."""
-    import subprocess
     from unittest.mock import patch
 
     from dream.docker_sandbox import DockerSandbox
@@ -114,7 +113,9 @@ def test_resource_limits_override():
     """Resource limits can be overridden."""
     from dream.docker_sandbox import ResourceLimits
 
-    limits = ResourceLimits(cpu_count=2.0, memory_mb=4096, timeout_seconds=120, network_enabled=True)
+    limits = ResourceLimits(
+        cpu_count=2.0, memory_mb=4096, timeout_seconds=120, network_enabled=True
+    )
     assert limits.cpu_count == 2.0
     assert limits.memory_mb == 4096
     assert limits.timeout_seconds == 120
@@ -166,9 +167,17 @@ def test_docker_unavailable_error_message():
 def test_docker_sandbox_package_exports():
     """The bridge's __init__ re-exports sandbox types when available."""
     try:
-        from dream.bridge import DockerSandbox, DockerUnavailableError, ResourceLimits, SandboxResult
+        from dream.bridge import (
+            DockerSandbox,
+            DockerUnavailableError,
+            ResourceLimits,
+            SandboxResult,
+        )
+
         assert DockerSandbox is not None
         assert DockerUnavailableError is not None
+        assert ResourceLimits is not None
+        assert SandboxResult is not None
     except ImportError:
         pass  # OK if docker not installed
 

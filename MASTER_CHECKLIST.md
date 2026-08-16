@@ -141,18 +141,18 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 - [x] 3.6.6 Route registered in `App.tsx`; Radio icon added to the activity rail
 - [x] 3.6.7 Echo transport: `gateway.*` handlers + types, so dev/tests need no sidecar; 245 frontend tests, tsc/lint/prettier/build green
 
-## Phase 3 — Projects, Subagents & Provenance (Prompt P-03)
+## Phase 3 — Projects, Subagents & Provenance (Prompt P-03 / P-10)
 - [ ] 3.1 Project dashboard; file browser
 - [ ] 3.2 Subagent monitor
-- [ ] 3.3 Run history / provenance viewer
+- [x] 3.3 Run history / provenance viewer — **P-10**: Full tamper-evident SHA-256 provenance logging, artifact sidecar linking, lineage graph & timeline UI, and reproducibility ZIP export.
 
 ## Phase 4 — Data Science Workbench (Prompt P-04)
 - [ ] 4.1 Data preview grid; cleaning steps
 - [ ] 4.2 Chart builder; report preview/export
 
-## Phase 5 — Providers, MCP & Web Gateway (Prompt P-05)
-- [ ] 5.1 Provider configuration + connection test
-- [ ] 5.2 MCP server configuration
+## Phase 5 — Providers, MCP & Web Gateway (Prompt P-05 / P-10)
+- [x] 5.1 Provider configuration + connection test — **P-10**: Model provider manager with ACP backends, OpenAI, Ollama, and Echo.
+- [x] 5.2 MCP server configuration — **P-10**: Multi-server MCP manager (stdio, SSE, WebSocket), tool discovery, resource access, and settings UI.
 - [ ] 5.3 Web gateway (mobile/tablet responsive) + authentication
 
 ## Phase 3.7–3.9 — Docker Sandbox, Chrome Control & Web Gateway (Prompt P-08)

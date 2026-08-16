@@ -8,19 +8,15 @@ The gateway runs as part of the Python sidecar or as a standalone process.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 import platform
 import socket
 import subprocess
-import tempfile
-import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -316,7 +312,10 @@ class TLSCertificateManager:
                 "-days", "3650",
                 "-nodes",
                 "-subj", f"/CN={hostname}/O=Dream Gateway",
-                "-addext", f"subjectAltName=DNS:{hostname},DNS:dream.local,DNS:localhost,IP:127.0.0.1",
+                "-addext", (
+                    f"subjectAltName=DNS:{hostname},"
+                    "DNS:dream.local,DNS:localhost,IP:127.0.0.1"
+                ),
             ],
             check=True,
             capture_output=True,
@@ -376,12 +375,12 @@ def create_gateway_app(
     try:
         from fastapi import FastAPI, HTTPException, Request
         from fastapi.middleware.cors import CORSMiddleware
-        from fastapi.responses import FileResponse, JSONResponse, Response
-    except ImportError:
+        from fastapi.responses import FileResponse, JSONResponse
+    except ImportError as exc:
         raise ImportError(
             "FastAPI is required for the web gateway. "
             "Install it with: pip install fastapi uvicorn"
-        )
+        ) from exc
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -719,8 +718,8 @@ def run_gateway(
 
     try:
         import uvicorn
-    except ImportError:
-        raise ImportError("uvicorn is required. Install with: pip install uvicorn")
+    except ImportError as exc:
+        raise ImportError("uvicorn is required. Install with: pip install uvicorn") from exc
 
     ssl_cert = None
     ssl_key = None
@@ -731,7 +730,8 @@ def run_gateway(
 
     print(f"🌐 Dream Gateway listening on http{'s' if tls else ''}://{host}:{port}")
     if token_manager.get_setup_token():
-        print(f"🔑 Setup token: {token_manager.get_setup_token()[:16]}... (use in Authorization header)")
+        token_prefix = token_manager.get_setup_token()[:16]
+        print(f"🔑 Setup token: {token_prefix}... (use in Authorization header)")
 
     uvicorn.run(
         app,

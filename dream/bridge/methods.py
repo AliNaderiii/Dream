@@ -35,6 +35,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from dream import scheduler
+from dream.acp import (
+    ACPAgentManager,
+    ACPBackend,
+    ACPServer,
+)
 from dream.agent import (
     ApprovalPolicy,
     Dream,
@@ -42,6 +47,10 @@ from dream.agent import (
     OllamaBackend,
     OpenAIBackend,
     build_backend,
+)
+from dream.mcp import (
+    MCPServerConfig,
+    MCPServerManager,
 )
 from dream.memory import KINDS, Memory, MemoryStore, normalize_fa
 from dream.model_providers import (
@@ -53,6 +62,11 @@ from dream.model_providers import (
     ProviderRegistry,
 )
 from dream.nl_schedule import ScheduleParseError
+from dream.provenance import (
+    ArtifactManager,
+    ProvenanceTracker,
+    ReproducibilityExporter,
+)
 from dream.scheduler import Schedule, run_to_dict, schedule_to_dict
 from dream.skills import SKILL_SUFFIX, parse_skill_text
 from dream.subagents import (
@@ -96,7 +110,7 @@ except ImportError:  # pragma: no cover
     TokenScope = None  # type: ignore[assignment,misc]
 
 #: Provider kinds the bridge knows how to build and persist.
-PROVIDER_KINDS: tuple[str, ...] = ("echo", *PROVIDER_CATALOG.keys())
+PROVIDER_KINDS: tuple[str, ...] = ("echo", *PROVIDER_CATALOG.keys(), "acp")
 
 #: How long a provider probe may take before it is reported unreachable.
 PROBE_TIMEOUT_SECONDS = 10.0
@@ -343,6 +357,10 @@ def build_configured_backend(config: dict[str, Any] | None) -> Any:
             str(endpoint or "https://generativelanguage.googleapis.com/v1beta"),
             oauth=bool(config.get("oauth")),
         )
+    if kind == "acp":
+        acp_endpoint = config.get("base_url") or config.get("endpoint") or "http://localhost:8000"
+        acp_token = config.get("api_key") or config.get("token") or credential or None
+        return ACPBackend(endpoint=acp_endpoint, token=acp_token)
     if kind == "echo":
         return EchoBackend()
     return build_backend(os.environ.get("DREAM_BACKEND", "echo"))
@@ -367,6 +385,7 @@ class SessionState:
     reasoning_effort: float = 0.0
     dream: Dream = None  # type: ignore[assignment]
     stop_event: asyncio.Event = field(default_factory=asyncio.Event)
+    last_record_id: str | None = None
 
     def to_index(self) -> dict[str, Any]:
         """Metadata only — never the conversation history (that is not persisted)."""
@@ -412,6 +431,9 @@ class BridgeMethods:
         sandbox: Any = None,
         browser: Any = None,
         token_manager: Any = None,
+        provenance_dir: str | None = None,
+        mcp_config_path: str | None = None,
+        acp_config_path: str | None = None,
     ) -> None:
         self.store = store or MemoryStore(os.environ.get("DREAM_DB", "data/dream.db"))
         self.sessions: dict[str, SessionState] = {}
@@ -421,6 +443,14 @@ class BridgeMethods:
         self.subagents = SubAgentManager()
         self._daemon: scheduler.SchedulerDaemon | None = None
         self._lock = threading.RLock()
+
+        # Provenance, MCP, and ACP subsystems (P-10)
+        self.provenance = ProvenanceTracker(log_dir=provenance_dir)
+        self.artifacts = ArtifactManager(self.provenance)
+        self.reproducibility = ReproducibilityExporter(self.provenance)
+        self.mcp = MCPServerManager(config_path=mcp_config_path)
+        self.acp_agents = ACPAgentManager(config_path=acp_config_path)
+        self.acp_server = ACPServer(store=self.store)
 
         # Infrastructure services (P-08): Docker sandbox, browser control,
         # web gateway tokens. Lazily created so an unavailable dependency
@@ -611,14 +641,42 @@ class BridgeMethods:
             "browser.get_cookies": self.browser_get_cookies,
             "browser.status": self.browser_status,
             "browser.close": self.browser_close,
-            # P-08: Web gateway.
-            "gateway.status": self.gateway_status,
+            # P-08: Web gateway tokens.
             "gateway.get_tokens": self.gateway_get_tokens,
             "gateway.create_token": self.gateway_create_token,
             "gateway.rotate_token": self.gateway_rotate_token,
             "gateway.revoke_token": self.gateway_revoke_token,
-            "gateway.start": self.gateway_start,
-            "gateway.stop": self.gateway_stop,
+            # provenance.* (P-10)
+            "provenance.list": self.provenance_list,
+            "provenance.get": self.provenance_get,
+            "provenance.tree": self.provenance_tree,
+            "provenance.export": self.provenance_export,
+            "provenance.verify": self.provenance_verify,
+            # artifact.* (P-10)
+            "artifact.get": self.artifact_get,
+            "artifact.list": self.artifact_list,
+            # mcp.* (P-10)
+            "mcp.add_server": self.mcp_add_server,
+            "mcp.remove_server": self.mcp_remove_server,
+            "mcp.list_servers": self.mcp_list_servers,
+            "mcp.get_server": self.mcp_get_server,
+            "mcp.toggle_server": self.mcp_toggle_server,
+            "mcp.toggle_tool": self.mcp_toggle_tool,
+            "mcp.test_connection": self.mcp_test_connection,
+            "mcp.list_tools": self.mcp_list_tools,
+            "mcp.call_tool": self.mcp_call_tool,
+            "mcp.list_resources": self.mcp_list_resources,
+            "mcp.read_resource": self.mcp_read_resource,
+            # acp.* (P-10)
+            "acp.server.status": self.acp_server_status,
+            "acp.server.start": self.acp_server_start,
+            "acp.server.stop": self.acp_server_stop,
+            "acp.client.list_agents": self.acp_client_list_agents,
+            "acp.client.add_agent": self.acp_client_add_agent,
+            "acp.client.remove_agent": self.acp_client_remove_agent,
+            "acp.client.test_agent": self.acp_client_test_agent,
+            "acp.client.send": self.acp_client_send,
+            "acp.client.replay_history": self.acp_client_replay_history,
         }
 
     # ------------------------------------------------------------------ #
@@ -690,6 +748,15 @@ class BridgeMethods:
         with self._lock:
             self.sessions[sid] = session
             self._save_sessions_index()
+
+        # Record provenance for session creation
+        rec = self.provenance.record(
+            event_type="session_create",
+            agent_id=sid,
+            payload={"title": title, "provider": provider, "model": model},
+        )
+        session.last_record_id = rec.record_id
+
         return {
             "session_id": sid,
             "id": sid,
@@ -770,6 +837,17 @@ class BridgeMethods:
         dream = session.dream
         cancellation = session.stop_event
 
+        # Provenance: record user message
+        user_rec = self.provenance.record(
+            event_type="user_message",
+            agent_id=session.id,
+            parent_record_id=session.last_record_id,
+            payload={"message": message},
+        )
+        session.last_record_id = user_rec.record_id
+
+        turn_start = time.monotonic()
+
         def produce() -> Any:
             if cancellation.is_set():
                 return None
@@ -777,6 +855,8 @@ class BridgeMethods:
 
         # Run the blocking turn in a worker thread, then chunk the reply text.
         result = await asyncio.to_thread(produce)
+        turn_duration_ms = int((time.monotonic() - turn_start) * 1000)
+
         session.message_count += 1
         session.updated_at = time.time()
         with self._lock:
@@ -790,6 +870,36 @@ class BridgeMethods:
             )
 
         turn_dict = turn_to_dict(result)
+
+        # Provenance: record tool calls
+        parent_id = user_rec.record_id
+        for call in turn_dict.get("tool_calls", []):
+            tool_rec = self.provenance.record(
+                event_type="tool_call",
+                agent_id=session.id,
+                parent_record_id=parent_id,
+                payload={
+                    "tool_name": call.get("name"),
+                    "arguments": call.get("arguments"),
+                    "allowed": call.get("allowed"),
+                    "result": call.get("result"),
+                },
+                model_snapshot={"provider": session.provider},
+            )
+            parent_id = tool_rec.record_id
+
+        # Provenance: record model response
+        resp_rec = self.provenance.record(
+            event_type="model_response",
+            agent_id=session.id,
+            parent_record_id=parent_id,
+            payload={"reply": turn_dict["reply"]},
+            duration_ms=turn_duration_ms,
+            token_count=len(turn_dict["reply"].split()),
+            model_snapshot={"provider": session.provider},
+        )
+        session.last_record_id = resp_rec.record_id
+
         cancel = cancellation
 
         async def _chunks() -> AsyncIterator[Chunk]:
@@ -1400,6 +1510,14 @@ class BridgeMethods:
             decoded = json.loads(raw)
         except (TypeError, ValueError):
             decoded = {"status": "ok", "result": raw}
+
+        # Provenance recording for standalone tool execution
+        self.provenance.record(
+            event_type="tool_call",
+            agent_id="bridge",
+            payload={"tool_name": name, "arguments": arguments, "result": decoded},
+        )
+
         return decoded
 
     # ------------------------------------------------------------------ #
@@ -1439,6 +1557,13 @@ class BridgeMethods:
                 raise invalid_params(f"approval {approval_id!r} already resolved")
             approval.resolved = True
             name, arguments = approval.name, approval.arguments
+
+        # Provenance: record approval event
+        self.provenance.record(
+            event_type="approval_granted" if allowed else "approval_denied",
+            agent_id="bridge",
+            payload={"approval_id": approval_id, "tool_name": name, "allowed": allowed},
+        )
 
         if not allowed:
             return {
@@ -1852,8 +1977,26 @@ class BridgeMethods:
             logger.exception("failed to stop the connectivity loop during shutdown")
 
     async def gateway_start(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Start every enabled, configured platform adapter."""
-        del params
+        """Start every enabled, configured platform adapter and web gateway."""
+        params = params or {}
+        if "port" in params or "tls" in params:
+            # Web gateway startup (P-08)
+            port = int(params.get("port", 9090))
+            tls = bool(params.get("tls", False))
+            try:
+                from dream.gateway_server import run_gateway
+
+                thread = threading.Thread(
+                    target=run_gateway,
+                    kwargs={"host": "0.0.0.0", "port": port, "tls": tls},
+                    daemon=True,
+                )
+                thread.start()
+                return {"started": True, "port": port, "tls": tls}
+            except Exception as exc:
+                raise BridgeError(-32016, f"Failed to start gateway: {exc}") from exc
+
+        # Connectivity adapters (P-07)
         gateway = self._ensure_gateway()
         await gateway.submit_async(gateway.start_all())
         return gateway.status()
@@ -1866,9 +2009,25 @@ class BridgeMethods:
         return gateway.status()
 
     def gateway_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Aggregate gateway status: adapters, linked users, counters."""
+        """Aggregate gateway status: connectivity adapters and web gateway tokens."""
         del params
-        return self._ensure_gateway().status()
+        status: dict[str, Any] = {}
+        try:
+            status = self._ensure_gateway().status()
+        except Exception:
+            pass
+
+        if self.gateway_tokens is not None:
+            tokens = self.gateway_tokens.list_tokens()
+            status.update(
+                {
+                    "enabled": True,
+                    "token_count": len(tokens),
+                    "tokens": tokens,
+                    "has_setup_token": self.gateway_tokens.get_setup_token() is not None,
+                }
+            )
+        return status
 
     async def gateway_configure(
         self, params: dict[str, Any] | None = None
@@ -2071,7 +2230,9 @@ class BridgeMethods:
             "error": result.error,
         }
 
-    async def sandbox_install_packages(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def sandbox_install_packages(
+        self, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Install packages in the sandbox image."""
         params = params or {}
         sb = self._require_sandbox()
@@ -2103,7 +2264,7 @@ class BridgeMethods:
             result = await bc.attach_existing_browser(port=port)
             return result
         except Exception as exc:
-            raise BridgeError(-32012, f"Failed to attach Chrome: {exc}")
+            raise BridgeError(-32012, f"Failed to attach Chrome: {exc}") from exc
 
     async def browser_launch_isolated(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Launch a fresh isolated Chrome instance."""
@@ -2113,7 +2274,7 @@ class BridgeMethods:
             result = await bc.launch_isolated_browser()
             return result
         except Exception as exc:
-            raise BridgeError(-32012, f"Failed to launch Chrome: {exc}")
+            raise BridgeError(-32012, f"Failed to launch Chrome: {exc}") from exc
 
     def browser_request_approval(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Request approval for a browser navigation."""
@@ -2171,7 +2332,9 @@ class BridgeMethods:
         try:
             # If the domain is not approved, this raises BrowserSecurityError
             # with enough info for the frontend to show an approval dialog.
-            content = await bc.navigate(url, purpose=purpose, wait_until=wait_until, timeout=timeout)
+            content = await bc.navigate(
+                url, purpose=purpose, wait_until=wait_until, timeout=timeout
+            )
             return {
                 "url": content.url,
                 "title": content.title,
@@ -2192,9 +2355,9 @@ class BridgeMethods:
                     "url": url,
                     "session_id": pending.get("id") if pending else None,
                 },
-            )
+            ) from exc
         except Exception as exc:
-            raise BridgeError(-32014, f"Navigation failed: {exc}")
+            raise BridgeError(-32014, f"Navigation failed: {exc}") from exc
 
     async def browser_get_content(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get the content of the current page."""
@@ -2286,18 +2449,6 @@ class BridgeMethods:
             raise BridgeError(-32015, "Gateway token manager is not available.")
         return self.gateway_tokens
 
-    def gateway_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Get gateway status, including token count and active connections."""
-        del params
-        tm = self._require_gateway_tokens()
-        tokens = tm.list_tokens()
-        return {
-            "enabled": True,
-            "token_count": len(tokens),
-            "tokens": tokens,
-            "has_setup_token": tm.get_setup_token() is not None,
-        }
-
     def gateway_get_tokens(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get all tokens (with full values for display)."""
         del params
@@ -2344,31 +2495,311 @@ class BridgeMethods:
                     break
         return {"revoked": revoked}
 
-    def gateway_start(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Start the gateway HTTP server (standalone; starts a background thread)."""
-        params = params or {}
-        del params
-        try:
-            from dream.gateway_server import run_gateway
-            import threading
-            port = int(os.environ.get("DREAM_GATEWAY_PORT", "9090"))
-            tls = os.environ.get("DREAM_GATEWAY_TLS", "false").lower() in ("1", "true", "yes")
-            thread = threading.Thread(
-                target=run_gateway,
-                kwargs={"host": "0.0.0.0", "port": port, "tls": tls},
-                daemon=True,
-            )
-            thread.start()
-            return {"started": True, "port": port, "tls": tls}
-        except Exception as exc:
-            raise BridgeError(-32016, f"Failed to start gateway: {exc}")
+    # ------------------------------------------------------------------ #
+    # provenance.* (P-10)
+    # ------------------------------------------------------------------ #
 
-    def gateway_stop(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Stop the gateway server (signal)."""
+    def provenance_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        agent_id = params.get("agent_id") or params.get("session_id")
+        event_type = params.get("event_type")
+        search = params.get("search")
+        date_from = params.get("date_from")
+        date_to = params.get("date_to")
+        limit = int(params.get("limit", 100))
+        offset = int(params.get("offset", 0))
+
+        records, total = self.provenance.list_records(
+            agent_id=str(agent_id) if agent_id else None,
+            event_type=str(event_type) if event_type else None,
+            search=str(search) if search else None,
+            date_from=str(date_from) if date_from else None,
+            date_to=str(date_to) if date_to else None,
+            limit=limit,
+            offset=offset,
+        )
+        return {"records": [r.to_dict() for r in records], "total": total}
+
+    def provenance_get(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        record_id = params.get("record_id")
+        if not isinstance(record_id, str) or not record_id:
+            raise invalid_params("record_id must be a non-empty string")
+        rec = self.provenance.get(record_id)
+        if not rec:
+            raise invalid_params(f"Provenance record {record_id} not found")
+        return rec.to_dict()
+
+    def provenance_tree(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        record_id = params.get("record_id")
+        agent_id = params.get("agent_id") or params.get("session_id")
+        artifact_path = params.get("artifact_path")
+        return self.provenance.get_tree(
+            record_id=str(record_id) if record_id else None,
+            agent_id=str(agent_id) if agent_id else None,
+            artifact_path=str(artifact_path) if artifact_path else None,
+        )
+
+    def provenance_export(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        record_id = params.get("record_id")
+        session_id = params.get("session_id") or params.get("agent_id")
+        artifact_path = params.get("artifact_path")
+        output_file = params.get("output_file")
+        return self.reproducibility.export(
+            record_id=str(record_id) if record_id else None,
+            session_id=str(session_id) if session_id else None,
+            artifact_path=str(artifact_path) if artifact_path else None,
+            output_file=str(output_file) if output_file else None,
+        )
+
+    def provenance_verify(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         del params
-        # Gateway is run in a daemon thread; stopping it requires signals
-        # which are complex. For now, indicate it can't be stopped via RPC.
-        return {"stopped": False, "note": "Restart the sidecar to stop the gateway."}
+        return self.provenance.verify_chain()
+
+    # ------------------------------------------------------------------ #
+    # artifact.* (P-10)
+    # ------------------------------------------------------------------ #
+
+    def artifact_get(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        path = params.get("path")
+        if not isinstance(path, str) or not path:
+            raise invalid_params("path must be a non-empty string")
+        art = self.artifacts.get_artifact(path)
+        if not art:
+            raise invalid_params(f"Artifact {path} not found")
+        return art
+
+    def artifact_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        del params
+        return {"artifacts": self.artifacts.list_artifacts()}
+
+    # ------------------------------------------------------------------ #
+    # mcp.* (P-10)
+    # ------------------------------------------------------------------ #
+
+    def mcp_add_server(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        name = params.get("name")
+        server_type = params.get("type", "stdio")
+        if not isinstance(name, str) or not name.strip():
+            raise invalid_params("name must be a non-empty string")
+        if server_type not in ("stdio", "sse", "ws"):
+            raise invalid_params("type must be one of stdio, sse, ws")
+
+        cfg = self.mcp.add_server(
+            name=name.strip(),
+            type=server_type,
+            command=params.get("command"),
+            args=params.get("args") or [],
+            env=params.get("env") or {},
+            url=params.get("url"),
+            headers=params.get("headers") or {},
+            enabled=bool(params.get("enabled", True)),
+        )
+        return cfg.to_dict()
+
+    def mcp_remove_server(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        server_id = params.get("server_id")
+        if not isinstance(server_id, str) or not server_id:
+            raise invalid_params("server_id must be a non-empty string")
+        removed = self.mcp.remove_server(server_id)
+        return {"removed": removed, "server_id": server_id}
+
+    def mcp_list_servers(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        del params
+        return {"servers": self.mcp.list_servers()}
+
+    def mcp_get_server(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        server_id = params.get("server_id")
+        if not isinstance(server_id, str) or not server_id:
+            raise invalid_params("server_id must be a non-empty string")
+        for s in self.mcp.list_servers():
+            if s["id"] == server_id:
+                return s
+        raise invalid_params(f"MCP server {server_id} not found")
+
+    def mcp_toggle_server(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        server_id = params.get("server_id")
+        enabled = bool(params.get("enabled", True))
+        if not isinstance(server_id, str) or not server_id:
+            raise invalid_params("server_id must be a non-empty string")
+        cfg = self.mcp.toggle_server(server_id, enabled)
+        if not cfg:
+            raise invalid_params(f"MCP server {server_id} not found")
+        return cfg.to_dict()
+
+    def mcp_toggle_tool(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        server_id = params.get("server_id")
+        tool_name = params.get("tool_name")
+        enabled = bool(params.get("enabled", True))
+        if not isinstance(server_id, str) or not isinstance(tool_name, str):
+            raise invalid_params("server_id and tool_name must be non-empty strings")
+        saved = self.mcp.toggle_tool(server_id, tool_name, enabled)
+        return {
+            "saved": saved,
+            "server_id": server_id,
+            "tool_name": tool_name,
+            "enabled": enabled,
+        }
+
+    async def mcp_test_connection(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        server_id = params.get("server_id")
+        if server_id:
+            return await self.mcp.test_connection(str(server_id))
+        if "type" in params:
+            cfg = MCPServerConfig.from_dict(params)
+            return await self.mcp.test_connection(cfg)
+        raise invalid_params("Must provide server_id or server config parameters")
+
+    async def mcp_list_tools(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        server_id = params.get("server_id")
+        if server_id:
+            client = await self.mcp.ensure_connected(str(server_id))
+            tools = await client.list_tools()
+            return {"tools": [t.to_dict() for t in tools]}
+        tools = await self.mcp.list_all_tools()
+        return {"tools": [t.to_dict() for t in tools]}
+
+    async def mcp_call_tool(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        tool_name = params.get("tool_name") or params.get("name")
+        arguments = params.get("arguments", {})
+        server_id = params.get("server_id")
+        if not isinstance(tool_name, str) or not tool_name:
+            raise invalid_params("tool_name must be a non-empty string")
+        result = await self.mcp.call_tool(
+            tool_name, arguments, server_id=str(server_id) if server_id else None
+        )
+        return {"status": "ok", "result": result}
+
+    async def mcp_list_resources(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        server_id = params.get("server_id")
+        if server_id:
+            client = await self.mcp.ensure_connected(str(server_id))
+            resources = await client.list_resources()
+            return {"resources": [r.to_dict() for r in resources]}
+        resources = await self.mcp.list_all_resources()
+        return {"resources": [r.to_dict() for r in resources]}
+
+    async def mcp_read_resource(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        uri = params.get("uri")
+        server_id = params.get("server_id")
+        if not isinstance(uri, str) or not uri:
+            raise invalid_params("uri must be a non-empty string")
+        content = await self.mcp.read_resource(
+            uri, server_id=str(server_id) if server_id else None
+        )
+        return {"uri": uri, "content": content}
+
+    # ------------------------------------------------------------------ #
+    # acp.* (P-10)
+    # ------------------------------------------------------------------ #
+
+    def acp_server_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        del params
+        return {
+            "status": "ready",
+            "token_configured": bool(self.acp_server.token),
+            "protocol": "acp/1.0",
+        }
+
+    def acp_server_start(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        token = params.get("token")
+        if token is not None:
+            self.acp_server.token = str(token)
+        return {"started": True, "token_configured": bool(self.acp_server.token)}
+
+    def acp_server_stop(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        del params
+        return {"stopped": True}
+
+    def acp_client_list_agents(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        del params
+        return {"agents": self.acp_agents.list_agents()}
+
+    def acp_client_add_agent(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        name = params.get("name")
+        endpoint = params.get("endpoint")
+        if not isinstance(name, str) or not isinstance(endpoint, str):
+            raise invalid_params("name and endpoint must be non-empty strings")
+        cfg = self.acp_agents.add_agent(
+            name=name,
+            endpoint=endpoint,
+            token=params.get("token"),
+            label=params.get("label") or name,
+            description=params.get("description") or "",
+            enabled=bool(params.get("enabled", True)),
+        )
+        return cfg.to_dict()
+
+    def acp_client_remove_agent(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        agent_id = params.get("agent_id")
+        if not isinstance(agent_id, str) or not agent_id:
+            raise invalid_params("agent_id must be a non-empty string")
+        removed = self.acp_agents.remove_agent(agent_id)
+        return {"removed": removed, "agent_id": agent_id}
+
+    async def acp_client_test_agent(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        agent_id = params.get("agent_id")
+        if agent_id:
+            return await self.acp_agents.test_agent(str(agent_id))
+        endpoint = params.get("endpoint")
+        if endpoint:
+            from dream.acp.models import ACPAgentConfig
+
+            cfg = ACPAgentConfig(
+                id="temp", name="Probe", endpoint=str(endpoint), token=params.get("token")
+            )
+            return await self.acp_agents.test_agent(cfg)
+        raise invalid_params("Must provide agent_id or endpoint")
+
+    async def acp_client_send(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        agent_id = params.get("agent_id")
+        message = params.get("message")
+        session_id = params.get("session_id") or "default"
+        if not isinstance(agent_id, str) or not isinstance(message, str):
+            raise invalid_params("agent_id and message are required strings")
+
+        client = self.acp_agents.get_client(agent_id)
+        if not client:
+            raise invalid_params(f"ACP agent {agent_id} not found")
+
+        res = await client.send_message(session_id, message)
+        return res
+
+    async def acp_client_replay_history(
+        self, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        params = params or {}
+        agent_id = params.get("agent_id")
+        messages = params.get("messages", [])
+        session_id = params.get("session_id") or "replayed_session"
+        instruction = params.get("instruction") or "Review this conversation history."
+        if not isinstance(agent_id, str):
+            raise invalid_params("agent_id must be a string")
+
+        client = self.acp_agents.get_client(agent_id)
+        if not client:
+            raise invalid_params(f"ACP agent {agent_id} not found")
+
+        res = await client.replay_history(session_id, messages, instruction=instruction)
+        return res
 
     # ------------------------------------------------------------------ #
     # internals

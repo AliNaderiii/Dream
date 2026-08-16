@@ -49,8 +49,28 @@ export function SandboxSettings() {
   }, [call]);
 
   useEffect(() => {
-    if (sandboxEnabled) void checkStatus();
-  }, [sandboxEnabled, checkStatus]);
+    let ignore = false;
+    const run = async () => {
+      if (!sandboxEnabled) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await call<SandboxStatus>('sandbox.status');
+        if (!ignore) setStatus(result);
+      } catch (err: unknown) {
+        if (!ignore) {
+          setError(err instanceof Error ? err.message : 'Failed to check sandbox status');
+          setStatus(null);
+        }
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, [sandboxEnabled, call]);
 
   const isAvailable = status?.available === true;
 
@@ -100,7 +120,14 @@ export function SandboxSettings() {
                 Unavailable
               </span>
             )}
-            <Button size="sm" variant="secondary" onClick={checkStatus} disabled={loading}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                void checkStatus();
+              }}
+              disabled={loading}
+            >
               Refresh
             </Button>
           </div>
@@ -114,9 +141,7 @@ export function SandboxSettings() {
                 key={lang}
                 className={cn(
                   'inline-flex items-center gap-1 rounded-xs px-2 py-0.5 text-caption',
-                  available
-                    ? 'bg-surface-raised text-fg-primary'
-                    : 'bg-surface text-fg-muted',
+                  available ? 'bg-surface-raised text-fg-primary' : 'bg-surface text-fg-muted',
                 )}
               >
                 {lang === 'python' ? (
@@ -148,7 +173,9 @@ export function SandboxSettings() {
                   max={8}
                   step={0.25}
                   value={limits.cpuCount}
-                  onChange={(e) => setLimits((l) => ({ ...l, cpuCount: parseFloat(e.target.value) || 1 }))}
+                  onChange={(e) =>
+                    setLimits((l) => ({ ...l, cpuCount: parseFloat(e.target.value) || 1 }))
+                  }
                   className="w-full rounded-xs border border-border-default bg-surface px-2 py-1 text-body"
                 />
               </label>
@@ -160,7 +187,9 @@ export function SandboxSettings() {
                   max={16384}
                   step={128}
                   value={limits.memoryMb}
-                  onChange={(e) => setLimits((l) => ({ ...l, memoryMb: parseInt(e.target.value) || 2048 }))}
+                  onChange={(e) =>
+                    setLimits((l) => ({ ...l, memoryMb: parseInt(e.target.value) || 2048 }))
+                  }
                   className="w-full rounded-xs border border-border-default bg-surface px-2 py-1 text-body"
                 />
               </label>
@@ -172,7 +201,9 @@ export function SandboxSettings() {
                   max={600}
                   step={5}
                   value={limits.timeoutSeconds}
-                  onChange={(e) => setLimits((l) => ({ ...l, timeoutSeconds: parseInt(e.target.value) || 60 }))}
+                  onChange={(e) =>
+                    setLimits((l) => ({ ...l, timeoutSeconds: parseInt(e.target.value) || 60 }))
+                  }
                   className="w-full rounded-xs border border-border-default bg-surface px-2 py-1 text-body"
                 />
               </label>
@@ -197,8 +228,8 @@ export function SandboxSettings() {
           {/* Quick actions */}
           <div className="py-3">
             <p className="text-caption text-fg-secondary mb-2">
-              Package management is available via the agent chat. Ask the agent to install
-              packages for your data science tasks.
+              Package management is available via the agent chat. Ask the agent to install packages
+              for your data science tasks.
             </p>
           </div>
         </>

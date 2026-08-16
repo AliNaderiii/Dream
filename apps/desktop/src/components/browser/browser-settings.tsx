@@ -6,7 +6,7 @@
  */
 
 import { Globe, GlobeLock, Monitor, Unplug } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useBridge } from '@/lib/bridge/hooks';
@@ -20,22 +20,27 @@ export function BrowserSettings() {
   const [attachPort, setAttachPort] = useState(9222);
   const [browserEnabled, setBrowserEnabled] = useState(true);
 
-  const refreshStatus = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await call<BrowserStatus>('browser.status');
-      setStatus(result);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to check browser status');
-    } finally {
-      setLoading(false);
-    }
-  }, [call]);
-
   useEffect(() => {
-    if (browserEnabled) void refreshStatus();
-  }, [browserEnabled, refreshStatus]);
+    let ignore = false;
+    const run = async () => {
+      if (!browserEnabled) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await call<BrowserStatus>('browser.status');
+        if (!ignore) setStatus(result);
+      } catch (err: unknown) {
+        if (!ignore)
+          setError(err instanceof Error ? err.message : 'Failed to check browser status');
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      ignore = true;
+    };
+  }, [browserEnabled, call]);
 
   const handleAttach = async () => {
     setLoading(true);
@@ -47,7 +52,15 @@ export function BrowserSettings() {
       setStatus((prev) =>
         prev
           ? { ...prev, attached: true, attached_to_existing: true, has_page: true }
-          : { attached: true, attached_to_existing: true, has_page: true, pending_approvals: 0, approved_domains: [], current_session: null, screenshot_dir: '' },
+          : {
+              attached: true,
+              attached_to_existing: true,
+              has_page: true,
+              pending_approvals: 0,
+              approved_domains: [],
+              current_session: null,
+              screenshot_dir: '',
+            },
       );
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to attach Chrome');
@@ -64,7 +77,15 @@ export function BrowserSettings() {
       setStatus((prev) =>
         prev
           ? { ...prev, attached: true, attached_to_existing: false, has_page: true }
-          : { attached: true, attached_to_existing: false, has_page: true, pending_approvals: 0, approved_domains: [], current_session: null, screenshot_dir: '' },
+          : {
+              attached: true,
+              attached_to_existing: false,
+              has_page: true,
+              pending_approvals: 0,
+              approved_domains: [],
+              current_session: null,
+              screenshot_dir: '',
+            },
       );
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to launch Chrome');
@@ -170,7 +191,13 @@ export function BrowserSettings() {
                     className="w-20 rounded-xs border border-border-default bg-surface px-2 py-1 text-body"
                   />
                 </label>
-                <Button size="sm" onClick={handleAttach} disabled={loading}>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    void handleAttach();
+                  }}
+                  disabled={loading}
+                >
                   {loading ? 'Connecting…' : 'Attach to Chrome'}
                 </Button>
               </div>
@@ -178,7 +205,14 @@ export function BrowserSettings() {
                 <span className="text-caption text-fg-secondary">
                   Or start a fresh, isolated instance:
                 </span>
-                <Button size="sm" variant="secondary" onClick={handleLaunchIsolated} disabled={loading}>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    void handleLaunchIsolated();
+                  }}
+                  disabled={loading}
+                >
                   {loading ? 'Launching…' : 'Launch Isolated'}
                 </Button>
               </div>
@@ -187,9 +221,20 @@ export function BrowserSettings() {
           ) : (
             <div className="flex items-center gap-2">
               <span className="text-caption text-fg-secondary">
-                Browser is {status.attached_to_existing ? 'attached to your Chrome' : 'running in isolated mode'}.
+                Browser is{' '}
+                {status.attached_to_existing
+                  ? 'attached to your Chrome'
+                  : 'running in isolated mode'}
+                .
               </span>
-              <Button size="sm" variant="secondary" onClick={handleClose} disabled={loading}>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  void handleClose();
+                }}
+                disabled={loading}
+              >
                 Close Browser
               </Button>
             </div>

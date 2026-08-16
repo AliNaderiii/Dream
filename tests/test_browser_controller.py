@@ -14,10 +14,8 @@ def test_browser_controller_import():
     from dream.browser_controller import (
         BrowserController,
         BrowserSecurityError,
-        BrowserSession,
         BrowserTimeoutError,
         BrowserUnavailableError,
-        PageContent,
     )
 
     assert BrowserController is not None
@@ -57,7 +55,9 @@ def test_browser_session_defaults():
     """BrowserSession has sensible defaults."""
     from dream.browser_controller import BrowserSession
 
-    bs = BrowserSession(id="test", url="https://example.com", purpose="Testing", domain="example.com")
+    bs = BrowserSession(
+        id="test", url="https://example.com", purpose="Testing", domain="example.com"
+    )
     assert bs.id == "test"
     assert bs.url == "https://example.com"
     assert bs.purpose == "Testing"
@@ -256,6 +256,9 @@ def test_bridge_reflects_browser_imports():
     """The bridge re-exports browser types when available."""
     try:
         from dream.bridge import BrowserController, BrowserSession, PageContent
+
         assert BrowserController is not None
+        assert BrowserSession is not None
+        assert PageContent is not None
     except ImportError:
         pass  # OK if playwright not installed

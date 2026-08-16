@@ -3,7 +3,7 @@
  */
 
 import { Container, Loader2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useBridge } from '@/lib/bridge/hooks';
 import type { SandboxStatus } from '@/lib/bridge/types';
@@ -14,23 +14,28 @@ export function SandboxStatusIndicator() {
   const [status, setStatus] = useState<SandboxStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const check = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await call<SandboxStatus>('sandbox.status');
-      setStatus(result);
-    } catch {
-      setStatus(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [call]);
-
   useEffect(() => {
-    void check();
-    const interval = setInterval(check, 30_000); // Check every 30s
-    return () => clearInterval(interval);
-  }, [check]);
+    let ignore = false;
+    const run = async () => {
+      setLoading(true);
+      try {
+        const result = await call<SandboxStatus>('sandbox.status');
+        if (!ignore) setStatus(result);
+      } catch {
+        if (!ignore) setStatus(null);
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    };
+    void run();
+    const interval = setInterval(() => {
+      void run();
+    }, 30_000);
+    return () => {
+      ignore = true;
+      clearInterval(interval);
+    };
+  }, [call]);
 
   if (loading && !status) {
     return (
