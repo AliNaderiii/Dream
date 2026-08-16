@@ -139,6 +139,32 @@ interface EchoSession {
   provider: string;
 }
 
+/** Shape of the memory rows the echo store keeps (mirrors `BridgeMemory`). */
+interface EchoMemory {
+  id: number;
+  kind: string;
+  content: string;
+  tags: string[];
+  importance: number;
+  created_at: number;
+  last_used_at: number;
+  use_count: number;
+  source: string;
+  archived: boolean;
+  pinned: boolean;
+  score: number;
+}
+
+/** Shape of the skill rows the echo store keeps. */
+interface EchoSkill {
+  name: string;
+  description: string;
+  steps: string[];
+  filename: string;
+  enabled: boolean;
+  created_at: number;
+}
+
 let echoCounter = 0;
 
 const BROWSER_PROVIDER_CATALOG = {
@@ -254,6 +280,136 @@ interface EchoProviderConfig {
   supports_streaming: boolean;
 }
 
+const DAY_SECONDS = 86_400;
+
+/** Reads a string param, falling back when it is absent or the wrong type. */
+function readString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+/** Reads a numeric param, falling back when it is absent or the wrong type. */
+function readNumber(value: unknown, fallback: number): number {
+  const parsed = typeof value === 'number' ? value : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/** A small, deterministic memory corpus so the explorer has something to show. */
+function seedMemories(): EchoMemory[] {
+  const now = Math.floor(Date.now() / 1000);
+  const seeds: Array<[string, string, number, number, string[]]> = [
+    [
+      'semantic',
+      'Dream stores memories as semantic, episodic and procedural rows.',
+      0.9,
+      0,
+      ['core'],
+    ],
+    [
+      'semantic',
+      'The bridge speaks JSON-RPC 2.0 over stdio to the Python sidecar.',
+      0.8,
+      1,
+      ['bridge'],
+    ],
+    ['episodic', 'Reviewed the P-05 memory explorer wireframes this morning.', 0.5, 1, ['design']],
+    ['episodic', 'Paired on the skills import validation rules.', 0.4, 3, ['skills']],
+    [
+      'procedural',
+      'To export a skill: open Skills, select it, then choose Export.',
+      0.7,
+      4,
+      ['howto'],
+    ],
+    ['semantic', 'کاربر زبان فارسی را برای رابط کاربری ترجیح می‌دهد.', 0.6, 5, ['locale']],
+    ['episodic', 'Shipped the JSON-RPC sidecar supervisor in P-02.', 0.6, 9, ['release']],
+    [
+      'procedural',
+      'Run npm run typecheck before every commit to the desktop app.',
+      0.85,
+      12,
+      ['howto'],
+    ],
+    ['semantic', 'Importance is stored 0.0–1.0 and rendered as ten stars.', 0.3, 20, ['ui']],
+    ['episodic', 'Investigated a flaky reconnect test in the bridge suite.', 0.2, 33, ['bug']],
+  ];
+  return seeds.map(([kind, content, importance, daysAgo, tags], index) => ({
+    id: index + 1,
+    kind,
+    content,
+    tags,
+    importance,
+    created_at: now - daysAgo * DAY_SECONDS,
+    last_used_at: now - daysAgo * DAY_SECONDS,
+    use_count: 0,
+    source: 'echo',
+    archived: false,
+    pinned: false,
+    score: 0,
+  }));
+}
+
+/** Two example skills so the manager renders without a sidecar. */
+function seedSkills(): EchoSkill[] {
+  const now = Math.floor(Date.now() / 1000);
+  return [
+    {
+      name: 'weekly report',
+      description: 'Summarise the week from the session log.',
+      steps: ['Collect sessions from the past 7 days', 'Group them by project', 'Write a summary'],
+      filename: 'skills/weekly-report.txt',
+      enabled: true,
+      created_at: now - 6 * DAY_SECONDS,
+    },
+    {
+      name: 'triage inbox',
+      description: 'Sort incoming notes into projects.',
+      steps: ['Read each unfiled note', 'Match it to a project', 'Move or archive it'],
+      filename: 'skills/triage-inbox.txt',
+      enabled: false,
+      created_at: now - 20 * DAY_SECONDS,
+    },
+  ];
+}
+
+/** Renders an echo skill back to its file body, matching the sidecar's format. */
+function renderEchoSkill(skill: EchoSkill): string {
+  return [
+    `name: ${skill.name}`,
+    `description: ${skill.description}`,
+    'steps:',
+    ...skill.steps.map((step) => `- ${step}`),
+    '',
+  ].join('\n');
+}
+
+/** Very small skill-file parser used by the echo `skill.install` handler. */
+function parseEchoSkill(
+  content: string,
+): { name: string; description: string; steps: string[] } | null {
+  let name = '';
+  let description = '';
+  const steps: string[] = [];
+  let inSteps = false;
+  for (const raw of content.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const lower = line.toLowerCase();
+    if (lower.startsWith('name:')) {
+      name = line.slice(5).trim();
+      inSteps = false;
+    } else if (lower.startsWith('description:')) {
+      description = line.slice(12).trim();
+      inSteps = false;
+    } else if (lower.startsWith('steps:')) {
+      inSteps = true;
+    } else if (inSteps) {
+      steps.push(line.replace(/^[-*]\s*/, '').replace(/^\d+[.)]\s*/, ''));
+    }
+  }
+  if (!name || !description || steps.length === 0) return null;
+  return { name, description, steps };
+}
+
 /**
  * An in-memory transport that answers a useful subset of methods locally, so
  * the conversation UI is exercisable in a browser without the Python sidecar.
@@ -265,6 +421,9 @@ export class EchoBridgeTransport implements BridgeTransport {
   private providers = new Map<string, EchoProviderConfig>();
   private stateHandlers = new Set<(s: BridgeConnectionState) => void>();
   private startedAt = Date.now();
+  private memories: EchoMemory[] = seedMemories();
+  private skills: EchoSkill[] = seedSkills();
+  private nextMemoryId = this.memories.length + 1;
 
   onState(handler: (state: BridgeConnectionState) => void): () => void {
     this.stateHandlers.add(handler);
@@ -426,14 +585,139 @@ export class EchoBridgeTransport implements BridgeTransport {
         return { ok: true, provider: providerId, latency_ms: 8 };
       }
       case 'memory.list':
-      case 'memory.search':
-        return { memories: [] };
+        return this.echoMemoryList(params);
+      case 'memory.count': {
+        const active = this.memories.filter((m) => !m.archived);
+        const byKind: Record<string, number> = { semantic: 0, episodic: 0, procedural: 0 };
+        for (const m of active) byKind[m.kind] = (byKind[m.kind] ?? 0) + 1;
+        return {
+          total: active.length,
+          by_kind: byKind,
+          archived: this.memories.length - active.length,
+        };
+      }
+      case 'memory.search': {
+        const query = readString(params['query']).toLowerCase();
+        const limit = readNumber(params['limit'], 8);
+        return {
+          memories: this.memories
+            .filter((m) => !m.archived && m.content.toLowerCase().includes(query))
+            .slice(0, limit),
+        };
+      }
       case 'memory.get':
-        return null;
+        return this.memories.find((m) => m.id === readNumber(params['memory_id'], -1)) ?? null;
+      case 'memory.create': {
+        const now = Math.floor(Date.now() / 1000);
+        const memory: EchoMemory = {
+          id: this.nextMemoryId++,
+          kind: readString(params['kind'], 'semantic'),
+          content: readString(params['content']),
+          tags: Array.isArray(params['tags']) ? (params['tags'] as string[]) : [],
+          importance: readNumber(params['importance'], 0.5),
+          created_at: now,
+          last_used_at: now,
+          use_count: 0,
+          source: readString(params['source'], 'desktop'),
+          archived: false,
+          pinned: false,
+          score: 0,
+        };
+        this.memories.unshift(memory);
+        return { memory };
+      }
+      case 'memory.update': {
+        const memory = this.memories.find((m) => m.id === readNumber(params['memory_id'], -1));
+        if (!memory) {
+          throw new BridgeRpcError({ code: -32602, message: 'no such memory' });
+        }
+        if (typeof params['content'] === 'string') memory.content = params['content'];
+        if (typeof params['kind'] === 'string') memory.kind = params['kind'];
+        if (typeof params['importance'] === 'number') memory.importance = params['importance'];
+        if (Array.isArray(params['tags'])) memory.tags = params['tags'] as string[];
+        return { memory };
+      }
+      case 'memory.delete': {
+        const memoryId = readNumber(params['memory_id'], -1);
+        const memory = this.memories.find((m) => m.id === memoryId);
+        if (!memory) {
+          throw new BridgeRpcError({ code: -32602, message: 'no such memory' });
+        }
+        if (params['hard']) this.memories = this.memories.filter((m) => m.id !== memoryId);
+        else memory.archived = true;
+        return { deleted: true, memory_id: memoryId };
+      }
       case 'skill.list':
-        return { skills: [], problems: [] };
-      case 'skill.get':
-        return { match: null };
+        return {
+          skills: this.skills.map((s) => ({
+            name: s.name,
+            description: s.description,
+            steps: s.steps,
+            filename: s.filename,
+            enabled: s.enabled,
+          })),
+          problems: [],
+        };
+      case 'skill.get': {
+        const skill = this.findEchoSkill(params['skill_id'] ?? params['query']);
+        if (!skill) return { match: null };
+        return { match: { ...skill, content: renderEchoSkill(skill) } };
+      }
+      case 'skill.install': {
+        const content = readString(params['content']);
+        const parsed = parseEchoSkill(content);
+        if (!parsed) {
+          throw new BridgeRpcError({ code: -32602, message: 'invalid skill file' });
+        }
+        const name = readString(params['name'], parsed.name);
+        const existing = this.skills.find((s) => s.name === name);
+        if (existing && !params['overwrite']) {
+          return {
+            filename: existing.filename,
+            status: 'conflict',
+            name: existing.name,
+            conflict: true,
+            existing_filename: existing.filename,
+          };
+        }
+        const filename = `skills/${name.replace(/\s+/g, '-').toLowerCase()}.txt`;
+        const record: EchoSkill = {
+          name,
+          description: parsed.description,
+          steps: parsed.steps,
+          filename,
+          enabled: existing?.enabled ?? true,
+          created_at: Math.floor(Date.now() / 1000),
+        };
+        if (existing) Object.assign(existing, record);
+        else this.skills.push(record);
+        return { filename, status: 'installed', name };
+      }
+      case 'skill.delete':
+      case 'skill.remove': {
+        const skill = this.findEchoSkill(params['skill_id'] ?? params['name']);
+        if (!skill) {
+          throw new BridgeRpcError({ code: -32602, message: 'no such skill' });
+        }
+        this.skills = this.skills.filter((s) => s !== skill);
+        return { deleted: true, removed: true, filename: skill.filename, name: skill.name };
+      }
+      case 'skill.enable':
+      case 'skill.disable': {
+        const skill = this.findEchoSkill(params['skill_id'] ?? params['name']);
+        if (!skill) {
+          throw new BridgeRpcError({ code: -32602, message: 'no such skill' });
+        }
+        skill.enabled = method === 'skill.enable';
+        return { name: skill.name, filename: skill.filename, enabled: skill.enabled };
+      }
+      case 'skill.export': {
+        const skill = this.findEchoSkill(params['skill_id'] ?? params['name']);
+        if (!skill) {
+          throw new BridgeRpcError({ code: -32602, message: 'no such skill' });
+        }
+        return { name: skill.name, filename: skill.filename, content: renderEchoSkill(skill) };
+      }
       case 'tool.list':
         return {
           tools: [
@@ -453,6 +737,59 @@ export class EchoBridgeTransport implements BridgeTransport {
       default:
         throw new BridgeRpcError({ code: -32601, message: `echo: unknown method ${method}` });
     }
+  }
+
+  /** Filter, sort and page the in-memory corpus the way `memory.list` does. */
+  private echoMemoryList(params: RpcParams): unknown {
+    const rawKinds = params['kind_filter'];
+    const kinds =
+      rawKinds == null
+        ? null
+        : Array.isArray(rawKinds)
+          ? (rawKinds as string[])
+          : [readString(rawKinds)];
+    const query = readString(params['search_query']).trim().toLowerCase();
+    const dateFrom = params['date_from'] == null ? null : readNumber(params['date_from'], 0);
+    const dateTo = params['date_to'] == null ? null : readNumber(params['date_to'], 0);
+    const minImportance =
+      params['min_importance'] == null ? null : readNumber(params['min_importance'], 0);
+    const sortBy = readString(params['sort_by'], 'date_newest');
+    const limit = Math.max(1, Math.min(500, readNumber(params['limit'], 50)));
+    const cursor = Math.max(0, readNumber(params['cursor'], 0));
+    const includeArchived = Boolean(params['include_archived']);
+
+    let rows = this.memories.filter((m) => includeArchived || !m.archived);
+    if (kinds) rows = rows.filter((m) => kinds.includes(m.kind));
+    if (query) rows = rows.filter((m) => m.content.toLowerCase().includes(query));
+    if (dateFrom != null) rows = rows.filter((m) => m.created_at >= dateFrom);
+    if (dateTo != null) rows = rows.filter((m) => m.created_at <= dateTo);
+    if (minImportance != null) rows = rows.filter((m) => m.importance >= minImportance);
+
+    rows = [...rows];
+    if (sortBy === 'date_oldest') rows.sort((a, b) => a.created_at - b.created_at);
+    else if (sortBy === 'importance')
+      rows.sort((a, b) => b.importance - a.importance || b.created_at - a.created_at);
+    else rows.sort((a, b) => b.created_at - a.created_at);
+
+    const page = rows.slice(cursor, cursor + limit);
+    const hasMore = cursor + limit < rows.length;
+    return {
+      memories: page,
+      total: rows.length,
+      next_cursor: hasMore ? String(cursor + limit) : null,
+      has_more: hasMore,
+    };
+  }
+
+  /** Resolve a skill by bare name or `skills/<slug>.txt` id. */
+  private findEchoSkill(idOrName: unknown): EchoSkill | undefined {
+    if (typeof idOrName !== 'string' || !idOrName.trim()) return undefined;
+    const needle = idOrName.trim();
+    return (
+      this.skills.find((s) => s.name === needle) ??
+      this.skills.find((s) => s.filename === needle) ??
+      this.skills.find((s) => s.name.toLowerCase().includes(needle.toLowerCase()))
+    );
   }
 }
 

@@ -36,8 +36,6 @@ describe('app shell', () => {
   });
 
   it.each([
-    ['/memory', 'Memory explorer'],
-    ['/skills', 'Skills manager'],
     ['/projects', 'Projects'],
     ['/subagents', 'Subagents'],
     ['/provenance', 'Provenance'],
@@ -48,6 +46,16 @@ describe('app shell', () => {
     renderApp(route);
     // Level 2: the top bar repeats several of these words as its h1 page title.
     expect(screen.getByRole('heading', { level: 2, name: heading })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['/memory', 'Memory explorer'],
+    ['/skills', 'Skills manager'],
+  ])('renders the %s workspace', (route, label) => {
+    renderApp(route);
+    // These two routes are full workspaces rather than a single headed panel,
+    // so they are identified by their landmark rather than an h2.
+    expect(screen.getByRole('region', { name: label })).toBeInTheDocument();
   });
 
   it('redirects an unknown route to the dashboard', () => {

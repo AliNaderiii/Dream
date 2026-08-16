@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import threading
 import time
 import uuid
@@ -40,7 +41,7 @@ from dream.agent import (
     OpenAIBackend,
     build_backend,
 )
-from dream.memory import KINDS, Memory, MemoryStore
+from dream.memory import KINDS, Memory, MemoryStore, normalize_fa
 from dream.model_providers import (
     PROVIDER_CATALOG,
     AnthropicBackend,
@@ -49,6 +50,7 @@ from dream.model_providers import (
     OAuthPKCEManager,
     ProviderRegistry,
 )
+from dream.skills import SKILL_SUFFIX, parse_skill_text
 
 from .errors import APPROVAL_REQUIRED, BridgeError, invalid_params
 from .streams import Chunk, Stream, stream_text, tokenise
@@ -125,13 +127,119 @@ def turn_to_dict(turn: Any) -> dict[str, Any]:
     }
 
 
-def skill_to_dict(skill: Any) -> dict[str, Any]:
+def skill_to_dict(skill: Any, enabled: bool = True) -> dict[str, Any]:
     return {
         "name": skill.name,
         "description": skill.description,
         "steps": list(skill.steps),
         "filename": skill.filename,
+        "enabled": enabled,
     }
+
+
+def skill_detail_to_dict(
+    skill: Any, disabled: set[str] | None = None
+) -> dict[str, Any] | None:
+    """Full skill detail, including rendered file text and metadata.
+
+    Returns ``None`` when *skill* is ``None`` so callers can pass the result of
+    :func:`_resolve_skill` straight through.
+    """
+    if skill is None:
+        return None
+    from dream import skills as skills_module
+
+    created_at = 0.0
+    try:
+        leaf = skill.filename.split("/")[-1]
+        path = skills_module._skills_dir() / leaf
+        if path.exists():
+            created_at = path.stat().st_mtime
+    except OSError:
+        created_at = 0.0
+    return {
+        "name": skill.name,
+        "description": skill.description,
+        "steps": list(skill.steps),
+        "filename": skill.filename,
+        "enabled": skill.name not in (disabled or set()),
+        "created_at": created_at,
+        "content": skills_module.render_skill_text(
+            skill.name, skill.description, list(skill.steps)
+        ),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Sanitisation & safety — input validation shared by memory/skill CRUD.
+# --------------------------------------------------------------------------- #
+
+# Script/style blocks are stripped whole (they never belong in a memory).
+_SCRIPT_STYLE_RE = re.compile(
+    r"<(script|style)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL
+)
+# Inline event-handler attributes: onload=, onclick='...', onerror=...
+_ON_ATTR_RE = re.compile(
+    r"""\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.IGNORECASE
+)
+_JAVASCRIPT_RE = re.compile(r"javascript:", re.IGNORECASE)
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+# Absolute paths (unix / win) or parent traversal smuggled into a skill.
+_PATH_SKILL_RE = re.compile(r"\.\.[\\/]|\.[\\/]\.\.")
+_ABS_PATH_RE = re.compile(r"(?:^|[\s\"'])(/[^\s\"']+|[A-Za-z]:[\\/])")
+# Code-style imports of dangerous stdlib modules. Plain prose that uses the word
+# "import" (e.g. a skill literally named "import test") must NOT be flagged, so
+# only specific execution-capable modules are rejected.
+_DANGEROUS_MODULES = (
+    "os", "sys", "subprocess", "shutil", "pathlib", "socket", "ctypes",
+    "importlib", "pickle", "marshal", "builtins", "code", "io", "glob",
+    "tempfile", "platform",
+)
+_CODE_IMPORT_RE = re.compile(
+    r"^\s*(?:import\s+(?:"
+    + "|".join(_DANGEROUS_MODULES)
+    + r")\b|from\s+(?:"
+    + "|".join(_DANGEROUS_MODULES)
+    + r")\s+import\b)",
+    re.MULTILINE | re.IGNORECASE,
+)
+
+# Caps shared with the UI (see docs/bridge/protocol.md §3 memory/skill CRUD).
+MAX_MEMORY_CONTENT_BYTES = 50 * 1024
+MAX_SKILL_CONTENT_BYTES = 100 * 1024
+
+
+def _sanitize_memory_text(text: str) -> str:
+    """Strip script/style blocks, event-handler attrs and stray tags.
+
+    Memories are user prose, not markup. Removing script/style and inline
+    handlers neutralises the obvious stored-XSS vectors while keeping the text
+    the user actually wrote.
+    """
+    text = _SCRIPT_STYLE_RE.sub("", text)
+    text = _ON_ATTR_RE.sub("", text)
+    text = _JAVASCRIPT_RE.sub("", text)
+    text = _HTML_TAG_RE.sub("", text)
+    return text.strip()
+
+
+def _validate_skill_safety(name: str, description: str, steps: list[str]) -> None:
+    """Refuse skills that smuggle filesystem paths or code-style imports.
+
+    Skills are plain ``name:/description:/steps:`` prose. An absolute path or a
+    ``..`` traversal could be abused by an import; a Python ``import`` statement
+    at the start of a line is almost certainly code being mislabelled as a
+    procedure. Both are rejected with ``INVALID_PARAMS``.
+    """
+    joined = "\n".join(
+        [str(name), str(description), *[str(s) for s in steps]]
+    )
+    if _PATH_SKILL_RE.search(joined):
+        raise invalid_params("skill content must not contain '..' path segments")
+    if _ABS_PATH_RE.search(joined):
+        raise invalid_params("skill content must not contain absolute file paths")
+    if _CODE_IMPORT_RE.search(joined):
+        raise invalid_params("skill content must not contain import statements")
 
 
 def reminder_to_dict(reminder: Any) -> dict[str, Any]:
@@ -269,6 +377,7 @@ class BridgeMethods:
         *,
         sessions_path: str | None = None,
         providers_path: str | None = None,
+        disabled_skills_path: str | None = None,
         default_provider: str | None = None,
         credential_store: KeychainCredentialStore | None = None,
     ) -> None:
@@ -293,6 +402,13 @@ class BridgeMethods:
         self.oauth = OAuthPKCEManager(self.provider_registry)
 
         self._started_at = time.time()
+        self._disabled_skills_path = (
+            disabled_skills_path
+            or os.environ.get(
+                "DREAM_DISABLED_SKILLS_PATH", "data/bridge_disabled_skills.json"
+            )
+        )
+        self._disabled_skills: set[str] = self._load_disabled_skills()
         self._load_sessions_index()
 
         #: The dispatcher reads this to route method → handler.
@@ -304,6 +420,7 @@ class BridgeMethods:
         """Persist state and close the store. Safe to call more than once."""
         self._save_sessions_index()
         self._save_providers()
+        self._save_disabled_skills()
         try:
             self.store.close()
         except Exception:
@@ -337,10 +454,16 @@ class BridgeMethods:
             "memory.get": self.memory_get,
             "memory.update": self.memory_update,
             "memory.delete": self.memory_delete,
+            "memory.count": self.memory_count,
+            "memory.create": self.memory_create,
             "skill.list": self.skill_list,
             "skill.get": self.skill_get,
             "skill.install": self.skill_install,
-            "skill.remove": self.skill_remove,
+            "skill.remove": self.skill_delete,
+            "skill.delete": self.skill_delete,
+            "skill.enable": self.skill_enable,
+            "skill.disable": self.skill_disable,
+            "skill.export": self.skill_export,
             "tool.list": self.tool_list,
             "tool.execute": self.tool_execute,
             "approval.request": self.approval_request,
@@ -711,19 +834,152 @@ class BridgeMethods:
     # ------------------------------------------------------------------ #
 
     def memory_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """List memories with kind/search/date/importance filters, sort & cursor.
+
+        Returns a page plus ``total``/``next_cursor``/``has_more`` so the UI can
+        drive infinite scroll. Filtering is done in Python over the active set;
+        the store owns persistence, not query shaping.
+        """
         params = params or {}
-        kinds = params.get("kind")
-        if kinds is not None and not isinstance(kinds, list):
-            raise invalid_params("kind must be a list when provided")
+        kind_filter = params.get("kind_filter", params.get("kind"))
+        if kind_filter is not None and not isinstance(kind_filter, list):
+            kind_filter = [kind_filter]
+        if kind_filter and any(k not in KINDS for k in kind_filter):
+            raise invalid_params(f"kind_filter must contain one of {KINDS}")
         include_archived = bool(params.get("include_archived", False))
-        limit = params.get("limit")
+        search_query = params.get("search_query") or None
+        if search_query is not None and not str(search_query).strip():
+            search_query = None
+        date_from = params.get("date_from")
+        date_to = params.get("date_to")
+        min_importance = params.get("min_importance")
+        sort_by = str(params.get("sort_by") or "date_newest")
+        if sort_by not in ("relevance", "date_newest", "date_oldest", "importance"):
+            raise invalid_params(
+                "sort_by must be one of relevance|date_newest|date_oldest|importance"
+            )
+        try:
+            limit = int(params.get("limit", 50))
+        except (TypeError, ValueError) as exc:
+            raise invalid_params("limit must be an integer") from exc
+        if limit <= 0 or limit > 500:
+            raise invalid_params("limit must be between 1 and 500")
+        try:
+            cursor = int(params.get("cursor", 0) or 0)
+        except (TypeError, ValueError) as exc:
+            raise invalid_params("cursor must be an integer") from exc
+        if cursor < 0:
+            cursor = 0
+
         kwargs: dict[str, Any] = {"include_archived": include_archived}
-        if kinds is not None:
-            kwargs["kinds"] = kinds
-        if isinstance(limit, int) and limit > 0:
-            kwargs["limit"] = limit
-        memories = [memory_to_dict(m) for m in self.store.all(**kwargs)]
-        return {"memories": memories}
+        if kind_filter:
+            kwargs["kinds"] = kind_filter
+        memories = self.store.all(**kwargs)
+
+        # Non-kind filters applied over the (bounded) active set.
+        if search_query:
+            nq = normalize_fa(str(search_query)).strip().lower()
+            memories = [m for m in memories if nq in m.norm.lower()]
+        if date_from is not None:
+            try:
+                memories = [m for m in memories if float(m.created_at) >= float(date_from)]
+            except (TypeError, ValueError):
+                pass
+        if date_to is not None:
+            try:
+                memories = [m for m in memories if float(m.created_at) <= float(date_to)]
+            except (TypeError, ValueError):
+                pass
+        if min_importance is not None:
+            try:
+                memories = [
+                    m for m in memories if float(m.importance) >= float(min_importance)
+                ]
+            except (TypeError, ValueError):
+                pass
+
+        def _relevance(m: Memory) -> float:
+            if not search_query:
+                return 0.0
+            q_tokens = set(normalize_fa(str(search_query)).split())
+            if not q_tokens:
+                return 0.0
+            return len(q_tokens & set(m.norm.split())) / len(q_tokens)
+
+        if sort_by == "relevance" and search_query:
+            memories.sort(key=lambda m: (_relevance(m), m.created_at), reverse=True)
+        elif sort_by == "date_oldest":
+            memories.sort(key=lambda m: m.created_at)
+        elif sort_by == "importance":
+            memories.sort(key=lambda m: (m.importance, m.created_at), reverse=True)
+        else:  # date_newest
+            memories.sort(key=lambda m: m.created_at, reverse=True)
+
+        total = len(memories)
+        page = memories[cursor : cursor + limit]
+        has_more = cursor + limit < total
+        next_cursor = str(cursor + limit) if has_more else None
+        return {
+            "memories": [memory_to_dict(m) for m in page],
+            "total": total,
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+        }
+
+    def memory_count(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Counts for dashboard badges, optionally scoped by kind_filter."""
+        params = params or {}
+        kind_filter = params.get("kind_filter")
+        if kind_filter is not None and not isinstance(kind_filter, list):
+            kind_filter = [kind_filter]
+        if kind_filter and any(k not in KINDS for k in kind_filter):
+            raise invalid_params(f"kind_filter must contain one of {KINDS}")
+        kwargs: dict[str, Any] = {}
+        if kind_filter:
+            kwargs["kinds"] = kind_filter
+        active = self.store.all(include_archived=False, **kwargs)
+        by_kind = {k: 0 for k in KINDS}
+        for m in active:
+            if m.kind in by_kind:
+                by_kind[m.kind] += 1
+        all_rows = self.store.all(include_archived=True)
+        archived = sum(1 for m in all_rows if m.archived)
+        return {"total": len(active), "by_kind": by_kind, "archived": archived}
+
+    def memory_create(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Create a new memory (semantic/episodic/procedural) via manual entry."""
+        params = params or {}
+        content = params.get("content")
+        if not isinstance(content, str) or not content.strip():
+            raise invalid_params("content must be a non-empty string")
+        if len(content.encode("utf-8")) > MAX_MEMORY_CONTENT_BYTES:
+            raise invalid_params("memory content exceeds the 50KB limit")
+        content = _sanitize_memory_text(content)
+        kind = str(params.get("kind") or "semantic")
+        if kind not in KINDS:
+            raise invalid_params(f"kind must be one of {KINDS}")
+        importance = params.get("importance", 0.5)
+        try:
+            importance = float(importance)
+        except (TypeError, ValueError) as exc:
+            raise invalid_params("importance must be a number") from exc
+        if not 0.0 <= importance <= 1.0:
+            raise invalid_params("importance must be between 0.0 and 1.0")
+        tags = params.get("tags")
+        if tags is not None and not isinstance(tags, list):
+            raise invalid_params("tags must be a list")
+        source = str(params.get("source") or "manual")
+        try:
+            memory = self.store.remember(
+                content,
+                kind=kind,
+                tags=tags or None,
+                importance=importance,
+                source=source,
+            )
+        except ValueError as exc:
+            raise invalid_params(str(exc)) from exc
+        return {"memory": memory_to_dict(memory)}
 
     def memory_search(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
@@ -731,7 +987,12 @@ class BridgeMethods:
         if not isinstance(query, str) or not query.strip():
             raise invalid_params("query must be a non-empty string")
         limit = int(params.get("limit", 8))
-        memories = [memory_to_dict(m) for m in self.store.recall(query, limit=limit)]
+        kinds = params.get("kinds")
+        if kinds is not None and not isinstance(kinds, list):
+            raise invalid_params("kinds must be a list when provided")
+        memories = [
+            memory_to_dict(m) for m in self.store.recall(query, limit=limit, kinds=kinds)
+        ]
         return {"memories": memories}
 
     def memory_get(self, params: dict[str, Any] | None = None) -> dict[str, Any] | None:
@@ -786,50 +1047,165 @@ class BridgeMethods:
 
         loaded, problems = skills_module.load_skills()
         return {
-            "skills": [skill_to_dict(s) for s in loaded],
+            "skills": [
+                skill_to_dict(s, enabled=s.name not in self._disabled_skills) for s in loaded
+            ],
             "problems": [{"filename": p.filename, "detail": p.detail} for p in problems],
         }
 
     def skill_get(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
+        skill_id = params.get("skill_id")
         query = params.get("query")
-        if not isinstance(query, str) or not query.strip():
-            raise invalid_params("query must be a non-empty string")
-        from dream import skills as skills_module
+        skill = None
+        if skill_id is not None:
+            skill = self._resolve_skill(skill_id)
+        elif query is not None:
+            from dream import skills as skills_module
 
-        skill = skills_module.find_skill(query, permissive=True)
-        return {"match": skill_to_dict(skill) if skill else None}
+            skill = skills_module.find_skill(str(query), permissive=True)
+        return {"match": skill_detail_to_dict(skill, self._disabled_skills)}
 
     def skill_install(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Install a skill — either structured fields or a pasted/imported body.
+
+        ``content`` carries a full skill file (the paste/import path); when given
+        it is parsed and its fields default the structured ones. ``overwrite``
+        controls conflict behaviour: when a same-named skill exists and
+        ``overwrite`` is false the call returns ``status: "conflict"`` (with the
+        existing filename) instead of raising, so the UI can offer diff/overwrite/
+        rename.
+        """
         params = params or {}
+        content = params.get("content")
         name = params.get("name")
         description = params.get("description")
         steps = params.get("steps")
+        overwrite = bool(params.get("overwrite", False))
+
+        if content is not None and not isinstance(content, str):
+            raise invalid_params("content must be a string")
+        if content is not None:
+            if len(content.encode("utf-8")) > MAX_SKILL_CONTENT_BYTES:
+                raise invalid_params("skill content exceeds the 100KB limit")
+            try:
+                parsed_name, parsed_desc, parsed_steps = parse_skill_text(content)
+            except ValueError as exc:
+                raise invalid_params(f"invalid skill file: {exc}") from exc
+            name = name or parsed_name
+            description = description or parsed_desc
+            steps = steps or parsed_steps
+
         if not isinstance(name, str) or not name.strip():
             raise invalid_params("name must be a non-empty string")
         if not isinstance(description, str) or not description.strip():
             raise invalid_params("description must be a non-empty string")
         if not isinstance(steps, list) or not steps:
             raise invalid_params("steps must be a non-empty list")
+
+        _validate_skill_safety(name, description, steps)
+
         from dream import skills as skills_module
+
+        loaded, _ = skills_module.load_skills()
+        existing = next((s for s in loaded if s.name == name.strip()), None)
+        if existing is not None and not overwrite:
+            return {
+                "filename": existing.filename,
+                "status": "conflict",
+                "name": existing.name,
+                "conflict": True,
+                "existing_filename": existing.filename,
+            }
 
         filename = skills_module.save_skill(name, description, steps)
-        return {"filename": filename, "status": "installed"}
+        return {"filename": filename, "status": "installed", "name": name.strip()}
 
     def skill_remove(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        # Kept for backward compatibility; delegates to the id-based delete but
+        # preserves the legacy ``removed`` key the old handler returned.
+        result = self.skill_delete(params)
+        return {"removed": result.get("deleted", False), "filename": result.get("filename")}
+
+    def skill_delete(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
-        name = params.get("name")
-        if not isinstance(name, str) or not name.strip():
-            raise invalid_params("name must be a non-empty string")
-        from dream import skills as skills_module
+        skill_id = params.get("skill_id") or params.get("name")
+        if not isinstance(skill_id, str) or not skill_id.strip():
+            raise invalid_params("skill_id must be a non-empty string")
+        skill = self._resolve_skill(skill_id)
+        if skill is None:
+            raise invalid_params(f"no skill matches {skill_id!r}")
         from dream.tools import _safe_path
 
-        cleaned = skills_module.validate_name(name)
-        path = _safe_path(f"skills/{cleaned}.txt")
+        path = _safe_path(skill.filename)
         if not path.exists():
-            raise invalid_params(f"no skill named {cleaned!r}")
+            raise invalid_params(f"no skill file for {skill.filename!r}")
         path.unlink()
-        return {"removed": True, "filename": f"skills/{cleaned}.txt"}
+        self._disabled_skills.discard(skill.name)
+        self._save_disabled_skills()
+        return {"deleted": True, "filename": skill.filename, "name": skill.name}
+
+    def skill_enable(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        skill_id = params.get("skill_id") or params.get("name")
+        if not isinstance(skill_id, str) or not skill_id.strip():
+            raise invalid_params("skill_id must be a non-empty string")
+        skill = self._resolve_skill(skill_id)
+        if skill is None:
+            raise invalid_params(f"no skill matches {skill_id!r}")
+        self._disabled_skills.discard(skill.name)
+        self._save_disabled_skills()
+        return {"name": skill.name, "filename": skill.filename, "enabled": True}
+
+    def skill_disable(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        skill_id = params.get("skill_id") or params.get("name")
+        if not isinstance(skill_id, str) or not skill_id.strip():
+            raise invalid_params("skill_id must be a non-empty string")
+        skill = self._resolve_skill(skill_id)
+        if skill is None:
+            raise invalid_params(f"no skill matches {skill_id!r}")
+        self._disabled_skills.add(skill.name)
+        self._save_disabled_skills()
+        return {"name": skill.name, "filename": skill.filename, "enabled": False}
+
+    def skill_export(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        skill_id = params.get("skill_id") or params.get("name")
+        if not isinstance(skill_id, str) or not skill_id.strip():
+            raise invalid_params("skill_id must be a non-empty string")
+        skill = self._resolve_skill(skill_id)
+        if skill is None:
+            raise invalid_params(f"no skill matches {skill_id!r}")
+        from dream import skills as skills_module
+
+        content = skills_module.render_skill_text(
+            skill.name, skill.description, list(skill.steps)
+        )
+        return {"name": skill.name, "filename": skill.filename, "content": content}
+
+    # -- skill helpers ----------------------------------------------------- #
+
+    def _resolve_skill(self, name_or_id: str) -> Any | None:
+        """Resolve a skill from a filename, ``name``, or ``skills/name.txt`` id."""
+        from dream import skills as skills_module
+
+        raw = str(name_or_id).strip()
+        cleaned = raw
+        if cleaned.startswith("skills/"):
+            cleaned = cleaned[len("skills/"):]
+        if cleaned.endswith(SKILL_SUFFIX):
+            cleaned = cleaned[: -len(SKILL_SUFFIX)]
+        loaded, _ = skills_module.load_skills()
+        for skill in loaded:
+            if (
+                skill.filename == raw
+                or skill.name == raw
+                or skill.name == cleaned
+                or skill.filename == f"skills/{cleaned}{SKILL_SUFFIX}"
+            ):
+                return skill
+        return skills_module.find_skill(raw, permissive=True)
 
     # ------------------------------------------------------------------ #
     # tool.*
@@ -1086,6 +1462,22 @@ class BridgeMethods:
     def _save_providers(self) -> None:
         self.provider_registry.default_provider = self._default_provider
         self.provider_registry._save()
+
+    def _load_disabled_skills(self) -> set[str]:
+        """Load the set of disabled skill names; missing/corrupt → empty set."""
+        try:
+            with open(self._disabled_skills_path, encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, ValueError):
+            return set()
+        if isinstance(data, list):
+            return {str(n) for n in data if n}
+        if isinstance(data, dict) and isinstance(data.get("disabled"), list):
+            return {str(n) for n in data["disabled"] if n}
+        return set()
+
+    def _save_disabled_skills(self) -> None:
+        self._write_json(self._disabled_skills_path, sorted(self._disabled_skills))
 
     def _load_sessions_index(self) -> None:
         try:
