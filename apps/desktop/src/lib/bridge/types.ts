@@ -269,6 +269,146 @@ export interface SkillExportResult {
   content: string;
 }
 
+// --------------------------------------------------------------------------- //
+// Subagents — mirrors `subagent_to_dict` in `dream/subagents.py`.
+// --------------------------------------------------------------------------- //
+
+/** Lifecycle states a subagent can be in. Mirrors `SUBAGENT_STATUSES`. */
+export const SUBAGENT_STATUSES = [
+  'idle',
+  'running',
+  'paused',
+  'completed',
+  'failed',
+  'cancelled',
+  'timeout',
+] as const;
+
+export type SubAgentStatus = (typeof SUBAGENT_STATUSES)[number];
+
+/** States from which a subagent will never move again. */
+export const TERMINAL_SUBAGENT_STATUSES: readonly SubAgentStatus[] = [
+  'completed',
+  'failed',
+  'cancelled',
+  'timeout',
+];
+
+/** Whether a subagent has finished for good. */
+export function isTerminalStatus(status: SubAgentStatus): boolean {
+  return TERMINAL_SUBAGENT_STATUSES.includes(status);
+}
+
+/** One line of a subagent's activity log. */
+export interface BridgeLogEntry {
+  ts: number;
+  level: string;
+  message: string;
+}
+
+/** A spawned subagent and its live counters. */
+export interface BridgeSubagent {
+  subagent_id: string;
+  id: string;
+  name: string;
+  parent_session_id: string | null;
+  model_provider: string;
+  model_name: string;
+  system_prompt: string;
+  tools: string[];
+  prompt: string;
+  context: string;
+  status: SubAgentStatus;
+  created_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+  max_turns: number;
+  max_tokens: number;
+  max_duration: number;
+  turn_count: number;
+  token_count: number;
+  result: string | null;
+  error: string | null;
+  pipeline_id: string | null;
+  pipeline_index: number | null;
+  /** Which limit ended the run — `turns`, `tokens` or `duration`. */
+  limit_hit: string | null;
+  elapsed: number;
+  /** 0–1, the highest of the turn, token and time ratios. */
+  progress: number;
+  /** Omitted by `subagent.list`, which returns rows without their logs. */
+  log?: BridgeLogEntry[];
+}
+
+/** `subagent.spawn` parameters. Limits fall back to the sidecar defaults. */
+export interface SpawnSubagentParams extends RpcParams {
+  prompt: string;
+  name?: string;
+  context?: string;
+  system_prompt?: string;
+  model_provider?: string;
+  model_name?: string;
+  tools?: string[];
+  max_turns?: number;
+  max_tokens?: number;
+  max_duration?: number;
+  parent_session_id?: string | null;
+}
+
+// --------------------------------------------------------------------------- //
+// Schedules — mirrors `schedule_to_dict` / `run_to_dict` in `dream/scheduler.py`.
+// --------------------------------------------------------------------------- //
+
+/** Outcome of one scheduled execution. Mirrors `RUN_STATUSES`. */
+export type ScheduleRunStatus = 'running' | 'success' | 'error' | 'approval_denied';
+
+/** A recurring prompt and its next fire time. */
+export interface BridgeSchedule {
+  schedule_id: string;
+  id: string;
+  name: string;
+  description: string;
+  cron_expression: string;
+  /** The phrase the user typed, kept so the form can round-trip it. */
+  natural_language: string | null;
+  /** Server-rendered reading of the cron expression. */
+  human: string;
+  prompt: string;
+  session_id: string | null;
+  enabled: boolean;
+  last_run: number | null;
+  next_run: number | null;
+  created_at: number;
+  max_runs: number | null;
+  run_count: number;
+  require_approval: boolean;
+  /** True once `run_count` has reached `max_runs`. */
+  exhausted: boolean;
+  /** Only `schedule.get` includes recent history. */
+  runs?: BridgeScheduleRun[];
+}
+
+/** One row of a schedule's execution history. */
+export interface BridgeScheduleRun {
+  id: number;
+  schedule_id: string;
+  started_at: number;
+  completed_at: number | null;
+  duration: number | null;
+  result_summary: string;
+  status: ScheduleRunStatus;
+}
+
+/** `schedule.preview` result — never throws, reports invalid input inline. */
+export interface SchedulePreview {
+  valid: boolean;
+  cron_expression: string | null;
+  human: string | null;
+  next_run: number | null;
+  natural_language: string | null;
+  error: string | null;
+}
+
 /** Connection lifecycle of the bridge, surfaced in the status bar. */
 export type BridgeConnectionState = 'connecting' | 'ready' | 'reconnecting' | 'disconnected';
 
@@ -278,4 +418,8 @@ export interface StreamChunk {
   token: string;
   /** Reserved for future non-text chunk kinds (tool calls, etc.). */
   event?: string;
+  /** Subagent that produced this chunk, on `subagent.logs` streams. */
+  subagent_id?: string;
+  /** Structured log line, on `subagent.logs` streams. */
+  entry?: BridgeLogEntry;
 }

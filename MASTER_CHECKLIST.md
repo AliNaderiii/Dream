@@ -62,6 +62,35 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 - [ ] 2.3 Memory explorer + timeline; reminders
 - [ ] 2.4 Skills manager
 
+### 2.5 Subagent system (Prompt P-06)
+- [x] 2.5.1 Architecture of record → `docs/architecture/subagents.md` (Gate G1)
+- [x] 2.5.2 `SubAgent` data model + lifecycle (idle → running → paused →
+  completed/failed/cancelled/timeout) — `dream/subagents.py` (Gate G2)
+- [x] 2.5.3 Resource limits enforced: max turns, max tokens, max wall clock,
+  whichever trips first (Gate G3)
+- [x] 2.5.4 Isolation: own asyncio Task, own `Dream`, ephemeral in-memory store,
+  restricted tool registry — no parent memory access (Gate G4)
+- [x] 2.5.5 `SubAgentManager`: spawn / get / list / cancel / pause / resume,
+  graceful cancellation with grace period then force kill
+- [x] 2.5.6 Pipeline chaining — each stage's result becomes the next's context (Gate G5)
+- [x] 2.5.7 RPC: `subagent.spawn|pipeline|list|get|status|cancel|pause|resume|logs`
+  with log streaming and cancel under 2 s (Gate G6)
+- [ ] 2.5.8 Subagent dashboard UI: status badges, progress bars, detail view,
+  live log, cancel/pause/resume, spawn dialog, pipeline builder (Gate G6)
+
+### 2.6 Scheduler (Prompt P-06)
+- [x] 2.6.1 `Schedule` + `ScheduleRun` models and CRUD over `MemoryStore` — `dream/scheduler.py`
+- [x] 2.6.2 Cron engine (5-field parse, `next_run_after`, human descriptions) — `dream/cron.py`
+- [x] 2.6.3 `nl_to_cron` pattern matcher, 20+ English and Persian phrasings, no
+  model call — `dream/nl_schedule.py` (Gate G7)
+- [x] 2.6.4 Scheduler daemon: 30 s poll, session reuse, fail-closed approval gate (Gate G8)
+- [x] 2.6.5 Execution history with status and duration (Gate G10)
+- [x] 2.6.6 RPC: `schedule.create|list|get|update|delete|toggle|history|preview|run_now|approve`
+- [ ] 2.6.7 Scheduler UI: schedule cards, live cron preview, history timeline,
+  edit/delete confirmation (Gate G9)
+- [x] 2.6.8 Security: children cannot reach parent files or memory; scheduled
+  dangerous tools require approval (Gate G11)
+
 ## Phase 3 — Projects, Subagents & Provenance (Prompt P-03)
 - [ ] 3.1 Project dashboard; file browser
 - [ ] 3.2 Subagent monitor

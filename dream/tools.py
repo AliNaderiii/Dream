@@ -15,7 +15,7 @@ import logging
 import os
 import socket
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from html.parser import HTMLParser
@@ -149,22 +149,28 @@ def tool(*, risk: str = "safe") -> Callable[[Callable[..., Any]], Callable[..., 
     return register
 
 
-def openai_schemas() -> list[dict[str, Any]]:
-    """Return registered tools in OpenAI's function-tool format."""
+def openai_schemas(registry: Mapping[str, Tool] | None = None) -> list[dict[str, Any]]:
+    """Return registered tools in OpenAI's function-tool format.
+
+    ``registry`` narrows the export to a private table. Subagents are granted a
+    subset of the tools their parent holds, and the model must not be told
+    about capabilities it will be refused, so the schema list and the dispatch
+    table have to come from the same mapping.
+    """
     return [
         {
             "type": "function",
             "function": {"name": t.name, "description": t.description, "parameters": t.schema},
         }
-        for t in REGISTRY.values()
+        for t in (REGISTRY if registry is None else registry).values()
     ]
 
 
-def anthropic_schemas() -> list[dict[str, Any]]:
+def anthropic_schemas(registry: Mapping[str, Tool] | None = None) -> list[dict[str, Any]]:
     """Return registered tools in Anthropic's tool format."""
     return [
         {"name": t.name, "description": t.description, "input_schema": t.schema}
-        for t in REGISTRY.values()
+        for t in (REGISTRY if registry is None else registry).values()
     ]
 
 
@@ -694,14 +700,24 @@ def _failure_payload(error_type: str, message: str) -> dict[str, Any]:
     return {"status": "error", "error": {"type": error_type, "message": message}}
 
 
-def execute(name: str, arguments: dict[str, Any], *, approved: bool = False) -> str:
+def execute(
+    name: str,
+    arguments: dict[str, Any],
+    *,
+    approved: bool = False,
+    registry: Mapping[str, Tool] | None = None,
+) -> str:
     """Run a registered tool and JSON-encode its result or error.
 
     Dangerous tools remain blocked unless an approval gate explicitly passes
     ``approved=True``. This keeps direct callers fail-closed while allowing the
     agent runtime to enforce a human decision on its execution path.
+
+    ``registry`` dispatches against a private table instead of the process
+    global. A tool absent from that table is reported as unknown, which is the
+    correct answer for a subagent: the capability does not exist for it.
     """
-    registered = REGISTRY.get(name)
+    registered = (REGISTRY if registry is None else registry).get(name)
     if registered is None:
         return json.dumps(
             _failure_payload("unknown_tool", f"Tool call failed: unknown tool: {name}"),

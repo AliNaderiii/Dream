@@ -38,7 +38,6 @@ from dream.bridge.methods import (
     ApprovalState,
     BridgeMethods,
     SessionState,
-    SubagentState,
     build_configured_backend,
     memory_to_dict,
     reminder_to_dict,
@@ -62,6 +61,8 @@ from dream.bridge.streams import (
     stream_text,
     tokenise,
 )
+from dream.scheduler import Schedule, SchedulerDaemon
+from dream.subagents import SubAgent, SubAgentManager, SubAgentSpec
 
 __all__ = [
     "APPROVAL_REQUIRED",
@@ -88,7 +89,11 @@ __all__ = [
     "StdinLineReader",
     "StdoutLineWriter",
     "Stream",
-    "SubagentState",
+    "SubAgent",
+    "SubAgentManager",
+    "SubAgentSpec",
+    "Schedule",
+    "SchedulerDaemon",
     "TOOL_ERROR",
     "build_configured_backend",
     "error_from_code",

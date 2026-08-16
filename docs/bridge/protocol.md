@@ -247,23 +247,104 @@ id and risk tier (the sidecar computes a short, human-readable `summary`).
 returns its result; `allowed: false` returns the standard blocked payload. A
 resolved approval cannot be reused.
 
-### 3.8 `subagent.*` — background work
+### 3.8 `subagent.*` — isolated background agents
 
 | Method | Params | Result |
 | --- | --- | --- |
-| `subagent.spawn` | `{message, session_id?, provider?}` | `{subagent_id, status: "running"}` |
-| `subagent.list` | `{}` | `{subagents: Subagent[]}` |
-| `subagent.status` | `{subagent_id}` | `Subagent` |
-| `subagent.cancel` | `{subagent_id}` | `{cancelled: true}` |
+| `subagent.spawn` | `SpawnSpec` | `Subagent` |
+| `subagent.pipeline` | `{stages: SpawnSpec[], name?, ...SpawnSpec}` | `{pipeline_id, subagents: Subagent[]}` |
+| `subagent.list` | `{pipeline_id?, session_id?}` | `{subagents: Subagent[], active: number}` |
+| `subagent.get` | `{subagent_id}` | `Subagent` (with `log`) |
+| `subagent.status` | `{subagent_id}` | alias of `subagent.get` |
+| `subagent.cancel` | `{subagent_id, grace_seconds?}` | `Subagent & {cancelled: true}` |
+| `subagent.pause` | `{subagent_id}` | `Subagent` |
+| `subagent.resume` | `{subagent_id}` | `Subagent` |
+| `subagent.logs` * | `{subagent_id}` | `Subagent` (chunks are log entries) |
 
-`Subagent = {id, status: "running"\|"completed"\|"failed"\|"cancelled", result?: Turn, error?: string, created_at, finished_at?}`
+```jsonc
+// SpawnSpec — only `prompt` is required (`message` is accepted as a legacy alias).
+{
+  "prompt": "Summarise the release notes",
+  "name": "summariser",
+  "context": "read-only text handed down from the parent",
+  "system_prompt": "You are terse.",
+  "provider": "echo",              // or "model_provider"
+  "model_name": "gpt-4o-mini",
+  "tools": ["calculate", "get_datetime"],   // subset of the parent registry
+  "max_turns": 8, "max_tokens": 8000, "max_duration": 120,
+  "session_id": "sess_…",          // parent session, for filtering only
+  "allow_dangerous": false          // dangerous tools stay out unless set
+}
+```
 
-A subagent runs one Dream turn in the background and reports its `Turn` as
-`result` when it completes. `cancel` marks it cancelled; a running Python turn
-is best-effort (it finishes the in-flight provider call then observes the
-cancelled flag).
+`Subagent = {id, subagent_id, name, prompt, context, status, result?, error?,
+progress, turn_count, token_count, elapsed, limit_hit?, tools, pipeline_id?,
+pipeline_index?, created_at, started_at?, finished_at?, max_turns, max_tokens,
+max_duration, log?}`
 
-### 3.9 `health.check` / `sidecar.version`
+`status ∈ idle | running | paused | completed | failed | cancelled | timeout`.
+`result` is the child's final reply **as a plain string**. `progress` is the
+largest of the three budget ratios (turns, tokens, wall clock) in `0..1`.
+
+Isolation (gate G4): each child runs in its own asyncio Task with its own
+`Dream` instance, its own **ephemeral in-memory store**, and a tool registry
+restricted to `tools`. It can neither read the parent's memories nor see its
+sibling's state. `context` is the only channel from parent to child, and the
+returned string is the only channel back.
+
+`subagent.pipeline` chains stages: stage *n*'s result becomes stage *n+1*'s
+`context`. Keys given alongside `stages` act as defaults for every stage. If a
+stage fails or is cancelled, the remaining stages are skipped.
+
+`subagent.cancel` signals the child, waits out a short grace period and then
+kills the task; it only returns once the status is terminal, which is inside
+the 2-second budget of gate G6. Exceeding `max_concurrent` children raises
+`RESOURCE_EXHAUSTED (-32007)`.
+
+`subagent.logs` streams the log: history is replayed first, then live lines
+arrive as `stream.chunk` notifications of shape
+`{subagent_id, entry: {ts, level, message}, token}` until the child finishes.
+
+### 3.9 `schedule.*` — cron & natural-language schedules
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `schedule.create` | `{name, prompt, cron_expression? \| natural_language?, description?, session_id?, enabled?, max_runs?, require_approval?}` | `Schedule` |
+| `schedule.list` | `{include_disabled?: boolean}` | `{schedules: Schedule[]}` |
+| `schedule.get` | `{schedule_id}` | `Schedule & {runs: Run[]}` |
+| `schedule.update` | `{schedule_id, ...fields}` | `Schedule` |
+| `schedule.delete` | `{schedule_id}` | `{deleted: true, schedule_id}` |
+| `schedule.toggle` | `{schedule_id, enabled?}` | `Schedule` |
+| `schedule.history` | `{schedule_id?, limit?}` | `{runs: Run[]}` |
+| `schedule.preview` | `{natural_language \| text}` | `{valid, cron_expression?, human?, next_run?, error?}` |
+| `schedule.run_now` | `{schedule_id}` | `{schedule, run}` |
+| `schedule.approve` | `{approval_id, allowed?}` | `{approval_id, allowed}` |
+
+`Schedule = {id, schedule_id, name, description, cron_expression, human,
+natural_language, prompt, session_id?, enabled, last_run?, next_run?,
+created_at, max_runs?, run_count, exhausted, require_approval}`
+
+`Run = {id, schedule_id, started_at, completed_at?, duration, status,
+result_summary, error?}` with `status ∈ running | success | error |
+approval_denied`.
+
+Either `cron_expression` or `natural_language` must be supplied; prose is
+translated by `dream.nl_schedule.nl_to_cron`, a **pattern matcher with no model
+call** that understands English and Persian ("every weekday at 6 PM" →
+`0 18 * * 1-5`, "هر روز ساعت ۹ صبح" → `0 9 * * *`). Unparseable prose is an
+`INVALID_PARAMS` error rather than a guess; `schedule.preview` reports the same
+failure as `{valid: false, error}` without raising, so the UI can show a live
+cron preview while the user is still typing.
+
+The daemon polls every 30 s, executes due schedules through the configured
+session (creating a throwaway one if `session_id` is unset), then advances
+`next_run` and appends a history row. Schedules with `require_approval: true`
+register a pending approval and **block** until `schedule.approve` answers it;
+a timeout, a cancellation or a missing UI all deny the run (fail-closed, gate
+G11) and log it as `approval_denied`. When `run_count` reaches `max_runs` the
+schedule is disabled and `next_run` is cleared.
+
+### 3.10 `health.check` / `sidecar.version`
 
 | Method | Params | Result |
 | --- | --- | --- |
@@ -406,6 +487,16 @@ The sidecar may emit notifications with **no** `id`:
   it performs no `setuid`/elevation and opens no privileged sockets.
 - **Bounded input.** Line length (10 MiB), queue depth (128), and concurrency
   (16) are all capped to resist resource exhaustion.
+- **Subagent containment.** A child agent gets an ephemeral in-memory store and
+  an explicit tool subset, so it cannot read the parent's memories or reach the
+  workspace through a tool the parent did not grant. `dangerous` tools are
+  filtered out of every child registry unless the parent passes
+  `allow_dangerous`, and children are bounded by turn, token and wall-clock
+  budgets plus a global concurrency cap.
+- **Scheduled runs are gated.** A schedule with `require_approval` cannot
+  execute until a human resolves its approval; the gate fails **closed** on
+  timeout, cancellation or a missing UI, and the denial is written to the
+  execution history.
 
 ---
 
@@ -427,3 +518,5 @@ The sidecar may emit notifications with **no** `id`:
 | Streaming helpers | `dream/bridge/streams.py` | `bridge/dispatcher.rs` | `lib/bridge/client.ts` |
 | Process supervision | — | `bridge/process.rs` | `lib/bridge/hooks.ts` (reconnect) |
 | Connection state | — | `bridge/state.rs` | `lib/bridge/hooks.ts` |
+| Subagent runtime | `dream/subagents.py` | — | `routes/subagents.tsx` |
+| Scheduler & cron | `dream/scheduler.py`, `dream/cron.py`, `dream/nl_schedule.py` | — | `routes/schedules.tsx` |

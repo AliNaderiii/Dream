@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import threading
@@ -33,6 +34,7 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from dream import scheduler
 from dream.agent import (
     ApprovalPolicy,
     Dream,
@@ -50,10 +52,23 @@ from dream.model_providers import (
     OAuthPKCEManager,
     ProviderRegistry,
 )
+from dream.nl_schedule import ScheduleParseError
+from dream.scheduler import Schedule, run_to_dict, schedule_to_dict
 from dream.skills import SKILL_SUFFIX, parse_skill_text
+from dream.subagents import (
+    DEFAULT_MAX_DURATION,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_MAX_TURNS,
+    SubAgent,
+    SubAgentManager,
+    SubAgentSpec,
+    subagent_to_dict,
+)
 
-from .errors import APPROVAL_REQUIRED, BridgeError, invalid_params
+from .errors import APPROVAL_REQUIRED, RESOURCE_EXHAUSTED, BridgeError, invalid_params
 from .streams import Chunk, Stream, stream_text, tokenise
+
+logger = logging.getLogger(__name__)
 
 #: Provider kinds the bridge knows how to build and persist.
 PROVIDER_KINDS: tuple[str, ...] = ("echo", *PROVIDER_CATALOG.keys())
@@ -352,20 +367,9 @@ class ApprovalState:
     risk: str
     summary: str
     resolved: bool = False
-
-
-@dataclass
-class SubagentState:
-    """A background Dream turn, observable until it finishes."""
-
-    id: str
-    status: str = "running"  # running | completed | failed | cancelled
-    message: str = ""
-    result: dict[str, Any] | None = None
-    error: str | None = None
-    created_at: float = field(default_factory=time.time)
-    finished_at: float | None = None
-    cancel_requested: bool = False
+    #: ``None`` until a human answers. ``schedule.approve`` sets it, and the
+    #: scheduler's gate waits on it.
+    decision: bool | None = None
 
 
 class BridgeMethods:
@@ -384,7 +388,10 @@ class BridgeMethods:
         self.store = store or MemoryStore(os.environ.get("DREAM_DB", "data/dream.db"))
         self.sessions: dict[str, SessionState] = {}
         self.approvals: dict[str, ApprovalState] = {}
-        self.subagents: dict[str, SubagentState] = {}
+        #: Child agents live in their own asyncio Tasks with their own stores;
+        #: the manager owns that isolation (see ``docs/architecture/subagents.md``).
+        self.subagents = SubAgentManager()
+        self._daemon: scheduler.SchedulerDaemon | None = None
         self._lock = threading.RLock()
 
         self._sessions_path = sessions_path or os.environ.get(
@@ -409,12 +416,27 @@ class BridgeMethods:
             )
         )
         self._disabled_skills: set[str] = self._load_disabled_skills()
+        scheduler.ensure_schedule_tables(self.store)
         self._load_sessions_index()
 
         #: The dispatcher reads this to route method → handler.
         self.handlers: dict[str, Callable[..., Any]] = self._build_handler_table()
 
     # -- lifecycle -------------------------------------------------------- #
+
+    async def aclose(self) -> None:
+        """Async half of shutdown: stop the daemon and the children, then close.
+
+        Anything owning an asyncio Task has to be torn down while the loop is
+        still running, which :meth:`shutdown` cannot do — the server calls this
+        first and keeps :meth:`shutdown` as the synchronous fallback.
+        """
+        await self.stop_scheduler()
+        try:
+            await self.subagents.cancel_all()
+        except Exception:  # pragma: no cover - teardown must never mask exit
+            logger.exception("failed to cancel subagents during shutdown")
+        self.shutdown()
 
     def shutdown(self) -> None:
         """Persist state and close the store. Safe to call more than once."""
@@ -469,9 +491,24 @@ class BridgeMethods:
             "approval.request": self.approval_request,
             "approval.resolve": self.approval_resolve,
             "subagent.spawn": self.subagent_spawn,
+            "subagent.pipeline": self.subagent_pipeline,
             "subagent.list": self.subagent_list,
+            "subagent.get": self.subagent_get,
             "subagent.status": self.subagent_status,
             "subagent.cancel": self.subagent_cancel,
+            "subagent.pause": self.subagent_pause,
+            "subagent.resume": self.subagent_resume,
+            "subagent.logs": self.subagent_logs,
+            "schedule.create": self.schedule_create,
+            "schedule.list": self.schedule_list,
+            "schedule.get": self.schedule_get,
+            "schedule.update": self.schedule_update,
+            "schedule.delete": self.schedule_delete,
+            "schedule.toggle": self.schedule_toggle,
+            "schedule.history": self.schedule_history,
+            "schedule.preview": self.schedule_preview,
+            "schedule.run_now": self.schedule_run_now,
+            "schedule.approve": self.schedule_approve,
             "health.check": self.health_check,
             "sidecar.version": self.sidecar_version,
         }
@@ -1324,73 +1361,345 @@ class BridgeMethods:
     # subagent.*
     # ------------------------------------------------------------------ #
 
+    def _require_subagent(self, params: dict[str, Any]) -> SubAgent:
+        sub_id = params.get("subagent_id") or params.get("id")
+        if not isinstance(sub_id, str) or not sub_id:
+            raise invalid_params("subagent_id must be a non-empty string")
+        agent = self.subagents.get(sub_id)
+        if agent is None:
+            raise invalid_params(f"no subagent with id {sub_id!r}")
+        return agent
+
+    def _spec_from_params(self, params: dict[str, Any]) -> SubAgentSpec:
+        """Validate spawn params into a spec.
+
+        ``message`` is accepted as an alias for ``prompt`` so the P-02 shape of
+        this call keeps working for any client that has not been updated yet.
+        """
+        prompt = params.get("prompt")
+        if prompt is None:
+            prompt = params.get("message")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise invalid_params("prompt must be a non-empty string")
+
+        tools = params.get("tools")
+        if tools is not None:
+            if not isinstance(tools, list) or not all(isinstance(t, str) for t in tools):
+                raise invalid_params("tools must be an array of strings")
+
+        provider = str(params.get("provider") or params.get("model_provider") or "")
+        provider = provider or self._default_provider
+        config = self._providers.get(provider) or {}
+
+        try:
+            return SubAgentSpec(
+                prompt=prompt,
+                name=str(params.get("name") or ""),
+                context=str(params.get("context") or ""),
+                system_prompt=str(params.get("system_prompt") or ""),
+                model_provider=provider,
+                model_name=str(params.get("model_name") or config.get("model") or ""),
+                tools=tools,
+                max_turns=_positive_int(params, "max_turns", DEFAULT_MAX_TURNS),
+                max_tokens=_positive_int(params, "max_tokens", DEFAULT_MAX_TOKENS),
+                max_duration=_positive_float(params, "max_duration", DEFAULT_MAX_DURATION),
+                parent_session_id=params.get("session_id") or params.get("parent_session_id"),
+                allow_dangerous=bool(params.get("allow_dangerous", False)),
+            )
+        except ValueError as exc:
+            raise invalid_params(str(exc)) from exc
+
     async def subagent_spawn(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
-        message = params.get("message")
-        if not isinstance(message, str) or not message.strip():
-            raise invalid_params("message must be a non-empty string")
-        provider = str(params.get("provider") or self._default_provider)
+        spec = self._spec_from_params(params)
+        try:
+            agent = self.subagents.spawn(spec)
+        except ResourceWarning as exc:
+            # The cap exists so one runaway parent cannot starve the sidecar.
+            raise BridgeError(RESOURCE_EXHAUSTED, str(exc)) from exc
+        return subagent_to_dict(agent, include_log=False)
 
-        sub_id = f"sub_{uuid.uuid4().hex[:16]}"
-        state = SubagentState(id=sub_id, message=message)
-        with self._lock:
-            self.subagents[sub_id] = state
-
-        session_id = params.get("session_id")
-        dream = (
-            self._require_session({"session_id": session_id}).dream
-            if session_id
-            else self._new_dream(provider)
-        )
-
-        def run_turn() -> None:
-            try:
-                if state.cancel_requested:
-                    state.status = "cancelled"
-                    return
-                turn = dream.run(message)
-                state.result = turn_to_dict(turn)
-                state.status = "cancelled" if state.cancel_requested else "completed"
-            except Exception as exc:  # never let a subagent crash the sidecar
-                state.error = f"{type(exc).__name__}: {exc}"
-                state.status = "failed"
-            finally:
-                state.finished_at = time.time()
-
-        asyncio.get_running_loop().run_in_executor(None, run_turn)
-        return {"subagent_id": sub_id, "status": "running"}
+    async def subagent_pipeline(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Spawn a chain in which each stage receives the previous result."""
+        params = params or {}
+        raw_stages = params.get("stages")
+        if not isinstance(raw_stages, list) or not raw_stages:
+            raise invalid_params("stages must be a non-empty array")
+        shared = {k: v for k, v in params.items() if k not in {"stages", "name"}}
+        specs: list[SubAgentSpec] = []
+        for index, stage in enumerate(raw_stages):
+            if not isinstance(stage, dict):
+                raise invalid_params(f"stages[{index}] must be an object")
+            specs.append(self._spec_from_params({**shared, **stage}))
+        try:
+            pipeline_id, agents = self.subagents.spawn_pipeline(
+                specs, name=str(params.get("name") or "")
+            )
+        except ResourceWarning as exc:
+            raise BridgeError(RESOURCE_EXHAUSTED, str(exc)) from exc
+        except ValueError as exc:
+            raise invalid_params(str(exc)) from exc
+        return {
+            "pipeline_id": pipeline_id,
+            "subagents": [subagent_to_dict(a, include_log=False) for a in agents],
+        }
 
     def subagent_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        del params
-        with self._lock:
-            snapshots = [_subagent_to_dict(s) for s in self.subagents.values()]
-        return {"subagents": snapshots}
+        params = params or {}
+        agents = self.subagents.list()
+        pipeline_id = params.get("pipeline_id")
+        if isinstance(pipeline_id, str) and pipeline_id:
+            agents = [a for a in agents if a.pipeline_id == pipeline_id]
+        session_id = params.get("session_id")
+        if isinstance(session_id, str) and session_id:
+            agents = [a for a in agents if a.parent_session_id == session_id]
+        return {
+            "subagents": [subagent_to_dict(a, include_log=False) for a in agents],
+            "active": self.subagents.active_count(),
+        }
 
+    def subagent_get(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        agent = self._require_subagent(params or {})
+        return subagent_to_dict(agent, include_log=True)
+
+    #: ``subagent.status`` is the P-02 name for ``subagent.get``.
     def subagent_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        params = params or {}
-        sub_id = params.get("subagent_id")
-        if not isinstance(sub_id, str) or not sub_id:
-            raise invalid_params("subagent_id must be a non-empty string")
-        with self._lock:
-            state = self.subagents.get(sub_id)
-        if state is None:
-            raise invalid_params(f"no subagent with id {sub_id!r}")
-        return _subagent_to_dict(state)
+        return self.subagent_get(params)
 
-    def subagent_cancel(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def subagent_cancel(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
-        sub_id = params.get("subagent_id")
-        if not isinstance(sub_id, str) or not sub_id:
-            raise invalid_params("subagent_id must be a non-empty string")
+        agent = self._require_subagent(params)
+        grace = params.get("grace_seconds")
+        cancelled = await self.subagents.cancel(
+            agent.id, grace_seconds=float(grace) if grace is not None else None
+        )
+        payload = subagent_to_dict(cancelled or agent, include_log=False)
+        payload["cancelled"] = True
+        return payload
+
+    def subagent_pause(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        agent = self._require_subagent(params or {})
+        paused = self.subagents.pause(agent.id)
+        if paused is None or paused.status != "paused":
+            status = "gone" if paused is None else paused.status
+            raise invalid_params(f"subagent {agent.id!r} is not running (status {status})")
+        return subagent_to_dict(paused, include_log=False)
+
+    def subagent_resume(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        agent = self._require_subagent(params or {})
+        # ``resume`` is a no-op on anything that is not paused, so compare the
+        # status we started from: a running child must not silently "resume".
+        if agent.status != "paused":
+            raise invalid_params(f"subagent {agent.id!r} is not paused (status {agent.status})")
+        resumed = self.subagents.resume(agent.id)
+        if resumed is None:
+            raise invalid_params(f"no subagent with id {agent.id!r}")
+        return subagent_to_dict(resumed, include_log=False)
+
+    async def subagent_logs(self, params: dict[str, Any] | None = None) -> Stream:
+        """Stream a subagent's log: history first, then live lines until it ends.
+
+        Returning a :class:`Stream` makes each log line a ``stream.chunk``
+        notification, so the dashboard renders output as it happens instead of
+        polling for it.
+        """
+        agent = self._require_subagent(params or {})
+        follow = self.subagents.follow_logs(agent.id)
+
+        async def chunks() -> AsyncIterator[Chunk]:
+            async for entry in follow:
+                yield {"subagent_id": agent.id, "entry": entry, "token": entry["message"]}
+
+        return Stream(final=subagent_to_dict(agent, include_log=False), chunks=chunks())
+
+    # ------------------------------------------------------------------ #
+    # schedule.*
+    # ------------------------------------------------------------------ #
+
+    def _require_schedule(self, params: dict[str, Any]) -> Schedule:
+        schedule_id = params.get("schedule_id") or params.get("id")
+        if not isinstance(schedule_id, str) or not schedule_id:
+            raise invalid_params("schedule_id must be a non-empty string")
+        schedule = scheduler.get_schedule(self.store, schedule_id)
+        if schedule is None:
+            raise invalid_params(f"no schedule with id {schedule_id!r}")
+        return schedule
+
+    def schedule_create(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        name = params.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise invalid_params("name must be a non-empty string")
+        prompt = params.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise invalid_params("prompt must be a non-empty string")
+        try:
+            schedule = scheduler.create_schedule(
+                self.store,
+                name=name,
+                prompt=prompt,
+                description=str(params.get("description") or ""),
+                cron_expression=params.get("cron_expression"),
+                natural_language=params.get("natural_language"),
+                session_id=params.get("session_id"),
+                enabled=bool(params.get("enabled", True)),
+                max_runs=params.get("max_runs"),
+                require_approval=bool(params.get("require_approval", False)),
+            )
+        except (ScheduleParseError, ValueError) as exc:
+            raise invalid_params(str(exc)) from exc
+        return schedule_to_dict(schedule)
+
+    def schedule_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        schedules = scheduler.list_schedules(
+            self.store, include_disabled=bool(params.get("include_disabled", True))
+        )
+        return {"schedules": [schedule_to_dict(s) for s in schedules]}
+
+    def schedule_get(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        schedule = self._require_schedule(params or {})
+        payload = schedule_to_dict(schedule)
+        payload["runs"] = [
+            run_to_dict(r) for r in scheduler.list_runs(self.store, schedule_id=schedule.id)
+        ]
+        return payload
+
+    def schedule_update(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        schedule = self._require_schedule(params)
+        fields = {
+            key: params[key]
+            for key in (
+                "name",
+                "description",
+                "prompt",
+                "cron_expression",
+                "natural_language",
+                "session_id",
+                "enabled",
+                "max_runs",
+                "require_approval",
+            )
+            if key in params
+        }
+        try:
+            updated = scheduler.update_schedule(self.store, schedule.id, **fields)
+        except (ScheduleParseError, ValueError) as exc:
+            raise invalid_params(str(exc)) from exc
+        return schedule_to_dict(updated or schedule)
+
+    def schedule_delete(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        schedule = self._require_schedule(params or {})
+        deleted = scheduler.delete_schedule(self.store, schedule.id)
+        return {"deleted": deleted, "schedule_id": schedule.id}
+
+    def schedule_toggle(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        schedule = self._require_schedule(params)
+        enabled = params.get("enabled")
+        toggled = scheduler.toggle_schedule(
+            self.store, schedule.id, enabled=None if enabled is None else bool(enabled)
+        )
+        return schedule_to_dict(toggled or schedule)
+
+    def schedule_history(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        schedule_id = params.get("schedule_id") or params.get("id")
+        if schedule_id is not None and not isinstance(schedule_id, str):
+            raise invalid_params("schedule_id must be a string")
+        if schedule_id:
+            self._require_schedule(params)
+        limit = _positive_int(params, "limit", 50)
+        runs = scheduler.list_runs(self.store, schedule_id=schedule_id, limit=limit)
+        return {"runs": [run_to_dict(r) for r in runs]}
+
+    def schedule_preview(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Translate prose to cron for the add form's live preview.
+
+        Never raises on unparseable input: the user is mid-sentence, and an
+        error dialog per keystroke would be unusable.
+        """
+        params = params or {}
+        return scheduler.preview_schedule(
+            natural_language=params.get("natural_language") or params.get("text"),
+            cron_expression=params.get("cron_expression"),
+        )
+
+    async def schedule_run_now(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        schedule = self._require_schedule(params or {})
+        run = await self._scheduler_daemon().run_now(schedule)
+        return {
+            "schedule": schedule_to_dict(
+                scheduler.get_schedule(self.store, schedule.id) or schedule
+            ),
+            "run": run_to_dict(run) if run else None,
+        }
+
+    # -- scheduler wiring -------------------------------------------------- #
+
+    def _scheduler_daemon(self) -> scheduler.SchedulerDaemon:
+        """The lazily-built daemon that executes schedules through Dream."""
+        if self._daemon is None:
+            self._daemon = scheduler.SchedulerDaemon(
+                store=self.store,
+                runner=self._run_schedule,
+                approval_gate=self._schedule_approval_gate,
+            )
+        return self._daemon
+
+    def start_scheduler(self) -> scheduler.SchedulerDaemon:
+        """Begin polling. Called by the server once it has a running loop."""
+        daemon = self._scheduler_daemon()
+        daemon.start()
+        return daemon
+
+    async def stop_scheduler(self) -> None:
+        if self._daemon is not None:
+            await self._daemon.stop()
+
+    async def _run_schedule(self, schedule: Schedule) -> str:
+        """Execute a schedule's prompt, reusing its session or creating one."""
+        session = self.sessions.get(schedule.session_id or "")
+        if session is not None:
+            dream = session.dream
+        else:
+            dream = self._new_dream(self._default_provider)
+        turn = await asyncio.to_thread(dream.run, schedule.prompt)
+        if session is not None:
+            session.message_count += 1
+            session.updated_at = time.time()
+        return str(getattr(turn, "reply", "") or "")
+
+    async def _schedule_approval_gate(self, schedule: Schedule) -> bool:
+        """Register an approval and wait for a human to resolve it.
+
+        The pending approval is what ``schedule.approve`` resolves; if nobody
+        does, the daemon's timeout denies the run (fail-closed, gate G11).
+        """
+        approval = self._register_approval(
+            "schedule.execute",
+            {"schedule_id": schedule.id, "name": schedule.name, "prompt": schedule.prompt},
+            "dangerous",
+        )
+        approval.decision = None
+        while approval.decision is None:
+            await asyncio.sleep(0.05)
+        return bool(approval.decision)
+
+    def schedule_approve(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Resolve a scheduled run's approval request."""
+        params = params or {}
+        approval_id = params.get("approval_id")
+        if not isinstance(approval_id, str) or not approval_id:
+            raise invalid_params("approval_id must be a non-empty string")
         with self._lock:
-            state = self.subagents.get(sub_id)
-        if state is None:
-            raise invalid_params(f"no subagent with id {sub_id!r}")
-        state.cancel_requested = True
-        if state.status == "running":
-            state.status = "cancelled"
-            state.finished_at = time.time()
-        return {"cancelled": True, "subagent_id": sub_id}
+            approval = self.approvals.get(approval_id)
+            if approval is None:
+                raise invalid_params(f"no approval with id {approval_id!r}")
+            approval.decision = bool(params.get("allowed", False))
+            approval.resolved = True
+        return {"approval_id": approval_id, "allowed": approval.decision}
 
     # ------------------------------------------------------------------ #
     # health / version
@@ -1536,16 +1845,32 @@ def _approval_summary(name: str, arguments: dict[str, Any]) -> str:
     return f"{name}({rendered})"
 
 
-def _subagent_to_dict(state: SubagentState) -> dict[str, Any]:
-    return {
-        "id": state.id,
-        "status": state.status,
-        "message": state.message,
-        "result": state.result,
-        "error": state.error,
-        "created_at": state.created_at,
-        "finished_at": state.finished_at,
-    }
+def _positive_int(params: dict[str, Any], key: str, default: int) -> int:
+    """Read an optional positive integer parameter."""
+    value = params.get(key)
+    if value is None:
+        return default
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise invalid_params(f"{key} must be an integer") from exc
+    if number < 1:
+        raise invalid_params(f"{key} must be at least 1")
+    return number
+
+
+def _positive_float(params: dict[str, Any], key: str, default: float) -> float:
+    """Read an optional positive float parameter."""
+    value = params.get(key)
+    if value is None:
+        return default
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise invalid_params(f"{key} must be a number") from exc
+    if number <= 0:
+        raise invalid_params(f"{key} must be greater than 0")
+    return number
 
 
 __all__ = [
@@ -1553,7 +1878,6 @@ __all__ = [
     "BridgeMethods",
     "SessionState",
     "ApprovalState",
-    "SubagentState",
     "build_configured_backend",
     "memory_to_dict",
     "turn_to_dict",

@@ -219,6 +219,45 @@ def test_shutdown_persists_session_index(tmp_path):
     assert any(r["title"] == "persisted" for r in rows)
 
 
+def test_aclose_stops_the_scheduler_and_the_subagents():
+    """The daemon and child tasks must be torn down while the loop still runs."""
+    methods = make_methods()
+
+    async def scenario():
+        daemon = methods.start_scheduler()
+        spawned = await methods.subagent_spawn({"prompt": "long job", "max_duration": 30})
+        await methods.aclose()
+        return daemon, methods.subagent_get({"subagent_id": spawned["subagent_id"]})
+
+    daemon, child = asyncio.run(scenario())
+    assert daemon.running is False
+    assert child["status"] in {"cancelled", "completed"}
+
+
+def test_serve_forever_starts_and_stops_the_scheduler():
+    from dream.bridge import server as server_module
+
+    methods = make_methods()
+    reader = ListLineReader([req(1, "health.check")])
+    writer = MemoryLineWriter()
+
+    async def scenario():
+        await server_module.serve_forever(methods, writer=writer)
+
+    # ``serve_forever`` builds its own stdin reader, so patch the pieces it owns.
+    original_reader = server_module.StdinLineReader
+    server_module.StdinLineReader = lambda *a, **k: reader  # type: ignore[assignment]
+    reader.start = lambda *a, **k: None  # type: ignore[method-assign]
+    try:
+        asyncio.run(scenario())
+    finally:
+        server_module.StdinLineReader = original_reader  # type: ignore[assignment]
+
+    assert methods._daemon is not None
+    assert methods._daemon.running is False  # stopped again on the way out
+    assert any(m.get("id") == 1 for m in [json.loads(x) for x in writer.lines[1:]])
+
+
 def test_id_echo_supports_strings():
     out, _ = run_server([req("abc-123", "health.check")])
     resp = next(m for m in out if m.get("id") == "abc-123")
