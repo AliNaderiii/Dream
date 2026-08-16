@@ -846,6 +846,87 @@ export class EchoBridgeTransport implements BridgeTransport {
         };
       case 'sidecar.version':
         return { protocol: '1.0', core: '0.1.0', sidecar: '0.1.0', python: 'browser' };
+
+      // P-08: Docker sandbox echo stubs.
+      case 'sandbox.status':
+        return { available: false, docker: false, error: 'Docker not available in echo mode' };
+      case 'sandbox.run_code':
+        return {
+          stdout: 'Echo sandbox: code execution not available',
+          stderr: '',
+          return_code: -1,
+          timed_out: false,
+          output_files: [],
+          elapsed_seconds: 0,
+          error: 'Sandbox is not available in echo mode. Start the sidecar with Docker installed.',
+        };
+      case 'sandbox.run_notebook':
+      case 'sandbox.install_packages':
+        return { error: 'Sandbox not available in echo mode' };
+
+      // P-08: Browser control echo stubs.
+      case 'browser.attach':
+      case 'browser.launch_isolated':
+        return { error: 'Browser control not available in echo mode', mode: 'echo' };
+      case 'browser.request_approval':
+        return {
+          session_id: `echo-${++echoCounter}`,
+          url: params['url'] as string,
+          purpose: (params['purpose'] as string) || '',
+          domain: 'echo.local',
+          status: 'pending',
+        };
+      case 'browser.approve':
+      case 'browser.deny':
+        return { approved: true, session_id: params['session_id'] as string };
+      case 'browser.navigate':
+        return {
+          url: params['url'] as string,
+          title: 'Echo Page',
+          text: 'Echo transport: page content not available',
+          links: [],
+          tables: [],
+        };
+      case 'browser.get_content':
+        return { url: '', title: 'Echo', text: '', links: [], tables: [] };
+      case 'browser.execute_js':
+        return null;
+      case 'browser.fill_form':
+      case 'browser.click':
+        return { success: true };
+      case 'browser.screenshot':
+        return { screenshot_path: '' };
+      case 'browser.get_cookies':
+        return { cookies: [] };
+      case 'browser.status':
+        return {
+          attached: false,
+          attached_to_existing: false,
+          has_page: false,
+          pending_approvals: 0,
+          approved_domains: [],
+          current_session: null,
+          screenshot_dir: '',
+        };
+      case 'browser.close':
+        return { closed: true };
+
+      // P-08: Web gateway echo stubs.
+      case 'gateway.status':
+        return { enabled: true, token_count: 0, tokens: [], has_setup_token: false };
+      case 'gateway.get_tokens':
+        return { tokens: {} };
+      case 'gateway.create_token':
+        return { token: `drm_echo_${Date.now()}`, scope: 'write', label: params['label'] as string };
+      case 'gateway.rotate_token':
+        return { token: `drm_echo_${Date.now()}`, rotated: true };
+      case 'gateway.revoke_token':
+        return { revoked: true };
+      case 'gateway.start':
+        return { started: true, port: 9090, tls: false };
+      case 'gateway.stop':
+        return { stopped: false, note: 'Echo mode' };
+
       default:
         throw new BridgeRpcError({ code: -32601, message: `echo: unknown method ${method}` });
     }

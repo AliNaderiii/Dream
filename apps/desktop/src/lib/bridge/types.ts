@@ -541,3 +541,112 @@ export interface StreamChunk {
   /** Structured log line, on `subagent.logs` streams. */
   entry?: BridgeLogEntry;
 }
+
+// ---------------------------------------------------------------------------
+// P-08: Docker sandbox types
+// ---------------------------------------------------------------------------
+
+/** Resource limits for a sandbox execution. */
+export interface SandboxResourceLimits {
+  cpu_count: number;
+  memory_mb: number;
+  disk_mb: number;
+  network_enabled: boolean;
+  timeout_seconds: number;
+  pids_limit: number;
+}
+
+/** Result of a sandbox code execution. */
+export interface SandboxResult {
+  stdout: string;
+  stderr: string;
+  return_code: number;
+  timed_out: boolean;
+  output_files: string[];
+  elapsed_seconds: number;
+  error: string | null;
+}
+
+/** Sandbox status (Docker availability, images, etc.). */
+export interface SandboxStatus {
+  available: boolean;
+  docker: Record<string, unknown> | false;
+  images_available: Record<string, boolean> | undefined;
+  default_images: Record<string, string> | undefined;
+  keep_containers: boolean;
+  data_dir: string;
+  error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// P-08: Browser control types
+// ---------------------------------------------------------------------------
+
+/** Browser page content. */
+export interface BrowserPageContent {
+  url: string;
+  title: string;
+  text: string;
+  links: Array<{ text: string; href: string }>;
+  tables: string[][][];
+  screenshot_path?: string;
+}
+
+/** Browser session approval state. */
+export interface BrowserSession {
+  session_id: string;
+  url: string;
+  purpose: string;
+  domain: string;
+  status: 'pending' | 'active' | 'closed';
+}
+
+/** Browser controller status. */
+export interface BrowserStatus {
+  attached: boolean;
+  attached_to_existing: boolean;
+  has_page: boolean;
+  pending_approvals: number;
+  approved_domains: string[];
+  current_session: BrowserSession | null;
+  screenshot_dir: string;
+}
+
+// ---------------------------------------------------------------------------
+// P-08: Web gateway types
+// ---------------------------------------------------------------------------
+
+/** Gateway token info (display-safe, partial token). */
+export interface GatewayTokenInfo {
+  prefix: string;
+  scope: 'read' | 'write';
+  label: string;
+  created_at: number;
+  last_used_at: number | null;
+}
+
+/** Gateway token with full value (for settings display). */
+export interface GatewayTokenFull {
+  scope: 'read' | 'write';
+  label: string;
+  created_at: number;
+  last_used_at: number | null;
+}
+
+/** Gateway status. */
+export interface GatewayStatus {
+  enabled: boolean;
+  token_count: number;
+  tokens: GatewayTokenInfo[];
+  has_setup_token: boolean;
+}
+
+/** Active gateway connection. */
+export interface GatewayConnection {
+  id: string;
+  ip: string;
+  device: string;
+  scope: string;
+  user_agent: string;
+  connected_at: number;
+}
