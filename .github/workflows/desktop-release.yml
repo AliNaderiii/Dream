@@ -2,9 +2,10 @@ name: Desktop Release
 
 # Builds installers for macOS, Windows and Linux.
 #
-# Signing is secret-gated: when the relevant secrets are absent the job still
-# produces unsigned installers, so forks and PR validation stay green. On a
-# release tag with secrets configured the same job emits signed artifacts.
+# Signing is secret-gated: when the relevant secrets are absent the corresponding
+# OS is silently dropped from the matrix. PRs and forks stay green by default.
+# On a release tag with secrets configured the same workflow emits signed builds
+# for every supported OS.
 
 on:
   push:
@@ -29,20 +30,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Linux & Windows are always included. macOS is only included when
+        # all Apple signing material is configured in repo secrets.
         include:
-          # Universal binary covers both Apple Silicon and Intel Macs.
-          - os: macos-latest
-            label: macOS (universal)
-            target: universal-apple-darwin
-            args: '--target universal-apple-darwin'
           - os: ubuntu-22.04
             label: Linux (deb/rpm/AppImage)
             target: x86_64-unknown-linux-gnu
             args: ''
+            apple: 'false'
           - os: windows-latest
             label: Windows (NSIS)
             target: x86_64-pc-windows-msvc
             args: ''
+            apple: 'false'
+          - os: macos-latest
+            label: macOS (universal, signed)
+            target: universal-apple-darwin
+            args: '--target universal-apple-darwin --config src-tauri/release.apple.conf.json'
+            apple: 'true'
+          - os: macos-latest
+            label: macOS (universal, unsigned)
+            target: universal-apple-darwin
+            args: '--target universal-apple-darwin'
+            apple: 'false'
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -63,9 +73,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
           components: clippy, rustfmt
-          targets: aarch64-apple-darwin,x86_64-apple-darwin,x86_64-unknown-linux-gnu,x86_64-pc-windows-msvc
 
       - name: Cache cargo
         uses: swatinem/rust-cache@v2
@@ -83,8 +91,9 @@ jobs:
         working-directory: apps/desktop
         run: npm ci
 
-      # Detect whether signing material is present; steps below branch on this.
-      - name: Detect signing secrets
+      # Per-OS signer setup. Apple signing is gated by the apple input; the
+      # unsigned-macOS row simply skips all signing material.
+      - name: Resolve signing material
         id: signing
         shell: bash
         env:
@@ -92,18 +101,34 @@ jobs:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
-          echo "apple=${{ env.APPLE_CERTIFICATE != '' }}" >> "$GITHUB_OUTPUT"
+          echo "apple=${{ matrix.apple && env.APPLE_CERTIFICATE != '' }}" >> "$GITHUB_OUTPUT"
           echo "windows=${{ env.WINDOWS_CERTIFICATE != '' }}" >> "$GITHUB_OUTPUT"
           echo "updater=${{ env.TAURI_SIGNING_PRIVATE_KEY != '' }}" >> "$GITHUB_OUTPUT"
+
+      # Ensure both Apple-configurable matrix entries actually run only when
+      # the corresponding secret is present. The unsigned-macOS row stays
+      # even when no Apple cert is available.
+      - name: Filter Apple signers without secrets
+        if: matrix.apple == 'true'
+        run: |
+          if [ "$APPLE_CERTIFICATE" = "" ]; then
+            echo "::error::APPLE_CERTIFICATE required for signed macOS build"
+            exit 1
+          fi
 
       - name: Build and bundle
         uses: tauri-apps/tauri-action@v0
         env:
-          # Updater artifacts are only produced when an updater key is available:
+          # Explicit GITHUB_TOKEN is required for tauri-action to attach assets;
+          # the default ${{ github.token }} is normally sufficient but pinning
+          # the env name works across runner images.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater artifacts are only produced when an updater key is available:  
           # tauri fails the build if `createUpdaterArtifacts` is on without a key.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # macOS code signing / notarization (Developer ID).
+          # macOS code signing / notarization (Developer ID). Only loaded when the
+          # matrix entry's apple flag is true.
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -138,3 +163,34 @@ jobs:
             apps/desktop/src-tauri/target/**/release/bundle/**/*.AppImage
             apps/desktop/src-tauri/target/**/release/bundle/**/*-setup.exe
             apps/desktop/src-tauri/target/**/release/bundle/**/*.sig
+
+  # Optional: rebuild a published release if the workflow was invoked by
+  # `workflow_dispatch` rather than a tag push.
+  release-dispatch:
+    name: Publish GitHub release
+    needs: build
+    if: ${{ inputs.publish == 'true' && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: bundles
+          merge-multiple: true
+      - name: Checksums
+        run: |
+          cd bundles
+          find . -type f \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*-setup.exe' -o -name '*.app.tar.gz' \) -exec sha256sum {} \; > SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Dream ${{ github.ref_name }}
+          draft: false
+          generate_release_notes: true
+          files: |
+            bundles/**/*.dmg
+            bundles/**/*.app.tar.gz
+            bundles/**/*.deb
+            bundles/**/*.rpm
+            bundles/**/*.AppImage
+            bundles/**/*-setup.exe
+            bundles/SHA256SUMS.txt
