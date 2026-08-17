@@ -53,7 +53,7 @@ export function SubagentStatusBadge({
   return (
     <Badge variant={meta.variant} className={className}>
       <Icon className={cn('size-3', meta.spin && 'animate-spin')} aria-hidden />
-      {meta.label}
+      {meta?.label}
     </Badge>
   );
 }

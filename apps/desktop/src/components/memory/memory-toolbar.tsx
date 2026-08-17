@@ -173,7 +173,7 @@ export function MemoryToolbar({
                     style={{ backgroundColor: KIND_COLOR[tab.value] }}
                   />
                 )}
-                {tab.label}
+                {tab?.label}
                 <span className="tabular rounded-full bg-surface-2 px-1.5 text-micro text-fg-muted">
                   {tab.count}
                 </span>

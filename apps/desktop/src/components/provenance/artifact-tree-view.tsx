@@ -95,7 +95,7 @@ export function ArtifactTreeView({ tree, onSelectNode }: ArtifactTreeViewProps) 
                   </div>
 
                   <p className="truncate text-body-sm font-semibold text-fg-primary">
-                    {node.label}
+                    {node?.label}
                   </p>
 
                   <div className="mt-2 flex items-center justify-between text-micro text-fg-secondary">

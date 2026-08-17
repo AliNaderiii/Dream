@@ -53,7 +53,7 @@ export function PlatformConfig({ platform, onSave }: PlatformConfigProps) {
         event.preventDefault();
         onSave(coerceFieldValues(platform, fieldValues));
       }}
-      aria-label={`${platform.label} configuration`}
+      aria-label={`${platform?.label} configuration`}
     >
       {platform.fields.map((field) => {
         const secret = field.type === 'secret';
@@ -68,14 +68,14 @@ export function PlatformConfig({ platform, onSave }: PlatformConfigProps) {
                 }
                 className="size-4 accent-accent"
               />
-              <span className="text-caption font-medium text-fg-secondary">{field.label}</span>
+              <span className="text-caption font-medium text-fg-secondary">{field?.label}</span>
             </label>
           );
         }
         return (
           <label key={field.key} className="flex flex-col gap-1">
             <span className="flex items-center gap-1 text-caption font-medium text-fg-secondary">
-              {field.label}
+              {field?.label}
               {field.required && (
                 <span className="text-danger-fg" aria-hidden>
                   *

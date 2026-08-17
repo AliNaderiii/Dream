@@ -134,10 +134,10 @@ export function ProfilingCard({ profile }: { profile: DatasetProfileDto }) {
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
         {headline.map((stat) => (
           <div
-            key={stat.label}
+            key={stat?.label}
             className={cn('rounded-lg border border-border-default bg-surface p-3')}
           >
-            <dt className="text-caption text-fg-muted">{stat.label}</dt>
+            <dt className="text-caption text-fg-muted">{stat?.label}</dt>
             <dd className="text-h3 font-semibold tabular">{stat.value}</dd>
           </div>
         ))}

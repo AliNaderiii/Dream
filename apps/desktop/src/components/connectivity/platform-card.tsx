@@ -91,8 +91,8 @@ export function PlatformCard({
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <Radio className="size-5 text-fg-secondary" aria-hidden />
-          <h3 className="text-body-lg font-semibold">{platform.label}</h3>
-          <Badge variant={badge.variant}>{badge.label}</Badge>
+          <h3 className="text-body-lg font-semibold">{platform?.label}</h3>
+          <Badge variant={badge.variant}>{badge?.label}</Badge>
           {platform.privacy === 'e2e' && (
             <Badge variant="info">
               <Lock className="size-3" aria-hidden />
@@ -105,7 +105,7 @@ export function PlatformCard({
           type="button"
           role="switch"
           aria-checked={platform.enabled}
-          aria-label={`${platform.label} enabled`}
+          aria-label={`${platform?.label} enabled`}
           onClick={() => onToggleEnabled(platform, !platform.enabled)}
           className={cn(
             'relative h-5 w-9 shrink-0 rounded-full transition-colors duration-fast',

@@ -225,7 +225,7 @@ export function GatewaySettings() {
                         )}
                       </div>
                       <p className="text-caption text-fg-muted">
-                        {info.label} &middot;{' '}
+                        {info?.label} &middot;{' '}
                         {info.last_used_at
                           ? `Last used ${new Date(info.last_used_at * 1000).toLocaleString()}`
                           : 'Never used'}

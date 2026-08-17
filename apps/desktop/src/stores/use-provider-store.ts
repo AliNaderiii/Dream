@@ -93,7 +93,7 @@ function providerFromWire(wire: ProviderWire): Provider {
     wire.status === 'connected' ? 'connected' : wire.status === 'error' ? 'error' : 'disconnected';
   return {
     id: wire.id,
-    name: wire.name ?? wire.label ?? wire.id,
+    name: wire.name ?? wire?.label ?? wire.id,
     kind: wire.kind,
     status,
     local: Boolean(wire.local),

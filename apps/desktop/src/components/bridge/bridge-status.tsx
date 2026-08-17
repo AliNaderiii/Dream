@@ -36,16 +36,16 @@ export function BridgeStatusIndicator() {
       title={
         interactive
           ? 'Bridge disconnected — click to reconnect'
-          : `Bridge ${meta.label.toLowerCase()}`
+          : `Bridge ${meta?.label.toLowerCase()}`
       }
       className="flex items-center gap-1.5 rounded-xs hover:text-fg-primary disabled:cursor-default disabled:hover:text-fg-secondary"
-      aria-label={`Bridge ${meta.label}`}
+      aria-label={`Bridge ${meta?.label}`}
     >
       <span
         className={cn('size-2 rounded-full', meta.dot, state === 'connecting' && 'animate-pulse')}
         aria-hidden
       />
-      <span className={meta.text}>{meta.label}</span>
+      <span className={meta.text}>{meta?.label}</span>
       {isFallback && (
         <span className="rounded-xs bg-surface-raised px-1 text-caption text-fg-muted">Echo</span>
       )}

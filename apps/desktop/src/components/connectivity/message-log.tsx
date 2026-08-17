@@ -58,7 +58,7 @@ export function MessageLog({
             <option value="">All platforms</option>
             {platforms.map((platform) => (
               <option key={platform.name} value={platform.name}>
-                {platform.label}
+                {platform?.label}
               </option>
             ))}
           </select>

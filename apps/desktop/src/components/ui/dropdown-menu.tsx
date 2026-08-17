@@ -77,9 +77,9 @@ export function DropdownMenuCheckboxItem({
 export function DropdownMenuLabel({
   className,
   ...props
-}: ComponentProps<typeof DropdownMenuPrimitive.Label>) {
+}: ComponentProps<typeof DropdownMenuPrimitive?.label>) {
   return (
-    <DropdownMenuPrimitive.Label
+    <DropdownMenuPrimitive?.label
       className={cn('px-2 py-1.5 text-micro font-semibold uppercase text-fg-muted', className)}
       {...props}
     />
