@@ -1,5 +1,70 @@
 # Status
 
+## P-09 — Data Science Pipeline & Workbench — SHIPPED
+
+**What shipped.** A complete data-science pipeline (Phase 4.1–4.6): sandboxed
+pandas tooling behind a dataset registry, statistical analysis, chart
+generation, PDF reports, Jupyter integration, and a five-tab desktop
+workbench — inspired by DeepAnalyze's autonomous data analysis.
+
+- **Data tool suite (`dream/skills/data_science.py`, Tasks 1–2, Gates G1–G6).**
+  - Dataset registry under `data/datasets/{id}/` addressed by 32-hex
+    `dataset_id` — the agent never touches raw paths after ingestion; sources
+    are copied in, `cleaned.csv` becomes the active file after cleaning.
+  - All 8 formats load with auto-detection (extension + content sniffing):
+    CSV, TSV, Excel, JSON, YAML, XML, SQLite, Parquet. 500 MB ingestion cap;
+    files > 100 MB profile via single-pass chunked aggregation.
+  - Profiling with per-column stats, IQR/z-score outlier detection, and
+    histograms — verified against hand-computed references to 1e-9.
+  - 10 cleaning operations as a validated tagged union with schema tracking
+    across renames/drops; 9 statistical analyses (correlation → time-series
+    decomposition) with per-entry error isolation, verified against scipy.
+  - 9 chart types across PNG/SVG/PDF (matplotlib) + interactive HTML
+    (Plotly payload); themes with graceful fallback, strict palette
+    allowlist, bounded sizes, 5 MB per-export quota.
+  - `generate_report`: PDF ≤ 5 pages with pypdf-extractable text, seven
+    sections, numeric summary table, embedded charts, and a markdown twin.
+  - **Security model (G9):** the host never imports pandas/matplotlib — every
+    operation compiles to a generated script executed in the P-08 Docker
+    sandbox (network disabled, cap-drop ALL, seccomp) with parameters passed
+    via `_params.json`, never interpolated into code. `dream/` runtime
+    dependencies stay empty; the scientific stack lives in the sandbox image.
+  - Agent tools (`load_data`, `profile_data`, `clean_data`, `analyze_data`,
+    `auto_chart`, `create_chart`, `generate_report`) registered on Dream's
+    tool registry via `register_data_science_tools`.
+- **Jupyter integration (`dream/skills/notebooks.py`, Task 3, Gate G7).**
+  - nbformat-v4 read/write as plain JSON on the host; notebook paths confined
+    to the datasets directory; kernels per `dataset_id` via `jupyter_client`
+    with lazy start, reuse, and shutdown on dataset delete.
+  - `execute_notebook` / `run_cell` persist outputs into the `.ipynb` and
+    return summarised transport-safe outputs (text truncated at 20 KB, images
+    ≤ 4 MB, structured errors). `open_jupyterlab` spawns a token-guarded
+    JupyterLab rooted at the datasets directory. R kernel is used when the
+    kernelspec exists; otherwise it quietly falls back to Python 3.
+- **Bridge integration (Task 5).** 11 `data.*` + 5 `notebook.*` RPC methods
+  on `BridgeMethods`, injectable runtime/notebook-manager seams for tests,
+  `DataScienceError` → `INVALID_PARAMS`, missing Jupyter → `-32012`. Spec at
+  `docs/bridge/protocol.md` §3.12–3.13.
+- **Frontend workbench (Task 4, Gate G8).** `/data` registry +
+  `/data/:datasetId` workbench with Preview (TanStack Table:
+  sort/filter/paginate/column-resize/cell-copy), Profile (headline stats +
+  expandable per-column cards with mini histograms), Charts (ranked
+  suggestions + gallery with downloads), Notebook (inline render, per-cell
+  run, Open in JupyterLab), and Report (markdown preview + PDF download).
+  Typed wrappers in `lib/bridge/data-science.ts`; deterministic echo runtime
+  (`lib/bridge/echo-data.ts`) seeds a 1,000-row sales-2024 dataset, a chart,
+  a notebook with outputs, and a report markdown so browser dev needs no
+  sidecar.
+- **Tests & gates (Task 6, G10–G11).** 170+ new Python tests
+  (`test_data_science*.py`, `test_bridge_data.py`, `test_notebooks_kernel.py`)
+  including live-kernel round trips and performance floors (1 MB CSV < 3 s,
+  profile < 10 s, chart < 3 s); coverage 88% on both new modules. 28 new
+  vitest tests (wrapper + workbench render). Full suites green: 1562 Python,
+  279 frontend; ruff/eslint/tsc/prettier clean.
+- **Docs (Task 7).** `docs/architecture/data-science.md` (pipeline
+  architecture, sandbox integration, error model), protocol §3.12–3.13 +
+  reference-map row, Phase 4 checklist items marked shipped.
+
 ## P-10 — Provenance System, MCP Client & ACP Support — SHIPPED
 
 **What shipped.** Enterprise-grade provenance tracking, extensibility via Model

@@ -146,9 +146,58 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 - [ ] 3.2 Subagent monitor
 - [x] 3.3 Run history / provenance viewer — **P-10**: Full tamper-evident SHA-256 provenance logging, artifact sidecar linking, lineage graph & timeline UI, and reproducibility ZIP export.
 
-## Phase 4 — Data Science Workbench (Prompt P-04)
-- [ ] 4.1 Data preview grid; cleaning steps
-- [ ] 4.2 Chart builder; report preview/export
+## Phase 4 — Data Science Workbench (Prompt P-04 / P-09)
+
+### 4.1 Data Loading & Registry (Task 1)
+- [x] 4.1.1 `load_data` tool: ingest into `data/datasets/{id}/`, registry by `dataset_id` (uuid), never raw paths
+- [x] 4.1.2 All 8 formats: CSV, TSV, Excel (.xlsx/.xls), JSON, YAML, XML, SQLite, Parquet
+- [x] 4.1.3 Auto-detect from extension; content sniffing for ambiguous extensions (magic bytes + delimiter counting)
+- [x] 4.1.4 Size bounds: 500 MB ingestion cap; > 100 MB profiled via chunked aggregation
+- [x] 4.1.5 `data.list_datasets` / `data.get_dataset` / `data.delete_dataset` registry RPCs
+- [x] **Gate G1 — Data loading** → one fixture per format in `tests/test_data_science_io.py`
+
+### 4.2 Profiling & Cleaning (Task 1)
+- [x] 4.2.1 `profile_data`: per-column stats (numeric/categorical/datetime/text/boolean), missing %, duplicates, histograms
+- [x] 4.2.2 Outlier detection: IQR fences and z-score, verified on synthetic ground-truth fixtures
+- [x] 4.2.3 `clean_data` with all 10 ops: drop_na, fill_na, convert_dtype, remove_duplicates, rename_column, drop_column, filter_rows, normalize_column, encode_categorical, handle_outliers
+- [x] 4.2.4 Validation: column regex `^[A-Za-z_][A-Za-z0-9_]*$` ≤ 64 chars, schema membership, tagged-union checks, schema tracking across renames/drops
+- [x] 4.2.5 `cleaned.csv` becomes the active file; dtypes re-applied on reload
+- [x] **Gate G2 — Profiling** → within 1e-9 of hand-computed reference (`tests/test_data_science_profile.py`)
+- [x] **Gate G3 — Cleaning** → 10 ops round-trip with explicit invariants (`tests/test_data_science_clean.py`)
+
+### 4.3 Statistical Analysis (Task 1)
+- [x] 4.3.1 `analyze_data`: correlation, ttest, anova, chi_square, linear_regression, logistic_regression, kmeans, pca, time_series_decompose
+- [x] 4.3.2 Type checks: 2-level categorical for t-test, parseable datetime for time series, numeric coercion, target ∉ features
+- [x] 4.3.3 Per-analysis error isolation — one failure never kills the batch
+- [x] **Gate G4 — Analysis** → agrees with scipy references to 1e-9 (`tests/test_data_science_analyze.py`)
+
+### 4.4 Visualization (Task 2)
+- [x] 4.4.1 `create_chart`: 9 chart types (line, bar, scatter, histogram, box, heatmap, pie, area, bubble)
+- [x] 4.4.2 `auto_chart`: deterministic ranked suggestions from (role, cardinality) rubric
+- [x] 4.4.3 Themes (default/minimal/dark/ggplot/seaborn, graceful fallback) + strict palette allowlist + custom hex colors
+- [x] 4.4.4 Sizing bounds (200–4096 × 150–4096, dpi ∈ {72,96,150,300}); 5 MB per-export quota enforced
+- [x] 4.4.5 Exports: PNG/SVG/PDF via matplotlib, interactive HTML via Plotly payload — all rendered in the sandbox
+- [x] **Gate G5 — Charts** → every type renders under quota; auto-select ground truth (`tests/test_data_science_charts.py`)
+
+### 4.5 Reports & Notebooks (Tasks 1 & 3)
+- [x] 4.5.1 `generate_report`: PDF ≤ 5 pages with extractable title, sections (abstract…references), numeric table, embedded charts + markdown twin
+- [x] 4.5.2 DOI references are static text; report generation never touches the network
+- [x] 4.5.3 `notebook.create` / `read`: nbformat-v4 JSON on the host, paths confined to the datasets directory
+- [x] 4.5.4 `notebook.execute` / `run_cell`: jupyter_client kernels, one per dataset, outputs persisted + summarised
+- [x] 4.5.5 `notebook.open_lab`: token-guarded JupyterLab spawn; R kernel used when installed, quiet Python fallback otherwise
+- [x] **Gate G6 — Reports** → pypdf extracts the title (`tests/test_data_science_report.py`)
+- [x] **Gate G7 — Notebooks** → create/execute/read/open-lab with live kernel (`tests/test_notebooks_kernel.py`)
+
+### 4.6 Bridge, Frontend & Quality (Tasks 4–6)
+- [x] 4.6.1 RPC families `data.*` (11 methods) + `notebook.*` (5 methods) in `dream/bridge/methods.py`; protocol §3.12–3.13
+- [x] 4.6.2 Typed wrapper `apps/desktop/src/lib/bridge/data-science.ts` + DTOs in `types.ts`
+- [x] 4.6.3 Deterministic echo runtime (`echo-data.ts`): seeded 1k-row sales-2024 CSV, chart spec, notebook outputs, report markdown
+- [x] 4.6.4 Workbench routes `/data` + `/data/:datasetId` (Preview/Profile/Charts/Notebook/Report tabs) registered in `App.tsx`, nav in activity rail
+- [x] 4.6.5 Preview grid: TanStack Table with sort/filter/paginate/column-resize/row-hover/cell-copy
+- [x] 4.6.6 Tests: 170+ new Python tests across 8 files; vitest wrapper + component render suites; ≥ 80% coverage on new modules
+- [x] 4.6.7 Security: all execution sandboxed, params via `_params.json` (no code interpolation), allowlists everywhere, sizes bounded
+- [x] **Gate G8 — Workbench UI** → sort/filter/paginate/copy/export in `routes/data.test.tsx`
+- [x] **Gate G9/G10 — Security & performance** → 1 MB CSV < 3 s, profile < 10 s, chart < 3 s (`tests/test_data_science_perf.py`)
 
 ## Phase 5 — Providers, MCP & Web Gateway (Prompt P-05 / P-10)
 - [x] 5.1 Provider configuration + connection test — **P-10**: Model provider manager with ACP backends, OpenAI, Ollama, and Echo.

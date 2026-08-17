@@ -20,6 +20,7 @@ import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen } from '@/lib/tauri';
 import { isTauri } from '@/utils/platform';
 
+import { EchoDataRuntime } from './echo-data';
 import { EchoGatewayRuntime, requireGatewayPlatform } from './echo-gateway';
 import { EchoScheduleRuntime, EchoSubagentRuntime } from './echo-subagents';
 import { BridgeRpcError, toBridgeError } from './errors';
@@ -435,6 +436,7 @@ export class EchoBridgeTransport implements BridgeTransport {
   private subagents = new EchoSubagentRuntime();
   private schedules = new EchoScheduleRuntime();
   private gateway = new EchoGatewayRuntime();
+  private data = new EchoDataRuntime();
 
   /** Stops any simulated subagent still ticking (vitest teardown). */
   dispose(): void {
@@ -468,6 +470,10 @@ export class EchoBridgeTransport implements BridgeTransport {
     params: RpcParams,
     onChunk?: (chunk: StreamChunk) => void,
   ): Promise<unknown> {
+    // P-09: data science workbench + notebooks live in their own runtime.
+    if (this.data.handles(method)) {
+      return this.data.handle(method, params);
+    }
     switch (method) {
       case 'session.create': {
         const sid = `echo-${++echoCounter}`;

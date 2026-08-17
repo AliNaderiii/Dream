@@ -7,6 +7,7 @@ import { ChatRoute } from '@/routes/chat';
 import { ConnectivityRoute } from '@/routes/connectivity';
 import { DashboardRoute } from '@/routes/dashboard';
 import { DataRoute } from '@/routes/data';
+import { DataDatasetRoute } from '@/routes/data.dataset';
 import { MemoryRoute } from '@/routes/memory';
 import { ProjectsRoute } from '@/routes/projects';
 import { ProvenanceRoute } from '@/routes/provenance';
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="subagents" element={<SubagentsRoute />} />
         <Route path="provenance" element={<ProvenanceRoute />} />
         <Route path="data" element={<DataRoute />} />
+        <Route path="data/:datasetId" element={<DataDatasetRoute />} />
         <Route path="connectivity" element={<ConnectivityRoute />} />
         <Route path="providers" element={<ProvidersRoute />} />
         <Route path="settings" element={<SettingsRoute />} />

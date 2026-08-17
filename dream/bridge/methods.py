@@ -69,6 +69,11 @@ from dream.provenance import (
 )
 from dream.scheduler import Schedule, run_to_dict, schedule_to_dict
 from dream.skills import SKILL_SUFFIX, parse_skill_text
+from dream.skills.data_science import (
+    DataScienceError,
+    DataScienceRuntime,
+)
+from dream.skills.notebooks import NotebookManager, NotebookUnavailableError
 from dream.subagents import (
     DEFAULT_MAX_DURATION,
     DEFAULT_MAX_TOKENS,
@@ -434,6 +439,8 @@ class BridgeMethods:
         provenance_dir: str | None = None,
         mcp_config_path: str | None = None,
         acp_config_path: str | None = None,
+        data_runtime: Any = None,
+        notebook_manager: Any = None,
     ) -> None:
         self.store = store or MemoryStore(os.environ.get("DREAM_DB", "data/dream.db"))
         self.sessions: dict[str, SessionState] = {}
@@ -475,6 +482,12 @@ class BridgeMethods:
             self.gateway_tokens = TokenManager()
         else:
             self.gateway_tokens = None
+
+        # Data science pipeline (P-09): dataset registry + sandboxed executor
+        # + notebook kernels. Created lazily unless injected (tests inject a
+        # runtime wired to fakes).
+        self._data_runtime: Any = data_runtime
+        self._notebooks: Any = notebook_manager
 
         self._sessions_path = sessions_path or os.environ.get(
             "DREAM_SESSIONS_PATH", "data/bridge_sessions.json"
@@ -532,6 +545,11 @@ class BridgeMethods:
         self._save_sessions_index()
         self._save_providers()
         self._save_disabled_skills()
+        if self._notebooks is not None:
+            try:
+                self._notebooks.shutdown_all()
+            except Exception:  # pragma: no cover - teardown must never mask exit
+                logger.exception("notebook shutdown failed")
         try:
             self.store.close()
         except Exception:
@@ -677,6 +695,24 @@ class BridgeMethods:
             "acp.client.test_agent": self.acp_client_test_agent,
             "acp.client.send": self.acp_client_send,
             "acp.client.replay_history": self.acp_client_replay_history,
+            # data.* — data science pipeline (P-09)
+            "data.load_data": self.data_load_data,
+            "data.profile_data": self.data_profile_data,
+            "data.clean_data": self.data_clean_data,
+            "data.analyze_data": self.data_analyze_data,
+            "data.auto_chart": self.data_auto_chart,
+            "data.create_chart": self.data_create_chart,
+            "data.generate_report": self.data_generate_report,
+            "data.get_report": self.data_get_report,
+            "data.list_datasets": self.data_list_datasets,
+            "data.get_dataset": self.data_get_dataset,
+            "data.delete_dataset": self.data_delete_dataset,
+            # notebook.* — Jupyter integration (P-09)
+            "notebook.create": self.notebook_create,
+            "notebook.execute": self.notebook_execute,
+            "notebook.run_cell": self.notebook_run_cell,
+            "notebook.read": self.notebook_read,
+            "notebook.open_lab": self.notebook_open_lab,
         }
 
     # ------------------------------------------------------------------ #
@@ -2800,6 +2836,232 @@ class BridgeMethods:
 
         res = await client.replay_history(session_id, messages, instruction=instruction)
         return res
+
+    # ------------------------------------------------------------------ #
+    # data.* — data science pipeline (P-09)
+    # ------------------------------------------------------------------ #
+
+    def _require_data(self) -> Any:
+        """Lazily create the data-science runtime (sandboxed executor)."""
+        if self._data_runtime is None:
+            self._data_runtime = DataScienceRuntime()
+        return self._data_runtime
+
+    def _require_notebooks(self) -> Any:
+        if self._notebooks is None:
+            runtime = self._require_data()
+            self._notebooks = NotebookManager(runtime.datasets.root)
+        return self._notebooks
+
+    @staticmethod
+    def _dataset_id(params: dict[str, Any]) -> str:
+        dataset_id = params.get("dataset_id")
+        if not isinstance(dataset_id, str) or not dataset_id.strip():
+            raise invalid_params("dataset_id must be a non-empty string")
+        return dataset_id.strip()
+
+    async def _data_call(self, fn: Any, *args: Any) -> Any:
+        """Run a runtime call in a worker thread, mapping validation errors."""
+        try:
+            return await asyncio.to_thread(fn, *args)
+        except DataScienceError as exc:
+            raise invalid_params(str(exc)) from exc
+
+    async def data_load_data(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Ingest a data file and register it as a dataset."""
+        params = params or {}
+        file_path = params.get("file_path")
+        if not isinstance(file_path, str) or not file_path.strip():
+            raise invalid_params("file_path must be a non-empty string")
+        name = params.get("name")
+        if name is not None and not isinstance(name, str):
+            raise invalid_params("name must be a string")
+        runtime = self._require_data()
+        return await self._data_call(runtime.load_data, file_path, name)
+
+    async def data_profile_data(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Per-column + summary statistics for a dataset."""
+        params = params or {}
+        max_categories = _positive_int(params, "max_categories", 20)
+        runtime = self._require_data()
+        return await self._data_call(
+            runtime.profile_data, self._dataset_id(params), max_categories
+        )
+
+    async def data_clean_data(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Apply a validated pipeline of cleaning operations."""
+        params = params or {}
+        operations = params.get("operations")
+        if not isinstance(operations, list) or not operations:
+            raise invalid_params("operations must be a non-empty list")
+        runtime = self._require_data()
+        return await self._data_call(
+            runtime.clean_data, self._dataset_id(params), operations
+        )
+
+    async def data_analyze_data(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Run statistical analyses on a dataset."""
+        params = params or {}
+        analyses = params.get("analyses")
+        if not isinstance(analyses, list) or not analyses:
+            raise invalid_params("analyses must be a non-empty list")
+        runtime = self._require_data()
+        return await self._data_call(
+            runtime.analyze_data, self._dataset_id(params), analyses
+        )
+
+    async def data_auto_chart(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Rank chart suggestions for a dataset."""
+        params = params or {}
+        max_charts = _positive_int(params, "max_charts", 6)
+        runtime = self._require_data()
+        return await self._data_call(
+            runtime.auto_chart, self._dataset_id(params), max_charts
+        )
+
+    async def data_create_chart(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Render a chart from a ChartSpec (png/svg/pdf/html)."""
+        params = params or {}
+        chart_spec = params.get("chart_spec")
+        if not isinstance(chart_spec, dict):
+            raise invalid_params("chart_spec must be an object")
+        runtime = self._require_data()
+        return await self._data_call(runtime.create_chart, chart_spec)
+
+    async def data_generate_report(
+        self, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Produce report.pdf + report.md for a dataset."""
+        params = params or {}
+        title = params.get("title")
+        if not isinstance(title, str) or not title.strip():
+            raise invalid_params("title must be a non-empty string")
+        sections = params.get("sections")
+        if sections is not None and not isinstance(sections, list):
+            raise invalid_params("sections must be a list")
+        runtime = self._require_data()
+        return await self._data_call(
+            runtime.generate_report, self._dataset_id(params), title, sections
+        )
+
+    async def data_get_report(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Return the generated markdown report, if any."""
+        params = params or {}
+        runtime = self._require_data()
+        markdown = await self._data_call(
+            runtime.read_markdown_report, self._dataset_id(params)
+        )
+        return {"dataset_id": params.get("dataset_id"), "markdown": markdown}
+
+    def data_list_datasets(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """List registered datasets, newest first."""
+        del params
+        runtime = self._require_data()
+        return {"datasets": runtime.list_datasets()}
+
+    def data_get_dataset(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Return one dataset's registry record."""
+        params = params or {}
+        runtime = self._require_data()
+        try:
+            record = runtime.datasets.get(self._dataset_id(params))
+        except DataScienceError as exc:
+            raise invalid_params(str(exc)) from exc
+        return record.to_dict()
+
+    def data_delete_dataset(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Delete a dataset and its derived files."""
+        params = params or {}
+        runtime = self._require_data()
+        dataset_id = self._dataset_id(params)
+        try:
+            deleted = runtime.delete_dataset(dataset_id)
+        except DataScienceError as exc:
+            raise invalid_params(str(exc)) from exc
+        if self._notebooks is not None:
+            self._notebooks.shutdown_kernel(dataset_id)
+        return {"deleted": deleted, "dataset_id": dataset_id}
+
+    # ------------------------------------------------------------------ #
+    # notebook.* — Jupyter integration (P-09)
+    # ------------------------------------------------------------------ #
+
+    async def notebook_create(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Create an .ipynb under the dataset's notebooks directory."""
+        params = params or {}
+        name = params.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise invalid_params("name must be a non-empty string")
+        cells = params.get("cells") or []
+        if not isinstance(cells, list):
+            raise invalid_params("cells must be a list")
+        notebooks = self._require_notebooks()
+        try:
+            return await asyncio.to_thread(
+                notebooks.create_notebook, self._dataset_id(params), name, cells
+            )
+        except (ValueError, PermissionError) as exc:
+            raise invalid_params(str(exc)) from exc
+
+    async def notebook_execute(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Execute every code cell of a notebook on its dataset kernel."""
+        params = params or {}
+        path = params.get("path")
+        if not isinstance(path, str) or not path.strip():
+            raise invalid_params("path must be a non-empty string")
+        kernel_id = params.get("kernel_id")
+        if kernel_id is not None and not isinstance(kernel_id, str):
+            raise invalid_params("kernel_id must be a string")
+        notebooks = self._require_notebooks()
+        try:
+            return await asyncio.to_thread(notebooks.execute_notebook, path, kernel_id)
+        except NotebookUnavailableError as exc:
+            raise BridgeError(-32012, str(exc)) from exc
+        except (ValueError, PermissionError, FileNotFoundError) as exc:
+            raise invalid_params(str(exc)) from exc
+
+    async def notebook_run_cell(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Execute one cell of a notebook by index."""
+        params = params or {}
+        path = params.get("path")
+        if not isinstance(path, str) or not path.strip():
+            raise invalid_params("path must be a non-empty string")
+        cell_index = params.get("cell_index")
+        if not isinstance(cell_index, int) or isinstance(cell_index, bool) or cell_index < 0:
+            raise invalid_params("cell_index must be a non-negative integer")
+        notebooks = self._require_notebooks()
+        try:
+            return await asyncio.to_thread(notebooks.run_cell, path, cell_index)
+        except NotebookUnavailableError as exc:
+            raise BridgeError(-32012, str(exc)) from exc
+        except (ValueError, PermissionError, FileNotFoundError) as exc:
+            raise invalid_params(str(exc)) from exc
+
+    async def notebook_read(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Return a notebook's cells + summarised outputs."""
+        params = params or {}
+        path = params.get("path")
+        if not isinstance(path, str) or not path.strip():
+            raise invalid_params("path must be a non-empty string")
+        notebooks = self._require_notebooks()
+        try:
+            return await asyncio.to_thread(notebooks.read_notebook, path)
+        except (ValueError, PermissionError, FileNotFoundError) as exc:
+            raise invalid_params(str(exc)) from exc
+
+    async def notebook_open_lab(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Spawn (or reuse) JupyterLab and return the notebook's URL."""
+        params = params or {}
+        path = params.get("path")
+        if not isinstance(path, str) or not path.strip():
+            raise invalid_params("path must be a non-empty string")
+        notebooks = self._require_notebooks()
+        try:
+            return await asyncio.to_thread(notebooks.open_jupyterlab, path)
+        except NotebookUnavailableError as exc:
+            raise BridgeError(-32012, str(exc)) from exc
+        except (ValueError, PermissionError, FileNotFoundError) as exc:
+            raise invalid_params(str(exc)) from exc
 
     # ------------------------------------------------------------------ #
     # internals

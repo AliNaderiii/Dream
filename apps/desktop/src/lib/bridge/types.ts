@@ -795,3 +795,208 @@ export interface ACPAgentDto {
   enabled: boolean;
   status?: 'ready' | 'untested' | 'error';
 }
+
+// --------------------------------------------------------------------------- //
+// Data science workbench types (P-09).
+// --------------------------------------------------------------------------- //
+
+/** Registry entry for one ingested dataset (`data.list_datasets`). */
+export interface DatasetSummaryDto {
+  dataset_id: string;
+  name: string;
+  filename: string;
+  format: string;
+  created_at: number;
+  shape: [number, number];
+  columns: string[];
+  cleaned: boolean;
+}
+
+/** Result of `data.load_data`. */
+export interface DatasetDto {
+  dataset_id: string;
+  name: string;
+  filename: string;
+  format: string;
+  shape: [number, number];
+  columns: string[];
+  dtypes: Record<string, string>;
+  memory_bytes: number;
+  preview: Record<string, unknown>[];
+}
+
+/** Per-column profile entry inside `data.profile_data`. */
+export interface ColumnProfileDto {
+  dtype: string;
+  role?: 'numeric' | 'categorical' | 'datetime' | 'boolean' | 'text';
+  missing: number;
+  missing_pct?: number;
+  unique?: number;
+  count?: number;
+  mean?: number;
+  std?: number;
+  min?: number | string;
+  q1?: number;
+  median?: number;
+  q3?: number;
+  max?: number | string;
+  outliers_iqr?: number;
+  outliers_zscore?: number;
+  top_values?: { value: string; count: number }[];
+  histogram?: { counts: number[]; edges: number[] };
+  avg_length?: number;
+  true_count?: number;
+}
+
+/** Result of `data.profile_data`. */
+export interface DatasetProfileDto {
+  dataset_id: string;
+  sampled: boolean;
+  row_count: number;
+  column_count: number;
+  duplicate_rows: number | null;
+  missing_pct: number | null;
+  memory_bytes?: number;
+  columns: Record<string, ColumnProfileDto>;
+}
+
+/** One cleaning operation (tagged union on `op`). */
+export interface CleanOpDto {
+  op:
+    | 'drop_na'
+    | 'fill_na'
+    | 'convert_dtype'
+    | 'remove_duplicates'
+    | 'rename_column'
+    | 'drop_column'
+    | 'filter_rows'
+    | 'normalize_column'
+    | 'encode_categorical'
+    | 'handle_outliers';
+  column?: string;
+  columns?: string[];
+  [key: string]: unknown;
+}
+
+/** Result of `data.clean_data`. */
+export interface CleanResultDto {
+  dataset_id: string;
+  rows_before: number;
+  rows_after: number;
+  shape: [number, number];
+  columns: string[];
+  dtypes: Record<string, string>;
+  operations_applied: string[];
+  preview: Record<string, unknown>[];
+}
+
+/** One analysis request (tagged union on `kind`). */
+export interface AnalysisRequestDto {
+  kind:
+    | 'correlation'
+    | 'ttest'
+    | 'anova'
+    | 'chi_square'
+    | 'linear_regression'
+    | 'logistic_regression'
+    | 'kmeans'
+    | 'pca'
+    | 'time_series_decompose';
+  [key: string]: unknown;
+}
+
+/** One analysis result (`status` is `ok` or `error`). */
+export interface AnalysisResultDto {
+  kind: string;
+  status: 'ok' | 'error';
+  error?: string;
+  [key: string]: unknown;
+}
+
+/** A chart specification (validated against strict allowlists server-side). */
+export interface ChartSpecDto {
+  type: 'line' | 'bar' | 'scatter' | 'histogram' | 'box' | 'heatmap' | 'pie' | 'area' | 'bubble';
+  dataset_id: string;
+  x?: string | null;
+  y?: string | null;
+  color?: string | null;
+  group?: string | null;
+  size_by?: string | null;
+  theme?: 'default' | 'minimal' | 'dark' | 'ggplot' | 'seaborn';
+  palette?: 'viridis' | 'plasma' | 'inferno' | 'Set1' | 'Set2' | 'Pastel1' | 'custom';
+  colors?: string[];
+  size?: { width?: number; height?: number; dpi?: 72 | 96 | 150 | 300 };
+  title?: string;
+  legend?: boolean;
+  annotations?: string[];
+  /** Present on `data.auto_chart` suggestions. */
+  score?: number;
+  reason?: string;
+}
+
+/** Result of `data.create_chart`. */
+export interface ChartResultDto {
+  chart_id: string;
+  dataset_id: string;
+  spec: ChartSpecDto;
+  files: { png?: string; svg?: string; pdf?: string; html?: string };
+  sizes: Record<string, number>;
+}
+
+/** Result of `data.generate_report`. */
+export interface ReportResultDto {
+  dataset_id: string;
+  title: string;
+  pdf_path: string;
+  markdown_path: string;
+  size_bytes: number;
+  sections: string[];
+  charts_embedded: number;
+}
+
+/** A notebook cell in transport form. */
+export interface NotebookCellDto {
+  cell_type: 'code' | 'markdown';
+  source: string;
+  outputs?: NotebookOutputDto[];
+  execution_count?: number | null;
+}
+
+/** Summarised notebook output (text, image ref, html, or error). */
+export interface NotebookOutputDto {
+  type: string;
+  name?: string;
+  text?: string;
+  html?: string;
+  image_mime?: string;
+  image_data?: string;
+  image_truncated?: boolean;
+  ename?: string;
+  evalue?: string;
+  traceback?: string;
+}
+
+/** Result of `notebook.create`. */
+export interface NotebookRefDto {
+  notebook_path: string;
+  dataset_id: string;
+  name: string;
+  cell_count: number;
+}
+
+/** Result of `notebook.read`. */
+export interface NotebookDocumentDto {
+  notebook_path: string;
+  cells: NotebookCellDto[];
+}
+
+/** Result of `notebook.execute` / `notebook.run_cell`. */
+export interface NotebookRunResultDto {
+  notebook_path: string;
+  kernel_id?: string;
+  cells_executed?: number;
+  cell_index?: number;
+  cell_type?: string;
+  execution_count?: number | null;
+  outputs: { cell_index?: number; outputs: NotebookOutputDto[] }[] | NotebookOutputDto[];
+}
