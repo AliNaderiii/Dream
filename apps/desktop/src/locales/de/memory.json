@@ -1,0 +1,15 @@
+{
+  "title": "Erinnerungs-Explorer",
+  "loading": "Erinnerungen werden geladen…",
+  "shown": "{{shown}} von {{total}} Erinnerungen angezeigt",
+  "noMemories": "Noch keine Erinnerungen",
+  "noMemoriesDesc": "Erinnerungen stammen aus Unterhaltungen oder können von Hand hinzugefügt werden.",
+  "newMemory": "Neue Erinnerung",
+  "loadMore": "Mehr laden",
+  "memoryCount": "{{count}} Erinnerungen",
+  "memoryCountOne": "1 Erinnerung",
+  "failedLoad": "Erinnerungen konnten nicht geladen werden.",
+  "failedLoadMore": "Weitere Erinnerungen konnten nicht geladen werden.",
+  "failedSave": "Diese Erinnerung konnte nicht gespeichert werden.",
+  "failedDelete": "Diese Erinnerung konnte nicht gelöscht werden."
+}

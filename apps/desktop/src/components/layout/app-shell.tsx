@@ -19,30 +19,35 @@ import { useFileDrop } from '@/hooks/use-file-drop';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useNativeBridge } from '@/hooks/use-native-bridge';
 import { useTheme } from '@/hooks/use-theme';
+import { useLocaleSync, useTranslation } from '@/lib/i18n';
 
-/** Maps a pathname to the title shown in the top bar. */
-const TITLES: Record<string, string> = {
-  '/': 'Dashboard',
-  '/projects': 'Projects',
-  '/memory': 'Memory',
-  '/skills': 'Skills',
-  '/subagents': 'Subagents',
-  '/data': 'Data',
-  '/provenance': 'Provenance',
-  '/providers': 'Providers',
-  '/settings': 'Settings',
+/** Pathname → common.nav key for the top-bar title. */
+const NAV_SLUG: Record<string, string> = {
+  '/': 'dashboard',
+  '/projects': 'projects',
+  '/memory': 'memory',
+  '/skills': 'skills',
+  '/subagents': 'subagents',
+  '/data': 'data',
+  '/provenance': 'provenance',
+  '/providers': 'providers',
+  '/settings': 'settings',
 };
 
 export function AppShell() {
+  const { t } = useTranslation('common');
   const location = useLocation();
   const chatMatch = useMatch('/chat/:sessionId');
 
   useTheme();
+  useLocaleSync();
   useNativeBridge();
   const shortcuts = useKeyboardShortcuts();
   const { isDragging } = useFileDrop();
 
-  const title = chatMatch ? 'Conversation' : (TITLES[location.pathname] ?? 'Dream');
+  const title = chatMatch
+    ? t('conversation')
+    : t(`nav.${NAV_SLUG[location.pathname] ?? 'dashboard'}`);
 
   return (
     <TooltipProvider>
@@ -64,7 +69,7 @@ export function AppShell() {
             {/* Drop overlay: shown while files hover the window. */}
             {isDragging && (
               <div className="pointer-events-none absolute inset-0 z-40 m-3 flex items-center justify-center rounded-lg border-2 border-dashed border-accent bg-accent-soft/60">
-                <p className="text-h3 font-semibold text-accent-text">Drop files to attach</p>
+                <p className="text-h3 font-semibold text-accent-text">{t('drop')}</p>
               </div>
             )}
           </main>

@@ -1,0 +1,11 @@
+{
+  "title": "Konnektivität",
+  "subtitle": "Sprich über Telegram, Discord, Slack, WhatsApp, Signal und E-Mail mit Dream.",
+  "noPlatforms": "Keine Plattformen verfügbar",
+  "noPlatformsDesc": "Verbinde eine Plattform, um Dream mit deinen Chat-Apps zu verbinden.",
+  "start": "Starten",
+  "stop": "Stoppen",
+  "gatewayRunning": "Gateway läuft",
+  "gatewayStopped": "Gateway gestoppt",
+  "loading": "Plattformen werden geladen…"
+}

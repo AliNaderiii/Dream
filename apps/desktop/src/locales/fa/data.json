@@ -1,0 +1,18 @@
+{
+  "title": "کارگاه داده",
+  "subtitle": "بارگذاری، پروفایل، پاک‌سازی، تحلیل و نمودار داده‌ها.",
+  "load": "بارگذاری داده",
+  "noDatasets": "هنوز داده‌ای نیست",
+  "noDatasetsDesc": "یک فایل CSV یا جدول بارگذاری کنید تا تحلیل را شروع کنید.",
+  "profile": "پروفایل",
+  "clean": "پاک‌سازی",
+  "analyse": "تحلیل",
+  "charts": "نمودارها",
+  "report": "گزارش",
+  "notebook": "نوت‌بوک",
+  "loading": "در حال بارگذاری داده‌ها…",
+  "rows": "{{rows}} ردیف × {{cols}} ستون",
+  "cleaned": "پاک‌شده",
+  "deleteDataset": "حذف {{name}}",
+  "ingestPlaceholder": "~/datasets/sales-2024.csv"
+}

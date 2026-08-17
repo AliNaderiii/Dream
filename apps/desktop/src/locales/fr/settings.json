@@ -1,0 +1,24 @@
+{
+  "title": "Réglages et intégrations",
+  "subtitle": "Configurez l’apparence du système, les extensions de serveurs MCP et les connexions d’agents ACP.",
+  "tabs": {
+    "general": "Général",
+    "mcp": "Serveurs MCP",
+    "acp": "Interopérabilité ACP"
+  },
+  "appearance": "Apparence",
+  "theme": "Thème",
+  "themeDesc": "Suit le réglage système sauf remplacement.",
+  "density": "Densité",
+  "densityDesc": "Compact réduit le remplissage des composants de 25 %.",
+  "language": "Langue",
+  "languageDesc": "Le persan fait basculer toute l’interface de droite à gauche.",
+  "window": "Fenêtre",
+  "minimizeToTray": "Réduire dans la barre d’état",
+  "minimizeToTrayDesc": "Masque la fenêtre au lieu de la réduire.",
+  "closeToTray": "Fermer dans la barre d’état",
+  "closeToTrayDesc": "Garde Dream actif dans la barre d’état à la fermeture de la fenêtre.",
+  "workspace": "Espace de travail",
+  "workspaceFolder": "Dossier d’espace de travail",
+  "noWorkspace": "Aucun dossier sélectionné — l’accès aux fichiers est illimité."
+}

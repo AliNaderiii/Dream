@@ -1,0 +1,19 @@
+{
+  "title": "Provenance",
+  "subtitle": "Auditez l’historique de chaque artefact et tour.",
+  "noRecords": "Aucun enregistrement de provenance",
+  "noRecordsDesc": "Les enregistrements apparaissent ici au fil du travail de Dream.",
+  "searchPlaceholder": "Rechercher des enregistrements de provenance par outil, requête, fichier ou hachage…",
+  "allEventTypes": "Tous les types d’événement",
+  "toolCalls": "Appels d’outils",
+  "codeExecutions": "Exécutions de code",
+  "fileWrites": "Écritures de fichiers",
+  "modelResponses": "Réponses du modèle",
+  "userMessages": "Messages utilisateur",
+  "subagentSpawns": "Sous-agents",
+  "allSessions": "Toutes les sessions",
+  "noArtifacts": "Aucun artefact généré pour l’instant",
+  "toolLabel": "Outil :",
+  "modelLabel": "Modèle :",
+  "sizeLabel": "Taille :"
+}

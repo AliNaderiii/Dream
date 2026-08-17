@@ -1,0 +1,8 @@
+{
+  "title": "Web-Gateway",
+  "subtitle": "Greife von deinem Telefon oder einem anderen Browser auf Dream zu.",
+  "stopped": "Gateway gestoppt",
+  "running": "Gateway läuft",
+  "error": "Gateway-Fehler",
+  "disabled": "Gateway deaktiviert"
+}

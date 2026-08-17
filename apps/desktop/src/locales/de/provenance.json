@@ -1,0 +1,19 @@
+{
+  "title": "Herkunft",
+  "subtitle": "Prüfe den Verlauf jedes Artefakts und Turns.",
+  "noRecords": "Keine Herkunftsdatensätze",
+  "noRecordsDesc": "Datensätze erscheinen hier, während Dream arbeitet.",
+  "searchPlaceholder": "Herkunftsdatensätze nach Werkzeug, Abfrage, Datei oder Hash durchsuchen…",
+  "allEventTypes": "Alle Ereignistypen",
+  "toolCalls": "Werkzeugaufrufe",
+  "codeExecutions": "Code-Ausführungen",
+  "fileWrites": "Dateischreibvorgänge",
+  "modelResponses": "Modellantworten",
+  "userMessages": "Benutzernachrichten",
+  "subagentSpawns": "Subagenten",
+  "allSessions": "Alle Sitzungen",
+  "noArtifacts": "Noch keine Artefakte erzeugt",
+  "toolLabel": "Werkzeug:",
+  "modelLabel": "Modell:",
+  "sizeLabel": "Größe:"
+}

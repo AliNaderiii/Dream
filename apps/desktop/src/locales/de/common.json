@@ -1,0 +1,114 @@
+{
+  "nav": {
+    "dashboard": "Übersicht",
+    "chat": "Chat",
+    "projects": "Projekte",
+    "memory": "Erinnerung",
+    "skills": "Fähigkeiten",
+    "subagents": "Subagenten",
+    "data": "Daten",
+    "connectivity": "Konnektivität",
+    "providers": "Anbieter",
+    "settings": "Einstellungen",
+    "provenance": "Herkunft"
+  },
+  "sessions": {
+    "title": "Sitzungen",
+    "new": "Neue Sitzung",
+    "search": "Sitzungen suchen",
+    "collapse": "Seitenleiste einklappen",
+    "expand": "Seitenleiste ausklappen",
+    "resize": "Seitenleiste skalieren",
+    "empty": "Noch keine Sitzungen. Starte eine, um zu beginnen.",
+    "noMatch": "Keine Sitzung entspricht deiner Suche.",
+    "groupToday": "Heute",
+    "groupWeek": "Diese Woche",
+    "groupMonth": "Dieser Monat",
+    "groupOlder": "Älter"
+  },
+  "conversation": "Unterhaltung",
+  "status": {
+    "idle": "Bereit",
+    "running": "Läuft",
+    "paused": "Pausiert",
+    "error": "Fehler",
+    "offline": "Offline"
+  },
+  "titlebar": {
+    "minimize": "Minimieren",
+    "maximize": "Maximieren",
+    "restore": "Wiederherstellen",
+    "close": "Schließen",
+    "pending": "{{count}} ausstehend"
+  },
+  "topbar": {
+    "chooseWorkspace": "Arbeitsbereichsordner wählen",
+    "toggleTheme": "Design wechseln",
+    "expandSidebar": "Seitenleiste ausklappen",
+    "collapseSidebar": "Seitenleiste einklappen",
+    "approvals": "{{count}} Genehmigungsanfragen",
+    "newSession": "Neue Sitzung",
+    "newProject": "Neues Projekt",
+    "selectModel": "Modell wählen",
+    "cloud": "Cloud",
+    "configureProviders": "Anbieter konfigurieren…",
+    "noApprovals": "Keine ausstehenden Genehmigungen",
+    "switchToLight": "Zum hellen Design wechseln",
+    "switchToDark": "Zum dunklen Design wechseln"
+  },
+  "command": {
+    "title": "Befehlspalette",
+    "description": "Suche und führe einen beliebigen Dream-Befehl aus.",
+    "searchPlaceholder": "Befehl eingeben…",
+    "searchAria": "Befehle suchen",
+    "empty": "Keine passenden Befehle"
+  },
+  "confirm": {
+    "confirm": "Bestätigen",
+    "cancel": "Abbrechen"
+  },
+  "error": {
+    "title": "Etwas ist schiefgelaufen",
+    "body": "Dream hat beim Rendern dieses Bildschirms einen unerwarteten Fehler festgestellt. Deine Sitzungen und Erinnerungen sind nicht betroffen.",
+    "retry": "Erneut versuchen"
+  },
+  "drop": "Dateien zum Anhängen ablegen",
+  "dashboard": {
+    "greeting": "Schön, dich zu sehen",
+    "subtitle": "Dream behält seine Erinnerung auf diesem Gerät und fragt, bevor es etwas Unumkehrbares tut.",
+    "startSession": "Sitzung starten",
+    "memoryTitle": "Erinnerungs-Explorer",
+    "memoryDesc": "Durchstöbern, woran sich Dream erinnert",
+    "skillsTitle": "Fähigkeiten",
+    "skillsDesc": "Wiederverwendbare Abläufe verwalten",
+    "providersTitle": "Anbieter",
+    "providersDesc": "Modelle und Schlüssel konfigurieren"
+  },
+  "projects": {
+    "title": "Projekte",
+    "description": "Projekt-Dashboards, Dateien und projektspezifische Erinnerung. Gebaut in P-03."
+  },
+  "language": {
+    "en": "English",
+    "fa": "فارسی",
+    "zh-CN": "简体中文",
+    "ja": "日本語",
+    "es": "Español",
+    "de": "Deutsch",
+    "fr": "Français",
+    "ko": "한국어"
+  },
+  "generic": {
+    "on": "An",
+    "off": "Aus",
+    "loading": "Wird geladen…",
+    "choose": "Wählen…",
+    "edit": "Bearbeiten",
+    "save": "Speichern",
+    "saving": "Wird gespeichert…",
+    "delete": "Löschen",
+    "export": "Exportieren",
+    "cancel": "Abbrechen",
+    "close": "Schließen"
+  }
+}

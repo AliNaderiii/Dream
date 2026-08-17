@@ -658,7 +658,11 @@ def run_shell(command: str, timeout: int = 30) -> dict[str, Any]:
     :param command: Shell command to run.
     :param timeout: Maximum execution time in seconds.
     """
-    completed = subprocess.run(
+    # ``shell=True`` is the entire point of this tool (pipes, redirection and
+    # compound commands). It is gated behind the ``dangerous`` risk tier, which
+    # the approval policy refuses to execute without an interactive approver,
+    # so the shell is only ever invoked with explicit human consent.
+    completed = subprocess.run(  # nosec B602
         command,
         shell=True,
         cwd=WORKSPACE_ROOT,

@@ -10,6 +10,7 @@ import { Maximize2, Minus, Square, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/lib/i18n';
 import { windowApi } from '@/lib/tauri';
 import { useAppStore } from '@/stores/use-app-store';
 import { cn } from '@/utils/cn';
@@ -17,6 +18,7 @@ import { isMacOS } from '@/utils/platform';
 
 /** Height must match `--spacing-titlebar`. */
 export function TitleBar() {
+  const { t } = useTranslation('common');
   const mac = isMacOS();
   const [maximized, setMaximized] = useState(false);
   const pendingApprovals = useAppStore((s) => s.pendingApprovals);
@@ -51,7 +53,7 @@ export function TitleBar() {
         </span>
         {pendingApprovals > 0 && (
           <span className="rounded-full bg-warning-bg px-1.5 py-0.5 text-micro font-semibold text-warning-fg">
-            {pendingApprovals} pending
+            {t('titlebar.pending', { count: pendingApprovals })}
           </span>
         )}
       </div>
@@ -61,7 +63,7 @@ export function TitleBar() {
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Minimize"
+            aria-label={t('titlebar.minimize')}
             className="h-[38px] w-11 rounded-none"
             onClick={() => void windowApi.minimize()}
           >
@@ -70,7 +72,7 @@ export function TitleBar() {
           <Button
             variant="ghost"
             size="icon"
-            aria-label={maximized ? 'Restore' : 'Maximize'}
+            aria-label={maximized ? t('titlebar.restore') : t('titlebar.maximize')}
             className="h-[38px] w-11 rounded-none"
             onClick={() => void windowApi.toggleMaximize().then((v) => setMaximized(Boolean(v)))}
           >
@@ -79,7 +81,7 @@ export function TitleBar() {
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Close"
+            aria-label={t('titlebar.close')}
             className="h-[38px] w-11 rounded-none hover:bg-danger-fg hover:text-white"
             onClick={() => void windowApi.close()}
           >

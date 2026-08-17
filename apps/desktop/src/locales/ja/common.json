@@ -1,0 +1,114 @@
+{
+  "nav": {
+    "dashboard": "ダッシュボード",
+    "chat": "チャット",
+    "projects": "プロジェクト",
+    "memory": "記憶",
+    "skills": "スキル",
+    "subagents": "サブエージェント",
+    "data": "データ",
+    "connectivity": "接続",
+    "providers": "プロバイダー",
+    "settings": "設定",
+    "provenance": "来歴"
+  },
+  "sessions": {
+    "title": "セッション",
+    "new": "新しいセッション",
+    "search": "セッションを検索",
+    "collapse": "サイドバーを折りたたむ",
+    "expand": "サイドバーを展開",
+    "resize": "サイドバーのサイズ変更",
+    "empty": "まだセッションがありません。開始してください。",
+    "noMatch": "検索に一致するセッションがありません。",
+    "groupToday": "今日",
+    "groupWeek": "今週",
+    "groupMonth": "今月",
+    "groupOlder": "それ以前"
+  },
+  "conversation": "会話",
+  "status": {
+    "idle": "待機中",
+    "running": "実行中",
+    "paused": "一時停止",
+    "error": "エラー",
+    "offline": "オフライン"
+  },
+  "titlebar": {
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "元に戻す",
+    "close": "閉じる",
+    "pending": "保留 {{count}} 件"
+  },
+  "topbar": {
+    "chooseWorkspace": "ワークスペースフォルダーを選択",
+    "toggleTheme": "テーマを切り替え",
+    "expandSidebar": "サイドバーを展開",
+    "collapseSidebar": "サイドバーを折りたたむ",
+    "approvals": "承認リクエスト {{count}} 件",
+    "newSession": "新しいセッション",
+    "newProject": "新しいプロジェクト",
+    "selectModel": "モデルを選択",
+    "cloud": "クラウド",
+    "configureProviders": "プロバイダーを設定…",
+    "noApprovals": "保留中の承認はありません",
+    "switchToLight": "ライトテーマに切り替え",
+    "switchToDark": "ダークテーマに切り替え"
+  },
+  "command": {
+    "title": "コマンドパレット",
+    "description": "Dream のコマンドを検索して実行します。",
+    "searchPlaceholder": "コマンドを入力…",
+    "searchAria": "コマンドを検索",
+    "empty": "一致するコマンドがありません"
+  },
+  "confirm": {
+    "confirm": "確認",
+    "cancel": "キャンセル"
+  },
+  "error": {
+    "title": "問題が発生しました",
+    "body": "この画面の描画中に予期しないエラーが発生しました。セッションと記憶には影響ありません。",
+    "retry": "再試行"
+  },
+  "drop": "ファイルをドロップして添付",
+  "dashboard": {
+    "greeting": "おかえりなさい",
+    "subtitle": "Dream は記憶をこのマシンに保持し、取り消しできない操作の前には必ず確認します。",
+    "startSession": "セッションを開始",
+    "memoryTitle": "記憶エクスプローラー",
+    "memoryDesc": "Dream が覚えている内容を閲覧",
+    "skillsTitle": "スキル",
+    "skillsDesc": "再利用可能な手順を管理",
+    "providersTitle": "プロバイダー",
+    "providersDesc": "モデルとキーを設定"
+  },
+  "projects": {
+    "title": "プロジェクト",
+    "description": "プロジェクトのダッシュボード、ファイル、プロジェクト別の記憶。P-03 で構築。"
+  },
+  "language": {
+    "en": "English",
+    "fa": "فارسی",
+    "zh-CN": "简体中文",
+    "ja": "日本語",
+    "es": "Español",
+    "de": "Deutsch",
+    "fr": "Français",
+    "ko": "한국어"
+  },
+  "generic": {
+    "on": "オン",
+    "off": "オフ",
+    "loading": "読み込み中…",
+    "choose": "選択…",
+    "edit": "編集",
+    "save": "保存",
+    "saving": "保存中…",
+    "delete": "削除",
+    "export": "エクスポート",
+    "cancel": "キャンセル",
+    "close": "閉じる"
+  }
+}

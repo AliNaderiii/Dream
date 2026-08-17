@@ -1,0 +1,114 @@
+{
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "chat": "Discussion",
+    "projects": "Projets",
+    "memory": "Mémoire",
+    "skills": "Compétences",
+    "subagents": "Sous-agents",
+    "data": "Données",
+    "connectivity": "Connectivité",
+    "providers": "Fournisseurs",
+    "settings": "Réglages",
+    "provenance": "Provenance"
+  },
+  "sessions": {
+    "title": "Sessions",
+    "new": "Nouvelle session",
+    "search": "Rechercher des sessions",
+    "collapse": "Réduire la barre latérale",
+    "expand": "Déplier la barre latérale",
+    "resize": "Redimensionner la barre latérale",
+    "empty": "Aucune session pour l’instant. Lancez-en une pour commencer.",
+    "noMatch": "Aucune session ne correspond à votre recherche.",
+    "groupToday": "Aujourd’hui",
+    "groupWeek": "Cette semaine",
+    "groupMonth": "Ce mois-ci",
+    "groupOlder": "Plus ancien"
+  },
+  "conversation": "Conversation",
+  "status": {
+    "idle": "Inactif",
+    "running": "En cours",
+    "paused": "En pause",
+    "error": "Erreur",
+    "offline": "Hors ligne"
+  },
+  "titlebar": {
+    "minimize": "Réduire",
+    "maximize": "Agrandir",
+    "restore": "Restaurer",
+    "close": "Fermer",
+    "pending": "{{count}} en attente"
+  },
+  "topbar": {
+    "chooseWorkspace": "Choisir le dossier d’espace de travail",
+    "toggleTheme": "Changer de thème",
+    "expandSidebar": "Déplier la barre latérale",
+    "collapseSidebar": "Réduire la barre latérale",
+    "approvals": "{{count}} demandes d’approbation",
+    "newSession": "Nouvelle session",
+    "newProject": "Nouveau projet",
+    "selectModel": "Choisir un modèle",
+    "cloud": "Cloud",
+    "configureProviders": "Configurer les fournisseurs…",
+    "noApprovals": "Aucune approbation en attente",
+    "switchToLight": "Passer au thème clair",
+    "switchToDark": "Passer au thème sombre"
+  },
+  "command": {
+    "title": "Palette de commandes",
+    "description": "Rechercher et exécuter n’importe quelle commande Dream.",
+    "searchPlaceholder": "Saisir une commande…",
+    "searchAria": "Rechercher des commandes",
+    "empty": "Aucune commande correspondante"
+  },
+  "confirm": {
+    "confirm": "Confirmer",
+    "cancel": "Annuler"
+  },
+  "error": {
+    "title": "Une erreur est survenue",
+    "body": "Dream a rencontré une erreur inattendue en affichant cet écran. Vos sessions et votre mémoire ne sont pas affectées.",
+    "retry": "Réessayer"
+  },
+  "drop": "Déposez des fichiers pour les joindre",
+  "dashboard": {
+    "greeting": "Ravi de vous voir",
+    "subtitle": "Dream conserve sa mémoire sur cet appareil et demande avant toute action irréversible.",
+    "startSession": "Démarrer une session",
+    "memoryTitle": "Explorateur de mémoire",
+    "memoryDesc": "Parcourir ce dont Dream se souvient",
+    "skillsTitle": "Compétences",
+    "skillsDesc": "Gérer des procédures réutilisables",
+    "providersTitle": "Fournisseurs",
+    "providersDesc": "Configurer les modèles et les clés"
+  },
+  "projects": {
+    "title": "Projets",
+    "description": "Tableaux de bord de projet, fichiers et mémoire par projet. Construit dans P-03."
+  },
+  "language": {
+    "en": "English",
+    "fa": "فارسی",
+    "zh-CN": "简体中文",
+    "ja": "日本語",
+    "es": "Español",
+    "de": "Deutsch",
+    "fr": "Français",
+    "ko": "한국어"
+  },
+  "generic": {
+    "on": "Activé",
+    "off": "Désactivé",
+    "loading": "Chargement…",
+    "choose": "Choisir…",
+    "edit": "Modifier",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "delete": "Supprimer",
+    "export": "Exporter",
+    "cancel": "Annuler",
+    "close": "Fermer"
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "nav": {
+    "dashboard": "대시보드",
+    "chat": "대화",
+    "projects": "프로젝트",
+    "memory": "기억",
+    "skills": "스킬",
+    "subagents": "하위 에이전트",
+    "data": "데이터",
+    "connectivity": "연결",
+    "providers": "제공자",
+    "settings": "설정",
+    "provenance": "출처"
+  },
+  "sessions": {
+    "title": "세션",
+    "new": "새 세션",
+    "search": "세션 검색",
+    "collapse": "사이드바 접기",
+    "expand": "사이드바 펼치기",
+    "resize": "사이드바 크기 조절",
+    "empty": "아직 세션이 없습니다. 하나 시작하세요.",
+    "noMatch": "검색과 일치하는 세션이 없습니다.",
+    "groupToday": "오늘",
+    "groupWeek": "이번 주",
+    "groupMonth": "이번 달",
+    "groupOlder": "이전"
+  },
+  "conversation": "대화",
+  "status": {
+    "idle": "대기 중",
+    "running": "실행 중",
+    "paused": "일시정지",
+    "error": "오류",
+    "offline": "오프라인"
+  },
+  "titlebar": {
+    "minimize": "최소화",
+    "maximize": "최대화",
+    "restore": "복원",
+    "close": "닫기",
+    "pending": "{{count}}개 대기 중"
+  },
+  "topbar": {
+    "chooseWorkspace": "작업공간 폴더 선택",
+    "toggleTheme": "테마 전환",
+    "expandSidebar": "사이드바 펼치기",
+    "collapseSidebar": "사이드바 접기",
+    "approvals": "{{count}}개의 승인 요청",
+    "newSession": "새 세션",
+    "newProject": "새 프로젝트",
+    "selectModel": "모델 선택",
+    "cloud": "클라우드",
+    "configureProviders": "제공자 구성…",
+    "noApprovals": "대기 중인 승인 없음",
+    "switchToLight": "라이트 테마로 전환",
+    "switchToDark": "다크 테마로 전환"
+  },
+  "command": {
+    "title": "명령 팔레트",
+    "description": "Dream 명령을 검색하고 실행합니다.",
+    "searchPlaceholder": "명령 입력…",
+    "searchAria": "명령 검색",
+    "empty": "일치하는 명령이 없습니다"
+  },
+  "confirm": {
+    "confirm": "확인",
+    "cancel": "취소"
+  },
+  "error": {
+    "title": "문제가 발생했습니다",
+    "body": "이 화면을 렌더링하는 동안 Dream에 예기치 않은 오류가 발생했습니다. 세션과 기억은 영향을 받지 않습니다.",
+    "retry": "다시 시도"
+  },
+  "drop": "파일을 놓아 첨부",
+  "dashboard": {
+    "greeting": "반갑습니다",
+    "subtitle": "Dream은 기억을 이 기기에 보관하며 되돌릴 수 없는 작업 전에 먼저 묻습니다.",
+    "startSession": "세션 시작",
+    "memoryTitle": "기억 탐색기",
+    "memoryDesc": "Dream이 기억하는 내용 탐색",
+    "skillsTitle": "스킬",
+    "skillsDesc": "재사용 가능한 절차 관리",
+    "providersTitle": "제공자",
+    "providersDesc": "모델 및 키 구성"
+  },
+  "projects": {
+    "title": "프로젝트",
+    "description": "프로젝트 대시보드, 파일, 프로젝트별 기억. P-03에서 구축됨."
+  },
+  "language": {
+    "en": "English",
+    "fa": "فارسی",
+    "zh-CN": "简体中文",
+    "ja": "日本語",
+    "es": "Español",
+    "de": "Deutsch",
+    "fr": "Français",
+    "ko": "한국어"
+  },
+  "generic": {
+    "on": "켬",
+    "off": "끔",
+    "loading": "로드 중…",
+    "choose": "선택…",
+    "edit": "편집",
+    "save": "저장",
+    "saving": "저장 중…",
+    "delete": "삭제",
+    "export": "내보내기",
+    "cancel": "취소",
+    "close": "닫기"
+  }
+}

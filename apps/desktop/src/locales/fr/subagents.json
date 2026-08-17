@@ -1,0 +1,13 @@
+{
+  "title": "Sous-agents",
+  "subtitle": "Déléguez des tâches à des agents de travail isolés.",
+  "spawn": "Créer un sous-agent",
+  "newSubagent": "Nouveau sous-agent",
+  "noSubagents": "Aucun sous-agent pour l’instant",
+  "noSubagentsDesc": "Déléguez une tâche pour l’exécuter dans un travailleur isolé.",
+  "selectPrompt": "Sélectionnez un sous-agent pour l’inspecter.",
+  "refresh": "Actualiser",
+  "expandList": "Déplier la liste des sous-agents",
+  "collapseList": "Réduire la liste des sous-agents",
+  "progress": "progression de {{name}}"
+}

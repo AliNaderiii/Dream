@@ -1,0 +1,8 @@
+{
+  "title": "Docker 샌드박스",
+  "subtitle": "격리된 컨테이너에서 신뢰할 수 없는 코드를 실행합니다.",
+  "unavailable": "Docker 사용 불가",
+  "available": "샌드박스 준비됨",
+  "disabled": "샌드박스 비활성화",
+  "error": "샌드박스 오류"
+}

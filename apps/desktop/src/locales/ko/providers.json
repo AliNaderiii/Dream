@@ -1,0 +1,20 @@
+{
+  "title": "제공자",
+  "subtitle": "Dream이 대화할 수 있는 모델 백엔드를 구성합니다.",
+  "add": "제공자 추가",
+  "noProviders": "구성된 제공자가 없습니다",
+  "noProvidersDesc": "Dream과 대화하려면 제공자를 연결하세요.",
+  "connected": "연결됨",
+  "disconnected": "연결 안 됨",
+  "testing": "테스트 중",
+  "local": "로컬",
+  "configure": "구성",
+  "configured": "{{count}}개 구성됨",
+  "connectFirst": "첫 번째 제공자 연결",
+  "connectFirstDesc": "OpenAI, Anthropic, Google AI, Groq, Together, OpenRouter 또는 로컬 서버 중에서 선택하세요.",
+  "browseCatalog": "카탈로그 둘러보기",
+  "loading": "제공자 로드 중…",
+  "deleteTitle": "{{name}} 삭제?",
+  "deleteDesc": "구성을 제거하고 OS 키체인에서 자격 증명을 영구적으로 삭제합니다. 대화는 삭제되지 않습니다.",
+  "deleteProvider": "제공자 삭제"
+}

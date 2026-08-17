@@ -1,0 +1,15 @@
+{
+  "title": "Memory explorer",
+  "loading": "Loading memories…",
+  "shown": "{{shown}} of {{total}} memories shown",
+  "noMemories": "No memories yet",
+  "noMemoriesDesc": "Memories are captured from conversations, or you can add one by hand.",
+  "newMemory": "New memory",
+  "loadMore": "Load more",
+  "memoryCount": "{{count}} memories",
+  "memoryCountOne": "1 memory",
+  "failedLoad": "Failed to load memories.",
+  "failedLoadMore": "Failed to load more memories.",
+  "failedSave": "Could not save this memory.",
+  "failedDelete": "Could not delete this memory."
+}

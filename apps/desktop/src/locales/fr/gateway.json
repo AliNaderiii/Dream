@@ -1,0 +1,8 @@
+{
+  "title": "Passerelle web",
+  "subtitle": "Accédez à Dream depuis votre téléphone ou un autre navigateur.",
+  "stopped": "Passerelle arrêtée",
+  "running": "Passerelle en cours d’exécution",
+  "error": "Erreur de passerelle",
+  "disabled": "Passerelle désactivée"
+}

@@ -1,0 +1,24 @@
+{
+  "title": "Settings & Integrations",
+  "subtitle": "Configure system appearance, MCP server extensions, and ACP agent connections.",
+  "tabs": {
+    "general": "General",
+    "mcp": "MCP Servers",
+    "acp": "ACP Interoperability"
+  },
+  "appearance": "Appearance",
+  "theme": "Theme",
+  "themeDesc": "Follows your system setting unless overridden.",
+  "density": "Density",
+  "densityDesc": "Compact reduces component padding by 25%.",
+  "language": "Language",
+  "languageDesc": "Persian switches the whole shell to right-to-left.",
+  "window": "Window",
+  "minimizeToTray": "Minimize to tray",
+  "minimizeToTrayDesc": "Hide the window instead of minimizing it.",
+  "closeToTray": "Close to tray",
+  "closeToTrayDesc": "Keep Dream running in the tray when the window closes.",
+  "workspace": "Workspace",
+  "workspaceFolder": "Workspace folder",
+  "noWorkspace": "No folder selected — file access is unrestricted."
+}

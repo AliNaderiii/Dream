@@ -7,21 +7,30 @@ import { Circle, Globe, HardDrive, Languages } from 'lucide-react';
 
 import { BridgeStatusIndicator } from '@/components/bridge/bridge-status';
 import { SandboxStatusIndicator } from '@/components/sandbox/sandbox-status';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { LANGUAGES, useTranslation } from '@/lib/i18n';
 import { useAppStore } from '@/stores/use-app-store';
 import { useProviderStore } from '@/stores/use-provider-store';
 import type { AgentStatus } from '@/types';
 import { cn } from '@/utils/cn';
 
-/** Maps agent status to a dot colour and label. */
-const STATUS_META: Record<AgentStatus, { label: string; className: string }> = {
-  idle: { label: 'Idle', className: 'text-fg-muted' },
-  running: { label: 'Running', className: 'text-success-fg' },
-  paused: { label: 'Paused', className: 'text-warning-fg' },
-  error: { label: 'Error', className: 'text-danger-fg' },
-  offline: { label: 'Offline', className: 'text-fg-muted' },
+/** Maps agent status to a dot colour and label key. */
+const STATUS_META: Record<AgentStatus, { labelKey: string; className: string }> = {
+  idle: { labelKey: 'status.idle', className: 'text-fg-muted' },
+  running: { labelKey: 'status.running', className: 'text-success-fg' },
+  paused: { labelKey: 'status.paused', className: 'text-warning-fg' },
+  error: { labelKey: 'status.error', className: 'text-danger-fg' },
+  offline: { labelKey: 'status.offline', className: 'text-fg-muted' },
 };
 
 export function StatusBar() {
+  const { t } = useTranslation('common');
+  const { t: ts } = useTranslation('settings');
   const agentStatus = useAppStore((s) => s.agentStatus);
   const workspaceRoot = useAppStore((s) => s.workspaceRoot);
   const locale = useAppStore((s) => s.locale);
@@ -32,12 +41,13 @@ export function StatusBar() {
   const activeProvider = providers.find((p) => p.id === activeProviderId);
 
   const status = STATUS_META[agentStatus];
+  const activeLanguage = LANGUAGES.find((l) => l.code === locale);
 
   return (
     <footer className="flex h-6 shrink-0 items-center gap-3 border-t border-border-default bg-surface px-3 text-caption text-fg-secondary">
       <span className="flex items-center gap-1.5">
         <Circle className={cn('size-2 fill-current', status.className)} aria-hidden />
-        <span>{status.label}</span>
+        <span>{t(status.labelKey)}</span>
       </span>
 
       <BridgeStatusIndicator />
@@ -64,15 +74,31 @@ export function StatusBar() {
             {workspaceRoot}
           </span>
         )}
-        <button
-          type="button"
-          onClick={() => setLocale(locale === 'fa' ? 'en' : 'fa')}
-          className="flex items-center gap-1 rounded-xs hover:text-fg-primary"
-          aria-label={locale === 'fa' ? 'Switch to English' : 'تغییر به فارسی'}
-        >
-          <Languages className="size-3" aria-hidden />
-          {locale === 'fa' ? 'فارسی' : 'English'}
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center gap-1 rounded-xs hover:text-fg-primary"
+              aria-label={ts('language')}
+            >
+              <Languages className="size-3" aria-hidden />
+              <span>{activeLanguage?.flag}</span>
+              {t(activeLanguage?.nameKey ?? 'language.en')}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {LANGUAGES.map((lang) => (
+              <DropdownMenuItem
+                key={lang.code}
+                onSelect={() => setLocale(lang.code)}
+                className={locale === lang.code ? 'bg-accent-soft text-accent-text' : ''}
+              >
+                <span className="me-2">{lang.flag}</span>
+                {t(lang.nameKey)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </span>
     </footer>
   );

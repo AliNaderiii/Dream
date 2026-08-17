@@ -1,0 +1,8 @@
+{
+  "title": "Docker-Sandbox",
+  "subtitle": "Führe nicht vertrauenswürdigen Code in einem isolierten Container aus.",
+  "unavailable": "Docker nicht verfügbar",
+  "available": "Sandbox bereit",
+  "disabled": "Sandbox deaktiviert",
+  "error": "Sandbox-Fehler"
+}

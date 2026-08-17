@@ -1,0 +1,24 @@
+{
+  "title": "Einstellungen & Integrationen",
+  "subtitle": "Konfiguriere Systemdarstellung, MCP-Server-Erweiterungen und ACP-Agentenverbindungen.",
+  "tabs": {
+    "general": "Allgemein",
+    "mcp": "MCP-Server",
+    "acp": "ACP-Interoperabilität"
+  },
+  "appearance": "Darstellung",
+  "theme": "Design",
+  "themeDesc": "Folgt der Systemeinstellung, sofern nicht überschrieben.",
+  "density": "Dichte",
+  "densityDesc": "Kompakt reduziert den Innenabstand der Komponenten um 25 %.",
+  "language": "Sprache",
+  "languageDesc": "Persisch schaltet die gesamte Oberfläche auf rechts-nach-links.",
+  "window": "Fenster",
+  "minimizeToTray": "In Tray minimieren",
+  "minimizeToTrayDesc": "Blendet das Fenster aus, statt es zu minimieren.",
+  "closeToTray": "In Tray schließen",
+  "closeToTrayDesc": "Hält Dream beim Schließen des Fensters im Tray am Laufen.",
+  "workspace": "Arbeitsbereich",
+  "workspaceFolder": "Arbeitsbereichsordner",
+  "noWorkspace": "Kein Ordner gewählt — Dateizugriff ist nicht eingeschränkt."
+}

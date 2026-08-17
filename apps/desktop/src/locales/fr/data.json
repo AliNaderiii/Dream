@@ -1,0 +1,18 @@
+{
+  "title": "Atelier de données",
+  "subtitle": "Chargez, profilez, nettoyez, analysez et tracez des jeux de données.",
+  "load": "Charger un jeu de données",
+  "noDatasets": "Aucun jeu de données pour l’instant",
+  "noDatasetsDesc": "Chargez un fichier CSV ou tabulaire pour commencer l’analyse.",
+  "profile": "Profil",
+  "clean": "Nettoyer",
+  "analyse": "Analyser",
+  "charts": "Graphiques",
+  "report": "Rapport",
+  "notebook": "Notebook",
+  "loading": "Chargement des jeux de données…",
+  "rows": "{{rows}} lignes × {{cols}} colonnes",
+  "cleaned": "nettoyé",
+  "deleteDataset": "Supprimer {{name}}",
+  "ingestPlaceholder": "~/datasets/sales-2024.csv"
+}

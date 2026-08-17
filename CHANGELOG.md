@@ -5,6 +5,53 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-08-17
+
+Prompt P-11 — Internationalisation, Documentation, Security Audit & Release.
+
+### Added
+
+- **Internationalisation** — the desktop shell now ships eight languages
+  (English, Persian, Simplified Chinese, Japanese, Spanish, German, French,
+  Korean) via `react-i18next`, with a flag + native-name picker in Settings and
+  the status bar, auto-detection from `navigator.language`, and a fallback to
+  the key string (never a raw English value). Persian is the only
+  right-to-left language and flips the whole shell via logical CSS properties.
+  Locale-aware number/currency/date formatting uses the `Intl` API. Every route
+  and shell component is migrated to `t()`/`useTranslation()`.
+- **Developer tooling** — `apps/desktop/scripts/generate-locales.mjs`, the
+  single source of truth for locale files (identical key trees across all
+  eight languages guarantee 100% coverage).
+- **Documentation** — `docs/user/` (quick-start, full 12-chapter manual, FAQ,
+  troubleshooting, keyboard shortcuts) and `docs/dev/` (architecture with a
+  Mermaid diagram, contributing guide, how-to guides for adding tools,
+  providers, MCP connectors and platform adapters, and an API reference).
+- **Security audit** — `docs/security/audit-report.md` plus a
+  `tests/test_security_*.py` suite covering tool-risk enforcement, workspace
+  confinement, gateway token scope, and a tracked-file credential scan.
+- **Performance** — code-split routes (`React.lazy` + `Suspense`),
+  `docs/performance-budget.md`, and a `.github/workflows/perf.yml` CI smoke
+  that fails on bundle-size/cold-start regressions beyond 10%.
+- **Release** — SHA-256 checksum generation in the release workflow.
+
+### Changed
+
+- Version bumped to **0.2.0** (`dream/__init__.py`, `pyproject.toml`,
+  `apps/desktop/package.json`, `Cargo.toml`, `tauri.conf.json`).
+
+### Fixed
+
+- Two Bandit high findings resolved: the WebSocket handshake SHA-1 is now
+  marked `usedforsecurity=False` (RFC 6455-mandated, not a security primitive),
+  and the approval-gated `run_shell` tool documents its intentional
+  `shell=True` with `# nosec B602`.
+
+### Security
+
+- `ruff` clean; `bandit` 0 critical / 0 high; `npm audit` 0 vulnerabilities;
+  project Python dependencies free of known CVEs. See
+  `docs/security/audit-report.md`.
+
 ## [Unreleased]
 
 ### Added

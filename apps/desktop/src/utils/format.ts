@@ -63,3 +63,22 @@ export function formatTokens(count: number): string {
   if (count < 1000) return String(count);
   return `${(count / 1000).toFixed(1)}k`;
 }
+
+/** The document's current language tag, falling back to English. */
+function localeTag(): string {
+  if (typeof document === 'undefined') return 'en';
+  return document.documentElement.lang || 'en';
+}
+
+/**
+ * Locale-aware number, e.g. `1,234.56` in English or `۱۲۳۴/۵۶`-style grouping
+ * for the Persian locale (Western digits, Persian decimal separator).
+ */
+export function formatNumber(value: number): string {
+  return new Intl.NumberFormat(localeTag()).format(value);
+}
+
+/** Locale-aware currency with an explicit currency code, e.g. `USD`. */
+export function formatCurrency(value: number, currency = 'USD'): string {
+  return new Intl.NumberFormat(localeTag(), { style: 'currency', currency }).format(value);
+}

@@ -4,6 +4,7 @@ import { Database, MessageSquarePlus, Sparkles, Wrench } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/lib/i18n';
 import { useSessionStore } from '@/stores/use-session-store';
 import { formatShortcut } from '@/utils/platform';
 
@@ -11,30 +12,34 @@ import { formatShortcut } from '@/utils/platform';
 const TILES = [
   {
     to: '/memory',
-    label: 'Memory explorer',
-    description: 'Browse what Dream remembers',
+    labelKey: 'dashboard.memoryTitle',
+    descKey: 'dashboard.memoryDesc',
     icon: Database,
   },
-  { to: '/skills', label: 'Skills', description: 'Manage reusable procedures', icon: Wrench },
+  {
+    to: '/skills',
+    labelKey: 'dashboard.skillsTitle',
+    descKey: 'dashboard.skillsDesc',
+    icon: Wrench,
+  },
   {
     to: '/providers',
-    label: 'Providers',
-    description: 'Configure models and keys',
+    labelKey: 'dashboard.providersTitle',
+    descKey: 'dashboard.providersDesc',
     icon: Sparkles,
   },
 ] as const;
 
 export function DashboardRoute() {
+  const { t } = useTranslation('common');
   const navigate = useNavigate();
   const createSession = useSessionStore((s) => s.createSession);
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-8 p-8">
       <header className="flex flex-col gap-2">
-        <h2 className="text-display font-bold">Good to see you</h2>
-        <p className="text-body-lg text-fg-secondary">
-          Dream keeps its memory on this machine and asks before doing anything irreversible.
-        </p>
+        <h2 className="text-display font-bold">{t('dashboard.greeting')}</h2>
+        <p className="text-body-lg text-fg-secondary">{t('dashboard.subtitle')}</p>
       </header>
 
       <Button
@@ -47,7 +52,7 @@ export function DashboardRoute() {
         }}
       >
         <MessageSquarePlus aria-hidden />
-        Start a session
+        {t('dashboard.startSession')}
         <span className="ltr-island ms-1 opacity-70">{formatShortcut(['mod', 'n'])}</span>
       </Button>
 
@@ -62,8 +67,8 @@ export function DashboardRoute() {
               className="flex flex-col items-start gap-2 rounded-lg border border-border-default bg-surface p-4 text-start transition-colors duration-fast hover:border-border-strong hover:bg-surface-2"
             >
               <Icon className="size-5 text-accent-text" aria-hidden />
-              <span className="text-h3 font-semibold">{tile.label}</span>
-              <span className="text-caption text-fg-secondary">{tile.description}</span>
+              <span className="text-h3 font-semibold">{t(tile.labelKey)}</span>
+              <span className="text-caption text-fg-secondary">{t(tile.descKey)}</span>
             </button>
           );
         })}

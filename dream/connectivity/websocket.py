@@ -61,7 +61,11 @@ class WebSocketClosed(WebSocketError):
 
 def _accept_key(client_key: str) -> str:
     """Compute the Sec-WebSocket-Accept value the server must echo."""
-    digest = hashlib.sha1((client_key + _WS_GUID).encode("ascii")).digest()
+    # SHA-1 here is mandated by RFC 6455 §4.2.2 for the opening handshake; it is
+    # not a security primitive, so mark it as such for static analysis.
+    digest = hashlib.sha1(
+        (client_key + _WS_GUID).encode("ascii"), usedforsecurity=False
+    ).digest()
     return base64.b64encode(digest).decode("ascii")
 
 

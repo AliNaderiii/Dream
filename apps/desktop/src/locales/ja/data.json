@@ -1,0 +1,18 @@
+{
+  "title": "データワークベンチ",
+  "subtitle": "データセットの読み込み、プロファイリング、クリーニング、分析、可視化。",
+  "load": "データセットを読み込む",
+  "noDatasets": "まだデータセットがありません",
+  "noDatasetsDesc": "CSV または表ファイルを読み込んで分析を開始します。",
+  "profile": "プロファイル",
+  "clean": "クリーニング",
+  "analyse": "分析",
+  "charts": "チャート",
+  "report": "レポート",
+  "notebook": "ノートブック",
+  "loading": "データセットを読み込み中…",
+  "rows": "{{rows}} 行 × {{cols}} 列",
+  "cleaned": "クリーニング済み",
+  "deleteDataset": "{{name}} を削除",
+  "ingestPlaceholder": "~/datasets/sales-2024.csv"
+}

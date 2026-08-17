@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/lib/i18n';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -34,11 +35,12 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   destructive = true,
   onConfirm,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation('common');
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[min(28rem,92vw)]">
@@ -49,7 +51,7 @@ export function ConfirmDialog({
         <DialogBody className="sr-only" aria-hidden />
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
-            {cancelLabel}
+            {cancelLabel ?? t('confirm.cancel')}
           </Button>
           <Button
             variant={destructive ? 'destructive' : 'primary'}
@@ -58,7 +60,7 @@ export function ConfirmDialog({
               onOpenChange(false);
             }}
           >
-            {confirmLabel}
+            {confirmLabel ?? t('confirm.confirm')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,0 +1,6 @@
+{
+  "title": "Scheduler",
+  "subtitle": "Schedule recurring and one-off tasks.",
+  "noTasks": "No scheduled tasks",
+  "noTasksDesc": "Schedule a task to run it later or on a repeating interval."
+}

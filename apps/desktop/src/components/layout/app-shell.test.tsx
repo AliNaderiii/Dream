@@ -42,10 +42,11 @@ describe('app shell', () => {
     ['/data', 'Data workbench'],
     ['/providers', 'Providers'],
     ['/settings', 'Appearance'],
-  ])('renders %s', (route, heading) => {
+  ])('renders %s', async (route, heading) => {
     renderApp(route);
     // Level 2: the top bar repeats several of these words as its h1 page title.
-    expect(screen.getByRole('heading', { level: 2, name: heading })).toBeInTheDocument();
+    // Heavy routes are code-split, so await the lazy chunk before asserting.
+    expect(await screen.findByRole('heading', { level: 2, name: heading })).toBeInTheDocument();
   });
 
   it.each([
@@ -94,7 +95,9 @@ describe('app shell', () => {
     const user = userEvent.setup();
     renderApp('/');
 
-    await user.click(screen.getByRole('button', { name: 'تغییر به فارسی' }));
+    // Open the language menu in the status bar, then pick Persian.
+    await user.click(screen.getByRole('button', { name: 'Language' }));
+    await user.click(screen.getByRole('menuitem', { name: /فارسی/ }));
 
     expect(document.documentElement.getAttribute('dir')).toBe('rtl');
     expect(document.documentElement.getAttribute('lang')).toBe('fa');

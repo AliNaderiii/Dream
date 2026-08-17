@@ -1,0 +1,19 @@
+{
+  "title": "来歴",
+  "subtitle": "すべての成果物とターンの履歴を監査します。",
+  "noRecords": "来歴レコードがありません",
+  "noRecordsDesc": "Dream が動作するにつれてレコードがここに表示されます。",
+  "searchPlaceholder": "ツール、クエリ、ファイル、またはハッシュで来歴レコードを検索…",
+  "allEventTypes": "すべてのイベントタイプ",
+  "toolCalls": "ツール呼び出し",
+  "codeExecutions": "コード実行",
+  "fileWrites": "ファイル書き込み",
+  "modelResponses": "モデル応答",
+  "userMessages": "ユーザーメッセージ",
+  "subagentSpawns": "サブエージェント",
+  "allSessions": "すべてのセッション",
+  "noArtifacts": "まだ成果物はありません",
+  "toolLabel": "ツール：",
+  "modelLabel": "モデル：",
+  "sizeLabel": "サイズ："
+}

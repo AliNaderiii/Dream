@@ -14,10 +14,12 @@ import { PlatformConfig } from '@/components/connectivity/platform-config';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/lib/i18n';
 import type { GatewayPlatformName } from '@/lib/bridge/types';
 import { useConnectivityStore } from '@/stores/use-connectivity-store';
 
 export function ConnectivityRoute() {
+  const { t } = useTranslation('connectivity');
   const platforms = useConnectivityStore((state) => state.platforms);
   const status = useConnectivityStore((state) => state.status);
   const logs = useConnectivityStore((state) => state.logs);
@@ -53,25 +55,23 @@ export function ConnectivityRoute() {
         <div className="flex items-center gap-2">
           <Radio className="size-6 text-fg-secondary" aria-hidden />
           <div>
-            <h1 className="text-h2 font-semibold">Connectivity</h1>
-            <p className="text-body text-fg-secondary">
-              Talk to Dream from Telegram, Discord, Slack, WhatsApp, Signal, and Email.
-            </p>
+            <h1 className="text-h2 font-semibold">{t('title')}</h1>
+            <p className="text-body text-fg-secondary">{t('subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant={running ? 'success' : 'neutral'}>
-            {running ? 'Gateway running' : 'Gateway stopped'}
+            {running ? t('gatewayRunning') : t('gatewayStopped')}
           </Badge>
           {running ? (
             <Button variant="secondary" onClick={() => void stopGateway()}>
               <Square className="size-4" aria-hidden />
-              Stop
+              {t('stop')}
             </Button>
           ) : (
             <Button variant="primary" onClick={() => void startGateway()}>
               <Play className="size-4" aria-hidden />
-              Start
+              {t('start')}
             </Button>
           )}
         </div>
@@ -86,14 +86,14 @@ export function ConnectivityRoute() {
       {loading && platforms.length === 0 ? (
         <div className="flex h-full items-center justify-center text-fg-muted">
           <LoaderCircle className="size-6 animate-spin" aria-hidden />
-          <span className="ms-2 text-body">Loading platforms…</span>
+          <span className="ms-2 text-body">{t('loading')}</span>
         </div>
       ) : platforms.length === 0 ? (
         <EmptyState
           icon={Radio}
-          title="No platforms available"
-          description="The sidecar did not report a platform catalog. Start the gateway to retry."
-          action={{ label: 'Retry', onClick: () => void load() }}
+          title={t('noPlatforms')}
+          description={t('noPlatformsDesc')}
+          action={{ label: t('start'), onClick: () => void load() }}
         />
       ) : (
         <>

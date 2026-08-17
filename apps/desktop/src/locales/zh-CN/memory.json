@@ -1,0 +1,15 @@
+{
+  "title": "记忆浏览器",
+  "loading": "正在加载记忆…",
+  "shown": "已显示 {{shown}} / {{total}} 条记忆",
+  "noMemories": "还没有记忆",
+  "noMemoriesDesc": "记忆来自对话，也可以手动添加。",
+  "newMemory": "新记忆",
+  "loadMore": "加载更多",
+  "memoryCount": "{{count}} 条记忆",
+  "memoryCountOne": "1 条记忆",
+  "failedLoad": "加载记忆失败。",
+  "failedLoadMore": "加载更多记忆失败。",
+  "failedSave": "无法保存这条记忆。",
+  "failedDelete": "无法删除这条记忆。"
+}

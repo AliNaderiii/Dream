@@ -1,0 +1,13 @@
+{
+  "title": "子代理",
+  "subtitle": "将任务委派给隔离的工作代理。",
+  "spawn": "生成一个子代理",
+  "newSubagent": "新子代理",
+  "noSubagents": "还没有子代理",
+  "noSubagentsDesc": "委派一个任务以在隔离的工作代理中运行。",
+  "selectPrompt": "选择一个子代理进行检查。",
+  "refresh": "刷新",
+  "expandList": "展开子代理列表",
+  "collapseList": "折叠子代理列表",
+  "progress": "{{name}} 进度"
+}

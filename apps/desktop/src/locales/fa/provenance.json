@@ -1,0 +1,19 @@
+{
+  "title": "تاریخچه",
+  "subtitle": "ممیزی تاریخچهٔ هر مصنوع و نوبت.",
+  "noRecords": "رکورد تاریخچه‌ای نیست",
+  "noRecordsDesc": "هم‌زمان با کار Dream رکوردها اینجا ظاهر می‌شوند.",
+  "searchPlaceholder": "جستجوی رکوردهای تاریخچه بر اساس ابزار، پرس‌وجو، فایل یا هش…",
+  "allEventTypes": "همهٔ انواع رویداد",
+  "toolCalls": "فراخوانی‌های ابزار",
+  "codeExecutions": "اجراهای کد",
+  "fileWrites": "نوشتن فایل‌ها",
+  "modelResponses": "پاسخ‌های مدل",
+  "userMessages": "پیام‌های کاربر",
+  "subagentSpawns": "زیرعامل‌ها",
+  "allSessions": "همهٔ نشست‌ها",
+  "noArtifacts": "هنوز مصنوعی تولید نشده",
+  "toolLabel": "ابزار:",
+  "modelLabel": "مدل:",
+  "sizeLabel": "اندازه:"
+}

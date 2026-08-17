@@ -4,19 +4,30 @@ import { HashRouter } from 'react-router-dom';
 
 import App from '@/App';
 import { ErrorBoundary } from '@/components/shared/error-boundary';
+import { initI18n, resolveInitialLocale } from '@/lib/i18n';
+import { useAppStore } from '@/stores/use-app-store';
 import '@/styles/theme.css';
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Root element #root is missing from index.html');
 
-// HashRouter, not BrowserRouter: bundled Tauri apps are served from the
-// `tauri://localhost` asset protocol, where path-based routing cannot deep-link.
-createRoot(container).render(
-  <StrictMode>
-    <ErrorBoundary>
-      <HashRouter>
-        <App />
-      </HashRouter>
-    </ErrorBoundary>
-  </StrictMode>,
-);
+// Seed the store (locale + direction) with the detected or persisted locale
+// before the first render, then initialise i18next to match.
+const initialLocale = resolveInitialLocale();
+useAppStore.getState().setLocale(initialLocale);
+
+void (async () => {
+  await initI18n(initialLocale);
+
+  // HashRouter, not BrowserRouter: bundled Tauri apps are served from the
+  // `tauri://localhost` asset protocol, where path-based routing cannot deep-link.
+  createRoot(container).render(
+    <StrictMode>
+      <ErrorBoundary>
+        <HashRouter>
+          <App />
+        </HashRouter>
+      </ErrorBoundary>
+    </StrictMode>,
+  );
+})();

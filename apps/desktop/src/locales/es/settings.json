@@ -1,0 +1,24 @@
+{
+  "title": "Ajustes e integraciones",
+  "subtitle": "Configura la apariencia del sistema, extensiones de servidores MCP y conexiones de agentes ACP.",
+  "tabs": {
+    "general": "General",
+    "mcp": "Servidores MCP",
+    "acp": "Interoperabilidad ACP"
+  },
+  "appearance": "Apariencia",
+  "theme": "Tema",
+  "themeDesc": "Sigue la configuración del sistema salvo que se anule.",
+  "density": "Densidad",
+  "densityDesc": "Compacto reduce el relleno de los componentes en un 25 %.",
+  "language": "Idioma",
+  "languageDesc": "El persa cambia todo el shell a derecha a izquierda.",
+  "window": "Ventana",
+  "minimizeToTray": "Minimizar a la bandeja",
+  "minimizeToTrayDesc": "Oculta la ventana en lugar de minimizarla.",
+  "closeToTray": "Cerrar a la bandeja",
+  "closeToTrayDesc": "Mantiene Dream en la bandeja al cerrar la ventana.",
+  "workspace": "Espacio de trabajo",
+  "workspaceFolder": "Carpeta de espacio de trabajo",
+  "noWorkspace": "Sin carpeta seleccionada: el acceso a archivos no está restringido."
+}

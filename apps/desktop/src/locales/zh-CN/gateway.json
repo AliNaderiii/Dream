@@ -1,0 +1,8 @@
+{
+  "title": "Web 网关",
+  "subtitle": "从手机或其他浏览器访问 Dream。",
+  "stopped": "网关已停止",
+  "running": "网关运行中",
+  "error": "网关错误",
+  "disabled": "网关已禁用"
+}

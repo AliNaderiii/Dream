@@ -1,0 +1,13 @@
+{
+  "title": "Subagenten",
+  "subtitle": "Delegiere Aufgaben an isolierte Worker-Agenten.",
+  "spawn": "Subagenten erzeugen",
+  "newSubagent": "Neuer Subagent",
+  "noSubagents": "Noch keine Subagenten",
+  "noSubagentsDesc": "Delegiere eine Aufgabe, um sie in einem isolierten Worker auszuführen.",
+  "selectPrompt": "Wähle einen Subagenten zum Prüfen aus.",
+  "refresh": "Aktualisieren",
+  "expandList": "Subagentenliste ausklappen",
+  "collapseList": "Subagentenliste einklappen",
+  "progress": "Fortschritt von {{name}}"
+}

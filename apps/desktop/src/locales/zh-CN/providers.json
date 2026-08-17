@@ -1,0 +1,20 @@
+{
+  "title": "服务商",
+  "subtitle": "配置 Dream 可以对话的模型后端。",
+  "add": "添加服务商",
+  "noProviders": "未配置服务商",
+  "noProvidersDesc": "连接一个服务商以开始与 Dream 对话。",
+  "connected": "已连接",
+  "disconnected": "未连接",
+  "testing": "测试中",
+  "local": "本地",
+  "configure": "配置",
+  "configured": "已配置 {{count}} 个",
+  "connectFirst": "连接你的第一个服务商",
+  "connectFirstDesc": "从 OpenAI、Anthropic、Google AI、Groq、Together、OpenRouter 或本地服务器中选择。",
+  "browseCatalog": "浏览目录",
+  "loading": "正在加载服务商…",
+  "deleteTitle": "删除 {{name}}？",
+  "deleteDesc": "这将删除其配置并从操作系统钥匙串中永久清除其凭据。对话不会被删除。",
+  "deleteProvider": "删除服务商"
+}

@@ -12,8 +12,8 @@ export type ResolvedTheme = 'light' | 'dark';
 /** Writing direction. Persian/Arabic render right-to-left. */
 export type Direction = 'ltr' | 'rtl';
 
-/** UI language. */
-export type Locale = 'en' | 'fa';
+/** UI language. Only Persian renders right-to-left. */
+export type Locale = 'en' | 'fa' | 'zh-CN' | 'ja' | 'es' | 'de' | 'fr' | 'ko';
 
 /** Layout density. Compact multiplies component padding by 0.75. */
 export type Density = 'comfortable' | 'compact';

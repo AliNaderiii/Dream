@@ -1,0 +1,19 @@
+{
+  "title": "출처",
+  "subtitle": "모든 아티팩트와 턴의 기록을 감사합니다.",
+  "noRecords": "출처 기록 없음",
+  "noRecordsDesc": "Dream이 작업함에 따라 기록이 여기에 표시됩니다.",
+  "searchPlaceholder": "도구, 쿼리, 파일 또는 해시로 출처 기록 검색…",
+  "allEventTypes": "모든 이벤트 유형",
+  "toolCalls": "도구 호출",
+  "codeExecutions": "코드 실행",
+  "fileWrites": "파일 쓰기",
+  "modelResponses": "모델 응답",
+  "userMessages": "사용자 메시지",
+  "subagentSpawns": "하위 에이전트",
+  "allSessions": "모든 세션",
+  "noArtifacts": "아직 생성된 아티팩트 없음",
+  "toolLabel": "도구:",
+  "modelLabel": "모델:",
+  "sizeLabel": "크기:"
+}

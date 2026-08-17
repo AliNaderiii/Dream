@@ -1,5 +1,33 @@
 # Status
 
+## P-11 — Internationalisation, Documentation, Security Audit & Release — SHIPPED
+
+**What shipped.** The polish phase: Dream is now a shippable, localised,
+documented, audited product.
+
+- **Internationalisation (Task 1, Gate G1).** Eight languages (English base +
+  Persian, Simplified Chinese, Japanese, Spanish, German, French, Korean) via
+  `react-i18next`. Locale source of truth is
+  `apps/desktop/scripts/generate-locales.mjs` (14 namespaces × 8 languages,
+  245 keys, identical key trees → 100% coverage). `lang`/`dir` are applied to
+  `<html>`; only `fa` flips RTL. Auto-detect from `navigator.language` with
+  English fallback; flag + native-name picker in Settings and the status bar;
+  locale-aware `Intl` formatting; every route and shell component migrated to
+  `t()`. 15 new vitest tests (coverage gate, RTL assertion, detection).
+- **Documentation (Tasks 2–3, Gates G2–G3).** `docs/user/` (quick-start,
+  12-chapter manual, 28-question FAQ, troubleshooting, keyboard shortcuts) and
+  `docs/dev/` (architecture with Mermaid diagram, contributing, five how-to
+  guides, three API references).
+- **Security audit (Task 4, Gate G5).** `docs/security/audit-report.md` —
+  0 critical, 0 high. Two Bandit highs resolved (RFC 6455 SHA-1
+  `usedforsecurity=False`; approval-gated `run_shell` `# nosec B602`).
+  10 medium deferred with justification. `npm audit` 0 vulnerabilities;
+  project Python deps free of known CVEs. 23 new security tests.
+- **Performance (Task 5, Gate G6).** Code-split routes; `docs/performance-budget.md`;
+  `.github/workflows/perf.yml` CI smoke with a committed baseline.
+- **Release (Task 6, Gates G7–G8).** Version 0.2.0; `CHANGELOG.md` release
+  section; SHA-256 checksums in the release workflow; draft GitHub release.
+
 ## P-09 — Data Science Pipeline & Workbench — SHIPPED
 
 **What shipped.** A complete data-science pipeline (Phase 4.1–4.6): sandboxed

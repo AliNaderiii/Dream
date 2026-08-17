@@ -1,0 +1,18 @@
+{
+  "title": "Data workbench",
+  "subtitle": "Load, profile, clean, analyse and chart datasets.",
+  "load": "Load dataset",
+  "noDatasets": "No datasets yet",
+  "noDatasetsDesc": "Load a CSV or table file to start analysing it.",
+  "profile": "Profile",
+  "clean": "Clean",
+  "analyse": "Analyse",
+  "charts": "Charts",
+  "report": "Report",
+  "notebook": "Notebook",
+  "loading": "Loading datasets…",
+  "rows": "{{rows}} rows × {{cols}} columns",
+  "cleaned": "cleaned",
+  "deleteDataset": "Delete {{name}}",
+  "ingestPlaceholder": "~/datasets/sales-2024.csv"
+}

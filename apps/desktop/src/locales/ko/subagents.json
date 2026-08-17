@@ -1,0 +1,13 @@
+{
+  "title": "하위 에이전트",
+  "subtitle": "작업을 격리된 워커 에이전트에 위임합니다.",
+  "spawn": "하위 에이전트 생성",
+  "newSubagent": "새 하위 에이전트",
+  "noSubagents": "아직 하위 에이전트가 없습니다",
+  "noSubagentsDesc": "격리된 워커에서 실행할 작업을 위임하세요.",
+  "selectPrompt": "검사할 하위 에이전트를 선택하세요.",
+  "refresh": "새로고침",
+  "expandList": "하위 에이전트 목록 펼치기",
+  "collapseList": "하위 에이전트 목록 접기",
+  "progress": "{{name}} 진행률"
+}

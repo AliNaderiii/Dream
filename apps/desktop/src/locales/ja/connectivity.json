@@ -1,0 +1,11 @@
+{
+  "title": "接続",
+  "subtitle": "Telegram、Discord、Slack、WhatsApp、Signal、メールから Dream と会話します。",
+  "noPlatforms": "利用可能なプラットフォームがありません",
+  "noPlatformsDesc": "プラットフォームを接続して Dream をチャットアプリに橋渡しします。",
+  "start": "開始",
+  "stop": "停止",
+  "gatewayRunning": "ゲートウェイ実行中",
+  "gatewayStopped": "ゲートウェイ停止中",
+  "loading": "プラットフォームを読み込み中…"
+}
