@@ -1,6 +1,6 @@
 [package]
 name = "dream-desktop"
-version = "0.1.0"
+version = "0.2.0"
 description = "Dream — a personal AI assistant with first-class Persian support"
 authors = ["Ali Naderi"]
 license = "MIT"

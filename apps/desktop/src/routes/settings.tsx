@@ -7,11 +7,12 @@ import { GatewaySettings } from '@/components/gateway/gateway-settings';
 import { MCPServersList } from '@/components/mcp/mcp-servers-list';
 import { SandboxSettings } from '@/components/sandbox/sandbox-settings';
 import { Button } from '@/components/ui/button';
+import { LANGUAGES, useTranslation } from '@/lib/i18n';
 import { getBridgeClient } from '@/lib/bridge/client';
 import type { ACPAgentDto, MCPServerDto, MCPToolDto } from '@/lib/bridge/types';
 import { dialogApi, windowApi } from '@/lib/tauri';
 import { useAppStore } from '@/stores/use-app-store';
-import type { Density, Locale, ThemeMode } from '@/types';
+import type { Density, ThemeMode } from '@/types';
 
 /** A labelled settings row. */
 function Row({
@@ -36,12 +37,10 @@ function Row({
 
 const THEMES: ThemeMode[] = ['light', 'dark', 'system'];
 const DENSITIES: Density[] = ['comfortable', 'compact'];
-const LOCALES: Array<{ value: Locale; label: string }> = [
-  { value: 'en', label: 'English' },
-  { value: 'fa', label: 'فارسی' },
-];
 
 export function SettingsRoute() {
+  const { t } = useTranslation('settings');
+  const { t: tc } = useTranslation('common');
   const [activeTab, setActiveTab] = useState<'general' | 'mcp' | 'acp'>('general');
 
   const theme = useAppStore((s) => s.theme);
@@ -113,7 +112,7 @@ export function SettingsRoute() {
   }, [closeToTray]);
 
   const chooseWorkspace = async () => {
-    const folder = await dialogApi.selectFolder({ title: 'Choose workspace folder' });
+    const folder = await dialogApi.selectFolder({ title: tc('topbar.chooseWorkspace') });
     if (!folder) return;
     await dialogApi.setWorkspaceRoot(folder);
     setWorkspaceRoot(folder);
@@ -179,11 +178,9 @@ export function SettingsRoute() {
         <div>
           <h1 className="text-h2 font-semibold text-fg-primary flex items-center gap-2">
             <SettingsIcon className="size-6 text-accent" />
-            Settings & Integrations
+            {t('title')}
           </h1>
-          <p className="text-caption text-fg-secondary">
-            Configure system appearance, MCP server extensions, and ACP agent connections.
-          </p>
+          <p className="text-caption text-fg-secondary">{t('subtitle')}</p>
         </div>
 
         <div className="flex rounded-lg border border-border-default bg-surface p-1">
@@ -197,7 +194,7 @@ export function SettingsRoute() {
             }`}
           >
             <SettingsIcon className="size-4" />
-            General
+            {t('tabs.general')}
           </button>
           <button
             type="button"
@@ -209,7 +206,7 @@ export function SettingsRoute() {
             }`}
           >
             <Server className="size-4" />
-            MCP Servers ({mcpServers.length})
+            {t('tabs.mcp')} ({mcpServers.length})
           </button>
           <button
             type="button"
@@ -221,7 +218,7 @@ export function SettingsRoute() {
             }`}
           >
             <Bot className="size-4" />
-            ACP Interoperability ({acpAgents.length})
+            {t('tabs.acp')} ({acpAgents.length})
           </button>
         </div>
       </div>
@@ -231,9 +228,9 @@ export function SettingsRoute() {
         {activeTab === 'general' && (
           <div className="mx-auto max-w-2xl space-y-8 rounded-xl border border-border-default bg-surface p-6 shadow-sm">
             <section>
-              <h2 className="pb-2 text-h2 font-semibold text-fg-primary">Appearance</h2>
+              <h2 className="pb-2 text-h2 font-semibold text-fg-primary">{t('appearance')}</h2>
 
-              <Row label="Theme" description="Follows your system setting unless overridden.">
+              <Row label={t('theme')} description={t('themeDesc')}>
                 <div className="flex gap-1">
                   {THEMES.map((option) => (
                     <Button
@@ -248,7 +245,7 @@ export function SettingsRoute() {
                 </div>
               </Row>
 
-              <Row label="Density" description="Compact reduces component padding by 25%.">
+              <Row label={t('density')} description={t('densityDesc')}>
                 <div className="flex gap-1">
                   {DENSITIES.map((option) => (
                     <Button
@@ -263,19 +260,17 @@ export function SettingsRoute() {
                 </div>
               </Row>
 
-              <Row
-                label="Language"
-                description="Persian switches the whole shell to right-to-left."
-              >
-                <div className="flex gap-1">
-                  {LOCALES.map((option) => (
+              <Row label={t('language')} description={t('languageDesc')}>
+                <div className="flex flex-wrap gap-1">
+                  {LANGUAGES.map((option) => (
                     <Button
-                      key={option.value}
+                      key={option.code}
                       size="sm"
-                      variant={locale === option.value ? 'primary' : 'secondary'}
-                      onClick={() => setLocale(option.value)}
+                      variant={locale === option.code ? 'primary' : 'secondary'}
+                      onClick={() => setLocale(option.code)}
                     >
-                      {option.label}
+                      <span className="me-1">{option.flag}</span>
+                      {tc(option.nameKey)}
                     </Button>
                   ))}
                 </div>
@@ -283,43 +278,37 @@ export function SettingsRoute() {
             </section>
 
             <section>
-              <h2 className="pb-2 text-h2 font-semibold text-fg-primary">Window</h2>
+              <h2 className="pb-2 text-h2 font-semibold text-fg-primary">{t('window')}</h2>
 
-              <Row label="Minimize to tray" description="Hide the window instead of minimizing it.">
+              <Row label={t('minimizeToTray')} description={t('minimizeToTrayDesc')}>
                 <Button
                   size="sm"
                   variant={minimizeToTray ? 'primary' : 'secondary'}
                   aria-pressed={minimizeToTray}
                   onClick={() => setMinimizeToTray((v) => !v)}
                 >
-                  {minimizeToTray ? 'On' : 'Off'}
+                  {minimizeToTray ? tc('generic.on') : tc('generic.off')}
                 </Button>
               </Row>
 
-              <Row
-                label="Close to tray"
-                description="Keep Dream running in the tray when the window closes."
-              >
+              <Row label={t('closeToTray')} description={t('closeToTrayDesc')}>
                 <Button
                   size="sm"
                   variant={closeToTray ? 'primary' : 'secondary'}
                   aria-pressed={closeToTray}
                   onClick={() => setCloseToTray((v) => !v)}
                 >
-                  {closeToTray ? 'On' : 'Off'}
+                  {closeToTray ? tc('generic.on') : tc('generic.off')}
                 </Button>
               </Row>
             </section>
 
             <section>
-              <h2 className="pb-2 text-h2 font-semibold text-fg-primary">Workspace</h2>
+              <h2 className="pb-2 text-h2 font-semibold text-fg-primary">{t('workspace')}</h2>
 
-              <Row
-                label="Workspace folder"
-                description={workspaceRoot ?? 'No folder selected — file access is unrestricted.'}
-              >
+              <Row label={t('workspaceFolder')} description={workspaceRoot ?? t('noWorkspace')}>
                 <Button size="sm" onClick={() => void chooseWorkspace()}>
-                  Choose…
+                  {tc('generic.choose')}
                 </Button>
               </Row>
             </section>

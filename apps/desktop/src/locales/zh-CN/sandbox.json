@@ -1,0 +1,8 @@
+{
+  "title": "Docker 沙箱",
+  "subtitle": "在隔离容器中运行不受信任的代码。",
+  "unavailable": "Docker 不可用",
+  "available": "沙箱就绪",
+  "disabled": "沙箱已禁用",
+  "error": "沙箱错误"
+}

@@ -1,0 +1,114 @@
+{
+  "nav": {
+    "dashboard": "پیشخوان",
+    "chat": "گفتگو",
+    "projects": "پروژه‌ها",
+    "memory": "حافظه",
+    "skills": "مهارت‌ها",
+    "subagents": "زیرعامل‌ها",
+    "data": "داده",
+    "connectivity": "اتصال",
+    "providers": "سرویس‌ها",
+    "settings": "تنظیمات",
+    "provenance": "تاریخچه"
+  },
+  "sessions": {
+    "title": "نشست‌ها",
+    "new": "نشست جدید",
+    "search": "جستجوی نشست‌ها",
+    "collapse": "جمع‌کردن نوار کناری",
+    "expand": "بازکردن نوار کناری",
+    "resize": "تغییر اندازهٔ نوار کناری",
+    "empty": "هنوز نشستی نیست. برای شروع یکی بسازید.",
+    "noMatch": "هیچ نشستی با جستجوی شما سازگار نیست.",
+    "groupToday": "امروز",
+    "groupWeek": "این هفته",
+    "groupMonth": "این ماه",
+    "groupOlder": "قدیمی‌تر"
+  },
+  "conversation": "گفتگو",
+  "status": {
+    "idle": "آماده",
+    "running": "در حال اجرا",
+    "paused": "متوقف",
+    "error": "خطا",
+    "offline": "آفلاین"
+  },
+  "titlebar": {
+    "minimize": "کوچک‌کردن",
+    "maximize": "بزرگ‌کردن",
+    "restore": "بازگرداندن",
+    "close": "بستن",
+    "pending": "{{count}} در انتظار"
+  },
+  "topbar": {
+    "chooseWorkspace": "انتخاب پوشهٔ فضای کاری",
+    "toggleTheme": "تغییر پوسته",
+    "expandSidebar": "بازکردن نوار کناری",
+    "collapseSidebar": "جمع‌کردن نوار کناری",
+    "approvals": "{{count}} درخواست تأیید",
+    "newSession": "نشست جدید",
+    "newProject": "پروژهٔ جدید",
+    "selectModel": "انتخاب مدل",
+    "cloud": "ابری",
+    "configureProviders": "پیکربندی سرویس‌ها…",
+    "noApprovals": "درخواست تأییدی در انتظار نیست",
+    "switchToLight": "تغییر به پوستهٔ روشن",
+    "switchToDark": "تغییر به پوستهٔ تیره"
+  },
+  "command": {
+    "title": "فرمان‌ها",
+    "description": "جستجو و اجرای هر فرمان Dream.",
+    "searchPlaceholder": "یک فرمان بنویسید…",
+    "searchAria": "جستجوی فرمان‌ها",
+    "empty": "فرمانی یافت نشد"
+  },
+  "confirm": {
+    "confirm": "تأیید",
+    "cancel": "انصراف"
+  },
+  "error": {
+    "title": "مشکلی پیش آمد",
+    "body": "Dream هنگام نمایش این صفحه با خطای غیرمنتظره‌ای روبه‌رو شد. نشست‌ها و حافظهٔ شما دست‌نخورده می‌مانند.",
+    "retry": "تلاش دوباره"
+  },
+  "drop": "فایل‌ها را برای پیوست رها کنید",
+  "dashboard": {
+    "greeting": "خوش آمدید",
+    "subtitle": "Dream حافظه‌اش را روی همین دستگاه نگه می‌دارد و پیش از هر کار برگشت‌ناپذیر اجازه می‌گیرد.",
+    "startSession": "شروع یک نشست",
+    "memoryTitle": "مرورگر حافظه",
+    "memoryDesc": "مرور چیزهایی که Dream به خاطر می‌سپارد",
+    "skillsTitle": "مهارت‌ها",
+    "skillsDesc": "مدیریت رویه‌های قابل استفادهٔ دوباره",
+    "providersTitle": "سرویس‌ها",
+    "providersDesc": "پیکربندی مدل‌ها و کلیدها"
+  },
+  "projects": {
+    "title": "پروژه‌ها",
+    "description": "پیشخوان پروژه، فایل‌ها و حافظهٔ هر پروژه. ساخته‌شده در P-03."
+  },
+  "language": {
+    "en": "English",
+    "fa": "فارسی",
+    "zh-CN": "简体中文",
+    "ja": "日本語",
+    "es": "Español",
+    "de": "Deutsch",
+    "fr": "Français",
+    "ko": "한국어"
+  },
+  "generic": {
+    "on": "روشن",
+    "off": "خاموش",
+    "loading": "در حال بارگذاری…",
+    "choose": "انتخاب…",
+    "edit": "ویرایش",
+    "save": "ذخیره",
+    "saving": "در حال ذخیره…",
+    "delete": "حذف",
+    "export": "خروجی",
+    "cancel": "انصراف",
+    "close": "بستن"
+  }
+}

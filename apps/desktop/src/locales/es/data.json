@@ -1,0 +1,18 @@
+{
+  "title": "Banco de trabajo de datos",
+  "subtitle": "Carga, perfila, limpia, analiza y grafica conjuntos de datos.",
+  "load": "Cargar conjunto de datos",
+  "noDatasets": "Aún no hay conjuntos de datos",
+  "noDatasetsDesc": "Carga un archivo CSV o de tabla para empezar a analizarlo.",
+  "profile": "Perfil",
+  "clean": "Limpiar",
+  "analyse": "Analizar",
+  "charts": "Gráficas",
+  "report": "Informe",
+  "notebook": "Cuaderno",
+  "loading": "Cargando conjuntos de datos…",
+  "rows": "{{rows}} filas × {{cols}} columnas",
+  "cleaned": "limpio",
+  "deleteDataset": "Eliminar {{name}}",
+  "ingestPlaceholder": "~/datasets/sales-2024.csv"
+}

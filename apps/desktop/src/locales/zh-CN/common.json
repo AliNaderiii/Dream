@@ -1,0 +1,114 @@
+{
+  "nav": {
+    "dashboard": "仪表盘",
+    "chat": "对话",
+    "projects": "项目",
+    "memory": "记忆",
+    "skills": "技能",
+    "subagents": "子代理",
+    "data": "数据",
+    "connectivity": "连接",
+    "providers": "服务商",
+    "settings": "设置",
+    "provenance": "溯源"
+  },
+  "sessions": {
+    "title": "会话",
+    "new": "新会话",
+    "search": "搜索会话",
+    "collapse": "折叠侧边栏",
+    "expand": "展开侧边栏",
+    "resize": "调整侧边栏大小",
+    "empty": "还没有会话，开始一个吧。",
+    "noMatch": "没有符合搜索的会话。",
+    "groupToday": "今天",
+    "groupWeek": "本周",
+    "groupMonth": "本月",
+    "groupOlder": "更早"
+  },
+  "conversation": "对话",
+  "status": {
+    "idle": "空闲",
+    "running": "运行中",
+    "paused": "已暂停",
+    "error": "错误",
+    "offline": "离线"
+  },
+  "titlebar": {
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "还原",
+    "close": "关闭",
+    "pending": "{{count}} 个待处理"
+  },
+  "topbar": {
+    "chooseWorkspace": "选择工作区文件夹",
+    "toggleTheme": "切换主题",
+    "expandSidebar": "展开侧边栏",
+    "collapseSidebar": "折叠侧边栏",
+    "approvals": "{{count}} 个审批请求",
+    "newSession": "新会话",
+    "newProject": "新项目",
+    "selectModel": "选择模型",
+    "cloud": "云端",
+    "configureProviders": "配置服务商…",
+    "noApprovals": "没有待处理的审批",
+    "switchToLight": "切换到浅色主题",
+    "switchToDark": "切换到深色主题"
+  },
+  "command": {
+    "title": "命令面板",
+    "description": "搜索并运行任意 Dream 命令。",
+    "searchPlaceholder": "输入命令…",
+    "searchAria": "搜索命令",
+    "empty": "没有匹配的命令"
+  },
+  "confirm": {
+    "confirm": "确认",
+    "cancel": "取消"
+  },
+  "error": {
+    "title": "出错了",
+    "body": "Dream 在渲染此屏幕时遇到意外错误。你的会话和记忆不受影响。",
+    "retry": "重试"
+  },
+  "drop": "拖放文件以附加",
+  "dashboard": {
+    "greeting": "很高兴见到你",
+    "subtitle": "Dream 将记忆保存在本机，并在执行任何不可逆操作前先征得同意。",
+    "startSession": "开始一个会话",
+    "memoryTitle": "记忆浏览器",
+    "memoryDesc": "浏览 Dream 记住的内容",
+    "skillsTitle": "技能",
+    "skillsDesc": "管理可复用的流程",
+    "providersTitle": "服务商",
+    "providersDesc": "配置模型和密钥"
+  },
+  "projects": {
+    "title": "项目",
+    "description": "项目仪表盘、文件以及每个项目的记忆。已在 P-03 中构建。"
+  },
+  "language": {
+    "en": "English",
+    "fa": "فارسی",
+    "zh-CN": "简体中文",
+    "ja": "日本語",
+    "es": "Español",
+    "de": "Deutsch",
+    "fr": "Français",
+    "ko": "한국어"
+  },
+  "generic": {
+    "on": "开启",
+    "off": "关闭",
+    "loading": "加载中…",
+    "choose": "选择…",
+    "edit": "编辑",
+    "save": "保存",
+    "saving": "保存中…",
+    "delete": "删除",
+    "export": "导出",
+    "cancel": "取消",
+    "close": "关闭"
+  }
+}

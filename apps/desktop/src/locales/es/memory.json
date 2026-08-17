@@ -1,0 +1,15 @@
+{
+  "title": "Explorador de memoria",
+  "loading": "Cargando recuerdos…",
+  "shown": "{{shown}} de {{total}} recuerdos mostrados",
+  "noMemories": "Aún no hay recuerdos",
+  "noMemoriesDesc": "Los recuerdos se capturan de las conversaciones o puedes añadir uno a mano.",
+  "newMemory": "Nuevo recuerdo",
+  "loadMore": "Cargar más",
+  "memoryCount": "{{count}} recuerdos",
+  "memoryCountOne": "1 recuerdo",
+  "failedLoad": "No se pudieron cargar los recuerdos.",
+  "failedLoadMore": "No se pudieron cargar más recuerdos.",
+  "failedSave": "No se pudo guardar este recuerdo.",
+  "failedDelete": "No se pudo eliminar este recuerdo."
+}

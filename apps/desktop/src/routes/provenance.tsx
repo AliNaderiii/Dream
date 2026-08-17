@@ -15,6 +15,7 @@ import { useEffect, useState } from 'react';
 
 import { ArtifactDetailPanel } from '@/components/provenance/artifact-detail-panel';
 import { ArtifactTreeView } from '@/components/provenance/artifact-tree-view';
+import { useTranslation } from '@/lib/i18n';
 import { ProvenanceTimeline } from '@/components/provenance/provenance-timeline';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,7 @@ import { getBridgeClient } from '@/lib/bridge/client';
 import type { ArtifactDto, ProvenanceRecordDto, ProvenanceTreeDto } from '@/lib/bridge/types';
 
 export function ProvenanceRoute() {
+  const { t } = useTranslation('provenance');
   const [activeTab, setActiveTab] = useState<'timeline' | 'tree' | 'artifacts'>('timeline');
   const [records, setRecords] = useState<ProvenanceRecordDto[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactDto[]>([]);
@@ -144,7 +146,7 @@ export function ProvenanceRoute() {
         <div>
           <h2 className="text-h2 font-semibold text-fg-primary flex items-center gap-2">
             <GitBranch className="size-6 text-accent" />
-            Provenance
+            {t('title')}
           </h2>
           <p className="text-caption text-fg-secondary">
             Tamper-evident SHA-256 logs linking artifacts to exact code, data snapshots, and model
@@ -204,7 +206,7 @@ export function ProvenanceRoute() {
           <Search className="absolute start-3 top-2.5 size-4 text-fg-muted" />
           <input
             type="text"
-            placeholder="Search provenance records by tool, query, file, or hash..."
+            placeholder={t('searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full rounded-lg border border-border-default bg-surface ps-9 pe-4 py-2 text-body text-fg-primary placeholder:text-fg-muted focus:border-accent focus:outline-none"
@@ -219,13 +221,13 @@ export function ProvenanceRoute() {
             onChange={(e) => setSelectedEventType(e.target.value)}
             className="rounded-lg border border-border-default bg-surface px-3 py-2 text-body text-fg-primary focus:border-accent focus:outline-none"
           >
-            <option value="all">All Event Types</option>
-            <option value="tool_call">Tool Calls</option>
-            <option value="code_execution">Code Executions</option>
-            <option value="file_write">File Writes</option>
-            <option value="model_response">Model Responses</option>
-            <option value="user_message">User Messages</option>
-            <option value="subagent_spawn">Subagents</option>
+            <option value="all">{t('allEventTypes')}</option>
+            <option value="tool_call">{t('toolCalls')}</option>
+            <option value="code_execution">{t('codeExecutions')}</option>
+            <option value="file_write">{t('fileWrites')}</option>
+            <option value="model_response">{t('modelResponses')}</option>
+            <option value="user_message">{t('userMessages')}</option>
+            <option value="subagent_spawn">{t('subagentSpawns')}</option>
           </select>
         </div>
 
@@ -236,7 +238,7 @@ export function ProvenanceRoute() {
             onChange={(e) => setSelectedSessionId(e.target.value)}
             className="rounded-lg border border-border-default bg-surface px-3 py-2 text-body text-fg-primary focus:border-accent focus:outline-none"
           >
-            <option value="all">All Sessions</option>
+            <option value="all">{t('allSessions')}</option>
             {sessions.map((sid) => (
               <option key={sid} value={sid}>
                 Session: {sid.slice(0, 16)}
@@ -326,7 +328,7 @@ export function ProvenanceRoute() {
             ) : artifacts.length === 0 ? (
               <div className="flex h-64 flex-col items-center justify-center text-fg-secondary">
                 <Sparkles className="mb-2 size-8 opacity-40" />
-                <p className="text-body font-medium">No Artifacts Generated Yet</p>
+                <p className="text-body font-medium">{t('noArtifacts')}</p>
                 <p className="text-caption text-fg-muted">
                   Figures, charts, datasets, and reports written by tools will appear here with full
                   provenance lineage.
@@ -361,15 +363,15 @@ export function ProvenanceRoute() {
 
                     <div className="mt-3 space-y-1 text-caption text-fg-secondary">
                       <div className="flex justify-between">
-                        <span>Tool:</span>
+                        <span>{t('toolLabel')}</span>
                         <span className="font-medium text-fg-primary">{art.tool_name}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>Model:</span>
+                        <span>{t('modelLabel')}</span>
                         <span>{art.model}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>Size:</span>
+                        <span>{t('sizeLabel')}</span>
                         <span>{art.size} bytes</span>
                       </div>
                     </div>

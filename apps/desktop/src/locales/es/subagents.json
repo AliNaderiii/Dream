@@ -1,0 +1,13 @@
+{
+  "title": "Subagentes",
+  "subtitle": "Delega tareas a agentes de trabajo aislados.",
+  "spawn": "Generar un subagente",
+  "newSubagent": "Nuevo subagente",
+  "noSubagents": "Aún no hay subagentes",
+  "noSubagentsDesc": "Delega una tarea para ejecutarla en un trabajador aislado.",
+  "selectPrompt": "Selecciona un subagente para inspeccionarlo.",
+  "refresh": "Actualizar",
+  "expandList": "Expandir lista de subagentes",
+  "collapseList": "Contraer lista de subagentes",
+  "progress": "progreso de {{name}}"
+}

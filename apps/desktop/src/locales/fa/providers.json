@@ -1,0 +1,20 @@
+{
+  "title": "سرویس‌ها",
+  "subtitle": "پیکربندی پشتیبان‌های مدلی که Dream می‌تواند با آن‌ها گفتگو کند.",
+  "add": "افزودن سرویس",
+  "noProviders": "سرویسی پیکربندی نشده",
+  "noProvidersDesc": "برای گفتگو با Dream یک سرویس وصل کنید.",
+  "connected": "متصل",
+  "disconnected": "قطع",
+  "testing": "در حال آزمایش",
+  "local": "محلی",
+  "configure": "پیکربندی",
+  "configured": "{{count}} پیکربندی‌شده",
+  "connectFirst": "اولین سرویس خود را وصل کنید",
+  "connectFirstDesc": "از OpenAI، Anthropic، Google AI، Groq، Together، OpenRouter یا یک سرور محلی انتخاب کنید.",
+  "browseCatalog": "مرور کاتالوگ",
+  "loading": "در حال بارگذاری سرویس‌ها…",
+  "deleteTitle": "حذف {{name}}؟",
+  "deleteDesc": "این کار پیکربندی آن را حذف و اعتبارنامه‌هایش را برای همیشه از زنجیره‌کلید سیستم‌عامل پاک می‌کند. گفتگوها حذف نمی‌شوند.",
+  "deleteProvider": "حذف سرویس"
+}

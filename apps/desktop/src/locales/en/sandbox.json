@@ -1,0 +1,8 @@
+{
+  "title": "Docker Sandbox",
+  "subtitle": "Run untrusted code in an isolated container.",
+  "unavailable": "Docker unavailable",
+  "available": "Sandbox ready",
+  "disabled": "Sandbox disabled",
+  "error": "Sandbox error"
+}

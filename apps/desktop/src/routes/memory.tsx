@@ -21,6 +21,7 @@ import {
 import { EmptyState } from '@/components/shared/empty-state';
 import { Button } from '@/components/ui/button';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useTranslation } from '@/lib/i18n';
 import { useBridge } from '@/lib/bridge/hooks';
 import {
   countMemories,
@@ -36,6 +37,8 @@ import { dateInputToSeconds, type TimelineZoom } from '@/utils/time';
 const PAGE_SIZE = 25;
 
 export function MemoryRoute() {
+  const { t } = useTranslation('memory');
+  const { t: tc } = useTranslation('common');
   const { client } = useBridge();
 
   const [filters, setFilters] = useState<MemoryFilters>(DEFAULT_FILTERS);
@@ -95,7 +98,7 @@ export function MemoryRoute() {
         setCursor(page.next_cursor);
         setHasMore(page.has_more);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load memories.');
+        if (!cancelled) setError(err instanceof Error ? err.message : t('failedLoad'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -104,7 +107,7 @@ export function MemoryRoute() {
     return () => {
       cancelled = true;
     };
-  }, [client, query]);
+  }, [client, query, t]);
 
   useEffect(() => {
     const load = async () => {
@@ -123,11 +126,11 @@ export function MemoryRoute() {
       setHasMore(page.has_more);
       setTotal(page.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load more memories.');
+      setError(err instanceof Error ? err.message : t('failedLoadMore'));
     } finally {
       setLoadingMore(false);
     }
-  }, [client, cursor, hasMore, loadingMore, query]);
+  }, [client, cursor, hasMore, loadingMore, query, t]);
 
   // Infinite scroll: a sentinel below the last card triggers the next page.
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -172,7 +175,7 @@ export function MemoryRoute() {
       setSelected(null);
       await reload();
     } catch (err) {
-      setDrawerError(err instanceof Error ? err.message : 'Could not save this memory.');
+      setDrawerError(err instanceof Error ? err.message : t('failedSave'));
     }
   };
 
@@ -183,14 +186,14 @@ export function MemoryRoute() {
       setSelected(null);
       await reload();
     } catch (err) {
-      setDrawerError(err instanceof Error ? err.message : 'Could not delete this memory.');
+      setDrawerError(err instanceof Error ? err.message : t('failedDelete'));
     }
   };
 
   const selectedId = selected && selected !== 'new' ? selected.id : null;
 
   return (
-    <section aria-label="Memory explorer" className="flex h-full min-h-0 flex-col">
+    <section aria-label={t('title')} className="flex h-full min-h-0 flex-col">
       <MemoryToolbar
         filters={filters}
         onChange={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}
@@ -205,7 +208,7 @@ export function MemoryRoute() {
       />
 
       <p aria-live="polite" className="sr-only">
-        {loading ? 'Loading memories' : `${memories.length} of ${total} memories shown`}
+        {loading ? t('loading') : t('shown', { shown: memories.length, total })}
       </p>
 
       {error && (
@@ -219,13 +222,13 @@ export function MemoryRoute() {
 
       <div className="min-h-0 flex-1">
         {loading ? (
-          <p className="p-8 text-center text-body text-fg-muted">Loading memories…</p>
+          <p className="p-8 text-center text-body text-fg-muted">{t('loading')}</p>
         ) : memories.length === 0 ? (
           <EmptyState
             icon={Database}
-            title="No memories yet"
-            description="Memories are captured from conversations, or you can add one by hand."
-            action={{ label: 'New memory', onClick: () => setSelected('new') }}
+            title={t('noMemories')}
+            description={t('noMemoriesDesc')}
+            action={{ label: t('newMemory'), onClick: () => setSelected('new') }}
           />
         ) : view === 'timeline' ? (
           <MemoryTimeline
@@ -265,13 +268,13 @@ export function MemoryRoute() {
                   disabled={loadingMore}
                   onClick={() => void loadMore()}
                 >
-                  {loadingMore ? 'Loading…' : 'Load more'}
+                  {loadingMore ? tc('generic.loading') : t('loadMore')}
                 </Button>
               </div>
             )}
             {!hasMore && (
               <p className="py-3 text-center text-caption text-fg-muted">
-                {total} {total === 1 ? 'memory' : 'memories'}
+                {total === 1 ? t('memoryCountOne') : t('memoryCount', { count: total })}
               </p>
             )}
           </div>

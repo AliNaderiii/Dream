@@ -1,0 +1,18 @@
+{
+  "title": "数据工作台",
+  "subtitle": "加载、画像、清洗、分析和绘制数据集。",
+  "load": "加载数据集",
+  "noDatasets": "还没有数据集",
+  "noDatasetsDesc": "加载一个 CSV 或表格文件以开始分析。",
+  "profile": "画像",
+  "clean": "清洗",
+  "analyse": "分析",
+  "charts": "图表",
+  "report": "报告",
+  "notebook": "笔记本",
+  "loading": "正在加载数据集…",
+  "rows": "{{rows}} 行 × {{cols}} 列",
+  "cleaned": "已清洗",
+  "deleteDataset": "删除 {{name}}",
+  "ingestPlaceholder": "~/datasets/sales-2024.csv"
+}

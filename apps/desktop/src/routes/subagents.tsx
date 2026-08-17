@@ -16,6 +16,7 @@ import { ProgressBar, SubagentStatusBadge } from '@/components/subagents/status-
 import { EmptyState } from '@/components/shared/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/lib/i18n';
 import { useBridge } from '@/lib/bridge/hooks';
 import type { BridgeLogEntry, BridgeSubagent, RpcParams } from '@/lib/bridge/types';
 import { isTerminalStatus } from '@/lib/bridge/types';
@@ -81,6 +82,7 @@ function SubagentRow({
 }
 
 export function SubagentsRoute() {
+  const { t } = useTranslation('subagents');
   const { call, stream } = useBridge();
 
   const [agents, setAgents] = useState<BridgeSubagent[]>([]);
@@ -234,16 +236,21 @@ export function SubagentsRoute() {
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3">
         <div className="flex items-center gap-2">
-          <h2 className="text-h2 font-semibold">Subagents</h2>
+          <h2 className="text-h2 font-semibold">{t('title')}</h2>
           {activeCount > 0 && <Badge variant="info">{activeCount} running</Badge>}
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="ghost" onClick={() => void refresh()} aria-label="Refresh">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void refresh()}
+            aria-label={t('refresh')}
+          >
             <RefreshCw aria-hidden />
           </Button>
           <Button size="sm" variant="primary" onClick={() => setDialogOpen(true)}>
             <Plus aria-hidden />
-            New subagent
+            {t('newSubagent')}
           </Button>
         </div>
       </header>
@@ -260,9 +267,9 @@ export function SubagentsRoute() {
       {agents.length === 0 ? (
         <EmptyState
           icon={Bot}
-          title="No subagents yet"
-          description="Delegate a task to a child agent. It runs in isolation with its own memory and only the tools you grant it."
-          action={{ label: 'Spawn a subagent', onClick: () => setDialogOpen(true) }}
+          title={t('noSubagents')}
+          description={t('noSubagentsDesc')}
+          action={{ label: t('spawn'), onClick: () => setDialogOpen(true) }}
         />
       ) : (
         <div className="flex min-h-0 flex-1">
@@ -276,7 +283,7 @@ export function SubagentsRoute() {
               type="button"
               onClick={() => setListOpen((v) => !v)}
               aria-expanded={listOpen}
-              aria-label={listOpen ? 'Collapse subagent list' : 'Expand subagent list'}
+              aria-label={listOpen ? t('collapseList') : t('expandList')}
               className="flex items-center gap-1.5 px-3 py-2 text-caption font-medium text-fg-secondary hover:text-fg-primary"
             >
               {listOpen ? (
@@ -314,7 +321,7 @@ export function SubagentsRoute() {
                 onResume={() => void control('subagent.resume')}
               />
             ) : (
-              <p className="text-body text-fg-secondary">Select a subagent to inspect it.</p>
+              <p className="text-body text-fg-secondary">{t('selectPrompt')}</p>
             )}
           </div>
         </div>

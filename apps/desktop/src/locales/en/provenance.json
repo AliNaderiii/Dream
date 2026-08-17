@@ -1,0 +1,19 @@
+{
+  "title": "Provenance",
+  "subtitle": "Audit the history of every artifact and turn.",
+  "noRecords": "No provenance records",
+  "noRecordsDesc": "Records appear here as Dream works.",
+  "searchPlaceholder": "Search provenance records by tool, query, file, or hash…",
+  "allEventTypes": "All Event Types",
+  "toolCalls": "Tool Calls",
+  "codeExecutions": "Code Executions",
+  "fileWrites": "File Writes",
+  "modelResponses": "Model Responses",
+  "userMessages": "User Messages",
+  "subagentSpawns": "Subagents",
+  "allSessions": "All Sessions",
+  "noArtifacts": "No Artifacts Generated Yet",
+  "toolLabel": "Tool:",
+  "modelLabel": "Model:",
+  "sizeLabel": "Size:"
+}

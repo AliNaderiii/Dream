@@ -1,0 +1,11 @@
+{
+  "title": "连接",
+  "subtitle": "通过 Telegram、Discord、Slack、WhatsApp、Signal 和 Email 与 Dream 对话。",
+  "noPlatforms": "没有可用平台",
+  "noPlatformsDesc": "连接一个平台以将 Dream 桥接到你的聊天应用。",
+  "start": "启动",
+  "stop": "停止",
+  "gatewayRunning": "网关运行中",
+  "gatewayStopped": "网关已停止",
+  "loading": "正在加载平台…"
+}

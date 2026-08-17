@@ -22,6 +22,7 @@ import type { FormEvent } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/lib/i18n';
 import type { ProviderDraft } from '@/stores/use-provider-store';
 import { useProviderStore } from '@/stores/use-provider-store';
 import type { Provider, ProviderCatalogEntry } from '@/types';
@@ -54,6 +55,8 @@ function draftForProvider(provider: Provider): ProviderDraft {
 }
 
 export function ProvidersRoute() {
+  const { t } = useTranslation('providers');
+  const { t: tc } = useTranslation('common');
   const providers = useProviderStore((state) => state.providers);
   const catalog = useProviderStore((state) => state.catalog);
   const loading = useProviderStore((state) => state.loading);
@@ -81,20 +84,17 @@ export function ProvidersRoute() {
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-h2 font-semibold">Providers</h2>
-            <Badge variant="neutral">{configured.length} configured</Badge>
+            <h2 className="text-h2 font-semibold">{t('title')}</h2>
+            <Badge variant="neutral">{t('configured', { count: configured.length })}</Badge>
           </div>
-          <p className="mt-1 max-w-2xl text-body text-fg-secondary">
-            Connect cloud or local models. API keys go directly to your operating system keychain
-            and never enter Dream’s settings files.
-          </p>
+          <p className="mt-1 max-w-2xl text-body text-fg-secondary">{t('subtitle')}</p>
         </div>
         <Button
           variant="primary"
           disabled={catalog.length === 0}
           onClick={() => catalog[0] && setEditor(draftForCatalog(catalog[0]))}
         >
-          <Plus aria-hidden /> Add provider
+          <Plus aria-hidden /> {t('add')}
         </Button>
       </div>
 
@@ -108,22 +108,20 @@ export function ProvidersRoute() {
 
       {loading && configured.length === 0 ? (
         <div className="flex items-center justify-center gap-2 py-20 text-fg-muted">
-          <LoaderCircle className="size-5 animate-spin" aria-hidden /> Loading providers…
+          <LoaderCircle className="size-5 animate-spin" aria-hidden /> {t('loading')}
         </div>
       ) : configured.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border-strong bg-surface p-12 text-center">
           <KeyRound className="mx-auto mb-3 size-10 text-accent-text" aria-hidden />
-          <h3 className="text-h3 font-semibold">Connect your first provider</h3>
-          <p className="mx-auto mt-1 max-w-md text-fg-secondary">
-            Choose from OpenAI, Anthropic, Google AI, Groq, Together, OpenRouter, or a local server.
-          </p>
+          <h3 className="text-h3 font-semibold">{t('connectFirst')}</h3>
+          <p className="mx-auto mt-1 max-w-md text-fg-secondary">{t('connectFirstDesc')}</p>
           <Button
             className="mt-5"
             variant="primary"
             disabled={catalog.length === 0}
             onClick={() => catalog[0] && setEditor(draftForCatalog(catalog[0]))}
           >
-            <Plus aria-hidden /> Browse catalog
+            <Plus aria-hidden /> {t('browseCatalog')}
           </Button>
         </div>
       ) : (
@@ -158,14 +156,13 @@ export function ProvidersRoute() {
           <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
           <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border-default bg-overlay p-5 shadow-e3">
             <Dialog.Title className="text-h3 font-semibold">
-              Delete {deleteTarget?.name}?
+              {t('deleteTitle', { name: deleteTarget?.name })}
             </Dialog.Title>
             <Dialog.Description className="mt-2 text-fg-secondary">
-              This removes its configuration and permanently purges its credentials from the OS
-              keychain. Conversations are not deleted.
+              {t('deleteDesc')}
             </Dialog.Description>
             <div className="mt-5 flex justify-end gap-2">
-              <Button onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              <Button onClick={() => setDeleteTarget(null)}>{tc('generic.cancel')}</Button>
               <Button
                 variant="destructive"
                 onClick={() => {
@@ -177,7 +174,7 @@ export function ProvidersRoute() {
                   });
                 }}
               >
-                <Trash2 aria-hidden /> Delete provider
+                <Trash2 aria-hidden /> {t('deleteProvider')}
               </Button>
             </div>
           </Dialog.Content>

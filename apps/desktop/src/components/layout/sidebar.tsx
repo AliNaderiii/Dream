@@ -11,22 +11,24 @@ import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useTranslation } from '@/lib/i18n';
 import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, useAppStore } from '@/stores/use-app-store';
 import { useSessionStore } from '@/stores/use-session-store';
 import { cn } from '@/utils/cn';
 import { formatShortcut } from '@/utils/platform';
 
-/** Groups sessions into the date buckets the design calls for. */
-function groupLabel(timestamp: number): string {
+/** i18n key of the date bucket a timestamp falls into. */
+function groupKey(timestamp: number): string {
   const day = 86_400_000;
   const age = Date.now() - timestamp;
-  if (age < day) return 'Today';
-  if (age < 7 * day) return 'This week';
-  if (age < 30 * day) return 'This month';
-  return 'Older';
+  if (age < day) return 'sessions.groupToday';
+  if (age < 7 * day) return 'sessions.groupWeek';
+  if (age < 30 * day) return 'sessions.groupMonth';
+  return 'sessions.groupOlder';
 }
 
 export function Sidebar() {
+  const { t } = useTranslation('common');
   const navigate = useNavigate();
   const collapsed = useAppStore((s) => s.sidebarCollapsed);
   const width = useAppStore((s) => s.sidebarWidth);
@@ -74,25 +76,25 @@ export function Sidebar() {
 
   // Precompute the date-group header for each row so rendering stays pure.
   const rows = visible.map((session, index) => {
-    const group = groupLabel(session.updatedAt);
-    const previous = index > 0 ? groupLabel(visible[index - 1].updatedAt) : null;
+    const group = groupKey(session.updatedAt);
+    const previous = index > 0 ? groupKey(visible[index - 1].updatedAt) : null;
     return { session, group, showHeader: group !== previous };
   });
 
   return (
     <aside
-      aria-label="Sessions"
+      aria-label={t('sessions.title')}
       style={{ width }}
       className="relative flex shrink-0 flex-col border-e border-border-default bg-surface"
     >
       <div className="flex items-center gap-1 px-3 pt-3">
-        <h2 className="flex-1 text-h3 font-semibold">Sessions</h2>
+        <h2 className="flex-1 text-h3 font-semibold">{t('sessions.title')}</h2>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="New session"
+              aria-label={t('sessions.new')}
               onClick={() => {
                 const session = createSession();
                 void navigate(`/chat/${session.id}`);
@@ -101,20 +103,24 @@ export function Sidebar() {
               <MessageSquarePlus aria-hidden />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>New session {formatShortcut(['mod', 'n'])}</TooltipContent>
+          <TooltipContent>
+            {t('sessions.new')} {formatShortcut(['mod', 'n'])}
+          </TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Collapse sidebar"
+              aria-label={t('sessions.collapse')}
               onClick={toggleSidebar}
             >
               <PanelLeftClose aria-hidden className="rtl:rotate-180" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Collapse {formatShortcut(['mod', 'b'])}</TooltipContent>
+          <TooltipContent>
+            {t('sessions.collapse')} {formatShortcut(['mod', 'b'])}
+          </TooltipContent>
         </Tooltip>
       </div>
 
@@ -127,8 +133,8 @@ export function Sidebar() {
           type="search"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search sessions"
-          aria-label="Search sessions"
+          placeholder={t('sessions.search')}
+          aria-label={t('sessions.search')}
           className="selectable h-8 w-full rounded-md border border-border-default bg-sunken ps-8 pe-2 text-body text-fg-primary placeholder:text-fg-muted focus:border-border-strong"
         />
       </div>
@@ -136,9 +142,7 @@ export function Sidebar() {
       <div className="flex-1 overflow-y-auto px-2 pb-2">
         {visible.length === 0 ? (
           <p className="px-2 py-6 text-center text-caption text-fg-muted">
-            {sessions.length === 0
-              ? 'No sessions yet. Start one to begin.'
-              : 'No sessions match your search.'}
+            {sessions.length === 0 ? t('sessions.empty') : t('sessions.noMatch')}
           </p>
         ) : (
           <ul className="flex flex-col gap-0.5">
@@ -147,7 +151,7 @@ export function Sidebar() {
                 <li key={session.id}>
                   {showHeader && (
                     <p className="px-2 pb-1 pt-3 text-micro font-semibold uppercase text-fg-muted">
-                      {group}
+                      {t(group)}
                     </p>
                   )}
                   <button
@@ -174,7 +178,7 @@ export function Sidebar() {
       {/* Resize handle: 6px hit area, 1px visible, keyboard-adjustable. */}
       <div
         role="separator"
-        aria-label="Resize sidebar"
+        aria-label={t('sessions.resize')}
         aria-orientation="vertical"
         aria-valuenow={width}
         aria-valuemin={SIDEBAR_MIN_WIDTH}

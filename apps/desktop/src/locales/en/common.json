@@ -1,0 +1,114 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "chat": "Chat",
+    "projects": "Projects",
+    "memory": "Memory",
+    "skills": "Skills",
+    "subagents": "Subagents",
+    "data": "Data",
+    "connectivity": "Connectivity",
+    "providers": "Providers",
+    "settings": "Settings",
+    "provenance": "Provenance"
+  },
+  "sessions": {
+    "title": "Sessions",
+    "new": "New session",
+    "search": "Search sessions",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar",
+    "resize": "Resize sidebar",
+    "empty": "No sessions yet. Start one to begin.",
+    "noMatch": "No sessions match your search.",
+    "groupToday": "Today",
+    "groupWeek": "This week",
+    "groupMonth": "This month",
+    "groupOlder": "Older"
+  },
+  "conversation": "Conversation",
+  "status": {
+    "idle": "Idle",
+    "running": "Running",
+    "paused": "Paused",
+    "error": "Error",
+    "offline": "Offline"
+  },
+  "titlebar": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close",
+    "pending": "{{count}} pending"
+  },
+  "topbar": {
+    "chooseWorkspace": "Choose workspace folder",
+    "toggleTheme": "Toggle theme",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "approvals": "{{count}} approval requests",
+    "newSession": "New session",
+    "newProject": "New project",
+    "selectModel": "Select model",
+    "cloud": "Cloud",
+    "configureProviders": "Configure providers…",
+    "noApprovals": "No pending approvals",
+    "switchToLight": "Switch to light theme",
+    "switchToDark": "Switch to dark theme"
+  },
+  "command": {
+    "title": "Command palette",
+    "description": "Search and run any Dream command.",
+    "searchPlaceholder": "Type a command…",
+    "searchAria": "Search commands",
+    "empty": "No matching commands"
+  },
+  "confirm": {
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "error": {
+    "title": "Something went wrong",
+    "body": "Dream hit an unexpected error while rendering this screen. Your sessions and memory are unaffected.",
+    "retry": "Try again"
+  },
+  "drop": "Drop files to attach",
+  "dashboard": {
+    "greeting": "Good to see you",
+    "subtitle": "Dream keeps its memory on this machine and asks before doing anything irreversible.",
+    "startSession": "Start a session",
+    "memoryTitle": "Memory explorer",
+    "memoryDesc": "Browse what Dream remembers",
+    "skillsTitle": "Skills",
+    "skillsDesc": "Manage reusable procedures",
+    "providersTitle": "Providers",
+    "providersDesc": "Configure models and keys"
+  },
+  "projects": {
+    "title": "Projects",
+    "description": "Project dashboards, files and per-project memory. Built in P-03."
+  },
+  "language": {
+    "en": "English",
+    "fa": "فارسی",
+    "zh-CN": "简体中文",
+    "ja": "日本語",
+    "es": "Español",
+    "de": "Deutsch",
+    "fr": "Français",
+    "ko": "한국어"
+  },
+  "generic": {
+    "on": "On",
+    "off": "Off",
+    "loading": "Loading…",
+    "choose": "Choose…",
+    "edit": "Edit",
+    "save": "Save",
+    "saving": "Saving…",
+    "delete": "Delete",
+    "export": "Export",
+    "cancel": "Cancel",
+    "close": "Close"
+  }
+}

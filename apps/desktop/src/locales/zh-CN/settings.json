@@ -1,0 +1,24 @@
+{
+  "title": "设置与集成",
+  "subtitle": "配置系统外观、MCP 服务器扩展和 ACP 代理连接。",
+  "tabs": {
+    "general": "常规",
+    "mcp": "MCP 服务器",
+    "acp": "ACP 互操作"
+  },
+  "appearance": "外观",
+  "theme": "主题",
+  "themeDesc": "除非手动覆盖，否则跟随系统设置。",
+  "density": "密度",
+  "densityDesc": "紧凑模式将组件内边距缩小 25%。",
+  "language": "语言",
+  "languageDesc": "波斯语会将整个外壳切换为从右到左。",
+  "window": "窗口",
+  "minimizeToTray": "最小化到托盘",
+  "minimizeToTrayDesc": "将窗口隐藏而不是最小化。",
+  "closeToTray": "关闭到托盘",
+  "closeToTrayDesc": "关闭窗口后让 Dream 继续在托盘中运行。",
+  "workspace": "工作区",
+  "workspaceFolder": "工作区文件夹",
+  "noWorkspace": "未选择文件夹——文件访问不受限制。"
+}

@@ -1,0 +1,24 @@
+{
+  "title": "設定と統合",
+  "subtitle": "システムの外観、MCP サーバー拡張、ACP エージェント接続を設定します。",
+  "tabs": {
+    "general": "一般",
+    "mcp": "MCP サーバー",
+    "acp": "ACP 相互運用"
+  },
+  "appearance": "外観",
+  "theme": "テーマ",
+  "themeDesc": "上書きしない限りシステム設定に従います。",
+  "density": "密度",
+  "densityDesc": "コンパクトはコンポーネントの余白を 25% 減らします。",
+  "language": "言語",
+  "languageDesc": "ペルシャ語にするとシェル全体が右から左になります。",
+  "window": "ウィンドウ",
+  "minimizeToTray": "トレイに最小化",
+  "minimizeToTrayDesc": "最小化の代わりにウィンドウを隠します。",
+  "closeToTray": "トレイに閉じる",
+  "closeToTrayDesc": "ウィンドウを閉じても Dream をトレイで実行し続けます。",
+  "workspace": "ワークスペース",
+  "workspaceFolder": "ワークスペースフォルダー",
+  "noWorkspace": "フォルダー未選択——ファイルアクセスは制限されません。"
+}

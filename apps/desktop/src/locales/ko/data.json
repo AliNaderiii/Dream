@@ -1,0 +1,18 @@
+{
+  "title": "데이터 워크벤치",
+  "subtitle": "데이터셋을 로드, 프로파일링, 정리, 분석, 차트로 표시합니다.",
+  "load": "데이터셋 로드",
+  "noDatasets": "아직 데이터셋이 없습니다",
+  "noDatasetsDesc": "CSV 또는 테이블 파일을 로드해 분석을 시작하세요.",
+  "profile": "프로파일",
+  "clean": "정리",
+  "analyse": "분석",
+  "charts": "차트",
+  "report": "보고서",
+  "notebook": "노트북",
+  "loading": "데이터셋 로드 중…",
+  "rows": "{{rows}}행 × {{cols}}열",
+  "cleaned": "정리됨",
+  "deleteDataset": "{{name}} 삭제",
+  "ingestPlaceholder": "~/datasets/sales-2024.csv"
+}

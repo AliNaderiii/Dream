@@ -1,0 +1,20 @@
+{
+  "title": "Fournisseurs",
+  "subtitle": "Configurez les backends de modèles avec lesquels Dream peut dialoguer.",
+  "add": "Ajouter un fournisseur",
+  "noProviders": "Aucun fournisseur configuré",
+  "noProvidersDesc": "Connectez un fournisseur pour commencer à converser avec Dream.",
+  "connected": "Connecté",
+  "disconnected": "Déconnecté",
+  "testing": "Test en cours",
+  "local": "Local",
+  "configure": "Configurer",
+  "configured": "{{count}} configurés",
+  "connectFirst": "Connectez votre premier fournisseur",
+  "connectFirstDesc": "Choisissez parmi OpenAI, Anthropic, Google AI, Groq, Together, OpenRouter ou un serveur local.",
+  "browseCatalog": "Parcourir le catalogue",
+  "loading": "Chargement des fournisseurs…",
+  "deleteTitle": "Supprimer {{name}} ?",
+  "deleteDesc": "Cela supprime sa configuration et purge définitivement ses identifiants du trousseau du système. Les conversations ne sont pas supprimées.",
+  "deleteProvider": "Supprimer le fournisseur"
+}

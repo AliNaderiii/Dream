@@ -1,0 +1,13 @@
+{
+  "title": "Subagents",
+  "subtitle": "Delegate tasks to isolated worker agents.",
+  "spawn": "Spawn a subagent",
+  "newSubagent": "New subagent",
+  "noSubagents": "No subagents yet",
+  "noSubagentsDesc": "Delegate a task to run it in an isolated worker.",
+  "selectPrompt": "Select a subagent to inspect it.",
+  "refresh": "Refresh",
+  "expandList": "Expand subagent list",
+  "collapseList": "Collapse subagent list",
+  "progress": "{{name}} progress"
+}

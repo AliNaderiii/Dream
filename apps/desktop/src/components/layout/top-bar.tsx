@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useTranslation } from '@/lib/i18n';
 import { dialogApi } from '@/lib/tauri';
 import { useAppStore } from '@/stores/use-app-store';
 import { useProviderStore } from '@/stores/use-provider-store';
@@ -28,6 +29,7 @@ interface TopBarProps {
 }
 
 export function TopBar({ title }: TopBarProps) {
+  const { t } = useTranslation('common');
   const navigate = useNavigate();
   const location = useLocation();
   const isPaneWorkspace = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
@@ -47,7 +49,7 @@ export function TopBar({ title }: TopBarProps) {
   const activeProvider = providers.find((p) => p.id === activeProviderId);
 
   const chooseWorkspace = async () => {
-    const folder = await dialogApi.selectFolder({ title: 'Choose workspace folder' });
+    const folder = await dialogApi.selectFolder({ title: t('topbar.chooseWorkspace') });
     if (!folder) return;
     await dialogApi.setWorkspaceRoot(folder);
     setWorkspaceRoot(folder);
@@ -61,13 +63,15 @@ export function TopBar({ title }: TopBarProps) {
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Expand sidebar"
+              aria-label={t('topbar.expandSidebar')}
               onClick={toggleSidebar}
             >
               <PanelLeftOpen aria-hidden className="rtl:rotate-180" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Expand sidebar {formatShortcut(['mod', 'b'])}</TooltipContent>
+          <TooltipContent>
+            {t('topbar.expandSidebar')} {formatShortcut(['mod', 'b'])}
+          </TooltipContent>
         </Tooltip>
       )}
 
@@ -77,12 +81,12 @@ export function TopBar({ title }: TopBarProps) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="secondary" size="sm" className="gap-1.5">
-              <span className="truncate">{activeProvider?.name ?? 'Select model'}</span>
+              <span className="truncate">{activeProvider?.name ?? t('topbar.selectModel')}</span>
               {activeModelId && <span className="ltr-island text-fg-muted">{activeModelId}</span>}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-56">
-            <DropdownMenuLabel>Providers</DropdownMenuLabel>
+            <DropdownMenuLabel>{t('nav.providers')}</DropdownMenuLabel>
             {providers.map((provider) => (
               <DropdownMenuCheckboxItem
                 key={provider.id}
@@ -91,7 +95,7 @@ export function TopBar({ title }: TopBarProps) {
               >
                 <span className="flex-1">{provider.name}</span>
                 <Badge variant={provider.local ? 'success' : 'neutral'}>
-                  {provider.local ? 'Local' : 'Cloud'}
+                  {provider.local ? t('providers.local') : t('topbar.cloud')}
                 </Badge>
               </DropdownMenuCheckboxItem>
             ))}
@@ -100,7 +104,7 @@ export function TopBar({ title }: TopBarProps) {
               checked={false}
               onCheckedChange={() => void navigate('/providers')}
             >
-              Configure providers…
+              {t('topbar.configureProviders')}
             </DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -111,7 +115,7 @@ export function TopBar({ title }: TopBarProps) {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="New session"
+            aria-label={t('topbar.newSession')}
             onClick={() => {
               const session = createSession();
               void navigate(`/chat/${session.id}`);
@@ -120,7 +124,9 @@ export function TopBar({ title }: TopBarProps) {
             <Plus aria-hidden />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>New session {formatShortcut(['mod', 'n'])}</TooltipContent>
+        <TooltipContent>
+          {t('topbar.newSession')} {formatShortcut(['mod', 'n'])}
+        </TooltipContent>
       </Tooltip>
 
       <Tooltip>
@@ -128,13 +134,13 @@ export function TopBar({ title }: TopBarProps) {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Choose workspace"
+            aria-label={t('topbar.chooseWorkspace')}
             onClick={() => void chooseWorkspace()}
           >
             <FolderOpen aria-hidden />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Choose workspace folder</TooltipContent>
+        <TooltipContent>{t('topbar.chooseWorkspace')}</TooltipContent>
       </Tooltip>
 
       <Tooltip>
@@ -142,7 +148,7 @@ export function TopBar({ title }: TopBarProps) {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={`Pending approvals: ${pendingApprovals}`}
+            aria-label={t('topbar.approvals', { count: pendingApprovals })}
             className="relative"
           >
             <Bell aria-hidden />
@@ -153,8 +159,8 @@ export function TopBar({ title }: TopBarProps) {
         </TooltipTrigger>
         <TooltipContent>
           {pendingApprovals === 0
-            ? 'No pending approvals'
-            : `${pendingApprovals} pending approvals`}
+            ? t('topbar.noApprovals')
+            : t('topbar.approvals', { count: pendingApprovals })}
         </TooltipContent>
       </Tooltip>
 
@@ -163,13 +169,17 @@ export function TopBar({ title }: TopBarProps) {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={resolvedTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            aria-label={
+              resolvedTheme === 'dark' ? t('topbar.switchToLight') : t('topbar.switchToDark')
+            }
             onClick={toggleTheme}
           >
             {resolvedTheme === 'dark' ? <Sun aria-hidden /> : <Moon aria-hidden />}
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Toggle theme {formatShortcut(['mod', 'shift', 'l'])}</TooltipContent>
+        <TooltipContent>
+          {t('topbar.toggleTheme')} {formatShortcut(['mod', 'shift', 'l'])}
+        </TooltipContent>
       </Tooltip>
     </div>
   );

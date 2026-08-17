@@ -9,6 +9,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { useMemo, useState } from 'react';
 
 import type { Shortcut } from '@/hooks/use-keyboard-shortcuts';
+import { useTranslation } from '@/lib/i18n';
 import { useAppStore } from '@/stores/use-app-store';
 import { cn } from '@/utils/cn';
 import { formatShortcut } from '@/utils/platform';
@@ -19,6 +20,7 @@ interface CommandPaletteProps {
 }
 
 export function CommandPalette({ commands }: CommandPaletteProps) {
+  const { t } = useTranslation('common');
   const open = useAppStore((s) => s.commandPaletteOpen);
   const setOpen = useAppStore((s) => s.setCommandPaletteOpen);
   const [query, setQuery] = useState('');
@@ -53,7 +55,7 @@ export function CommandPalette({ commands }: CommandPaletteProps) {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
         <Dialog.Content
-          aria-label="Command palette"
+          aria-label={t('command.title')}
           className="fixed start-1/2 top-24 z-50 w-[min(36rem,90vw)] -translate-x-1/2 overflow-hidden rounded-xl border border-border-default bg-overlay shadow-e3 rtl:translate-x-1/2"
           onKeyDown={(event) => {
             if (event.key === 'ArrowDown') {
@@ -71,24 +73,22 @@ export function CommandPalette({ commands }: CommandPaletteProps) {
             }
           }}
         >
-          <Dialog.Title className="sr-only">Command palette</Dialog.Title>
-          <Dialog.Description className="sr-only">
-            Search and run any Dream command.
-          </Dialog.Description>
+          <Dialog.Title className="sr-only">{t('command.title')}</Dialog.Title>
+          <Dialog.Description className="sr-only">{t('command.description')}</Dialog.Description>
 
           <input
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Type a command…"
-            aria-label="Search commands"
+            placeholder={t('command.searchPlaceholder')}
+            aria-label={t('command.searchAria')}
             className="selectable h-12 w-full border-b border-border-default bg-transparent px-4 text-body-lg text-fg-primary placeholder:text-fg-muted focus:outline-none"
           />
 
           <ul className="max-h-80 overflow-y-auto p-2">
             {results.length === 0 ? (
               <li className="px-3 py-6 text-center text-caption text-fg-muted">
-                No matching commands
+                {t('command.empty')}
               </li>
             ) : (
               results.map((command, index) => (

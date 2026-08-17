@@ -1,0 +1,8 @@
+{
+  "title": "Bac à sable Docker",
+  "subtitle": "Exécutez du code non fiable dans un conteneur isolé.",
+  "unavailable": "Docker indisponible",
+  "available": "Bac à sable prêt",
+  "disabled": "Bac à sable désactivé",
+  "error": "Erreur du bac à sable"
+}

@@ -1,0 +1,5 @@
+{
+  "bridgeOffline": "El motor de Dream está sin conexión.",
+  "network": "Falló una solicitud de red. Revisa tu conexión.",
+  "permission": "No tienes permiso para hacer eso."
+}

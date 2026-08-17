@@ -1,0 +1,8 @@
+{
+  "title": "Web Gateway",
+  "subtitle": "Access Dream from your phone or another browser.",
+  "stopped": "Gateway stopped",
+  "running": "Gateway running",
+  "error": "Gateway error",
+  "disabled": "Gateway disabled"
+}

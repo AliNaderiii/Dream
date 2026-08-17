@@ -1,0 +1,15 @@
+{
+  "title": "Explorateur de mémoire",
+  "loading": "Chargement des souvenirs…",
+  "shown": "{{shown}} souvenirs sur {{total}} affichés",
+  "noMemories": "Aucun souvenir pour l’instant",
+  "noMemoriesDesc": "Les souvenirs proviennent des conversations, ou vous pouvez en ajouter un à la main.",
+  "newMemory": "Nouveau souvenir",
+  "loadMore": "Charger plus",
+  "memoryCount": "{{count}} souvenirs",
+  "memoryCountOne": "1 souvenir",
+  "failedLoad": "Impossible de charger les souvenirs.",
+  "failedLoadMore": "Impossible de charger plus de souvenirs.",
+  "failedSave": "Impossible d’enregistrer ce souvenir.",
+  "failedDelete": "Impossible de supprimer ce souvenir."
+}

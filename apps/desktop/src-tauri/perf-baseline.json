@@ -1,0 +1,7 @@
+{
+  "cold_start_ms": 5000,
+  "idle_memory_mb": 200,
+  "bundle_kib_max": 4000,
+  "measured_on": "2026-08-17",
+  "note": "Upper bounds, not a measurement: CI fails when a run exceeds these by >10%."
+}

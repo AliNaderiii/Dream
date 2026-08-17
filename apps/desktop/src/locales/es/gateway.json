@@ -1,0 +1,8 @@
+{
+  "title": "Puerta de enlace web",
+  "subtitle": "Accede a Dream desde tu teléfono u otro navegador.",
+  "stopped": "Puerta de enlace detenida",
+  "running": "Puerta de enlace en ejecución",
+  "error": "Error de puerta de enlace",
+  "disabled": "Puerta de enlace deshabilitada"
+}

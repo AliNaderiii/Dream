@@ -1,0 +1,15 @@
+{
+  "title": "記憶エクスプローラー",
+  "loading": "記憶を読み込み中…",
+  "shown": "{{total}} 件中 {{shown}} 件の記憶を表示",
+  "noMemories": "まだ記憶がありません",
+  "noMemoriesDesc": "記憶は会話から取り込まれます。手動で追加することもできます。",
+  "newMemory": "新しい記憶",
+  "loadMore": "さらに読み込む",
+  "memoryCount": "{{count}} 件の記憶",
+  "memoryCountOne": "1 件の記憶",
+  "failedLoad": "記憶を読み込めませんでした。",
+  "failedLoadMore": "さらに記憶を読み込めませんでした。",
+  "failedSave": "この記憶を保存できませんでした。",
+  "failedDelete": "この記憶を削除できませんでした。"
+}

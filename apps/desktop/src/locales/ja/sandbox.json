@@ -1,0 +1,8 @@
+{
+  "title": "Docker サンドボックス",
+  "subtitle": "信頼できないコードを分離コンテナで実行します。",
+  "unavailable": "Docker が利用できません",
+  "available": "サンドボックス準備完了",
+  "disabled": "サンドボックス無効",
+  "error": "サンドボックスエラー"
+}

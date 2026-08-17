@@ -1,0 +1,20 @@
+{
+  "title": "Anbieter",
+  "subtitle": "Konfiguriere die Modell-Backends, mit denen Dream sprechen kann.",
+  "add": "Anbieter hinzufügen",
+  "noProviders": "Keine Anbieter konfiguriert",
+  "noProvidersDesc": "Verbinde einen Anbieter, um mit Dream zu sprechen.",
+  "connected": "Verbunden",
+  "disconnected": "Getrennt",
+  "testing": "Wird getestet",
+  "local": "Lokal",
+  "configure": "Konfigurieren",
+  "configured": "{{count}} konfiguriert",
+  "connectFirst": "Ersten Anbieter verbinden",
+  "connectFirstDesc": "Wähle aus OpenAI, Anthropic, Google AI, Groq, Together, OpenRouter oder einem lokalen Server.",
+  "browseCatalog": "Katalog durchsuchen",
+  "loading": "Anbieter werden geladen…",
+  "deleteTitle": "{{name}} löschen?",
+  "deleteDesc": "Entfernt die Konfiguration und löscht die Zugangsdaten dauerhaft aus dem Schlüsselbund des Systems. Unterhaltungen werden nicht gelöscht.",
+  "deleteProvider": "Anbieter löschen"
+}

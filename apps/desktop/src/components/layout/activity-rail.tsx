@@ -20,13 +20,14 @@ import type { LucideIcon } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/utils/cn';
 import { formatShortcut } from '@/utils/platform';
 
 /** A destination in the activity rail. */
 interface RailItem {
   to: string;
-  label: string;
+  labelKey: string;
   icon: LucideIcon;
   shortcut?: readonly string[];
   /** Match child routes as active (e.g. `/chat/:id`). */
@@ -34,30 +35,32 @@ interface RailItem {
 }
 
 const PRIMARY_ITEMS: RailItem[] = [
-  { to: '/', label: 'Dashboard', icon: Sparkles, shortcut: ['mod', '1'], end: true },
-  { to: '/chat', label: 'Chat', icon: MessageSquare },
-  { to: '/projects', label: 'Projects', icon: FolderKanban, shortcut: ['mod', '2'] },
-  { to: '/memory', label: 'Memory', icon: Database, shortcut: ['mod', '3'] },
-  { to: '/skills', label: 'Skills', icon: Wrench, shortcut: ['mod', '4'] },
-  { to: '/subagents', label: 'Subagents', icon: Bot },
-  { to: '/data', label: 'Data', icon: BarChart3 },
-  { to: '/connectivity', label: 'Connectivity', icon: Radio, shortcut: ['mod', '5'] },
+  { to: '/', labelKey: 'nav.dashboard', icon: Sparkles, shortcut: ['mod', '1'], end: true },
+  { to: '/chat', labelKey: 'nav.chat', icon: MessageSquare },
+  { to: '/projects', labelKey: 'nav.projects', icon: FolderKanban, shortcut: ['mod', '2'] },
+  { to: '/memory', labelKey: 'nav.memory', icon: Database, shortcut: ['mod', '3'] },
+  { to: '/skills', labelKey: 'nav.skills', icon: Wrench, shortcut: ['mod', '4'] },
+  { to: '/subagents', labelKey: 'nav.subagents', icon: Bot },
+  { to: '/data', labelKey: 'nav.data', icon: BarChart3 },
+  { to: '/connectivity', labelKey: 'nav.connectivity', icon: Radio, shortcut: ['mod', '5'] },
 ];
 
 const FOOTER_ITEMS: RailItem[] = [
-  { to: '/providers', label: 'Providers', icon: Sparkles },
-  { to: '/settings', label: 'Settings', icon: Settings, shortcut: ['mod', ','] },
+  { to: '/providers', labelKey: 'nav.providers', icon: Sparkles },
+  { to: '/settings', labelKey: 'nav.settings', icon: Settings, shortcut: ['mod', ','] },
 ];
 
 function RailLink({ item }: { item: RailItem }) {
+  const { t } = useTranslation('common');
   const Icon = item.icon;
+  const label = t(item.labelKey);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <NavLink
           to={item.to}
           end={item.end}
-          aria-label={item.label}
+          aria-label={label}
           className={({ isActive }) =>
             cn(
               'relative flex size-10 items-center justify-center rounded-md text-fg-secondary transition-colors duration-fast',
@@ -81,7 +84,7 @@ function RailLink({ item }: { item: RailItem }) {
         </NavLink>
       </TooltipTrigger>
       <TooltipContent side="right">
-        {item.label}
+        {label}
         {item.shortcut && (
           <span className="ms-2 text-fg-muted ltr-island">{formatShortcut(item.shortcut)}</span>
         )}

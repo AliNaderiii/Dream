@@ -1,0 +1,19 @@
+{
+  "title": "溯源",
+  "subtitle": "审计每个工件和轮次的历史。",
+  "noRecords": "没有溯源记录",
+  "noRecordsDesc": "记录会随着 Dream 的工作出现在这里。",
+  "searchPlaceholder": "按工具、查询、文件或哈希搜索溯源记录…",
+  "allEventTypes": "所有事件类型",
+  "toolCalls": "工具调用",
+  "codeExecutions": "代码执行",
+  "fileWrites": "文件写入",
+  "modelResponses": "模型响应",
+  "userMessages": "用户消息",
+  "subagentSpawns": "子代理",
+  "allSessions": "所有会话",
+  "noArtifacts": "尚未生成任何工件",
+  "toolLabel": "工具：",
+  "modelLabel": "模型：",
+  "sizeLabel": "大小："
+}

@@ -1,0 +1,11 @@
+{
+  "title": "연결",
+  "subtitle": "Telegram, Discord, Slack, WhatsApp, Signal, 이메일에서 Dream과 대화하세요.",
+  "noPlatforms": "사용 가능한 플랫폼 없음",
+  "noPlatformsDesc": "플랫폼을 연결해 Dream을 채팅 앱에 연결하세요.",
+  "start": "시작",
+  "stop": "중지",
+  "gatewayRunning": "게이트웨이 실행 중",
+  "gatewayStopped": "게이트웨이 중지됨",
+  "loading": "플랫폼 로드 중…"
+}

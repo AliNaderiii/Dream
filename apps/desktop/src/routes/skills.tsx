@@ -19,6 +19,7 @@ import {
   type SkillImportRequest,
 } from '@/components/skills/skill-import-dialog';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/lib/i18n';
 import { useBridge } from '@/lib/bridge/hooks';
 import {
   buildSkillZip,
@@ -36,6 +37,8 @@ import type { BridgeSkillDetail, BridgeSkillEx, BridgeSkillProblem } from '@/lib
 import { absoluteDate } from '@/utils/time';
 
 export function SkillsRoute() {
+  const { t } = useTranslation('skills');
+  const { t: tc } = useTranslation('common');
   const { client } = useBridge();
 
   const [skills, setSkills] = useState<BridgeSkillEx[]>([]);
@@ -61,13 +64,13 @@ export function SkillsRoute() {
       const result = await listSkills(client);
       setSkills(result.skills);
       setProblems(result.problems);
-      setStatus(`${result.skills.length} skills loaded`);
+      setStatus(t('loadedCount', { count: result.skills.length }));
       return result.skills;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load skills.');
+      setError(err instanceof Error ? err.message : t('failedLoad'));
       return [];
     }
-  }, [client]);
+  }, [client, t]);
 
   useEffect(() => {
     const load = async () => {
@@ -97,26 +100,26 @@ export function SkillsRoute() {
         setEditing(false);
         setSaveError(null);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load the skill.');
+        if (!cancelled) setError(err instanceof Error ? err.message : t('failedLoadDetail'));
       }
     };
     void load();
     return () => {
       cancelled = true;
     };
-  }, [client, selectedName]);
+  }, [client, selectedName, t]);
 
   /** Optimistic toggle: flip locally, roll back if the bridge refuses. */
   const toggleEnabled = async (skill: BridgeSkillEx, enabled: boolean) => {
     setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, enabled } : s)));
-    setStatus(`${skill.name} ${enabled ? 'enabled' : 'disabled'}`);
+    setStatus(`${skill.name} ${enabled ? t('enabled') : t('disabled')}`);
     try {
       await setSkillEnabled(client, skill.name, enabled);
     } catch (err) {
       setSkills((prev) =>
         prev.map((s) => (s.name === skill.name ? { ...s, enabled: !enabled } : s)),
       );
-      setError(err instanceof Error ? err.message : `Could not ${enabled ? 'enable' : 'disable'}.`);
+      setError(err instanceof Error ? err.message : t('failedToggle'));
     }
   };
 
@@ -149,9 +152,9 @@ export function SkillsRoute() {
       const stillThere = updated.find((s) => s.name === validation.parsed?.name);
       setSelectedName(stillThere?.name ?? selectedName);
       setEditing(false);
-      setStatus(`${validation.parsed?.name ?? 'Skill'} saved`);
+      setStatus(`${validation.parsed?.name ?? tc('nav.skills')} ${t('saved')}`);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Could not save this skill.');
+      setSaveError(err instanceof Error ? err.message : t('failedSave'));
     } finally {
       setSaving(false);
     }
@@ -163,10 +166,10 @@ export function SkillsRoute() {
       await deleteSkill(client, detail.name);
       setSelectedName(null);
       setDetail(null);
-      setStatus(`${detail.name} deleted`);
+      setStatus(`${detail.name} ${t('deleted')}`);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not delete this skill.');
+      setError(err instanceof Error ? err.message : t('failedDelete'));
     }
   };
 
@@ -174,9 +177,9 @@ export function SkillsRoute() {
     try {
       const result = await exportSkill(client, name);
       downloadFile(exportFilename(result.name), result.content);
-      setStatus(`${result.name} exported`);
+      setStatus(`${result.name} ${t('exported')}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not export this skill.');
+      setError(err instanceof Error ? err.message : t('failedExport'));
     }
   };
 
@@ -186,24 +189,24 @@ export function SkillsRoute() {
       const files = await Promise.all(names.map((name) => exportSkill(client, name)));
       const zip = buildSkillZip(files.map((f) => ({ name: f.name, content: f.content })));
       downloadFile('dream-skills.zip', zip as BlobPart, 'application/zip');
-      setStatus(`${files.length} skills exported`);
+      setStatus(t('exportedMany', { count: files.length }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not export the selected skills.');
+      setError(err instanceof Error ? err.message : t('failedExportMany'));
     }
   };
 
   const sorted = useMemo(() => [...skills].sort((a, b) => a.name.localeCompare(b.name)), [skills]);
 
   return (
-    <section aria-label="Skills manager" className="flex h-full min-h-0">
+    <section aria-label={t('title')} className="flex h-full min-h-0">
       <section
-        aria-label="Installed skills"
+        aria-label={t('installed')}
         className="flex w-[min(24rem,45%)] shrink-0 flex-col border-e border-border-default"
       >
         <div className="flex flex-wrap items-center gap-2 border-b border-border-default px-3 py-2">
           <Button size="sm" variant="primary" onClick={() => setImportOpen(true)}>
             <Upload aria-hidden />
-            Import
+            {t('import')}
           </Button>
           <Button
             size="sm"
@@ -212,7 +215,7 @@ export function SkillsRoute() {
             onClick={() => void handleExportZip()}
           >
             <Package aria-hidden />
-            Export {checked.size > 0 ? `(${checked.size})` : 'ZIP'}
+            {checked.size > 0 ? `${tc('generic.export')} (${checked.size})` : t('exportZip')}
           </Button>
         </div>
 
@@ -231,13 +234,13 @@ export function SkillsRoute() {
 
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {loading ? (
-            <p className="p-6 text-center text-body text-fg-muted">Loading skills…</p>
+            <p className="p-6 text-center text-body text-fg-muted">{t('loading')}</p>
           ) : sorted.length === 0 ? (
             <EmptyState
               icon={Wrench}
-              title="No skills installed"
-              description="Skills are reusable procedures Dream can follow. Import one to get started."
-              action={{ label: 'Import a skill', onClick: () => setImportOpen(true) }}
+              title={t('noSkills')}
+              description={t('noSkillsDesc')}
+              action={{ label: t('importSkill'), onClick: () => setImportOpen(true) }}
             />
           ) : (
             <ul className="flex flex-col gap-2">
@@ -261,7 +264,7 @@ export function SkillsRoute() {
 
           {problems.length > 0 && (
             <div className="mt-3 rounded-md border border-warning-fg bg-warning-bg p-2 text-caption text-warning-fg">
-              <p className="font-semibold">Some skill files could not be read:</p>
+              <p className="font-semibold">{t('problems')}</p>
               <ul className="ps-4">
                 {problems.map((problem) => (
                   <li key={problem.filename} className="list-disc">
@@ -274,13 +277,9 @@ export function SkillsRoute() {
         </div>
       </section>
 
-      <section aria-label="Skill detail" className="flex min-w-0 flex-1 flex-col">
+      <section aria-label={t('detail')} className="flex min-w-0 flex-1 flex-col">
         {!detail ? (
-          <EmptyState
-            icon={Wrench}
-            title="Select a skill"
-            description="Pick a skill from the list to read its steps, edit it, or export it."
-          />
+          <EmptyState icon={Wrench} title={t('selectSkill')} description={t('selectSkillDesc')} />
         ) : (
           <>
             <header className="flex flex-wrap items-center gap-2 border-b border-border-default px-4 py-3">
@@ -288,7 +287,9 @@ export function SkillsRoute() {
                 <h2 className="truncate text-h3 font-semibold">{detail.name}</h2>
                 <p className="text-caption text-fg-secondary">
                   {detail.description}
-                  {detail.created_at ? ` · added ${absoluteDate(detail.created_at)}` : ''}
+                  {detail.created_at
+                    ? ` · ${t('added', { date: absoluteDate(detail.created_at) })}`
+                    : ''}
                 </p>
               </div>
               <div className="ms-auto flex items-center gap-2">
@@ -301,7 +302,7 @@ export function SkillsRoute() {
                       onClick={() => void handleSave()}
                     >
                       <Save aria-hidden />
-                      {saving ? 'Saving…' : 'Save'}
+                      {saving ? tc('generic.saving') : tc('generic.save')}
                     </Button>
                     <Button
                       size="sm"
@@ -312,13 +313,13 @@ export function SkillsRoute() {
                         setSaveError(null);
                       }}
                     >
-                      Cancel
+                      {tc('generic.cancel')}
                     </Button>
                   </>
                 ) : (
                   <>
                     <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
-                      Edit
+                      {tc('generic.edit')}
                     </Button>
                     <Button
                       size="sm"
@@ -326,7 +327,7 @@ export function SkillsRoute() {
                       onClick={() => void handleExportOne(detail.name)}
                     >
                       <Download aria-hidden />
-                      Export
+                      {tc('generic.export')}
                     </Button>
                     <Button
                       size="sm"
@@ -334,7 +335,7 @@ export function SkillsRoute() {
                       onClick={() => setConfirmDelete(true)}
                     >
                       <Trash2 aria-hidden />
-                      Delete
+                      {tc('generic.delete')}
                     </Button>
                   </>
                 )}
@@ -355,7 +356,7 @@ export function SkillsRoute() {
                 <textarea
                   value={draft}
                   rows={20}
-                  aria-label={`Edit ${detail.name}`}
+                  aria-label={t('editAria', { name: detail.name })}
                   onChange={(event) => setDraft(event.target.value)}
                   className="selectable ltr-island min-h-80 w-full resize-y rounded-md border border-border-default bg-canvas p-3 text-code text-fg-primary"
                 />
@@ -377,9 +378,9 @@ export function SkillsRoute() {
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title={`Delete ${detail?.name ?? 'this skill'}?`}
-        description="The skill file is removed from disk. This cannot be undone."
-        confirmLabel="Delete"
+        title={t('deleteTitle', { name: detail?.name ?? '…' })}
+        description={t('deleteDesc')}
+        confirmLabel={tc('generic.delete')}
         onConfirm={() => void handleDelete()}
       />
     </section>

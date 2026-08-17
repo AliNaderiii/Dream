@@ -1,0 +1,114 @@
+{
+  "nav": {
+    "dashboard": "Panel",
+    "chat": "Chat",
+    "projects": "Proyectos",
+    "memory": "Memoria",
+    "skills": "Habilidades",
+    "subagents": "Subagentes",
+    "data": "Datos",
+    "connectivity": "Conectividad",
+    "providers": "Proveedores",
+    "settings": "Ajustes",
+    "provenance": "Procedencia"
+  },
+  "sessions": {
+    "title": "Sesiones",
+    "new": "Nueva sesión",
+    "search": "Buscar sesiones",
+    "collapse": "Contraer barra lateral",
+    "expand": "Expandir barra lateral",
+    "resize": "Redimensionar barra lateral",
+    "empty": "Aún no hay sesiones. Empieza una para comenzar.",
+    "noMatch": "Ninguna sesión coincide con tu búsqueda.",
+    "groupToday": "Hoy",
+    "groupWeek": "Esta semana",
+    "groupMonth": "Este mes",
+    "groupOlder": "Anteriores"
+  },
+  "conversation": "Conversación",
+  "status": {
+    "idle": "Inactivo",
+    "running": "Ejecutando",
+    "paused": "En pausa",
+    "error": "Error",
+    "offline": "Sin conexión"
+  },
+  "titlebar": {
+    "minimize": "Minimizar",
+    "maximize": "Maximizar",
+    "restore": "Restaurar",
+    "close": "Cerrar",
+    "pending": "{{count}} pendientes"
+  },
+  "topbar": {
+    "chooseWorkspace": "Elegir carpeta de espacio de trabajo",
+    "toggleTheme": "Cambiar tema",
+    "expandSidebar": "Expandir barra lateral",
+    "collapseSidebar": "Contraer barra lateral",
+    "approvals": "{{count}} solicitudes de aprobación",
+    "newSession": "Nueva sesión",
+    "newProject": "Nuevo proyecto",
+    "selectModel": "Seleccionar modelo",
+    "cloud": "Nube",
+    "configureProviders": "Configurar proveedores…",
+    "noApprovals": "Sin aprobaciones pendientes",
+    "switchToLight": "Cambiar a tema claro",
+    "switchToDark": "Cambiar a tema oscuro"
+  },
+  "command": {
+    "title": "Paleta de comandos",
+    "description": "Busca y ejecuta cualquier comando de Dream.",
+    "searchPlaceholder": "Escribe un comando…",
+    "searchAria": "Buscar comandos",
+    "empty": "Sin comandos coincidentes"
+  },
+  "confirm": {
+    "confirm": "Confirmar",
+    "cancel": "Cancelar"
+  },
+  "error": {
+    "title": "Algo salió mal",
+    "body": "Dream encontró un error inesperado al mostrar esta pantalla. Tus sesiones y memoria no se ven afectadas.",
+    "retry": "Reintentar"
+  },
+  "drop": "Suelta archivos para adjuntar",
+  "dashboard": {
+    "greeting": "Encantado de verte",
+    "subtitle": "Dream guarda su memoria en este equipo y pregunta antes de hacer algo irreversible.",
+    "startSession": "Iniciar una sesión",
+    "memoryTitle": "Explorador de memoria",
+    "memoryDesc": "Explora lo que Dream recuerda",
+    "skillsTitle": "Habilidades",
+    "skillsDesc": "Gestiona procedimientos reutilizables",
+    "providersTitle": "Proveedores",
+    "providersDesc": "Configura modelos y claves"
+  },
+  "projects": {
+    "title": "Proyectos",
+    "description": "Paneles de proyecto, archivos y memoria por proyecto. Construido en P-03."
+  },
+  "language": {
+    "en": "English",
+    "fa": "فارسی",
+    "zh-CN": "简体中文",
+    "ja": "日本語",
+    "es": "Español",
+    "de": "Deutsch",
+    "fr": "Français",
+    "ko": "한국어"
+  },
+  "generic": {
+    "on": "Activado",
+    "off": "Desactivado",
+    "loading": "Cargando…",
+    "choose": "Elegir…",
+    "edit": "Editar",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "delete": "Eliminar",
+    "export": "Exportar",
+    "cancel": "Cancelar",
+    "close": "Cerrar"
+  }
+}

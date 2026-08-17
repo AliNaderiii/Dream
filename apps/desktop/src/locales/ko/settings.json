@@ -1,0 +1,24 @@
+{
+  "title": "설정 및 통합",
+  "subtitle": "시스템 모양, MCP 서버 확장, ACP 에이전트 연결을 구성합니다.",
+  "tabs": {
+    "general": "일반",
+    "mcp": "MCP 서버",
+    "acp": "ACP 상호운용"
+  },
+  "appearance": "모양",
+  "theme": "테마",
+  "themeDesc": "재정의하지 않으면 시스템 설정을 따릅니다.",
+  "density": "밀도",
+  "densityDesc": "컴팩트는 컴포넌트 여백을 25% 줄입니다.",
+  "language": "언어",
+  "languageDesc": "페르시아어는 전체 셸을 오른쪽에서 왼쪽으로 바꿉니다.",
+  "window": "창",
+  "minimizeToTray": "트레이로 최소화",
+  "minimizeToTrayDesc": "최소화 대신 창을 숨깁니다.",
+  "closeToTray": "트레이로 닫기",
+  "closeToTrayDesc": "창을 닫아도 Dream이 트레이에서 계속 실행됩니다.",
+  "workspace": "작업공간",
+  "workspaceFolder": "작업공간 폴더",
+  "noWorkspace": "폴더를 선택하지 않음 — 파일 접근이 제한되지 않습니다."
+}

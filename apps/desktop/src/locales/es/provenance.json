@@ -1,0 +1,19 @@
+{
+  "title": "Procedencia",
+  "subtitle": "Audita el historial de cada artefacto y turno.",
+  "noRecords": "No hay registros de procedencia",
+  "noRecordsDesc": "Los registros aparecen aquí a medida que Dream trabaja.",
+  "searchPlaceholder": "Buscar registros de procedencia por herramienta, consulta, archivo o hash…",
+  "allEventTypes": "Todos los tipos de evento",
+  "toolCalls": "Llamadas a herramientas",
+  "codeExecutions": "Ejecuciones de código",
+  "fileWrites": "Escrituras de archivo",
+  "modelResponses": "Respuestas del modelo",
+  "userMessages": "Mensajes de usuario",
+  "subagentSpawns": "Subagentes",
+  "allSessions": "Todas las sesiones",
+  "noArtifacts": "Aún no se han generado artefactos",
+  "toolLabel": "Herramienta:",
+  "modelLabel": "Modelo:",
+  "sizeLabel": "Tamaño:"
+}
