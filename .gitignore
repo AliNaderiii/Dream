@@ -1,4 +1,5 @@
-data/
+# Runtime data at the repo root only (not e.g. apps/desktop/src/components/data/)
+/data/
 __pycache__/
 *.py[cod]
 *.db

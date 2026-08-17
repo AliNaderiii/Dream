@@ -6,10 +6,10 @@
  */
 
 import {
+  BarChart3,
   Bot,
   Database,
   FolderKanban,
-  GitBranch,
   MessageSquare,
   Radio,
   Settings,
@@ -40,7 +40,7 @@ const PRIMARY_ITEMS: RailItem[] = [
   { to: '/memory', label: 'Memory', icon: Database, shortcut: ['mod', '3'] },
   { to: '/skills', label: 'Skills', icon: Wrench, shortcut: ['mod', '4'] },
   { to: '/subagents', label: 'Subagents', icon: Bot },
-  { to: '/data', label: 'Data', icon: GitBranch },
+  { to: '/data', label: 'Data', icon: BarChart3 },
   { to: '/connectivity', label: 'Connectivity', icon: Radio, shortcut: ['mod', '5'] },
 ];
 

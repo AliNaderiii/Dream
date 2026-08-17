@@ -384,6 +384,53 @@ failures never fail the RPC — they surface in the per-adapter
 
 ---
 
+### 3.12 `data.*` — data science pipeline (Prompt P-09)
+
+The data-science pipeline (see `docs/architecture/data-science.md`) ingests
+files into a dataset registry under `data/datasets/` and runs every heavy
+operation (pandas/scipy/sklearn/matplotlib) inside the P-08 Docker sandbox.
+Datasets are addressed by a 32-hex `dataset_id`, never by raw path.
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `data.load_data` | `{file_path, name?}` | `{dataset_id, name, filename, format, shape: [rows, cols], columns, dtypes, memory_bytes, preview}` — auto-detects CSV/TSV/Excel/JSON/YAML/XML/SQLite/Parquet; copies the source into the registry |
+| `data.profile_data` | `{dataset_id, max_categories?: 20}` | `{row_count, column_count, duplicate_rows, missing_pct, sampled, columns: {name → {dtype, role, missing, mean, std, q1, median, q3, outliers_iqr, outliers_zscore, top_values?, histogram?}}}` — files > 100 MB use chunked aggregation (`sampled: true`) |
+| `data.clean_data` | `{dataset_id, operations: CleanOp[]}` | `{rows_before, rows_after, shape, columns, dtypes, operations_applied, preview}` — writes `cleaned.csv`, which becomes the active file. `CleanOp` is a tagged union on `op`: `drop_na fill_na convert_dtype remove_duplicates rename_column drop_column filter_rows normalize_column encode_categorical handle_outliers` |
+| `data.analyze_data` | `{dataset_id, analyses: Analysis[]}` | `{results: [{kind, status: "ok"\|"error", ...}]}` — `Analysis.kind` ∈ `correlation ttest anova chi_square linear_regression logistic_regression kmeans pca time_series_decompose`; one failed analysis never kills the batch |
+| `data.auto_chart` | `{dataset_id, max_charts?: 6}` | `{charts: ChartSpec[]}` — deterministic rubric over (column role, cardinality); ranked by `score`, each with a human `reason` |
+| `data.create_chart` | `{chart_spec: ChartSpec}` | `{chart_id, dataset_id, spec, files: {png, svg, pdf, html}, sizes}` — themes/palettes/sizes validated against strict allowlists; each export is quota-checked (5 MB) |
+| `data.generate_report` | `{dataset_id, title, sections?}` | `{pdf_path, markdown_path, size_bytes, sections, charts_embedded}` — PDF ≤ 5 pages with extractable text; sections ⊆ `abstract data_summary methodology results discussion conclusion references` |
+| `data.get_report` | `{dataset_id}` | `{markdown: string \| null}` — the report's markdown twin |
+| `data.list_datasets` | `{}` | `{datasets: [{dataset_id, name, filename, format, created_at, shape, columns, cleaned}]}` |
+| `data.get_dataset` | `{dataset_id}` | the full registry record |
+| `data.delete_dataset` | `{dataset_id}` | `{deleted, dataset_id}` — removes files, the registry row, and the dataset's kernel |
+
+Every validation failure — unknown op/analysis/chart tags, columns absent
+from the schema, column names failing `^[A-Za-z_][A-Za-z0-9_]*$` (≤ 64
+chars), out-of-range sizes — raises `INVALID_PARAMS` (-32602) **before** any
+sandbox execution.
+
+### 3.13 `notebook.*` — Jupyter integration (Prompt P-09)
+
+Notebooks live at `data/datasets/{dataset_id}/notebooks/*.ipynb`. One kernel
+per dataset (`jupyter_client`), started lazily and stopped on dataset delete
+or sidecar shutdown. Only these methods touch `.ipynb` files.
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `notebook.create` | `{dataset_id, name, cells: [{type: "code"\|"markdown", source}]}` | `{notebook_path, dataset_id, name, cell_count}` |
+| `notebook.execute` | `{path, kernel_id?}` | `{notebook_path, kernel_id, cells_executed, outputs: [{cell_index, outputs}]}` — runs every code cell in order, persisting outputs into the file |
+| `notebook.run_cell` | `{path, cell_index}` | `{notebook_path, cell_index, cell_type, execution_count, outputs}` — markdown cells are a no-op, not an error |
+| `notebook.read` | `{path}` | `{notebook_path, cells: [{cell_type, source, outputs?, execution_count?}]}` — outputs summarised: text truncated at 20 KB, images ≤ 4 MB base64, errors as `{ename, evalue, traceback}` |
+| `notebook.open_lab` | `{path}` | `{url, already_running}` — spawns a token-guarded JupyterLab rooted at the datasets directory |
+
+Notebook paths are confined to the datasets directory (escapes raise
+`INVALID_PARAMS`). When `jupyter_client` or JupyterLab is not installed the
+execution methods raise code `-32012` with an actionable message; file-level
+methods (`create`/`read`) keep working.
+
+---
+
 ## 4. Error taxonomy
 
 JSON-RPC reserves `-32000` to `-32099` for implementation-defined server errors;
@@ -548,3 +595,4 @@ The sidecar may emit notifications with **no** `id`:
 | Subagent runtime | `dream/subagents.py` | — | `routes/subagents.tsx` |
 | Scheduler & cron | `dream/scheduler.py`, `dream/cron.py`, `dream/nl_schedule.py` | — | `routes/schedules.tsx` |
 | Connectivity gateway | `dream/connectivity/` (`gateway.py`, `adapters/`) | — | `lib/bridge/echo-gateway.ts`, `routes/connectivity.tsx` |
+| Data science pipeline | `dream/skills/data_science.py`, `dream/skills/notebooks.py` | — | `lib/bridge/data-science.ts`, `lib/bridge/echo-data.ts`, `routes/data.tsx`, `routes/data.dataset.tsx` |

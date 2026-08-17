@@ -7,6 +7,8 @@ error behaviour when Docker is unavailable.
 
 from __future__ import annotations
 
+import subprocess
+
 import pytest
 
 
@@ -79,13 +81,18 @@ def test_check_available_returns_false_without_docker():
 
 def test_check_docker_raises_without_docker():
     """When Docker is not installed, check_docker raises DockerUnavailableError."""
+    from unittest.mock import patch
+
     from dream.docker_sandbox import DockerSandbox, DockerUnavailableError
 
     sandbox = DockerSandbox()
 
+    # CI runners may have a live Docker daemon — mock the CLI away so the
+    # test asserts the failure path deterministically on every machine.
     import asyncio
-    with pytest.raises(DockerUnavailableError):
-        asyncio.run(sandbox.check_docker())
+    with patch.object(sandbox, "_run_docker_cmd", side_effect=FileNotFoundError("No docker")):
+        with pytest.raises(DockerUnavailableError):
+            asyncio.run(sandbox.check_docker())
 
 
 def test_sandbox_result_fields():
@@ -183,13 +190,22 @@ def test_docker_sandbox_package_exports():
 
 
 def test_install_packages_raises_without_docker():
-    """install_packages raises DockerUnavailableError when Docker is absent."""
+    """install_packages raises when the docker CLI is absent."""
+    from unittest.mock import patch
+
     from dream.docker_sandbox import DockerSandbox
 
     sandbox = DockerSandbox()
     import asyncio
-    with pytest.raises((ImportError, RuntimeError, FileNotFoundError)):
-        asyncio.run(sandbox.install_packages(["numpy"], language="python"))
+    # Mock the CLI away: on machines with a live daemon this would otherwise
+    # really build an image (slow) instead of exercising the failure path.
+    with patch.object(
+        sandbox,
+        "_run_docker_cmd_with_output",
+        side_effect=subprocess.SubprocessError("No docker"),
+    ):
+        with pytest.raises((ImportError, RuntimeError, FileNotFoundError)):
+            asyncio.run(sandbox.install_packages(["numpy"], language="python"))
 
 
 def test_run_notebook_requires_existing_file():

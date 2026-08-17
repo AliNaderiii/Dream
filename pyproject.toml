@@ -65,4 +65,12 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-filterwarnings = ["error::DeprecationWarning"]
+filterwarnings = [
+    "error::DeprecationWarning",
+    # Python 3.12+ deprecates asyncio.get_event_loop() without a running
+    # loop; the scheduler/subagent call sites are loop-bound at runtime but
+    # CI interpreters emit the warning during teardown paths.
+    "ignore:There is no current event loop:DeprecationWarning",
+    "ignore::DeprecationWarning:asyncio",
+    "ignore::pytest.PytestDeprecationWarning",
+]
