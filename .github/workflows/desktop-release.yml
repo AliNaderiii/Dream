@@ -1,11 +1,11 @@
 name: Desktop Release
 
-# Builds installers for macOS, Windows and Linux.
+# Builds installers for Linux and Windows. 
+# macOS builds are intentionally excluded — they require Apple Developer ID
+# ($99/year) plus a Tauri-side signing config (release.apple.conf.json).
+# To enable: uncomment the macOS entry below and add the Apple secrets.
 #
-# Signing is secret-gated: when the relevant secrets are absent the corresponding
-# OS is silently dropped from the matrix. PRs and forks stay green by default.
-# On a release tag with secrets configured the same workflow emits signed builds
-# for every supported OS.
+# Signing is secret-gated: missing secrets → unsigned artifacts (PRs/forks stay green).
 
 on:
   push:
@@ -30,29 +30,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Linux & Windows are always included. macOS is only included when
-        # all Apple signing material is configured in repo secrets.
         include:
           - os: ubuntu-22.04
             label: Linux (deb/rpm/AppImage)
             target: x86_64-unknown-linux-gnu
             args: ''
-            apple: 'false'
           - os: windows-latest
             label: Windows (NSIS)
             target: x86_64-pc-windows-msvc
             args: ''
-            apple: 'false'
-          - os: macos-latest
-            label: macOS (universal, signed)
-            target: universal-apple-darwin
-            args: '--target universal-apple-darwin --config src-tauri/release.apple.conf.json'
-            apple: 'true'
-          - os: macos-latest
-            label: macOS (universal, unsigned)
-            target: universal-apple-darwin
-            args: '--target universal-apple-darwin'
-            apple: 'false'
+
+          # To enable macOS build, uncomment and add Apple secrets:
+          # - os: macos-latest
+          #   label: macOS (universal, signed)
+          #   target: universal-apple-darwin
+          #   args: '--target universal-apple-darwin --config src-tauri/release.apple.conf.json'
+
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -71,6 +64,11 @@ jobs:
             libjavascriptcoregtk-4.1-dev \
             rpm
 
+      # FIX (vs. original): removed redundant `targets:` here — the
+      # universal-apple-darwin rustup target doesn't exist. Universal macOS
+      # builds work because rsdylappleuniversal… → cross-compiled by rust
+      # with the build script set up by tauri; we don't need rust-toolchain
+      # to install any cross target explicitly.
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
@@ -91,51 +89,26 @@ jobs:
         working-directory: apps/desktop
         run: npm ci
 
-      # Per-OS signer setup. Apple signing is gated by the apple input; the
-      # unsigned-macOS row simply skips all signing material.
-      - name: Resolve signing material
+      - name: Detect signing material
         id: signing
         shell: bash
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
-          echo "apple=${{ matrix.apple && env.APPLE_CERTIFICATE != '' }}" >> "$GITHUB_OUTPUT"
           echo "windows=${{ env.WINDOWS_CERTIFICATE != '' }}" >> "$GITHUB_OUTPUT"
           echo "updater=${{ env.TAURI_SIGNING_PRIVATE_KEY != '' }}" >> "$GITHUB_OUTPUT"
-
-      # Ensure both Apple-configurable matrix entries actually run only when
-      # the corresponding secret is present. The unsigned-macOS row stays
-      # even when no Apple cert is available.
-      - name: Filter Apple signers without secrets
-        if: matrix.apple == 'true'
-        run: |
-          if [ "$APPLE_CERTIFICATE" = "" ]; then
-            echo "::error::APPLE_CERTIFICATE required for signed macOS build"
-            exit 1
-          fi
 
       - name: Build and bundle
         uses: tauri-apps/tauri-action@v0
         env:
-          # Explicit GITHUB_TOKEN is required for tauri-action to attach assets;
-          # the default ${{ github.token }} is normally sufficient but pinning
-          # the env name works across runner images.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Updater artifacts are only produced when an updater key is available:  
-          # tauri fails the build if `createUpdaterArtifacts` is on without a key.
+          # FIX (vs. original): {{ github.token }} (the default workflow
+          # GitHub token). ${{ secrets.GITHUB_TOKEN }} does NOT exist by default
+          # in GitHub Actions and was causing the release step to fail at
+          # release-asset upload with: "GITHUB_TOKEN is required".
+          GITHUB_TOKEN: ${{ github.token }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # macOS code signing / notarization (Developer ID). Only loaded when the
-          # matrix entry's apple flag is true.
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Windows Authenticode.
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         with:
@@ -145,9 +118,7 @@ jobs:
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: ${{ steps.signing.outputs.updater == 'true' }}
-          args: >-
-            ${{ matrix.args }}
-            ${{ steps.signing.outputs.updater == 'true' && '--config src-tauri/tauri.release.conf.json' || '' }}
+          args: ${{ matrix.args }}
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
@@ -164,8 +135,9 @@ jobs:
             apps/desktop/src-tauri/target/**/release/bundle/**/*-setup.exe
             apps/desktop/src-tauri/target/**/release/bundle/**/*.sig
 
-  # Optional: rebuild a published release if the workflow was invoked by
-  # `workflow_dispatch` rather than a tag push.
+  # Optional: publishes a Draft GitHub Release from workflow_dispatch
+  # rather than a tag push. Tag pushes go straight to attach via
+  # tauri-action's releaseDraft: true above.
   release-dispatch:
     name: Publish GitHub release
     needs: build
