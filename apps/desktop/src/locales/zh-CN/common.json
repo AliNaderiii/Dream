@@ -84,6 +84,20 @@
     "providersTitle": "服务商",
     "providersDesc": "配置模型和密钥"
   },
+  "firstRun": {
+    "title": "离线可用 — 无需账户",
+    "desc": "Dream 借助离线 echo 引擎完全在本机运行。",
+    "echo": "离线 echo 引擎 — 无需网络或账户",
+    "ollamaTitle": "用 Ollama 添加本地模型",
+    "ollamaDesc": "更智能的回复，且仍然不会离开你的设备。",
+    "ollamaCta": "设置 Ollama",
+    "byokTitle": "自带 API 密钥",
+    "byokDesc": "可选 — 启用后你的提示词会发送到该服务商。",
+    "byokCta": "添加服务商密钥",
+    "routeTitle": "当前路由",
+    "leavesMachine": "提示词会离开本机",
+    "staysLocal": "提示词绝不会离开本机"
+  },
   "projects": {
     "title": "项目",
     "description": "项目仪表盘、文件以及每个项目的记忆。已在 P-03 中构建。"

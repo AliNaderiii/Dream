@@ -1,8 +1,9 @@
-/** Dashboard — the launch screen. Content arrives in later phases. */
+/** Dashboard — the launch screen. */
 
 import { Database, MessageSquarePlus, Sparkles, Wrench } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+import { FirstRunCard } from '@/components/billing/first-run-card';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/lib/i18n';
 import { useSessionStore } from '@/stores/use-session-store';
@@ -55,6 +56,9 @@ export function DashboardRoute() {
         {t('dashboard.startSession')}
         <span className="ltr-island ms-1 opacity-70">{formatShortcut(['mod', 'n'])}</span>
       </Button>
+
+      {/* S05: offline-first onboarding — echo works, Ollama offered, BYOK optional */}
+      <FirstRunCard />
 
       <div className="grid gap-3 sm:grid-cols-3">
         {TILES.map((tile) => {

@@ -713,6 +713,10 @@ class BridgeMethods:
             "notebook.run_cell": self.notebook_run_cell,
             "notebook.read": self.notebook_read,
             "notebook.open_lab": self.notebook_open_lab,
+            # commerce.* / route.* — plan, usage, and model route (S05)
+            "commerce.plan": self.commerce_plan,
+            "commerce.usage": self.commerce_usage,
+            "route.resolve": self.route_resolve,
         }
 
     # ------------------------------------------------------------------ #
@@ -3167,6 +3171,114 @@ class BridgeMethods:
             # Persistence is best-effort: a read-only data dir must not crash
             # the sidecar. The in-memory registries still serve requests.
             pass
+
+    # ------------------------------------------------------------------ #
+    # commerce.* / route.* — plan, usage, and model route (S05).
+    # Thin, read-only wrappers over dream.commerce and dream.router: the
+    # pricing policy lives in commerce.py (never a made-up IRR number), the
+    # privacy sentences live in router.py, and this layer only serialises.
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _plan_period(plan: Any) -> str:
+        """The quota window of a plan: day | month | year | unlimited."""
+        if plan.daily_limit is not None:
+            return "day"
+        if plan.monthly_limit is not None:
+            return "month"
+        if plan.yearly_limit is not None:
+            return "year"
+        return "unlimited"
+
+    def commerce_plan(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """``commerce.plan`` — the active plan, its period, and its honest price.
+
+        ``price`` is an integer only when it is 0 (the two free plans);
+        paid plans carry ``price=None`` with ``price_note`` set to
+        ``"TBD after cost measurement"``. The frontend must never render a
+        numeric IRR for a paid plan.
+        """
+        # Imported lazily so the bridge loads even if the commerce module
+        # changes; the import is stdlib-only and cheap.
+        from dream.commerce import active_plan, ledger_attached
+
+        plan = active_plan()
+        return {
+            "plan_id": plan.id,
+            "name_fa": plan.name_fa,
+            "name_en": _PLAN_NAME_EN.get(plan.id, plan.id),
+            "currency": plan.currency,
+            "price": plan.price,
+            "price_note": plan.price_note,
+            "metered": plan.metered,
+            "period": self._plan_period(plan),
+            "limits": {
+                "daily": plan.daily_limit,
+                "monthly": plan.monthly_limit,
+                "yearly": plan.yearly_limit,
+            },
+            "ledger_attached": ledger_attached(),
+        }
+
+    def commerce_usage(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """``commerce.usage`` — turns used in the current quota window.
+
+        ``limit`` is ``None`` (unlimited) when the plan is ``local`` or no
+        ledger is attached; the frontend renders that as ∞, never as a
+        fabricated number.
+        """
+        from dream.commerce import Ledger
+
+        ledger = Ledger.from_env()
+        if ledger is None:
+            return {
+                "plan_id": "local",
+                "window": None,
+                "used": 0,
+                "limit": None,
+                "remaining": None,
+                "unlimited": True,
+            }
+        info = ledger.usage()
+        return {
+            "plan_id": info["plan"],
+            "window": info["window"],
+            "used": info["used"],
+            "limit": info["limit"],
+            "remaining": (
+                None if info["limit"] is None else max(0, info["limit"] - info["used"])
+            ),
+            "unlimited": info["limit"] is None,
+        }
+
+    def route_resolve(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """``route.resolve`` — the resolved model route and its privacy line.
+
+        Returns the exact route and sentences owned by ``dream.router`` so
+        the desktop shows the same honest answer as ``dream --route``.
+        """
+        from dream.router import resolve_route
+
+        route = resolve_route()
+        return {
+            "name": route.name,
+            "leaves_machine": route.leaves_machine,
+            "sentence_en": route.sentence_en,
+            "sentence_fa": route.sentence_fa,
+        }
+
+
+#: English display names for the commercial plans (S05). Persian names come
+#: from ``dream.commerce`` itself; this map only feeds the desktop UI label.
+_PLAN_NAME_EN: dict[str, str] = {
+    "local": "Local",
+    "guest": "Guest",
+    "daily": "Daily",
+    "individual_monthly": "Individual (monthly)",
+    "individual_yearly": "Individual (yearly)",
+    "team": "Team",
+    "company": "Company",
+}
 
 
 def _approval_summary(name: str, arguments: dict[str, Any]) -> str:

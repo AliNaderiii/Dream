@@ -84,6 +84,20 @@
     "providersTitle": "Fournisseurs",
     "providersDesc": "Configurer les modèles et les clés"
   },
+  "firstRun": {
+    "title": "Fonctionne hors ligne — aucun compte requis",
+    "desc": "Dream fonctionne entièrement sur cette machine avec le moteur echo hors ligne.",
+    "echo": "Moteur echo hors ligne — sans réseau ni compte",
+    "ollamaTitle": "Ajouter un modèle local avec Ollama",
+    "ollamaDesc": "Des réponses plus intelligentes qui ne quittent jamais votre machine.",
+    "ollamaCta": "Configurer Ollama",
+    "byokTitle": "Apporter votre propre clé API",
+    "byokDesc": "Facultatif — vos messages quitteront alors cette machine vers ce fournisseur.",
+    "byokCta": "Ajouter une clé de fournisseur",
+    "routeTitle": "Route actuelle",
+    "leavesMachine": "Les messages quittent cette machine",
+    "staysLocal": "Les messages ne quittent jamais cette machine"
+  },
   "projects": {
     "title": "Projets",
     "description": "Tableaux de bord de projet, fichiers et mémoire par projet. Construit dans P-03."

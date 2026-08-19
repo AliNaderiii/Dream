@@ -1000,3 +1000,49 @@ export interface NotebookRunResultDto {
   execution_count?: number | null;
   outputs: { cell_index?: number; outputs: NotebookOutputDto[] }[] | NotebookOutputDto[];
 }
+
+// --------------------------------------------------------------------------- //
+// S05 — commerce.* / route.* (plan, usage, model route)
+// --------------------------------------------------------------------------- //
+
+/** The quota window of a plan, as resolved by `dream.commerce`. */
+export type PlanPeriod = 'day' | 'month' | 'year' | 'unlimited';
+
+/** Result of `commerce.plan` — the active plan and its honest price. */
+export interface CommercePlanDto {
+  plan_id: string;
+  /** Persian plan name straight from `dream.commerce` (the user-facing one). */
+  name_fa: string;
+  /** English display label supplied by the bridge. */
+  name_en: string;
+  currency: string;
+  /**
+   * Never a made-up number: `0` for the free plans, `null` for paid plans
+   * whose price is `TBD after cost measurement`.
+   */
+  price: number | null;
+  price_note: string;
+  metered: boolean;
+  period: PlanPeriod;
+  limits: { daily: number | null; monthly: number | null; yearly: number | null };
+  ledger_attached: boolean;
+}
+
+/** Result of `commerce.usage` — turns used in the current quota window. */
+export interface CommerceUsageDto {
+  plan_id: string;
+  window: 'day' | 'month' | 'year' | null;
+  used: number;
+  /** `null` means unlimited (render as ∞), never a fabricated number. */
+  limit: number | null;
+  remaining: number | null;
+  unlimited: boolean;
+}
+
+/** One resolved model route, mirroring `dream.router.Route`. */
+export interface RouteDto {
+  name: 'hosted' | 'ollama' | 'byok' | 'echo';
+  leaves_machine: boolean;
+  sentence_en: string;
+  sentence_fa: string;
+}

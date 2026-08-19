@@ -20,5 +20,32 @@
   "closeToTrayDesc": "Garde Dream actif dans la barre d’état à la fermeture de la fenêtre.",
   "workspace": "Espace de travail",
   "workspaceFolder": "Dossier d’espace de travail",
-  "noWorkspace": "Aucun dossier sélectionné — l’accès aux fichiers est illimité."
+  "noWorkspace": "Aucun dossier sélectionné — l’accès aux fichiers est illimité.",
+  "billing": {
+    "title": "Formule et utilisation",
+    "desc": "Votre formule, l’utilisation des tours et la route de vos messages.",
+    "plan": "Formule",
+    "period": "Période",
+    "periodDay": "Par jour",
+    "periodMonth": "Par mois",
+    "periodYear": "Par an",
+    "periodUnlimited": "Illimité",
+    "usage": "Utilisation",
+    "turnsUsed": "{{used}} sur {{limit}} tours utilisés",
+    "turnsUnlimited": "Tours illimités",
+    "price": "Prix",
+    "free": "Gratuit",
+    "priceTbd": "À définir après mesure des coûts",
+    "route": "Route du modèle",
+    "routeDesc": "Où chaque tour est exécuté.",
+    "routeHosted": "Modèle cloud hébergé",
+    "routeOllama": "Ollama local",
+    "routeByok": "Votre propre endpoint (BYOK)",
+    "routeEcho": "Echo hors ligne",
+    "leavesMachine": "Les messages quittent cette machine",
+    "staysLocal": "Les messages ne quittent jamais cette machine",
+    "upgrade": "Améliorer (bientôt)",
+    "unavailable": "Les informations de la formule ne sont pas disponibles.",
+    "retry": "Réessayer"
+  }
 }

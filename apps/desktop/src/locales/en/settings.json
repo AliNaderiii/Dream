@@ -20,5 +20,32 @@
   "closeToTrayDesc": "Keep Dream running in the tray when the window closes.",
   "workspace": "Workspace",
   "workspaceFolder": "Workspace folder",
-  "noWorkspace": "No folder selected — file access is unrestricted."
+  "noWorkspace": "No folder selected — file access is unrestricted.",
+  "billing": {
+    "title": "Plan & usage",
+    "desc": "Your plan, turn usage, and the route your prompts take.",
+    "plan": "Plan",
+    "period": "Period",
+    "periodDay": "Per day",
+    "periodMonth": "Per month",
+    "periodYear": "Per year",
+    "periodUnlimited": "Unlimited",
+    "usage": "Usage",
+    "turnsUsed": "{{used}} of {{limit}} turns used",
+    "turnsUnlimited": "Unlimited turns",
+    "price": "Price",
+    "free": "Free",
+    "priceTbd": "TBD after cost measurement",
+    "route": "Model route",
+    "routeDesc": "Where each turn runs.",
+    "routeHosted": "Hosted cloud model",
+    "routeOllama": "Local Ollama",
+    "routeByok": "Your own endpoint (BYOK)",
+    "routeEcho": "Offline echo",
+    "leavesMachine": "Prompts leave this machine",
+    "staysLocal": "Prompts never leave this machine",
+    "upgrade": "Upgrade (coming)",
+    "unavailable": "Plan info is unavailable right now.",
+    "retry": "Retry"
+  }
 }

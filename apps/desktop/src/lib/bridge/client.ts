@@ -21,6 +21,7 @@ import { listen } from '@/lib/tauri';
 import { isTauri } from '@/utils/platform';
 
 import { EchoDataRuntime } from './echo-data';
+import { EchoCommerceRuntime } from './echo-commerce';
 import { EchoGatewayRuntime, requireGatewayPlatform } from './echo-gateway';
 import { EchoScheduleRuntime, EchoSubagentRuntime } from './echo-subagents';
 import { BridgeRpcError, toBridgeError } from './errors';
@@ -437,6 +438,7 @@ export class EchoBridgeTransport implements BridgeTransport {
   private schedules = new EchoScheduleRuntime();
   private gateway = new EchoGatewayRuntime();
   private data = new EchoDataRuntime();
+  private commerce = new EchoCommerceRuntime();
 
   /** Stops any simulated subagent still ticking (vitest teardown). */
   dispose(): void {
@@ -1185,6 +1187,14 @@ export class EchoBridgeTransport implements BridgeTransport {
         return { removed: true, agent_id: params['agent_id'] };
       case 'acp.client.test_agent':
         return { ok: true, name: 'Claude Code (ACP)', latency_ms: 18, tools_count: 8 };
+
+      // S05: commerce.* / route.* — deterministic plan, usage, and route.
+      case 'commerce.plan':
+        return this.commerce.plan();
+      case 'commerce.usage':
+        return this.commerce.usage();
+      case 'route.resolve':
+        return this.commerce.route();
       default:
         throw new BridgeRpcError({ code: -32601, message: `echo: unknown method ${method}` });
     }

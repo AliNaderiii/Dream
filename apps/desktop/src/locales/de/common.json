@@ -84,6 +84,20 @@
     "providersTitle": "Anbieter",
     "providersDesc": "Modelle und Schlüssel konfigurieren"
   },
+  "firstRun": {
+    "title": "Funktioniert offline — kein Konto nötig",
+    "desc": "Dream läuft mit der Offline-Echo-Engine vollständig auf diesem Rechner.",
+    "echo": "Offline-Echo-Engine — ohne Netzwerk oder Konto",
+    "ollamaTitle": "Lokales Modell mit Ollama hinzufügen",
+    "ollamaDesc": "Klügere Antworten, die Ihren Rechner trotzdem nie verlassen.",
+    "ollamaCta": "Ollama einrichten",
+    "byokTitle": "Eigenen API-Schlüssel mitbringen",
+    "byokDesc": "Optional — Ihre Nachrichten verlassen dann diesen Rechner hin zu diesem Anbieter.",
+    "byokCta": "Anbieter-Schlüssel hinzufügen",
+    "routeTitle": "Aktuelle Route",
+    "leavesMachine": "Nachrichten verlassen diesen Rechner",
+    "staysLocal": "Nachrichten verlassen diesen Rechner nie"
+  },
   "projects": {
     "title": "Projekte",
     "description": "Projekt-Dashboards, Dateien und projektspezifische Erinnerung. Gebaut in P-03."

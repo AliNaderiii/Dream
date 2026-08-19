@@ -20,5 +20,32 @@
   "closeToTrayDesc": "창을 닫아도 Dream이 트레이에서 계속 실행됩니다.",
   "workspace": "작업공간",
   "workspaceFolder": "작업공간 폴더",
-  "noWorkspace": "폴더를 선택하지 않음 — 파일 접근이 제한되지 않습니다."
+  "noWorkspace": "폴더를 선택하지 않음 — 파일 접근이 제한되지 않습니다.",
+  "billing": {
+    "title": "요금제 및 사용량",
+    "desc": "요금제, 턴 사용량, 프롬프트 경로.",
+    "plan": "요금제",
+    "period": "기간",
+    "periodDay": "일 단위",
+    "periodMonth": "월 단위",
+    "periodYear": "연 단위",
+    "periodUnlimited": "무제한",
+    "usage": "사용량",
+    "turnsUsed": "{{limit}}턴 중 {{used}}턴 사용",
+    "turnsUnlimited": "턴 무제한",
+    "price": "가격",
+    "free": "무료",
+    "priceTbd": "비용 측정 후 결정",
+    "route": "모델 경로",
+    "routeDesc": "각 턴이 실행되는 위치.",
+    "routeHosted": "호스팅 클라우드 모델",
+    "routeOllama": "로컬 Ollama",
+    "routeByok": "자체 엔드포인트 (BYOK)",
+    "routeEcho": "오프라인 echo",
+    "leavesMachine": "프롬프트가 이 기기를 떠납니다",
+    "staysLocal": "프롬프트는 이 기기를 절대 떠나지 않습니다",
+    "upgrade": "업그레이드 (예정)",
+    "unavailable": "현재 요금제 정보를 사용할 수 없습니다.",
+    "retry": "다시 시도"
+  }
 }
