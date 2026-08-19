@@ -852,3 +852,64 @@ def test_email_adapter_missing_password_fails_fast():
 def test_html_to_text_strips_markup():
     assert html_to_text("<p>Hello <b>Dream</b></p><div>next</div>") == "Hello Dream\nnext"
     assert html_to_text("plain") == "plain"
+
+
+def test_telegram_adapter_ignores_group_messages_even_from_a_linked_user():
+    recorder = _Recorder()
+    adapter = TelegramAdapter(
+        {"token": "123456:abcdefghijklmnopqrstuvwx"},
+        on_message=recorder,
+        transport=_FakeTelegramTransport([]),
+    )
+    group_update = {
+        "update_id": 30,
+        "message": {
+            "message_id": 7,
+            "chat": {"id": -1001, "type": "supergroup"},
+            "from": {"id": 42, "is_bot": False},
+            "text": "/link 123456",
+        },
+    }
+
+    _run(adapter._handle_update(group_update))
+
+    assert recorder.messages == []
+
+
+def test_telegram_adapter_retries_failed_handler_before_advancing_offset():
+    attempts = 0
+    delivered: list[str] = []
+
+    async def flaky_handler(message: IncomingMessage) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("temporary route failure")
+        delivered.append(message.text)
+
+    adapter = TelegramAdapter(
+        {"token": "123456:abcdefghijklmnopqrstuvwx"},
+        on_message=flaky_handler,
+        transport=_FakeTelegramTransport([]),
+    )
+    update = {
+        "update_id": 41,
+        "message": {
+            "message_id": 8,
+            "chat": {"id": 99, "type": "private"},
+            "from": {"id": 42, "is_bot": False},
+            "text": "retry safely",
+        },
+    }
+
+    async def scenario() -> None:
+        with pytest.raises(RuntimeError, match="temporary route failure"):
+            await adapter._process_updates([update])
+        assert adapter._offset == 0
+
+        await adapter._process_updates([update])
+        assert adapter._offset == 42
+
+    _run(scenario())
+    assert attempts == 2
+    assert delivered == ["retry safely"]

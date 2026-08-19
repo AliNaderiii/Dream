@@ -13,6 +13,7 @@ import copy
 import json
 import os
 import threading
+from collections.abc import Iterator
 from typing import Any
 
 from dream.connectivity.platforms import PLATFORM_CATALOG
@@ -42,6 +43,39 @@ def redact_config(config: dict[str, Any]) -> dict[str, Any]:
         else:
             redacted[key] = copy.deepcopy(value)
     return redacted
+
+
+def _secret_scalars(value: Any) -> Iterator[str]:
+    """Yield scalar secret values from a configured secret field."""
+    if isinstance(value, dict):
+        for nested in value.values():
+            yield from _secret_scalars(nested)
+    elif isinstance(value, (list, tuple, set)):
+        for nested in value:
+            yield from _secret_scalars(nested)
+    elif value is not None:
+        yield str(value)
+
+
+def redact_text(text: object, config: dict[str, Any] | None = None) -> str:
+    """Remove credential values before text reaches a status or log boundary.
+
+    Shape- and environment-based redaction comes from the Telegram transport's
+    established sanitizer.  Values under secret-marked connectivity config
+    keys are additionally replaced, even when a provider uses an uncommon key
+    format that cannot be recognised safely from shape alone.
+    """
+    from dream.telegram import redact_token
+
+    safe = redact_token(text)
+    for key, value in (config or {}).items():
+        if _is_secret_key(key):
+            for secret in _secret_scalars(value):
+                if secret:
+                    safe = safe.replace(secret, "<redacted-credential>")
+        elif isinstance(value, dict):
+            safe = redact_text(safe, value)
+    return safe
 
 
 def _clean_keys(raw: dict[str, Any]) -> dict[str, Any]:

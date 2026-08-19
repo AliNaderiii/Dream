@@ -211,3 +211,46 @@ start/stop, configure save, secret reveal, e2e log notice).
 | RPC surface | `dream/bridge/methods.py` §gateway | `lib/bridge/types.ts`, `routes/connectivity.tsx` |
 | Screen + store | — | `routes/connectivity.tsx`, `stores/use-connectivity-store.ts` |
 | WebSocket client | `dream/connectivity/websocket.py` | — |
+
+## 12. S03 Telegram Live hardening
+
+S03 keeps the two existing Telegram entry points but aligns their security and
+phone behavior:
+
+* **Standalone `dream-telegram`.** `TELEGRAM_BOT_TOKEN` is read only from the
+  environment. With `TELEGRAM_ALLOWED_USER` set, that numeric Telegram user is
+  the sole owner and pairing is disabled. Without it, startup prints one
+  six-digit code valid for ten minutes; the code works once, only in a private
+  chat, and the paired chat is persisted. Every other identity and every group
+  chat is refused before commands, reminders, memory, or the model can run.
+* **Connectivity Telegram adapter.** Desktop `/link CODE` uses the same visible
+  security properties: six digits, ten-minute TTL, one successful redemption,
+  persistent linked identity. Telegram updates are accepted only from private
+  chats. The long-poll offset advances only after the gateway handler returns
+  successfully, so a transient route failure retries rather than silently
+  dropping an update.
+* **Phone command parity.** Telegram gateway commands delegate to
+  `cli.dispatch_command` behind `cli.PHONE_COMMANDS`. This single source makes
+  `/plan`, `/usage`, and `/route` available on both Telegram entry points, and
+  `/help` renders the allowlisted phone surface. A slash command not in that
+  policy receives the standard refusal and is never treated as a model prompt.
+  The S00 commerce kernel is present, so these commands are read-only status
+  surfaces; S03 adds no purchase or payment flow.
+* **Long replies.** Standalone replies and due reminders are split into chunks
+  no longer than 4,000 characters. Pending delivery stores the first unsent
+  chunk; after a mid-message transport error, already delivered chunks are not
+  repeated and the update offset remains unacknowledged until all chunks send.
+* **Credential boundaries.** Telegram-token, Bearer, common API-key, labelled
+  credential, environment credential, and configured secret values are
+  sanitised before transport errors, adapter status, gateway logging, and
+  plaintext JSONL message persistence. Tracebacks carrying raw exception text
+  are not logged at the gateway boundary. Public configuration still uses the
+  existing key-based redaction.
+* **Dangerous tools.** Telegram sessions construct `ApprovalPolicy` without an
+  approver. Model-requested dangerous tools therefore return
+  `dangerous tool denied: no approver configured`; they are not executed. A
+  phone command cannot bypass this because non-allowlisted slash commands are
+  refused before model dispatch.
+
+All Telegram tests inject fake transports. CI neither needs nor accepts a live
+BotFather token; the owner-only live procedure is in `docs/handoff/S03.md`.

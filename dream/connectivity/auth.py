@@ -143,7 +143,7 @@ class AuthStore:
     def pending(self, platform: str) -> LinkCode | None:
         """The outstanding code for *platform*, or ``None`` when none/expired."""
         with self._lock:
-            for code in self._pending.values():
+            for code in list(self._pending.values()):
                 if code.platform != platform or code.used:
                     continue
                 if self._expired(code):

@@ -27,7 +27,7 @@ from typing import Any
 
 from dream.connectivity.auth import AuthStore
 from dream.connectivity.base import PlatformAdapter, split_text
-from dream.connectivity.config import ConnectivityConfig
+from dream.connectivity.config import ConnectivityConfig, redact_text
 from dream.connectivity.messagelog import MessageLog
 from dream.connectivity.models import IncomingMessage, LinkedUser, PlatformStatus
 from dream.connectivity.ratelimit import RateLimiter
@@ -47,6 +47,19 @@ HELP_TEXT = (
     "/new_session — forget this chat's history and start fresh\n"
     "/link <code> — pair this chat with the desktop app"
 )
+
+
+def _telegram_help_text() -> str:
+    """Build Telegram help from cli.py's single phone-command policy."""
+    from cli import PHONE_HELP
+
+    return (
+        "Dream Telegram commands:\n"
+        f"{PHONE_HELP}\n"
+        "/status  /new_session  /link CODE"
+    )
+
+
 RATE_LIMITED_TEXT = "You are sending messages too quickly. Please wait a moment."
 REFUSAL_TEXT = "This chat is not linked to a Dream desktop. Use /link <code>."
 LINK_OK_TEXT = "Linked! You can now talk to Dream."
@@ -244,10 +257,11 @@ class Gateway:
                 status.running = True
                 status.detail = ""
             except Exception as exc:
+                safe_error = adapter.redact_error(f"{type(exc).__name__}: {exc}")
                 status.running = False
-                status.error = f"{type(exc).__name__}: {exc}"
+                status.error = safe_error
                 status.detail = "failed to start"
-                logger.warning("adapter %s failed to start: %s", name, exc)
+                logger.warning("adapter %s failed to start: %s", name, safe_error)
         return self.status()
 
     async def stop_all(self) -> None:
@@ -257,7 +271,11 @@ class Gateway:
                 await adapter.stop()
                 adapter.status.running = False
             except Exception as exc:
-                logger.warning("adapter %s failed to stop: %s", adapter.platform_name, exc)
+                logger.warning(
+                    "adapter %s failed to stop: %s",
+                    adapter.platform_name,
+                    adapter.redact_error(exc),
+                )
 
     async def start_adapter(self, platform: str) -> dict[str, Any]:
         adapter = self.adapter(platform)
@@ -267,26 +285,50 @@ class Gateway:
             raise ValueError(f"platform {platform!r} is disabled in config")
         if not self.config.configured(platform):
             raise ValueError(f"platform {platform!r} is missing required configuration")
-        await adapter.start()
+        try:
+            await adapter.start()
+        except Exception as exc:
+            safe_error = adapter.redact_error(f"{type(exc).__name__}: {exc}")
+            adapter.status.running = False
+            adapter.status.error = safe_error
+            logger.warning("adapter %s failed to start: %s", platform, safe_error)
+            raise RuntimeError(safe_error) from None
         adapter.status.running = True
+        adapter.status.error = None
         return adapter.status.to_dict()
 
     async def stop_adapter(self, platform: str) -> dict[str, Any]:
         adapter = self.adapter(platform)
         if adapter is None:
             raise ValueError(f"no adapter for platform {platform!r}")
-        await adapter.stop()
+        try:
+            await adapter.stop()
+        except Exception as exc:
+            safe_error = adapter.redact_error(f"{type(exc).__name__}: {exc}")
+            adapter.status.error = safe_error
+            logger.warning("adapter %s failed to stop: %s", platform, safe_error)
+            raise RuntimeError(safe_error) from None
         adapter.status.running = False
         return adapter.status.to_dict()
 
     # -- routing ------------------------------------------------------------ #
 
     async def _on_adapter_message(self, message: IncomingMessage) -> None:
-        """Callback every adapter delivers through (runs on the gateway loop)."""
+        """Route one adapter event, preserving Telegram retry semantics."""
         try:
             await self.route_message(message)
-        except Exception:  # a bad message must never kill the gateway loop
-            logger.exception("route_message failed for %s", message.platform)
+        except Exception as exc:
+            adapter = self.adapter(message.platform)
+            safe_error = adapter.redact_error(exc) if adapter is not None else redact_text(exc)
+            # Do not use logger.exception here: exception text may contain a
+            # credential even when the user-facing error has been sanitised.
+            logger.error("route_message failed for %s: %s", message.platform, safe_error)
+            if message.platform == "telegram":
+                # Telegram acknowledges by offset.  Propagate a *sanitised*
+                # failure so its poller keeps this update pending for retry.
+                raise RuntimeError(safe_error) from None
+            # Push/websocket adapters preserve the historic quarantine rule:
+            # one bad event does not tear down their connection loop.
 
     async def route_message(self, message: IncomingMessage) -> None:
         """The full pipeline: log → pre-auth commands → auth → rate → agent."""
@@ -297,7 +339,7 @@ class Gateway:
             logger.warning("dropped message for unregistered platform %r", platform)
             return
         privacy = adapter.privacy
-        log_text = "" if privacy == "e2e" else message.text
+        log_text = "" if privacy == "e2e" else redact_text(message.text, adapter.config)
         self._log.add(
             platform, "in", user_id, log_text,
             message_id=message.message_id, attachments=len(message.attachments),
@@ -343,14 +385,20 @@ class Gateway:
         return bool(self.config.get(platform).get("require_auth", True))
 
     def _run_command(self, platform: str, user_id: str, text: str) -> tuple[bool, str]:
-        """Handle gateway commands; returns (handled, reply)."""
+        """Handle gateway commands; returns (handled, reply).
+
+        Telegram additionally delegates every phone-safe CLI command to
+        ``cli.dispatch_command``.  The allowlist and help therefore remain
+        single-sourced in ``cli.py`` rather than drifting in this gateway.
+        Other platform command surfaces are unchanged.
+        """
         stripped = str(text).strip()
         if not stripped.startswith("/"):
             return False, ""
-        command, separator, argument = stripped.partition(" ")
-        command = command.split("@", 1)[0].lower()
+        head, separator, argument = stripped.partition(" ")
+        command = head.split("@", 1)[0].lower()
         if command in {"/start", "/help"}:
-            return True, HELP_TEXT
+            return True, _telegram_help_text() if platform == "telegram" else HELP_TEXT
         if command == "/status":
             session = self._sessions.stats(platform)
             row = next((s for s in session if s["user_id"] == user_id), None)
@@ -371,6 +419,19 @@ class Gateway:
                 self._auth.link(platform, user_id)
                 return True, LINK_OK_TEXT
             return True, LINK_BAD_TEXT
+        if platform == "telegram":
+            from cli import PHONE_COMMANDS, dispatch_command
+            from dream.telegram import COMMAND_REFUSAL_TEXT, _phone_stats_line
+
+            if command not in PHONE_COMMANDS:
+                return True, COMMAND_REFUSAL_TEXT
+            lines: list[str] = []
+            rebuilt = command + (separator + argument if separator else "")
+            dream = self._sessions.get(platform, user_id)
+            dispatch_command(rebuilt, dream, output=lines.append, quiet=True)
+            if command == "/stats":
+                lines = [_phone_stats_line(line) for line in lines]
+            return True, "\n".join(lines) if lines else "Command completed."
         return False, ""
 
     async def _agent_reply(
@@ -389,7 +450,7 @@ class Gateway:
         """Split, send, and log one outbound reply."""
         for chunk in split_text(reply, adapter.max_message_length):
             await adapter.send_message(user_id, chunk)
-        log_text = "" if adapter.privacy == "e2e" else reply
+        log_text = "" if adapter.privacy == "e2e" else redact_text(reply, adapter.config)
         self._log.add(adapter.platform_name, "out", user_id, log_text)
         self._outbound_total += 1
 
@@ -431,6 +492,9 @@ class Gateway:
     def configure(self, platform: str, values: dict[str, Any]) -> dict[str, Any]:
         """Merge config for one platform, update gating, return the public view."""
         self.config.set(platform, values)
+        adapter = self.adapter(platform)
+        if adapter is not None:
+            adapter.update_config(self.config.get(platform))
         self._rate.configure(platform, self.config.rate_limit_per_minute(platform))
         return self.config.public(platform)
 
