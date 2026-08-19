@@ -24,6 +24,12 @@ Two surfaces exist today:
 The demo transcript in the README is a real transcript of `python cli.py
 --demo` in this repository. It requires no API key and no network.
 
+On Windows the first five minutes are **no-VPN**: double-click `run.bat`
+(the only primary launcher). It creates `.venv` if needed, refuses to start
+without Ollama (Persian + English, with the official download URL), and
+otherwise talks to a local Ollama model. Details live in
+[user/quick-start.md](user/quick-start.md).
+
 ## Plans
 
 All prices are in **IRR (Iranian rial)**. The currency field exists on every

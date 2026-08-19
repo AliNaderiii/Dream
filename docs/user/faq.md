@@ -10,7 +10,8 @@
 4. **Where is my data stored?** Memory, skills and datasets are local — under
    your workspace and Dream's data directory. Nothing is uploaded.
 5. **How do I run the desktop app?** `cd apps/desktop && npm install && npm run
-   dev` (see quick-start.md).
+   dev` (see quick-start.md). On Windows the first-run path is **`run.bat`**
+   (local Ollama CLI), not `Dream.bat`.
 
 ## Language
 
@@ -71,3 +72,8 @@
     never contains secrets).
 28. **What does `dream --version` tell me?** Your exact build/version for
     support.
+29. **What is the one Windows double-click?** `run.bat`. If Ollama is missing
+    it prints Persian + English and the URL <https://ollama.com/download>.
+30. **When do I need `.[web]` or `.[data]`?** Only for the optional FastAPI
+    gateway (`pip install -e ".[web]"`) or notebook tooling
+    (`pip install -e ".[data]"`). The CLI does not need them.

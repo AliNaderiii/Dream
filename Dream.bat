@@ -3,6 +3,7 @@ setlocal
 REM Dream desktop launcher — double-click to open the window.
 REM Finds the virtual-environment interpreter without manual typing.
 REM If the environment is missing, prints a readable Persian message.
+REM Secondary launcher (desktop window). For first-time setup, double-click run.bat.
 
 chcp 65001 >nul 2>nul
 

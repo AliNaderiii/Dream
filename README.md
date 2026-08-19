@@ -61,11 +61,19 @@ kernel are developed and tested independently (see
 
 ### Windows
 
-Double-click `run.bat` to start Dream against a local Ollama server: it
-activates `.venv`, clears any OpenAI credentials, lets you pick between
-`qwen2.5:7b` (default) and `qwen2.5:3b`, and launches the interactive CLI.
-`check.bat` runs the offline diagnostics with `doctor.py --backend ollama`.
-Both scripts pause on exit so error messages stay readable.
+Double-click **`run.bat`**. That is the only first-run launcher.
+
+It creates `.venv` if needed (or prints the one command `python -m venv .venv`
+and waits), installs Dream, and starts the local Ollama backend with model
+`qwen2.5:7b`. If Ollama is missing it prints a Persian and English message
+with <https://ollama.com/download> and waits so the window stays readable.
+
+See [docs/user/quick-start.md](docs/user/quick-start.md) for extras
+(`.[web]`, `.[data]`) and the first conversation.
+
+Other scripts are labelled and kept, but they are not the first-run path:
+`check.bat` runs offline `doctor.py`; `Dream.bat` and `Dream-Start.bat` open
+the experimental desktop window.
 
 ## Plans and metering (honest by construction)
 
