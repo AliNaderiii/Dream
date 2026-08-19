@@ -7,9 +7,11 @@
  * stream, which the sidecar replays from the beginning on subscribe.
  */
 
-import { Bot, ChevronDown, ChevronRight, Plus, RefreshCw } from 'lucide-react';
+import { Bot, ChevronDown, ChevronRight, Plus, RefreshCw, Scale } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { CouncilDialog } from '@/components/subagents/council-dialog';
+import { CouncilWidget } from '@/components/subagents/council-widget';
 import { SpawnDialog } from '@/components/subagents/spawn-dialog';
 import { SubagentDetail } from '@/components/subagents/subagent-detail';
 import { ProgressBar, SubagentStatusBadge } from '@/components/subagents/status-badge';
@@ -18,7 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/lib/i18n';
 import { useBridge } from '@/lib/bridge/hooks';
-import type { BridgeLogEntry, BridgeSubagent, RpcParams } from '@/lib/bridge/types';
+import type { BridgeLogEntry, BridgeSubagent, CouncilDto, RpcParams } from '@/lib/bridge/types';
 import { isTerminalStatus } from '@/lib/bridge/types';
 import { cn } from '@/utils/cn';
 import { formatDuration } from '@/utils/format';
@@ -90,6 +92,9 @@ export function SubagentsRoute() {
   const [followed, setFollowed] = useState<FollowedSubagent | null>(null);
   const [tools, setTools] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [councilDialogOpen, setCouncilDialogOpen] = useState(false);
+  /** councils the user started here, keyed so a child's pipeline maps back. */
+  const [councils, setCouncils] = useState<{ council_id: string; pipeline_id: string }[]>([]);
   const [listOpen, setListOpen] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -197,6 +202,11 @@ export function SubagentsRoute() {
     ? { ...followedNow.agent, ...(listRow ?? {}) }
     : listRow;
   const log = followedNow?.log ?? [];
+  // When the selected child belongs to a council this page started, the
+  // detail pane becomes the three-column council widget.
+  const activeCouncil = detail?.pipeline_id
+    ? councils.find((c) => c.pipeline_id === detail.pipeline_id)
+    : undefined;
 
   const control = async (method: string) => {
     if (!activeId) return;
@@ -227,6 +237,29 @@ export function SubagentsRoute() {
     await refresh();
   };
 
+  const runCouncil = async (topic: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await call<CouncilDto>('council.run', { prompt: topic });
+      if (result.refusal) {
+        setError(result.refusal);
+        return;
+      }
+      setCouncils((prev) => [
+        ...prev,
+        { council_id: result.council_id, pipeline_id: result.pipeline_id },
+      ]);
+      const head = result.members[0];
+      if (head) setSelectedId(head.subagent_id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (liveRef.current) setBusy(false);
+    }
+  };
+
   const activeCount = useMemo(
     () => agents.filter((a) => !isTerminalStatus(a.status)).length,
     [agents],
@@ -247,6 +280,10 @@ export function SubagentsRoute() {
             aria-label={t('refresh')}
           >
             <RefreshCw aria-hidden />
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => setCouncilDialogOpen(true)}>
+            <Scale aria-hidden />
+            {t('councilReview')}
           </Button>
           <Button size="sm" variant="primary" onClick={() => setDialogOpen(true)}>
             <Plus aria-hidden />
@@ -312,14 +349,18 @@ export function SubagentsRoute() {
 
           <div className="min-w-0 flex-1 overflow-y-auto p-4">
             {detail ? (
-              <SubagentDetail
-                agent={detail}
-                log={log}
-                busy={busy}
-                onCancel={() => void control('subagent.cancel')}
-                onPause={() => void control('subagent.pause')}
-                onResume={() => void control('subagent.resume')}
-              />
+              activeCouncil ? (
+                <CouncilWidget councilId={activeCouncil.council_id} />
+              ) : (
+                <SubagentDetail
+                  agent={detail}
+                  log={log}
+                  busy={busy}
+                  onCancel={() => void control('subagent.cancel')}
+                  onPause={() => void control('subagent.pause')}
+                  onResume={() => void control('subagent.resume')}
+                />
+              )
             ) : (
               <p className="text-body text-fg-secondary">{t('selectPrompt')}</p>
             )}
@@ -332,6 +373,11 @@ export function SubagentsRoute() {
         onOpenChange={setDialogOpen}
         availableTools={tools}
         onSpawn={spawn}
+      />
+      <CouncilDialog
+        open={councilDialogOpen}
+        onOpenChange={setCouncilDialogOpen}
+        onRun={runCouncil}
       />
     </div>
   );

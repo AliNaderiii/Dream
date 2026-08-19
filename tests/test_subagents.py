@@ -699,3 +699,23 @@ def test_cancel_all_stops_every_running_child(monkeypatch: pytest.MonkeyPatch) -
         return [a.status for a in manager.list()]
 
     assert run(scenario()) == ["cancelled", "cancelled"]
+
+
+def test_child_ledger_is_detached_even_under_a_metered_plan(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """S10: a child never bills its own turns against the parent's ledger.
+
+    ``Dream.__init__`` attaches a ledger from the environment, so
+    ``build_child_tools`` overrides it with the caller's explicit ledger
+    (``None`` by default). Otherwise a council — which consumes its member
+    turns once, up front — would double-count every child turn.
+    """
+    ledger_path = tmp_path / "ledger.json"
+    monkeypatch.setenv("DREAM_PLAN", "guest")
+    monkeypatch.setenv("DREAM_LEDGER", str(ledger_path))
+    store = MemoryStore(":memory:")
+    child, _table = build_child_tools(store, None)
+    assert child.ledger is None
+    assert not ledger_path.exists()
+    store.close()

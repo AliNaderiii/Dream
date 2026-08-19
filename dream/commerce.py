@@ -371,34 +371,42 @@ class Ledger:
 
     # -- consuming ---------------------------------------------------------
 
-    def consume(self, now: datetime | None = None) -> int:
-        """Record one consumed turn.
+    def consume(self, now: datetime | None = None, amount: int = 1) -> int:
+        """Record one consumed turn, or ``amount`` of them for one call.
 
         Returns the number of turns used in the current window after the
         record. Raises ``QuotaExceeded`` (metered plan, window exhausted)
         or ``LedgerError`` (corrupt, unwritable, or misconfigured —
         fail-closed) without appending anything.
 
+        ``amount`` lets one logical action consume several turns atomically —
+        the council consumes its N members in a single call. The whole batch
+        is checked against the window limit before any entry is appended, so
+        a refusal never leaves a partially recorded batch behind.
+
         The disk copy is re-read first, so the count reflects turns another
         process consumed since this object was created.
         """
+        amount = max(1, int(amount))
         stamp = now or datetime.now().astimezone()
         entries = self._load(refresh=True)
         kind, key = self._window(stamp)
         used = sum(1 for entry in entries if self._entry_in_window(entry, kind, key))
         limit = self._window_limit()
-        if self.plan.metered and limit is not None and used >= limit:
+        if self.plan.metered and limit is not None and used + amount > limit:
             raise QuotaExceeded(_quota_message(self.plan, limit, used))
-        entries.append({"ts": stamp.isoformat()})
+        for _ in range(amount):
+            entries.append({"ts": stamp.isoformat()})
         try:
             self._save(entries)
         except LedgerWriteError:
-            # The turn was not recorded, so it must not count as consumed:
-            # drop the optimistic entry and let the caller refuse the turn.
-            entries.pop()
+            # The turns were not recorded, so they must not count as consumed:
+            # drop the optimistic entries and let the caller refuse the turn.
+            for _ in range(amount):
+                entries.pop()
             self._entries = None
             raise
-        return used + 1
+        return used + amount
 
     def remaining(self, now: datetime | None = None) -> int | None:
         """Turns left in the current window; ``None`` for unlimited plans."""

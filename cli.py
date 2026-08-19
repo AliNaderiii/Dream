@@ -709,7 +709,49 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Show the active model route and whether data leaves the machine, then exit",
     )
+    parser.add_argument(
+        "--council",
+        metavar="TOPIC",
+        help="Run an offline echo council (proposer → critic → judge) on TOPIC and exit",
+    )
     return parser
+
+
+def run_council_cli(topic: str, output: Callable[[str], None] = print) -> int:
+    """Run one echo council to completion and print its three roles + winner.
+
+    The council is opt-in and offline by default (echo members), and it
+    respects the active plan's usage ledger exactly like a normal turn: a
+    metered plan consumes the council's member turns once, up front.
+    ``--demo`` never reaches this function.
+    """
+    import asyncio
+
+    from dream.council import CouncilSpec, get_council, run_council
+    from dream.subagents import SubAgentManager
+
+    async def scenario() -> int:
+        manager = SubAgentManager()
+        result = run_council(manager, CouncilSpec(prompt=topic))
+        if result.refusal is not None:
+            # A refused council (quota) returns the ledger's Persian reply.
+            output(f"{result.refusal}")
+            return 1
+        output(f"Council {result.council_id}:")
+        await manager.wait_pipeline(result.pipeline_id, timeout=30.0)
+        fresh = get_council(manager, result.council_id)
+        if fresh is None or fresh.winner is None:
+            output("Council did not finish.")
+            return 1
+        for member in fresh.members:
+            excerpt = (member.result or "").replace("\n", " ")
+            output(f"  [{member.role}] ({member.provider}) {excerpt[:200]}")
+        output(f"  winner: {fresh.winner}")
+        output(f"  {fresh.sentence_en}")
+        output(f"  {fresh.sentence_fa}")
+        return 0
+
+    return asyncio.run(scenario())
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -732,6 +774,8 @@ def main(argv: list[str] | None = None) -> int:
 
         print(route_text())
         return 0
+    if args.council:
+        return run_council_cli(args.council)
     if args.bridge:
         # Start the sidecar instead of the interactive CLI. The bridge runs its
         # own event loop over stdin/stdout; nothing below this branch runs.

@@ -83,7 +83,9 @@ once, always allow that tool for this session, or deny. A denial or absent
 approver fails closed. Projects group sessions and can link workspace folders
 in place. The scheduler accepts Persian or English prose and displays both
 document-locale and Jalali next-run dates, history, pause/run controls, and an
-approval queue for gated jobs.
+approval queue for gated jobs. An opt-in three-role council (proposer, critic,
+judge) reviews one topic on the Subagents page or via `dream --council "…"`,
+offline by default.
 
 Build or run the full native UI using the scripts that exist in
 `apps/desktop/package.json`:

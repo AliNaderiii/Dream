@@ -32,6 +32,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from dream.agent import ApprovalPolicy, Dream, build_backend
+from dream.commerce import Ledger
 from dream.memory import MemoryStore
 from dream.tools import REGISTRY, Tool, execute, openai_schemas
 
@@ -243,6 +244,7 @@ def build_child_tools(
     *,
     allow_dangerous: bool = False,
     backend: Any | None = None,
+    ledger: Ledger | None = None,
 ) -> tuple[Dream, dict[str, Tool]]:
     """Build a child ``Dream`` and its private tool table without side effects.
 
@@ -250,6 +252,13 @@ def build_child_tools(
     global :data:`dream.tools.REGISTRY` is byte-identical afterwards, including
     the parent's store-bound memory closures, which is what lets several
     subagents and their parent coexist in one process.
+
+    ``ledger`` overrides the child's usage ledger. ``Dream.__init__`` attaches
+    a ledger from the environment (metered plan or ``DREAM_LEDGER``), but a
+    child never bills its own turns: a plain spawn is billed to the parent's
+    turn, and a council is billed once, up front, for all of its members. The
+    default ``None`` therefore detaches the env ledger so a child turn can
+    never double-count against the same file.
     """
     names = list(DEFAULT_TOOL_GRANT if granted is None else granted)
     with REGISTRY_LOCK:
@@ -260,6 +269,10 @@ def build_child_tools(
         finally:
             REGISTRY.clear()
             REGISTRY.update(snapshot)
+    # The child's ledger is decided by the caller (the parent paid for this
+    # child), never by the environment the parent happens to run under.
+    child.ledger = ledger
+    child._ledger_refusal = None
     table: dict[str, Tool] = {}
     for name in names:
         registered = captured.get(name)

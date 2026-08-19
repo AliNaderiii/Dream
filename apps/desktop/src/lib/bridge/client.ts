@@ -784,6 +784,10 @@ export class EchoBridgeTransport implements BridgeTransport {
             entry,
           });
         });
+      case 'council.run':
+        return this.subagents.runCouncil(params);
+      case 'council.get':
+        return this.subagents.getCouncil(params);
 
       // -- schedules ------------------------------------------------------ //
       case 'schedule.create':

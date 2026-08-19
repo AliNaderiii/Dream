@@ -18,11 +18,34 @@ import type {
   BridgeSchedule,
   BridgeScheduleRun,
   BridgeSubagent,
+  CouncilDto,
+  CouncilMemberDto,
   RpcParams,
   SchedulePreview,
   SubAgentStatus,
 } from './types';
 import { isTerminalStatus, RPC_ERROR } from './types';
+
+/**
+ * Council system prompts, mirrored from `dream/council.py`.
+ *
+ * A council is exactly three pipeline stages in the fixed order proposer →
+ * critic → judge; each stage's result becomes the next one's context, so the
+ * critic sees the proposal and the judge sees both.
+ */
+const COUNCIL_SYSTEM_PROMPTS: Record<'proposer' | 'critic' | 'judge', string> = {
+  proposer:
+    'You are the proposer in a three-role council. ' +
+    'Answer the topic directly. Be concrete and specific.',
+  critic:
+    'You are the critic in a three-role council. ' +
+    'Attack the previous answer: name its holes, false assumptions, and risks. ' +
+    'Do not rewrite the whole answer.',
+  judge:
+    'You are the judge in a three-role council. ' +
+    'Given the topic, the proposal, and the critique, pick or synthesise ' +
+    'ONE final answer. Do not narrate the process.',
+};
 
 /** Sidecar defaults, mirrored from `dream/subagents.py`. */
 const DEFAULT_MAX_TURNS = 8;
@@ -71,6 +94,10 @@ export class EchoSubagentRuntime {
   private states = new Map<string, EchoAgentState>();
   /** Remaining stages per pipeline, spawned as each predecessor finishes. */
   private pipelines = new Map<string, RpcParams[]>();
+  /** Pre-registered council members still waiting for their turn to run. */
+  private councilQueues = new Map<string, EchoAgentState[]>();
+  /** council_id → pipeline_id, mirroring the sidecar's council registry. */
+  private councilIds = new Map<string, string>();
   private spawnSeq = 0;
 
   /** Spawns one child. Fire-and-forget: the result arrives via `get`/`logs`. */
@@ -79,6 +106,21 @@ export class EchoSubagentRuntime {
     pipelineId: string | null = null,
     index: number | null = null,
   ): BridgeSubagent {
+    const state = this.createState(params, pipelineId, index);
+    this.schedule(state);
+    return this.snapshot(state, false);
+  }
+
+  /**
+   * Registers a child's record without starting it. Shared by `spawn` and the
+   * council path, which pre-registers all three members up front (the sidecar
+   * does the same) and starts them one at a time as each predecessor finishes.
+   */
+  private createState(
+    params: RpcParams,
+    pipelineId: string | null,
+    index: number | null,
+  ): EchoAgentState {
     const prompt = str(params, 'prompt') || str(params, 'message');
     if (!prompt.trim()) throw invalidParams('prompt must be a non-empty string');
     const rawTools = params['tools'];
@@ -126,8 +168,127 @@ export class EchoSubagentRuntime {
     };
     this.states.set(id, state);
     this.append(state, 'info', `spawned with ${agent.tools.length} tools`);
-    this.schedule(state);
-    return this.snapshot(state, false);
+    return state;
+  }
+
+  /**
+   * Starts an opt-in council: three pre-registered members in the fixed order
+   * proposer → critic → judge. Echo members run offline and deterministically;
+   * the winner appears once the judge completes.
+   */
+  runCouncil(params: RpcParams): CouncilDto {
+    const prompt = str(params, 'prompt');
+    if (!prompt.trim()) throw invalidParams('prompt must be a non-empty string');
+
+    const memberSpec = (raw: unknown, fallbackProvider: string): RpcParams => {
+      if (raw === undefined || raw === null) return { model_provider: fallbackProvider };
+      if (typeof raw !== 'object' || Array.isArray(raw)) {
+        throw invalidParams('council role overrides must be objects');
+      }
+      const spec = raw as RpcParams;
+      return {
+        model_provider: str(spec, 'model_provider') || str(spec, 'provider') || fallbackProvider,
+        model_name: str(spec, 'model_name'),
+      };
+    };
+
+    const pipelineId = nextId('pipe');
+    const roles = [
+      { role: 'proposer' as const, spec: memberSpec(params['proposer'], 'echo') },
+      { role: 'critic' as const, spec: memberSpec(params['critic'], 'echo') },
+      { role: 'judge' as const, spec: memberSpec(params['judge'], 'echo') },
+    ];
+
+    const queued: EchoAgentState[] = [];
+    const members: CouncilMemberDto[] = [];
+    roles.forEach((entry, index) => {
+      const state = this.createState(
+        {
+          prompt,
+          name: entry.role,
+          system_prompt: COUNCIL_SYSTEM_PROMPTS[entry.role],
+          model_provider: entry.spec.model_provider,
+          model_name: entry.spec.model_name,
+        },
+        pipelineId,
+        index,
+      );
+      if (index === 0) {
+        this.schedule(state);
+      } else {
+        state.agent.status = 'idle';
+        state.agent.started_at = null;
+        queued.push(state);
+      }
+      members.push(this.councilMember(state));
+    });
+    this.councilQueues.set(pipelineId, queued);
+
+    const councilId = nextId('council');
+    this.councilIds.set(councilId, pipelineId);
+    return this.councilDto(councilId, members, null, 0);
+  }
+
+  /** Current status of a council: live member statuses + the winner. */
+  getCouncil(params: RpcParams): CouncilDto {
+    const councilId = str(params, 'council_id');
+    if (!councilId) throw invalidParams('council_id must be a non-empty string');
+    const pipelineId = this.councilIds.get(councilId);
+    if (!pipelineId) throw invalidParams(`no council with id '${councilId}'`);
+    const states = [...this.states.values()]
+      .filter((s) => s.agent.pipeline_id === pipelineId)
+      .sort((a, b) => (a.agent.pipeline_index ?? 0) - (b.agent.pipeline_index ?? 0));
+    const members = states.map((s) => this.councilMember(s));
+    const judge = members.find((m) => m.role === 'judge') ?? null;
+    const winner = judge !== null && judge.status === 'completed' ? judge.result : null;
+    return this.councilDto(councilId, members, winner, 0);
+  }
+
+  /** One member row for the wire: role, provider, privacy flag, live status. */
+  private councilMember(state: EchoAgentState): CouncilMemberDto {
+    const { agent } = state;
+    const provider = agent.model_provider;
+    const leavesMachine = provider === 'echo' || provider === 'ollama' ? false : true;
+    return {
+      role:
+        agent.pipeline_index === 0 ? 'proposer' : agent.pipeline_index === 1 ? 'critic' : 'judge',
+      subagent_id: agent.subagent_id,
+      provider,
+      model: agent.model_name,
+      leaves_machine: leavesMachine,
+      status: agent.status,
+      result: agent.result,
+    };
+  }
+
+  private councilDto(
+    councilId: string,
+    members: CouncilMemberDto[],
+    winner: string | null,
+    turnsConsumed: number,
+  ): CouncilDto {
+    const leavesMachineAny = members.some((m) => m.leaves_machine);
+    const base =
+      `Council ${councilId}: ${members.length} roles ran in the fixed order ` +
+      'proposer, critic, judge. The judge\u2019s answer is the winner.';
+    const sentenceEn = leavesMachineAny
+      ? base + ' One or more members sent text to a remote provider; data left this machine.'
+      : base + ' Every member ran locally; nothing left this machine.';
+    // Mirrors `dream/council.py`: the Persian privacy sentences are the same
+    // \\u escapes, so the echo transport and the sidecar cannot disagree.
+    const sentenceFa = leavesMachineAny
+      ? '\u0634\u0648\u0631\u0627\u06cc\u0020\u0633\u0647\u200c\u0646\u0641\u0631\u0647\u0020\u0628\u0647\u0020\u067e\u0627\u06cc\u0627\u0646\u0020\u0631\u0633\u06cc\u062f\u061b\u0020\u06cc\u06a9\u0020\u06cc\u0627\u0020\u0686\u0646\u062f\u0020\u0639\u0636\u0648\u0020\u0628\u0647\u0020\u0633\u0631\u0648\u06cc\u0633\u0020\u0627\u0628\u0631\u06cc\u0020\u0641\u0631\u0633\u062a\u0627\u062f\u0647\u0020\u0634\u062f\u0020\u0648\u0020\u062f\u0627\u062f\u0647\u0020\u0627\u0632\u0020\u0627\u06cc\u0646\u0020\u062f\u0633\u062a\u06af\u0627\u0647\u0020\u062e\u0627\u0631\u062c\u0020\u0634\u062f\u002e'
+      : '\u0634\u0648\u0631\u0627\u06cc\u0020\u0633\u0647\u200c\u0646\u0641\u0631\u0647\u0020\u0628\u0647\u0020\u067e\u0627\u06cc\u0627\u0646\u0020\u0631\u0633\u06cc\u062f\u061b\u0020\u0647\u0645\u0647\u0654\u0020\u0627\u0639\u0636\u0627\u0020\u0628\u0647\u200c\u0635\u0648\u0631\u062a\u0020\u0645\u062d\u0644\u06cc\u0020\u0627\u062c\u0631\u0627\u0020\u0634\u062f\u0646\u062f\u0020\u0648\u0020\u0647\u06cc\u0686\u0020\u062f\u0627\u062f\u0647\u200c\u0627\u06cc\u0020\u0627\u0632\u0020\u0627\u06cc\u0646\u0020\u062f\u0633\u062a\u06af\u0627\u0647\u0020\u062e\u0627\u0631\u062c\u0020\u0646\u0634\u062f\u002e';
+    return {
+      council_id: councilId,
+      pipeline_id: this.councilIds.get(councilId) ?? '',
+      members,
+      winner,
+      turns_consumed: turnsConsumed,
+      leaves_machine_any: leavesMachineAny,
+      sentence_en: sentenceEn,
+      sentence_fa: sentenceFa,
+    };
   }
 
   /** Spawns a chain; each stage starts when its predecessor produces a result. */
@@ -248,6 +409,8 @@ export class EchoSubagentRuntime {
     for (const state of this.states.values()) this.clearTimer(state);
     this.states.clear();
     this.pipelines.clear();
+    this.councilQueues.clear();
+    this.councilIds.clear();
   }
 
   // ----------------------------------------------------------------- //
@@ -316,6 +479,23 @@ export class EchoSubagentRuntime {
   /** Hands a completed stage's result to the next one as its context. */
   private advancePipeline(agent: BridgeSubagent): void {
     if (!agent.pipeline_id) return;
+    const councilQueue = this.councilQueues.get(agent.pipeline_id);
+    if (councilQueue !== undefined) {
+      if (councilQueue.length === 0) {
+        this.councilQueues.delete(agent.pipeline_id);
+      } else {
+        const [next, ...rest] = councilQueue;
+        this.councilQueues.set(agent.pipeline_id, rest);
+        next.agent.status = 'running';
+        next.agent.started_at = now();
+        if (agent.result) {
+          const base = next.agent.context.trim();
+          next.agent.context = base ? `${base}\n\n${agent.result}` : agent.result;
+        }
+        this.schedule(next);
+      }
+      return;
+    }
     const remaining = this.pipelines.get(agent.pipeline_id);
     if (!remaining || remaining.length === 0) {
       this.pipelines.delete(agent.pipeline_id);
