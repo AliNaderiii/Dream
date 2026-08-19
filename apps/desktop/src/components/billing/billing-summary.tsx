@@ -58,6 +58,8 @@ function routeNameKey(route: RouteDto['name']): string {
   switch (route) {
     case 'hosted':
       return 'billing.routeHosted';
+    case 'aval':
+      return 'billing.routeAval';
     case 'ollama':
       return 'billing.routeOllama';
     case 'byok':

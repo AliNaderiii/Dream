@@ -1,17 +1,23 @@
-"""Model router: hosted → Ollama → BYOK → echo, with an honest privacy line.
+"""Model router: hosted → Aval → Ollama → BYOK → echo, with an honest privacy line.
 
 The router resolves which backend a turn would use without calling the
 network. The priority is fixed:
 
-1. ``hosted`` — a cloud model service configured with ``OPENAI_API_KEY``
-   (or ``DREAM_BACKEND=openai``). Messages leave the machine.
-2. ``ollama`` — a local Ollama server configured with ``OLLAMA_HOST``
+1. ``hosted`` — the official cloud model service configured with
+   ``OPENAI_API_KEY`` (or ``DREAM_BACKEND=openai``). Messages leave the
+   machine.
+2. ``aval`` — Aval AI, the recommended hosted path for Iranian users:
+   ``AVALAI_API_KEY`` set, ``OPENAI_BASE_URL`` pointing at api.avalai.ir /
+   api.avalapis.ir, or ``DREAM_BACKEND=aval`` / ``avalai``. Messages leave
+   the machine for Aval (api.avalai.ir). Never probed: detection is
+   deterministic from the environment only.
+3. ``ollama`` — a local Ollama server configured with ``OLLAMA_HOST``
    (or ``DREAM_BACKEND=ollama``). Messages never leave the machine.
-3. ``byok`` — bring your own key/endpoint: ``OPENAI_BASE_URL`` points at a
+4. ``byok`` — bring your own key/endpoint: ``OPENAI_BASE_URL`` points at a
    user-chosen server (with ``DREAM_BACKEND=openai`` or a key). Messages
    leave the machine to that server. A configured local Ollama outranks
    BYOK: without an official key, the private local server wins.
-4. ``echo`` — the deterministic offline backend. Nothing leaves the machine.
+5. ``echo`` — the deterministic offline backend. Nothing leaves the machine.
 
 Every resolved route carries a sentence (English and Persian) that states
 whether data leaves the machine, so ``dream --route`` / ``/route`` can never
@@ -24,6 +30,16 @@ import os
 from dataclasses import dataclass
 
 OFFICIAL_BASE_URLS = ("https://api.openai.com/v1", "https://api.openai.com/v1/")
+
+# Aval AI documents two OpenAI-compatible hosts. The primary endpoint is
+# https://api.avalai.ir/v1; https://api.avalapis.ir/v1 is the fallback host.
+# Both are recognised for routing, but neither is ever probed here.
+AVAL_BASE_URLS = (
+    "https://api.avalai.ir/v1",
+    "https://api.avalai.ir/v1/",
+    "https://api.avalapis.ir/v1",
+    "https://api.avalapis.ir/v1/",
+)
 
 
 @dataclass(frozen=True)
@@ -51,6 +67,25 @@ _HOSTED = Route(
         "\u067e\u06cc\u0627\u0645 \u0634\u0645\u0627 \u0627\u0632 \u0627\u06cc\u0646 "
         "\u062f\u0633\u062a\u06af\u0627\u0647 \u062e\u0627\u0631\u062c "
         "\u0645\u06cc\u200c\u0634\u0648\u062f."
+    ),
+)
+
+_AVAL = Route(
+    name="aval",
+    leaves_machine=True,
+    sentence_en=(
+        "Route: aval — this turn is sent to Aval AI (api.avalai.ir), "
+        "the Iranian cloud provider you configured; "
+        "your message leaves this machine."
+    ),
+    sentence_fa=(
+        "\u0645\u0633\u06cc\u0631: \u0622\u0648\u0627\u0644 \u2014 "
+        "\u0627\u06cc\u0646 \u0646\u0648\u0628\u062a \u0628\u0647 Aval AI "
+        "(api.avalai.ir) \u0641\u0631\u0633\u062a\u0627\u062f\u0647 "
+        "\u0645\u06cc\u0634\u0648\u062f\u061b \u067e\u06cc\u0627\u0645 "
+        "\u0634\u0645\u0627 \u0627\u0632 \u0627\u06cc\u0646 "
+        "\u062f\u0633\u062a\u06af\u0627\u0647 \u062e\u0627\u0631\u062c "
+        "\u0645\u06cc\u0634\u0648\u062f."
     ),
 )
 
@@ -122,22 +157,32 @@ def resolve_route() -> Route:
     """Pick the active route by configuration, never by network probes.
 
     An explicit ``DREAM_BACKEND`` wins; otherwise the fixed priority
-    hosted → Ollama → BYOK → echo applies:
+    hosted → Aval → Ollama → BYOK → echo applies:
 
     - ``hosted`` needs an API key *and* the official base URL (an unset base
-      URL means the official default).
+      URL means the official default). An official key and base outrank an
+      Aval key: the user's explicit hosted configuration wins.
+    - ``aval`` needs ``AVALAI_API_KEY`` or an Aval base URL
+      (api.avalai.ir / api.avalapis.ir). It sits below hosted but above the
+      local Ollama server: the user configured a cloud provider on purpose.
     - a configured local Ollama beats BYOK: when the key points at somebody
       else's endpoint, the local server is the more private option and wins.
-    - ``byok`` needs a custom (non-official) base URL. An official base URL
-      with no key is not a route at all, so it falls through to echo.
+    - ``byok`` needs a custom (non-official, non-Aval) base URL. An official
+      base URL with no key is not a route at all, so it falls through to echo.
 
-    The result is deterministic and offline-testable.
+    The result is deterministic and offline-testable; nothing here opens a
+    network connection.
     """
     explicit = _env("DREAM_BACKEND").lower()
     base_url = _env("OPENAI_BASE_URL")
     official_base = _is_official_base(base_url)
+    aval_base = _is_aval_base(base_url)
+    if explicit in ("aval", "avalai"):
+        return _AVAL
     if explicit == "openai":
-        return _HOSTED if official_base else _BYOK
+        if official_base:
+            return _HOSTED
+        return _AVAL if aval_base else _BYOK
     if explicit == "ollama":
         return _OLLAMA
     if explicit == "echo":
@@ -145,6 +190,10 @@ def resolve_route() -> Route:
 
     if _env("OPENAI_API_KEY") and official_base:
         return _HOSTED
+    # Read literally (not via _env) so the settings-example rule M23 can see
+    # that the documented AVALAI_API_KEY name is a real environment read.
+    if (os.environ.get("AVALAI_API_KEY") or "").strip() or aval_base:
+        return _AVAL
     if _env("OLLAMA_HOST"):
         return _OLLAMA
     if base_url and not official_base:
@@ -165,9 +214,27 @@ def _is_official_base(base_url: str) -> bool:
     return normalised.lower() in {url.rstrip("/").lower() for url in OFFICIAL_BASE_URLS}
 
 
+def _is_aval_base(base_url: str) -> bool:
+    """True when the endpoint is Aval AI's OpenAI-compatible host.
+
+    Both documented Aval hosts count — api.avalai.ir and the api.avalapis.ir
+    fallback — so an ``OPENAI_BASE_URL`` pointed at Aval is honestly named the
+    ``aval`` route rather than a generic BYOK endpoint. The comparison ignores
+    a trailing slash and surrounding case, and it never touches the network.
+    An unset base URL means the official OpenAI default, so it is never Aval.
+    """
+    if not base_url:
+        return False
+    normalised = base_url.strip().rstrip("/")
+    return normalised.lower() in {url.rstrip("/").lower() for url in AVAL_BASE_URLS}
+
+
 # Maps a route name to the backend name ``build_backend`` understands.
+# Aval is OpenAI-compatible, so the aval route builds the same client the
+# hosted and byok routes use.
 _ROUTE_BACKEND: dict[str, str] = {
     "hosted": "openai",
+    "aval": "openai",
     "ollama": "ollama",
     "byok": "openai",
     "echo": "echo",

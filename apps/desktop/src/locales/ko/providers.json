@@ -11,7 +11,7 @@
   "configure": "구성",
   "configured": "{{count}}개 구성됨",
   "connectFirst": "첫 번째 제공자 연결",
-  "connectFirstDesc": "OpenAI, Anthropic, Google AI, Groq, Together, OpenRouter 또는 로컬 서버 중에서 선택하세요.",
+  "connectFirstDesc": "Aval AI, OpenAI, Anthropic, Google AI, Groq, Together, OpenRouter 또는 로컬 서버 중에서 선택하세요.",
   "browseCatalog": "카탈로그 둘러보기",
   "loading": "제공자 로드 중…",
   "deleteTitle": "{{name}} 삭제?",

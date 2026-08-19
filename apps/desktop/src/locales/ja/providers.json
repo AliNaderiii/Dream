@@ -11,7 +11,7 @@
   "configure": "設定",
   "configured": "{{count}} 件設定済み",
   "connectFirst": "最初のプロバイダーを接続",
-  "connectFirstDesc": "OpenAI、Anthropic、Google AI、Groq、Together、OpenRouter、またはローカルサーバーから選択します。",
+  "connectFirstDesc": "Aval AI、OpenAI、Anthropic、Google AI、Groq、Together、OpenRouter、またはローカルサーバーから選択します。",
   "browseCatalog": "カタログを閲覧",
   "loading": "プロバイダーを読み込み中…",
   "deleteTitle": "{{name}} を削除しますか？",

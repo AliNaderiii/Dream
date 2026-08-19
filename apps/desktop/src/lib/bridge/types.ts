@@ -1041,7 +1041,7 @@ export interface CommerceUsageDto {
 
 /** One resolved model route, mirroring `dream.router.Route`. */
 export interface RouteDto {
-  name: 'hosted' | 'ollama' | 'byok' | 'echo';
+  name: 'hosted' | 'aval' | 'ollama' | 'byok' | 'echo';
   leaves_machine: boolean;
   sentence_en: string;
   sentence_fa: string;

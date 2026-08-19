@@ -90,6 +90,7 @@ export interface Session {
 
 /** Kind of model provider Dream can talk to. */
 export type ProviderKind =
+  | 'avalai'
   | 'openai'
   | 'anthropic'
   | 'google'

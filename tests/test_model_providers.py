@@ -59,6 +59,7 @@ def make_registry(tmp_path, *, opener=None):
 
 def test_catalog_contains_every_supported_provider():
     assert set(PROVIDER_CATALOG) == {
+        "avalai",
         "openai",
         "anthropic",
         "google",
@@ -70,6 +71,37 @@ def test_catalog_contains_every_supported_provider():
         "llamacpp",
     }
     assert all("api_key" not in provider for provider in PROVIDER_CATALOG.values())
+
+
+def test_avalai_catalog_entry_is_first_class_and_openai_compatible():
+    """S09: Aval AI is a first-class catalog row, listed first so the desktop
+    "Add provider" default and the recommended ordering start with Aval."""
+    entry = PROVIDER_CATALOG["avalai"]
+    assert entry["name"] == "Aval AI"
+    assert entry["website"] == "https://chat.avalai.ir/platform/home"
+    assert entry["docs"] == "https://docs.avalai.ir"
+    assert entry["auth_type"] == "api_key"
+    assert entry["endpoint"] == "https://api.avalai.ir/v1"
+    assert entry["model_list_url"] == "https://api.avalai.ir/v1/models"
+    assert entry["supports_streaming"] is True
+    # A short honest default list taken from the Aval docs model explorer;
+    # DeepSeek chat/reasoner ids were retired by Aval, so none are listed.
+    assert entry["default_models"] == [
+        "gpt-5.6-sol",
+        "gpt-5.6-luna",
+        "claude-sonnet-5",
+        "gemini-3.7-flash",
+    ]
+    assert list(PROVIDER_CATALOG)[0] == "avalai"
+
+
+def test_avalai_catalog_entry_never_makes_the_provider_local(tmp_path):
+    """The avalai row is a hosted cloud provider: a configured card must not
+    be reported as running on this machine."""
+    registry, _keyring = make_registry(tmp_path)
+    record = registry.add({"kind": "avalai", "name": "Aval", "models": ["gpt-5.6-luna"]})
+    assert record["local"] is False
+    assert record["kind"] == "avalai"
 
 
 def test_keychain_store_retrieve_update_delete_cycle():

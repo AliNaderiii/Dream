@@ -39,6 +39,7 @@
     "route": "模型路由",
     "routeDesc": "每轮在哪里运行。",
     "routeHosted": "托管云模型",
+    "routeAval": "Aval AI（伊朗云）",
     "routeOllama": "本地 Ollama",
     "routeByok": "自有端点 (BYOK)",
     "routeEcho": "离线 echo",

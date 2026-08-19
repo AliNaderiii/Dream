@@ -175,6 +175,26 @@ def test_route_resolve_ollama_is_local(monkeypatch):
     assert route["leaves_machine"] is False
 
 
+def test_route_resolve_aval_when_key_configured(monkeypatch):
+    """S09: the existing route.resolve RPC surfaces the new aval route."""
+    set_plan(monkeypatch, "local")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("OLLAMA_HOST", raising=False)
+    monkeypatch.delenv("DREAM_BACKEND", raising=False)
+    monkeypatch.delenv("AVALAI_API_KEY", raising=False)
+    monkeypatch.setenv("AVALAI_API_KEY", "sk-aval")
+    m = make_methods()
+    route = m.route_resolve({})
+
+    assert route["name"] == "aval"
+    assert route["leaves_machine"] is True
+    assert "aval ai" in route["sentence_en"].lower()
+    assert "api.avalai.ir" in route["sentence_en"].lower()
+    assert "leaves this machine" in route["sentence_en"].lower()
+    assert "aval ai" in route["sentence_fa"].lower()
+
+
 # --------------------------------------------------------------------------- #
 # Handler table wiring
 # --------------------------------------------------------------------------- #

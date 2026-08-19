@@ -11,7 +11,7 @@
   "configure": "پیکربندی",
   "configured": "{{count}} پیکربندی‌شده",
   "connectFirst": "اولین سرویس خود را وصل کنید",
-  "connectFirstDesc": "از OpenAI، Anthropic، Google AI، Groq، Together، OpenRouter یا یک سرور محلی انتخاب کنید.",
+  "connectFirstDesc": "از Aval AI، OpenAI، Anthropic، Google AI، Groq، Together، OpenRouter یا یک سرور محلی انتخاب کنید.",
   "browseCatalog": "مرور کاتالوگ",
   "loading": "در حال بارگذاری سرویس‌ها…",
   "deleteTitle": "حذف {{name}}؟",

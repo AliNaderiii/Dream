@@ -39,6 +39,7 @@
     "route": "모델 경로",
     "routeDesc": "각 턴이 실행되는 위치.",
     "routeHosted": "호스팅 클라우드 모델",
+    "routeAval": "Aval AI (이란 클라우드)",
     "routeOllama": "로컬 Ollama",
     "routeByok": "자체 엔드포인트 (BYOK)",
     "routeEcho": "오프라인 echo",

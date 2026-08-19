@@ -39,6 +39,7 @@
     "route": "モデルルート",
     "routeDesc": "各ターンの実行先。",
     "routeHosted": "ホスト型クラウドモデル",
+    "routeAval": "Aval AI（イランのクラウド）",
     "routeOllama": "ローカル Ollama",
     "routeByok": "独自エンドポイント (BYOK)",
     "routeEcho": "オフライン echo",

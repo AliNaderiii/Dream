@@ -39,6 +39,7 @@
     "route": "Route du modèle",
     "routeDesc": "Où chaque tour est exécuté.",
     "routeHosted": "Modèle cloud hébergé",
+    "routeAval": "Aval AI (cloud iranien)",
     "routeOllama": "Ollama local",
     "routeByok": "Votre propre endpoint (BYOK)",
     "routeEcho": "Echo hors ligne",
