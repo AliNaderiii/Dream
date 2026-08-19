@@ -14,17 +14,23 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import type { DragEvent, FormEvent, KeyboardEvent, MouseEvent } from 'react';
 
+import { ApprovalDialog } from '@/components/chat/approval-dialog';
+import { ToolCard } from '@/components/chat/tool-card';
 import { Button } from '@/components/ui/button';
 import { getBridgeClient } from '@/lib/bridge/client';
+import { RPC_ERROR } from '@/lib/bridge/types';
 import type { BridgeTurn } from '@/lib/bridge/types';
 import type { DockEdge, PaneState } from '@/stores/use-layout-store';
 import { useLayoutStore } from '@/stores/use-layout-store';
 import { usePaneChatStore } from '@/stores/use-pane-chat-store';
 import { useProviderStore } from '@/stores/use-provider-store';
-import type { Message, Provider } from '@/types';
+import type { ApprovalDecision, Message, Provider, ToolCardEntry } from '@/types';
 import { cn } from '@/utils/cn';
 
 const PANE_DRAG_TYPE = 'application/x-dream-pane';
+
+/** Module-level typed resolver map — replaces the previous `window as any` hack. */
+const approvalResolvers = new Map<string, (decision: ApprovalDecision) => void>();
 
 interface PaneProps {
   pane: PaneState;
@@ -242,6 +248,9 @@ function PaneChat({ pane }: { pane: PaneState }) {
   const appendChunk = usePaneChatStore((state) => state.appendChunk);
   const finishStream = usePaneChatStore((state) => state.finishStream);
   const failStream = usePaneChatStore((state) => state.failStream);
+  const setPendingApproval = usePaneChatStore((state) => state.setPendingApproval);
+  const alwaysAllowTool = usePaneChatStore((state) => state.alwaysAllowTool);
+  const isAlwaysAllowed = usePaneChatStore((state) => state.isAlwaysAllowed);
   const [input, setInput] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -257,7 +266,7 @@ function PaneChat({ pane }: { pane: PaneState }) {
         item.name.toLowerCase() === requested.toLowerCase(),
     );
     if (!provider) {
-      failStream(pane.id, `Provider “${requested || 'unknown'}” is not configured.`);
+      failStream(pane.id, `Provider "${requested || 'unknown'}" is not configured.`);
       return true;
     }
     const model =
@@ -277,6 +286,105 @@ function PaneChat({ pane }: { pane: PaneState }) {
       });
     }
     return true;
+  };
+
+  /**
+   * Execute a conversation.send with approval-retry support (S07).
+   *
+   * When the bridge returns APPROVAL_REQUIRED, we show the dialog; once the
+   * user decides, we resolve the approval on the bridge. "Always allow" is
+   * tracked per-pane, per-session.
+   */
+  const sendWithApproval = async (
+    sessionId: string,
+    text: string,
+    client: ReturnType<typeof getBridgeClient>,
+  ): Promise<BridgeTurn> => {
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const result = await client.stream<BridgeTurn>(
+          'conversation.send',
+          { session_id: sessionId, message: text },
+          { onChunk: (chunk) => appendChunk(pane.id, chunk.token) },
+        );
+        return result;
+      } catch (err: unknown) {
+        const code =
+          typeof err === 'object' && err !== null && 'code' in err
+            ? (err as { code: number }).code
+            : undefined;
+        if (code !== RPC_ERROR.APPROVAL_REQUIRED) throw err;
+
+        // Extract approval details from the error data.
+        const data =
+          typeof err === 'object' && err !== null && 'data' in err
+            ? (err as { data: Record<string, unknown> }).data
+            : {};
+        const rawApprovalId = data['approval_id'];
+        const rawToolName = data['name'] ?? data['tool_name'];
+        const rawSummary = data['summary'];
+        const rawRisk = data['risk'];
+        const approvalId = typeof rawApprovalId === 'string' ? rawApprovalId : '';
+        const toolName = typeof rawToolName === 'string' ? rawToolName : 'unknown tool';
+        const argsSummary = typeof rawSummary === 'string' ? rawSummary : '';
+        const risk = typeof rawRisk === 'string' ? rawRisk : 'dangerous';
+
+        // If user already said "always allow" for this tool, resolve and retry.
+        if (isAlwaysAllowed(pane.id, toolName)) {
+          void client
+            .call('approval.resolve', { approval_id: approvalId, allowed: true })
+            .catch(() => {});
+          continue;
+        }
+
+        // Show the approval dialog and wait for a decision.
+        const decision = await new Promise<ApprovalDecision>((resolve) => {
+          setPendingApproval(pane.id, {
+            approvalId,
+            toolName,
+            argsSummary,
+            risk,
+            paneId: pane.id,
+          });
+          approvalResolvers.set(pane.id, resolve);
+        });
+        setPendingApproval(pane.id, null);
+
+        if (decision === 'deny') {
+          // Resolve the approval as denied on the bridge.
+          void client
+            .call('approval.resolve', { approval_id: approvalId, allowed: false })
+            .catch(() => {});
+          // Record a blocked tool card.
+          const blockedCard: ToolCardEntry = {
+            id: `tc-blocked-${Date.now()}`,
+            name: toolName,
+            argsSummary,
+            status: 'blocked',
+            resultExcerpt: 'Denied by user',
+          };
+          addMessage(pane.id, {
+            id: `tool-${Date.now()}-${pane.id}`,
+            role: 'assistant',
+            content: '',
+            createdAt: Date.now(),
+            toolCards: [blockedCard],
+          });
+          throw new Error('Tool call denied by user');
+        }
+
+        if (decision === 'allow_always_session') {
+          alwaysAllowTool(pane.id, toolName);
+        }
+
+        // Resolve the approval as allowed, then retry the send.
+        void client
+          .call('approval.resolve', { approval_id: approvalId, allowed: true })
+          .catch(() => {});
+      }
+    }
+    throw new Error('Approval retry limit reached');
   };
 
   const send = async (event?: FormEvent) => {
@@ -314,14 +422,40 @@ function PaneChat({ pane }: { pane: PaneState }) {
         sessionId = created.session_id;
         updatePane(pane.id, { sessionId });
       }
-      const result = await client.stream<BridgeTurn>(
-        'conversation.send',
-        { session_id: sessionId, message: text },
-        { onChunk: (chunk) => appendChunk(pane.id, chunk.token) },
-      );
+      const result = await sendWithApproval(sessionId, text, client);
+
+      // Build tool cards from the turn's tool_calls (S07).
+      const toolCards: ToolCardEntry[] = (result.tool_calls ?? []).map((tc, index) => ({
+        id: `tc-${Date.now()}-${index}`,
+        name: tc.name,
+        argsSummary: JSON.stringify(tc.arguments ?? {}).slice(0, 160),
+        status: tc.allowed === false ? ('blocked' as const) : ('ok' as const),
+        resultExcerpt: (tc.result ?? '').slice(0, 200),
+      }));
+
+      // If there are tool cards, attach them to the assistant message.
+      if (toolCards.length > 0) {
+        addMessage(pane.id, {
+          id: `tool-${Date.now()}-${pane.id}`,
+          role: 'assistant',
+          content: '',
+          createdAt: Date.now(),
+          toolCards,
+        });
+      }
+
       finishStream(pane.id, result.reply);
-    } catch {
-      failStream(pane.id, 'Message failed. Check the bridge and provider connection.');
+    } catch (err) {
+      // Don't double-report if we already handled it (blocked tool).
+      const msg =
+        err instanceof Error && err.message === 'Tool call denied by user'
+          ? ''
+          : 'Message failed. Check the bridge and provider connection.';
+      if (msg) failStream(pane.id, msg);
+      else {
+        // Still clear the sending state.
+        finishStream(pane.id, '');
+      }
     }
   };
 
@@ -330,9 +464,22 @@ function PaneChat({ pane }: { pane: PaneState }) {
     void getBridgeClient().call('conversation.stop', { session_id: pane.sessionId });
   };
 
+  const handleApprovalDecision = (decision: ApprovalDecision) => {
+    const resolve = approvalResolvers.get(pane.id);
+    if (resolve) {
+      resolve(decision);
+      approvalResolvers.delete(pane.id);
+    }
+  };
+
   const messages = transcript?.messages ?? [];
   return (
     <div className="flex size-full min-h-0 flex-col">
+      {/* Approval dialog overlay (S07) */}
+      {transcript?.pendingApproval && (
+        <ApprovalDialog approval={transcript.pendingApproval} onDecision={handleApprovalDecision} />
+      )}
+
       <div className="selectable min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-5">
         {messages.length === 0 && !transcript?.streaming && (
           <div className="mx-auto flex h-full max-w-sm flex-col items-center justify-center text-center text-fg-muted">
@@ -347,16 +494,27 @@ function PaneChat({ pane }: { pane: PaneState }) {
           </div>
         )}
         {messages.map((message) => (
-          <article
-            key={message.id}
-            className={cn(
-              'max-w-[85%] rounded-lg px-3 py-2 text-body whitespace-pre-wrap',
-              message.role === 'user'
-                ? 'ms-auto bg-accent text-fg-inverse'
-                : 'me-auto border border-border-default bg-surface text-fg-primary',
+          <article key={message.id}>
+            {/* Tool cards (S07) — rendered above the assistant text bubble */}
+            {message.toolCards && message.toolCards.length > 0 && (
+              <div className="mb-1 space-y-1">
+                {message.toolCards.map((card) => (
+                  <ToolCard key={card.id} card={card} />
+                ))}
+              </div>
             )}
-          >
-            {message.content}
+            {message.content && (
+              <div
+                className={cn(
+                  'max-w-[85%] rounded-lg px-3 py-2 text-body whitespace-pre-wrap',
+                  message.role === 'user'
+                    ? 'ms-auto bg-accent text-fg-inverse'
+                    : 'me-auto border border-border-default bg-surface text-fg-primary',
+                )}
+              >
+                {message.content}
+              </div>
+            )}
           </article>
         ))}
         {transcript?.streaming && (
@@ -389,6 +547,7 @@ function PaneChat({ pane }: { pane: PaneState }) {
           rows={1}
           placeholder="Message Dream…"
           aria-label="Message"
+          dir="auto"
           className="selectable min-h-9 min-w-0 flex-1 resize-none rounded-md border border-border-default bg-canvas px-3 py-1.5 text-body outline-none focus:border-accent"
         />
         {transcript?.sending ? (

@@ -2,5 +2,15 @@
   "inputPlaceholder": "Write a message…",
   "send": "Send",
   "empty": "Start a conversation",
-  "emptyDesc": "Ask Dream a question, or paste a document to summarise it."
+  "emptyDesc": "Ask Dream a question, or paste a document to summarise it.",
+  "approval": {
+    "title": "Approval Required",
+    "description": "wants to execute with these arguments:",
+    "allowOnce": "Allow once",
+    "alwaysAllow": "Always allow this tool this session",
+    "deny": "Deny",
+    "waitingForApproval": "Waiting for approval…",
+    "blocked": "Blocked",
+    "blockedByUser": "Denied by user"
+  }
 }

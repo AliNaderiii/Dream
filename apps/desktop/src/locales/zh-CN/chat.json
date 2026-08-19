@@ -2,5 +2,15 @@
   "inputPlaceholder": "写一条消息…",
   "send": "发送",
   "empty": "开始一个对话",
-  "emptyDesc": "向 Dream 提问，或粘贴文档进行总结。"
+  "emptyDesc": "向 Dream 提问，或粘贴文档进行总结。",
+  "approval": {
+    "title": "需要批准",
+    "description": "希望使用以下参数执行：",
+    "allowOnce": "允许一次",
+    "alwaysAllow": "始终允许此工具（本次会话）",
+    "deny": "拒绝",
+    "waitingForApproval": "等待批准…",
+    "blocked": "已阻止",
+    "blockedByUser": "被用户拒绝"
+  }
 }

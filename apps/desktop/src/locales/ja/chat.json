@@ -2,5 +2,15 @@
   "inputPlaceholder": "メッセージを入力…",
   "send": "送信",
   "empty": "会話を開始",
-  "emptyDesc": "Dream に質問するか、ドキュメントを貼り付けて要約します。"
+  "emptyDesc": "Dream に質問するか、ドキュメントを貼り付けて要約します。",
+  "approval": {
+    "title": "承認が必要です",
+    "description": "以下の引数で実行しようとしています：",
+    "allowOnce": "一度許可",
+    "alwaysAllow": "このツールを常に許可（このセッション）",
+    "deny": "拒否",
+    "waitingForApproval": "承認待ち…",
+    "blocked": "ブロック済み",
+    "blockedByUser": "ユーザーにより拒否"
+  }
 }
