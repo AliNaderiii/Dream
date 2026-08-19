@@ -115,3 +115,49 @@ wrappers live in `apps/desktop/src/lib/bridge/data-science.ts`; the echo
 transport (`echo-data.ts`) seeds a deterministic 1,000-row `sales-2024`
 dataset, a chart, a notebook with outputs, and a report so browser dev works
 with no sidecar.
+
+## 6. Iranian office files (S02)
+
+`load_data` has to survive the files Iranian companies actually send. The
+host never imports pandas; encoding sniff and header matching stay in
+stdlib, and digit folding runs inside the generated sandbox script.
+
+### Encodings (CSV / TSV)
+
+`sniff_text_encoding` reads a 64 KiB sample (never the whole file) and
+returns one of:
+
+| Encoding | How it is recognised |
+| --- | --- |
+| `utf-8-sig` | leading `EF BB BF` BOM |
+| `utf-8` | sample decodes strictly as UTF-8 (covers ASCII) |
+| `cp1256` | otherwise treated as Windows Arabic/Persian |
+
+The sniffed name is stored on the dataset record and passed to the sandbox
+via `_params.json` so `pd.read_csv(..., encoding=…)` and the chunked
+profiler use the same codec. After `clean_data` the active file is
+`cleaned.csv` (UTF-8) and the record's encoding is reset to `utf-8`. The
+500 MB ingest cap and the 100 MB chunked-profile threshold are unchanged.
+
+Committed fixtures: `examples/iranian-sales-cp1256.csv` (real cp1256
+bytes, not valid UTF-8) and `examples/iranian-sales-utf8-sig.csv` (BOM +
+Persian digits).
+
+### Persian digits
+
+Before any numeric coerce, the sandbox translates Persian (`U+06F0–U+06F9`)
+and Arabic-Indic (`U+0660–U+0669`) digits to Latin, maps the Arabic decimal
+separator (`U+066B`) to `.`, and drops the Arabic thousands separator
+(`U+066C`). A column becomes numeric only when every non-blank cell
+converts; mixed text stays text (with digits folded).
+
+### Headers: yeh / kaf matching, display not rewritten
+
+Displayed column names are the file's own spelling after decode. Arabic yeh
+(`ي` U+064A) / kaf (`ك` U+0643) vs Farsi yeh (`ی` U+06CC) / keheh (`ک`
+U+06A9) are folded only when matching a request against the schema, using
+the existing `normalize_fa`. Exact match wins; a folded hit returns the
+**displayed** name so later sandbox ops see the real header. Office-style
+headers (Persian letters, spaces, light punctuation) are accepted by the
+column checker; injection characters (`;`, `/`, quotes, …) are still
+refused.
