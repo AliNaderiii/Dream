@@ -8,12 +8,7 @@
  */
 
 import type { BridgeClient } from './client';
-import type {
-  BridgeApproval,
-  BridgeSchedule,
-  BridgeScheduleRun,
-  SchedulePreview,
-} from './types';
+import type { BridgeApproval, BridgeSchedule, BridgeScheduleRun, SchedulePreview } from './types';
 
 /** `schedule.create` params — either rhythm form is accepted. */
 export interface ScheduleDraft {

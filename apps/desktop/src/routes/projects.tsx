@@ -171,7 +171,10 @@ export function ProjectsRoute() {
       </header>
 
       {error && (
-        <p role="alert" className="mb-4 rounded-md border border-border-default bg-surface p-3 text-caption text-fg-secondary">
+        <p
+          role="alert"
+          className="mb-4 rounded-md border border-border-default bg-surface p-3 text-caption text-fg-secondary"
+        >
           {error}
         </p>
       )}
@@ -275,7 +278,11 @@ export function ProjectsRoute() {
                     </option>
                   ))}
                 </select>
-                <Button variant="secondary" size="sm" onClick={() => void onNewSessionHere(project)}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void onNewSessionHere(project)}
+                >
                   <FolderPlus className="size-4" aria-hidden />
                   {t('projects.newSession')}
                 </Button>

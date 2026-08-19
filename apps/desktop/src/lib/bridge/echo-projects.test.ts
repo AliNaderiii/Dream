@@ -49,9 +49,9 @@ describe('EchoBridgeTransport projects', () => {
     await expect(
       t.request('3', 'project.create', { name: 'P', session_ids: 'nope' }),
     ).rejects.toMatchObject({ code: RPC_ERROR.INVALID_PARAMS });
-    await expect(t.request('4', 'project.get', { project_id: 'prj_missing' })).rejects.toMatchObject(
-      { code: RPC_ERROR.INVALID_PARAMS },
-    );
+    await expect(
+      t.request('4', 'project.get', { project_id: 'prj_missing' }),
+    ).rejects.toMatchObject({ code: RPC_ERROR.INVALID_PARAMS });
   });
 
   it('only groups sessions the echo transport knows', async () => {
@@ -112,11 +112,7 @@ describe('EchoBridgeTransport projects', () => {
       session_id: session.session_id,
     });
 
-    const sessions = await t.request<{ sessions: Array<{ id: string }> }>(
-      '4',
-      'session.list',
-      {},
-    );
+    const sessions = await t.request<{ sessions: Array<{ id: string }> }>('4', 'session.list', {});
     expect(sessions.sessions.map((s) => s.id)).toContain(session.session_id);
   });
 
@@ -130,11 +126,7 @@ describe('EchoBridgeTransport projects', () => {
     });
     await t.request('3', 'project.delete', { project_id: project.project_id });
 
-    const sessions = await t.request<{ sessions: Array<{ id: string }> }>(
-      '4',
-      'session.list',
-      {},
-    );
+    const sessions = await t.request<{ sessions: Array<{ id: string }> }>('4', 'session.list', {});
     expect(sessions.sessions.map((s) => s.id)).toContain(session.session_id);
   });
 

@@ -212,11 +212,7 @@ export function SchedulerRoute() {
                 <span className="min-w-0 flex-1 truncate text-caption" dir="auto">
                   {approval.summary}
                 </span>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => void onApproval(approval, true)}
-                >
+                <Button variant="primary" size="sm" onClick={() => void onApproval(approval, true)}>
                   <Check className="size-4" aria-hidden />
                   {t('approve')}
                 </Button>
