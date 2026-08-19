@@ -1,10 +1,17 @@
 # Dream
 
-**Dream is a local-first personal assistant for people who write Persian as well
-as English.** Its memory search treats Persian spelling variants as the same
-word before storing or querying them, so a fact saved from one keyboard is still
-found from another. The core package uses only Python's standard library; run
-its complete demo without an API key.
+**Dream is a local-first personal assistant for people who write Persian as
+well as English — a real desktop product, not a toy demo.** It ships a Python
+agent kernel (memory, tools, model routing, metering) with a Tauri 2 + React
+desktop shell (`apps/desktop/`), an offline demo that runs with zero network,
+and an honest commercial kernel: free unlimited local use, a free guest
+quota, and paid plans whose prices are *not invented* — they stay
+`TBD after cost measurement` until real costs are measured.
+
+Its memory search treats Persian spelling variants as the same word before
+storing or querying them, so a fact saved from one keyboard is still found
+from another. The core package uses only Python's standard library; run its
+complete demo without an API key.
 
 ## Persian retrieval that does not silently miss
 
@@ -46,6 +53,12 @@ these lines. If memory behaviour needs diagnosing, run
 model really calls the tool, and prints a one-line verdict naming the failure
 mode.
 
+The desktop shell (`apps/desktop/`) is a Tauri 2 + React application —
+localised into eight languages, with a data-science workbench UI. The
+Python↔desktop IPC bridge is scheduled separately; today the shell and the
+kernel are developed and tested independently (see
+`apps/desktop/README.md`).
+
 ### Windows
 
 Double-click `run.bat` to start Dream against a local Ollama server: it
@@ -53,6 +66,59 @@ activates `.venv`, clears any OpenAI credentials, lets you pick between
 `qwen2.5:7b` (default) and `qwen2.5:3b`, and launches the interactive CLI.
 `check.bat` runs the offline diagnostics with `doctor.py --backend ollama`.
 Both scripts pause on exit so error messages stay readable.
+
+## Plans and metering (honest by construction)
+
+Dream 0.2 introduces a commercial kernel (`dream/commerce.py`) with seven
+plans. All prices are in **IRR (Iranian rial)**. Only the two free plans
+carry a numeric price (0); every paid plan carries a **null** price with the
+note `TBD after cost measurement` — we will not invent numbers before real
+costs are measured.
+
+| Plan | Price (IRR) | Quota |
+| --- | --- | --- |
+| `local` | 0 | unlimited, no ledger file required |
+| `guest` | 0 | 20 turns/day |
+| `daily` | TBD after cost measurement | 100 turns/day |
+| `individual_monthly` | TBD after cost measurement | 1 000 turns/month |
+| `individual_yearly` | TBD after cost measurement | 12 000 turns/year |
+| `team` | TBD after cost measurement | 5 000 turns/month |
+| `company` | TBD after cost measurement | 20 000 turns/month |
+
+Usage is a JSON ledger (`DREAM_LEDGER`, default `data/dream-ledger.json`).
+`Dream.run` consumes one turn per message **only when a ledger is attached**:
+`DREAM_PLAN` is set to anything other than `local`, or `DREAM_LEDGER` names a
+file. The local plan runs with no ledger at all.
+
+Metered plans **fail closed**: a ledger file that is unreadable, invalid JSON,
+or malformed refuses turns with a Persian sentence instead of silently
+granting unlimited usage. Writes are atomic, so a crash never tears the
+ledger.
+
+```bash
+dream --plan        # active plan, currency, price
+dream --usage       # turns used/remaining in the current window
+# in-session: /plan /usage
+```
+
+## Model routing and privacy
+
+`dream/router.py` resolves the model route with a fixed priority —
+**hosted → Ollama → BYOK → echo** — purely from configuration, never from
+network probes:
+
+1. **hosted** — cloud model service (`OPENAI_API_KEY` or `DREAM_BACKEND=openai`): your message **leaves this machine**.
+2. **ollama** — local Ollama server (`OLLAMA_HOST` or `DREAM_BACKEND=ollama`): your message **never leaves this machine**.
+3. **byok** — bring-your-own-key endpoint (`OPENAI_BASE_URL` points at your own server): your message **leaves this machine** for that server.
+4. **echo** — deterministic offline backend: **no data leaves this machine**.
+
+Every route carries an English and a Persian sentence stating exactly whether
+data leaves the machine, and `dream --route` (or `/route`) prints it — the
+privacy answer is never hand-waved.
+
+```bash
+dream --route
+```
 
 ## Demo transcript
 
@@ -102,7 +168,9 @@ Model backends share one `chat(messages, tools)` interface. `EchoBackend` is
 the deterministic offline backend; `OpenAIBackend` speaks the OpenAI-compatible
 HTTP API; `OllamaBackend` points that protocol at a local Ollama instance.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full data flow.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full data flow and
+[docs/PRODUCT.md](docs/PRODUCT.md) for the product story, plans, and the
+metering/privacy behaviour.
 
 ## Add a tool
 
@@ -137,8 +205,11 @@ python -m build
 ```
 
 The core `dream/` package has **no runtime dependencies**. Development tools
-are available through the `dev` extra. See [CONTRIBUTING.md](CONTRIBUTING.md)
-and [CHANGELOG.md](CHANGELOG.md) for project process and release history.
+are available through the `dev` extra; `web` (fastapi, uvicorn) and `data`
+(nbformat) extras cover the optional web gateway and notebook tooling. Sample
+data lives in [`examples/`](examples/), including an Iranian sales CSV with
+Persian headers. See [CONTRIBUTING.md](CONTRIBUTING.md) and
+[CHANGELOG.md](CHANGELOG.md) for project process and release history.
 
 ## License
 
