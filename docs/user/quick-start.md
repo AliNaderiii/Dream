@@ -1,111 +1,117 @@
 # Quick Start — Dream in five minutes
 
-This file is the only thing you need to get from "installed" to "first
-conversation". It assumes Python 3.10 or later. An internet connection is
-needed only to install packages and (optionally) to talk to a cloud model.
+Dream's product UI is the Tauri desktop app in `apps/desktop/`; the Python CLI
+is also available for setup, diagnostics, automation, and an offline demo.
+Python 3.10+ is required. Node.js 22+ and Rust stable are required only when
+building the desktop app from source.
 
-## Windows — double-click `run.bat`
+## Windows first run — `run.bat` + Ollama
 
-That is the **only** first-run launcher. After you have Python 3.10+ on PATH:
+The supported first-run path today is the local CLI launcher, not an installer:
 
-1. Double-click **`run.bat`**.
-2. If `.venv` is missing, the script creates it (or prints the one command
-   `python -m venv .venv` and waits).
-3. If Ollama is missing, it prints a Persian and English message with
-   <https://ollama.com/download>, then waits so you can read the window.
-4. If Ollama is present, it starts Dream against the local Ollama server
-   with model `qwen2.5:7b` (`cli.py --backend ollama`, the same as
-   `dream --backend ollama`).
+1. Install [Ollama](https://ollama.com/download) and open it once.
+2. In a terminal, pull the default local model:
 
-Install [Ollama](https://ollama.com/download) and open it once so it is
-running. Pull the default model if you have not:
+   ```bat
+   ollama pull qwen2.5:7b
+   ```
 
-```bat
-ollama pull qwen2.5:7b
-```
+3. Double-click **`run.bat`** in the repository root.
 
-Other Windows scripts are **not** the first-run path:
+`run.bat` creates `.venv` when needed, installs Dream, clears cloud-provider
+credentials for that process, and starts `cli.py --backend ollama`. If Python
+or Ollama is missing, it prints the next step and pauses so the message remains
+visible. `check.bat` runs offline diagnostics. `Dream.bat` and
+`Dream-Start.bat` launch the older `desktop.py` window; they are not the Tauri
+product UI and are not the first-run path.
 
-| Script | Role |
-| --- | --- |
-| `run.bat` | **Primary.** Local Ollama CLI, no VPN. |
-| `check.bat` | Offline diagnostics (`python doctor.py`). |
-| `Dream.bat` | Experimental desktop window (`desktop.py`). |
-| `Dream-Start.bat` | Same desktop window, also loads `.env`. |
-
-Every `.bat` pauses on error so the black window stays readable.
-
-## 1. Install (any OS)
+## Install the Python CLI (any OS)
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate              # Windows: .venv\Scripts\activate
 python -m pip install -e .
+python doctor.py                  # offline installation checks
 ```
 
-`run.bat` runs that install for you on Windows (`pip install -e .`).
-
-Optional extras — install only what you need:
+Optional repository-defined extras are `.[web]`, `.[data]`, and `.[dev]`:
 
 ```bash
-python -m pip install -e ".[web]"    # FastAPI + uvicorn web gateway
-python -m pip install -e ".[data]"   # nbformat notebook tooling
-python -m pip install -e ".[dev]"    # pytest + ruff for contributors
+python -m pip install -e ".[web]"     # FastAPI + uvicorn
+python -m pip install -e ".[data]"    # nbformat
+python -m pip install -e ".[dev]"     # pytest + ruff
 ```
 
-You can combine extras: `python -m pip install -e ".[web,data]"` or
-`python -m pip install -e ".[dev,web,data]"`.
-
-## 2. Run the offline demo (no key, no network)
+## Verify and start a conversation
 
 ```bash
-dream --demo
+dream --demo                     # deterministic; no key or network
+dream --backend echo             # interactive offline session
+dream --backend ollama           # local Ollama session
 ```
 
-This runs a complete conversation against the built-in **echo** backend — no
-API key and no network required — so you can confirm the install works and see
-the memory + approval flow end to end.
+At the prompt, try `سلام! اسم من مریم است.`. Use `/mems` to list memories or
+`/help` for the command list.
 
-## 3. Configure a real model (optional)
+Inspect the commercial and privacy state without starting a conversation:
 
 ```bash
-python doctor.py                  # verify the installation (offline)
+dream --plan
+dream --usage
+dream --route
 ```
 
-`doctor.py` always prints English. If the console is UTF-8 it also prints
-Persian on failures. On Windows, double-click `check.bat` for the same
-offline checks.
+The same read-only commands are available during a terminal or paired Telegram
+conversation as `/plan`, `/usage`, and `/route`.
 
-To use a model, pick one backend:
+## Run or build the Tauri desktop UI
 
-- **Ollama (local, free, no VPN):** install from
-  <https://ollama.com/download>, then `dream --backend ollama`.
-  Windows: double-click `run.bat` (sets `DREAM_MODEL=qwen2.5:7b`).
-- **OpenAI-compatible:** set `OPENAI_API_KEY` (and optionally
-  `OPENAI_BASE_URL`) in your environment, then run `dream`.
-
-API keys go to your operating-system keychain (Keychain Access / Windows
-Credential Manager / Linux Secret Service) — they are never written to a
-settings file. See [CONFIGURATION.md](../CONFIGURATION.md).
-
-## 4. First conversation
-
-```text
-> سلام! اسم من مریم است.    (or: "Hi! My name is Mary.")
-```
-
-Dream replies in the language you used. Say `/mems` to see what it has stored,
-or `/help` for the command list.
-
-## 5. Try the desktop app
-
-The Tauri desktop shell (the full UI) is built from `apps/desktop`:
+From the repository root:
 
 ```bash
-cd apps/desktop && npm install && npm run dev
+cd apps/desktop
+npm install
+npm run tauri dev
 ```
 
-On Windows, `Dream.bat` opens the older experimental `desktop.py` window —
-that is not the first-run path.
+To produce host-platform installers:
 
-That's it — you're up and running in under five minutes.
+```bash
+cd apps/desktop
+npm install
+npm run tauri build
+```
+
+For browser-only UI development, `npm run dev` exists, but native features use
+safe browser fallbacks. The Tauri app builds and communicates with the Python
+kernel through the JSON-RPC sidecar. Its current surfaces include chat,
+projects, the Jalali-aware scheduler, memory and skills, data science,
+providers, connectivity, and settings.
+
+In chat, model tool calls appear as status cards (`ok`, `error`, `blocked`, or
+`pending`). Dangerous tools open an approval dialog: allow once, always allow
+that tool for this session, or deny. Denial and missing approval fail closed.
+
+## Pair Telegram
+
+1. Create a Telegram bot with BotFather and set `TELEGRAM_BOT_TOKEN` in your environment.
+2. Start the long-polling front end:
+
+   ```bash
+   dream-telegram --backend ollama
+   ```
+
+3. If `TELEGRAM_ALLOWED_USER` is not configured and no chat is paired, Dream
+   prints a six-digit code valid for 10 minutes. In a **private chat** with the
+   bot, send `/pair 123456`, replacing the digits with that code.
+
+Pairing is persisted locally. The automated pairing and policy tests are in the
+repository; the owner still performs the real bot/network smoke test because it
+requires live Telegram credentials.
+
+## For Iranian users
+
+Ollama runs the model locally and the Windows `run.bat` path does not require a
+VPN. Local-plan use is unlimited and does not need a usage ledger. Paid-plan
+prices are **TBD after cost measurement**; Dream does not publish invented IRR
+prices.

@@ -1,122 +1,98 @@
-# Dream — Product Story (S00)
+# Dream — Product story after Wave 2
 
-This document is the honest product story for Dream 0.2. It says what the
-product is, what is free, what is paid, what is measured, and what is not yet
-decided. Nothing here is marketing.
+Dream is a local-first personal assistant for people who write Persian as well
+as English. The product surface is the **Tauri 2 + React desktop app** in
+`apps/desktop/`; the Python kernel and CLI provide its agent, memory, tools,
+routing, metering, automation, diagnostics, and an offline demo.
 
-## What Dream is
+The desktop now builds and talks to the Python kernel through a framed JSON-RPC
+sidecar. It is not a disconnected mock shell. Browser development mode remains
+available with deterministic echo fallbacks where native APIs are unavailable.
 
-Dream is a **local-first personal assistant for people who write Persian as
-well as English**. The commercial kernel (this milestone) does not change the
-agent's nature: the product is first and foremost a local assistant whose
-memory, tools, and (optionally) model run on the owner's own machine.
+## What users can do today
 
-Two surfaces exist today:
+- Hold multi-pane conversations and stop in-flight work. Tool calls are visible
+  as cards with arguments, status, and result excerpts. Dangerous actions open
+  a bilingual approval dialog with allow-once, session allowlist, and deny;
+  missing or denied approval fails closed.
+- Organise sessions into projects and optionally link a workspace folder in
+  place. Deleting a project keeps its sessions.
+- Create schedules from Persian or English prose, preview cron and next-run
+  time, view Gregorian and Jalali dates, pause, run now, inspect history, and
+  approve or deny gated runs.
+- Use memory, skills, subagents, data-science workflows, providers, MCP,
+  connectivity settings, provenance, sandbox, browser, and gateway surfaces
+  delivered in the existing desktop application.
+- Use the terminal CLI and a paired Telegram private chat. Telegram preserves
+  the read-only `/plan`, `/usage`, and `/route` command surface; its live
+  bot/network smoke remains owner-run because it needs real credentials.
 
-1. **The Python kernel** (`dream/`, `cli.py`) — memory, typed tools, the
-   agent loop, model backends, the usage ledger, and the model router. It is
-   stdlib-only and fully offline-capable (`dream --demo`).
-2. **The Tauri desktop shell** (`apps/desktop/`) — a Tauri 2 + React 19
-   application with eight UI languages and a data-science workbench. The
-   Python↔desktop IPC bridge is a separate milestone; today the shell is
-   developed and tested on its own.
+## First run and local operation
 
-The demo transcript in the README is a real transcript of `python cli.py
---demo` in this repository. It requires no API key and no network.
-
-On Windows the first five minutes are **no-VPN**: double-click `run.bat`
-(the only primary launcher). It creates `.venv` if needed, refuses to start
-without Ollama (Persian + English, with the official download URL), and
-otherwise talks to a local Ollama model. Details live in
+Windows first-run today is **`run.bat` + Ollama**. The launcher creates a
+virtual environment if needed, installs Dream, and starts the local Ollama CLI
+path. It is not yet a Tauri installer launcher. Source builders can run or
+package the Tauri UI with the scripts in `apps/desktop/package.json`; see
 [user/quick-start.md](user/quick-start.md).
 
-## Plans
+`dream --demo` is a deterministic offline verification path. The Python kernel
+has no mandatory third-party runtime dependencies, while optional features and
+the desktop have their own declared dependencies. Dream is therefore not
+presented as “only a standard-library CLI.”
 
-All prices are in **IRR (Iranian rial)**. The currency field exists on every
-plan from day one so nothing has to be retrofitted.
+## Plans and usage
 
-| Plan | Price (IRR) | Quota | Notes |
-| --- | --- | --- | --- |
-| `local` | **0** | unlimited | The default. Needs no ledger file. |
-| `guest` | **0** | 20 turns/day | Free daily quota; the 21st turn is refused with a Persian sentence. |
-| `daily` | `null` — TBD after cost measurement | 100 turns/day | |
-| `individual_monthly` | `null` — TBD after cost measurement | 1 000 turns/month | |
-| `individual_yearly` | `null` — TBD after cost measurement | 12 000 turns/year | |
-| `team` | `null` — TBD after cost measurement | 5 000 turns/month | |
-| `company` | `null` — TBD after cost measurement | 20 000 turns/month | |
-
-**Pricing rule (enforced by tests):** the only numeric IRR prices in the
-product are `0` for the two free plans. Every paid plan stores `price: null`
-and a note that the price is *TBD after cost measurement*. Until real hosting,
-compute, and support costs are measured, publishing a number would be
-inventing one.
-
-The quota figures above are capacity placeholders, kept as constants in one
-place (`dream/commerce.py`) so tuning them after cost measurement is a
-one-line change per plan.
-
-## Usage metering
-
-- Usage lives in a **JSON ledger** (`DREAM_LEDGER`, default
-  `data/dream-ledger.json`). Each consumed turn appends one timestamped
-  entry; writes are atomic (temp file + rename), so a crash cannot tear the
-  ledger.
-- `Dream.run` **consumes a turn only when a ledger is attached**: when
-  `DREAM_PLAN` is set to anything other than `local`, or when `DREAM_LEDGER`
-  names a file. The unlimited `local` plan therefore runs with **no ledger
-  file at all**.
-- Quota windows follow the plan: day (`guest`, `daily`), month
-  (`individual_monthly`, `team`, `company`), year (`individual_yearly`).
-- Metered plans **fail closed**: if the ledger file is unreadable, invalid
-  JSON, or structurally malformed, the turn is refused with a Persian
-  sentence. Corruption never converts into free turns. An unknown
-  `DREAM_PLAN` name is also refused rather than silently billed as another
-  plan.
-
-## Model routing and privacy
-
-`dream/router.py` resolves the route with a fixed priority, purely from
-configuration (no network probes, deterministic, offline-testable):
-
-1. **hosted** — cloud model service; your message **leaves this machine**.
-2. **ollama** — local Ollama server; your message **never leaves this
-   machine**.
-3. **byok** — your own endpoint (`OPENAI_BASE_URL`); your message **leaves
-   this machine** for that server.
-4. **echo** — deterministic offline backend; **no data leaves this
-   machine**.
-
-Every route carries an English and a Persian sentence stating exactly whether
-data leaves the machine. `dream --route` (and `/route` on the phone) prints
-it. The privacy answer is a product guarantee, not a footnote.
-
-## CLI and phone surface
-
-| Command | Meaning | Phone |
+| Plan | Price | Quota |
 | --- | --- | --- |
-| `dream --plan` / `/plan` | active plan, currency, price | read-only, allowed |
-| `dream --usage` / `/usage` | ledger usage in the current window | read-only, allowed |
-| `dream --route` / `/route` | model route + whether data leaves the machine | read-only, allowed |
+| `local` | 0 IRR | unlimited; no ledger required |
+| `guest` | 0 IRR | 20 turns/day |
+| `daily` | TBD after cost measurement | 100 turns/day |
+| `individual_monthly` | TBD after cost measurement | 1,000 turns/month |
+| `individual_yearly` | TBD after cost measurement | 12,000 turns/year |
+| `team` | TBD after cost measurement | 5,000 turns/month |
+| `company` | TBD after cost measurement | 20,000 turns/month |
 
-All three are read-only, so the phone policy admits them; the terminal and
-phone command sets stay single-sourced in `cli.py` (parity tests enforce
-this).
+Only free plans have a numeric price. Paid plans store `price: null`; there is
+no payment processing or invented IRR amount yet.
 
-## What is deliberately not here yet
-
-- No payment processing, no invoices, no billing backend. The ledger is the
-  meter; the money plumbing is future work.
-- No numeric paid prices. See the pricing rule above.
-- No desktop↔kernel bridge yet (separate milestone; see
-  `apps/desktop/README.md`).
-- No telemetry. Dream does not report usage home; the ledger is a local file.
-
-## How to verify this document
+Usage is stored in a local JSON ledger when `DREAM_PLAN` is not `local` or
+`DREAM_LEDGER` is explicitly set. Writes are atomic and durable. Metered plans
+fail closed on an unknown plan or an unreadable, invalid, malformed, or
+unwritable ledger. Inspect the same state from the CLI or an interactive
+conversation:
 
 ```bash
-python -m pytest tests/test_commerce.py tests/test_router.py -q
-python cli.py --demo          # exits 0, offline
-python cli.py --plan          # local, IRR, price 0
-python cli.py --usage         # no ledger attached (plan: local)
-python cli.py --route         # echo, no data leaves
+dream --plan       # or /plan
+dream --usage      # or /usage
+dream --route      # or /route
 ```
+
+## Routing and privacy
+
+Route selection is configuration-driven and does not probe the network:
+
+1. hosted — messages leave the machine for the configured cloud service;
+2. Ollama — the model runs locally;
+3. BYOK — messages leave for the user-configured endpoint;
+4. echo — deterministic and offline.
+
+The route command reports an English and Persian privacy sentence derived from
+the selected route. There is no telemetry that reports the local usage ledger
+home.
+
+## For Iranian users
+
+Ollama provides a local path that needs no VPN, and `run.bat` selects that path
+on Windows. The local plan is unlimited. Paid plans remain **TBD after cost
+measurement**; no IRR prices will be published until actual compute and support
+costs are measured.
+
+## Honest boundaries
+
+- Windows first-run is currently the repository launcher and CLI, not a shipped
+  Tauri installer flow.
+- Telegram logic is automated and tested, but the final live pairing/message
+  smoke is performed by the owner with real bot credentials.
+- Payment, invoices, and final paid pricing are future work.
+- Local model quality and hardware requirements depend on the selected Ollama
+  model and the user's machine.

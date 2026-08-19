@@ -99,6 +99,33 @@ Prompt P-11 — Internationalisation, Documentation, Security Audit & Release.
   failed`, or `memory stored successfully`). Runnable as
   `python tools/memory_probe.py --backend ollama`; exits 0 on success.
 
+- **S01 — Commerce hardening.** Ledger reads and writes fail closed, writes
+  are atomic and durable, concurrent users refresh state before counting, and
+  routing consistently prefers local Ollama over BYOK when hosted is absent.
+- **S02 — Iranian data workflows.** Persian/Arabic digit and text handling,
+  Iranian CSV encoding coverage, and data-science ingestion/profile/cleaning,
+  analysis, chart, report, and notebook workflows are available through the
+  kernel and desktop workbench.
+- **S03 — Telegram.** A long-polling Telegram front end supports local,
+  expiring six-digit private-chat pairing, persisted paired chats, command
+  parity and policy enforcement. The final live bot/network smoke remains
+  owner-run with real credentials.
+- **S04 — Desktop bridge and build.** The Tauri UI communicates with the
+  Python kernel through a framed JSON-RPC sidecar, and desktop CI/build and
+  release packaging paths are present.
+- **S05 — Plans in desktop.** Desktop settings show plan, usage, route and
+  privacy information from the same commerce/router kernel used by the CLI;
+  no paid IRR amount is invented.
+- **S06 — Projects and Jalali scheduler.** Projects group sessions and link
+  workspace folders without copying. The scheduler accepts Persian or English
+  prose, previews cron, displays Jalali dates, exposes history and run controls,
+  and queues approval-gated runs. The desktop TypeScript and production build
+  were unblocked.
+- **S07 — Conversation UX.** Chat renders streaming-aware tool cards with
+  `ok`, `error`, `blocked`, and `pending` states. Dangerous calls open an
+  approval dialog for allow once, session allowlist, or deny, and in-flight
+  work can be stopped; approval remains fail closed.
+
 ### Changed
 
 - The system prompt no longer spends most of its length teaching the model

@@ -10,8 +10,8 @@ quota, and paid plans whose prices are *not invented* — they stay
 
 Its memory search treats Persian spelling variants as the same word before
 storing or querying them, so a fact saved from one keyboard is still found
-from another. The core package uses only Python's standard library; run its
-complete demo without an API key.
+from another. The Tauri app is the product UI; the Python kernel and CLI power
+it and provide an offline demo that needs no API key.
 
 ## Persian retrieval that does not silently miss
 
@@ -53,11 +53,11 @@ these lines. If memory behaviour needs diagnosing, run
 model really calls the tool, and prints a one-line verdict naming the failure
 mode.
 
-The desktop shell (`apps/desktop/`) is a Tauri 2 + React application —
-localised into eight languages, with a data-science workbench UI. The
-Python↔desktop IPC bridge is scheduled separately; today the shell and the
-kernel are developed and tested independently (see
-`apps/desktop/README.md`).
+The desktop app (`apps/desktop/`) is a Tauri 2 + React application localised
+into eight languages. It builds successfully and communicates with the Python
+kernel through a framed JSON-RPC sidecar. Its product surfaces include
+conversation panes, projects, a Jalali-aware scheduler, memory and skills,
+data science, providers, connectivity, provenance, and settings.
 
 ### Windows
 
@@ -73,7 +73,43 @@ See [docs/user/quick-start.md](docs/user/quick-start.md) for extras
 
 Other scripts are labelled and kept, but they are not the first-run path:
 `check.bat` runs offline `doctor.py`; `Dream.bat` and `Dream-Start.bat` open
-the experimental desktop window.
+the older `desktop.py` window, not the Tauri product UI.
+
+## Desktop conversations and work
+
+The Tauri chat transcript shows tool calls as cards with arguments, status, and
+result excerpts. Dangerous actions open a bilingual approval dialog: allow
+once, always allow that tool for this session, or deny. A denial or absent
+approver fails closed. Projects group sessions and can link workspace folders
+in place. The scheduler accepts Persian or English prose and displays both
+document-locale and Jalali next-run dates, history, pause/run controls, and an
+approval queue for gated jobs.
+
+Build or run the full native UI using the scripts that exist in
+`apps/desktop/package.json`:
+
+```bash
+cd apps/desktop
+npm install
+npm run tauri dev       # native development app
+npm run tauri build     # host-platform installer artifacts
+```
+
+## Telegram pairing
+
+Set `TELEGRAM_BOT_TOKEN`, run `dream-telegram --backend ollama`, and send
+`/pair <six-digit-code>` in a private chat when the process prints its
+10-minute pairing code. Pairing is saved locally. `/plan`, `/usage`, and
+`/route` are available on the paired phone surface. Automated tests cover the
+pairing and policy paths; the final live Telegram bot/network smoke remains an
+owner-run check requiring real credentials.
+
+## For Iranian users
+
+Ollama provides local model inference without a VPN, and `run.bat` deliberately
+uses that local path on Windows. The local plan is unlimited and requires no
+ledger. Paid plans are **TBD after cost measurement**; no made-up IRR prices
+are published.
 
 ## Plans and metering (honest by construction)
 
