@@ -356,6 +356,44 @@ export interface SpawnSubagentParams extends RpcParams {
 }
 
 // --------------------------------------------------------------------------- //
+// Council — the opt-in three-role review (S10). Mirrors `dream/council.py`.
+// --------------------------------------------------------------------------- //
+
+/** One role of a council: proposer, critic or judge. */
+export interface CouncilMemberDto {
+  role: 'proposer' | 'critic' | 'judge';
+  subagent_id: string;
+  provider: string;
+  model: string;
+  /** True when this member sends text off the machine. */
+  leaves_machine: boolean;
+  status: SubAgentStatus;
+  result: string | null;
+}
+
+/** `council.run` / `council.get` result. */
+export interface CouncilDto {
+  council_id: string;
+  pipeline_id: string;
+  members: CouncilMemberDto[];
+  /** The judge's result once the judge completes; null before then. */
+  winner: string | null;
+  /** Member turns consumed on the active plan's ledger (3 when metered). */
+  turns_consumed: number;
+  leaves_machine_any: boolean;
+  sentence_en: string;
+  sentence_fa: string;
+  /** Present only when the ledger refused the council (Persian reply). */
+  refusal?: string | null;
+}
+
+/** Optional per-role `{model_provider, model_name}` override for `council.run`. */
+export interface CouncilMemberParams extends RpcParams {
+  model_provider?: string;
+  model_name?: string;
+}
+
+// --------------------------------------------------------------------------- //
 // Schedules — mirrors `schedule_to_dict` / `run_to_dict` in `dream/scheduler.py`.
 // --------------------------------------------------------------------------- //
 

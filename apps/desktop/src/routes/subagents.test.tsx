@@ -29,6 +29,36 @@ describe('SubagentsRoute', () => {
 
     expect(await screen.findByText('No subagents yet')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Spawn a subagent/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Council review/ })).toBeInTheDocument();
+  });
+
+  it('runs a council: three columns appear and a winner is crowned', async () => {
+    const user = userEvent.setup();
+    render(<SubagentsRoute />);
+    await screen.findByText('No subagents yet');
+
+    await user.click(screen.getByRole('button', { name: /Council review/ }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(
+      within(dialog).getByRole('textbox', { name: 'Topic' }),
+      'Should we ship monthly releases?',
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Run council' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    // The proposer is selected automatically, and the widget shows one column
+    // per role while the echo members run in order.
+    expect(await screen.findByRole('region', { name: 'Proposer' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Critic' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Judge' })).toBeInTheDocument();
+
+    // The winner strip appears once the echo judge completes.
+    await waitFor(
+      () => {
+        expect(screen.getByText('Winner')).toBeInTheDocument();
+      },
+      { timeout: 8000 },
+    );
   });
 
   it('spawns a child, selects it, and runs it to completion', async () => {

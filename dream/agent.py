@@ -356,6 +356,16 @@ class EchoBackend:
 def build_backend(kind: str | None = None) -> OpenAIBackend | OllamaBackend | EchoBackend:
     """Select a backend, defaulting to ``DREAM_BACKEND`` or offline echo."""
     selected = (kind or os.environ.get("DREAM_BACKEND", "echo")).lower()
+    if selected in ("aval", "avalai"):
+        # Aval AI is an OpenAI-compatible endpoint (see ``dream/router.py``
+        # and the Aval section of ``.env.example``). The base URL and key come
+        # from the same environment names the router reads: ``OPENAI_BASE_URL``
+        # wins, the documented Aval host is the fallback, and the key is
+        # ``OPENAI_API_KEY`` or the Aval-specific ``AVALAI_API_KEY``.
+        return OpenAIBackend(
+            base_url=os.environ.get("OPENAI_BASE_URL") or "https://api.avalai.ir/v1",
+            api_key=os.environ.get("OPENAI_API_KEY") or os.environ.get("AVALAI_API_KEY"),
+        )
     if selected == "openai":
         return OpenAIBackend()
     if selected == "ollama":

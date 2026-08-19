@@ -48,6 +48,13 @@ from dream.agent import (
     OpenAIBackend,
     build_backend,
 )
+from dream.council import (
+    CouncilMemberSpec,
+    CouncilSpec,
+    council_to_dict,
+    get_council,
+    run_council,
+)
 from dream.mcp import (
     MCPServerConfig,
     MCPServerManager,
@@ -627,6 +634,8 @@ class BridgeMethods:
             "subagent.pause": self.subagent_pause,
             "subagent.resume": self.subagent_resume,
             "subagent.logs": self.subagent_logs,
+            "council.run": self.council_run,
+            "council.get": self.council_get,
             "schedule.create": self.schedule_create,
             "schedule.list": self.schedule_list,
             "schedule.get": self.schedule_get,
@@ -1803,6 +1812,53 @@ class BridgeMethods:
                 yield {"subagent_id": agent.id, "entry": entry, "token": entry["message"]}
 
         return Stream(final=subagent_to_dict(agent, include_log=False), chunks=chunks())
+
+    # ------------------------------------------------------------------ #
+    # council.* — opt-in three-role review (S10)
+    # ------------------------------------------------------------------ #
+
+    def _council_member_spec(self, raw: Any) -> CouncilMemberSpec | None:
+        """Parse one optional ``{model_provider, model_name}`` role override."""
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise invalid_params("council role overrides must be objects")
+        provider = str(raw.get("model_provider") or raw.get("provider") or "echo")
+        return CouncilMemberSpec(
+            model_provider=provider,
+            model_name=str(raw.get("model_name") or ""),
+        )
+
+    async def council_run(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Start an opt-in council (proposer → critic → judge) on one topic."""
+        params = params or {}
+        prompt = params.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise invalid_params("prompt must be a non-empty string")
+        try:
+            result = run_council(
+                self.subagents,
+                CouncilSpec(
+                    prompt=prompt,
+                    proposer=self._council_member_spec(params.get("proposer")),
+                    critic=self._council_member_spec(params.get("critic")),
+                    judge=self._council_member_spec(params.get("judge")),
+                ),
+            )
+        except ValueError as exc:
+            raise invalid_params(str(exc)) from exc
+        return council_to_dict(result)
+
+    def council_get(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Current status of a council: live member statuses + the winner."""
+        params = params or {}
+        council_id = params.get("council_id")
+        if not isinstance(council_id, str) or not council_id:
+            raise invalid_params("council_id must be a non-empty string")
+        result = get_council(self.subagents, council_id)
+        if result is None:
+            raise invalid_params(f"no council with id {council_id!r}")
+        return council_to_dict(result)
 
     # ------------------------------------------------------------------ #
     # schedule.*

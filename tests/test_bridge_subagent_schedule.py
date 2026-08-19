@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from dream.agent import EchoBackend
 from dream.bridge.errors import RESOURCE_EXHAUSTED, BridgeError
 from dream.bridge.methods import BridgeMethods
 from dream.bridge.streams import Stream
@@ -556,9 +557,11 @@ def test_every_new_method_is_routable() -> None:
         "subagent.status",
         "subagent.cancel",
         "subagent.pause",
-        "subagent.resume",
-        "subagent.logs",
-        "schedule.create",
+            "subagent.resume",
+            "subagent.logs",
+            "council.run",
+            "council.get",
+            "schedule.create",
         "schedule.list",
         "schedule.get",
         "schedule.update",
@@ -592,3 +595,110 @@ def test_schedules_persist_across_a_restart() -> None:
     )
     assert second.schedule_get({"schedule_id": created["schedule_id"]})["name"] == "Persistent"
     second.shutdown()
+
+
+# ============================================================== council.*
+
+async def wait_council_terminal(m: BridgeMethods, council_id: str, tries: int = 400) -> dict:
+    for _ in range(tries):
+        state = m.council_get({"council_id": council_id})
+        if state["winner"] is not None:
+            return state
+        await asyncio.sleep(0.01)
+    return m.council_get({"council_id": council_id})
+
+
+def test_council_run_spawns_three_echo_members_in_order() -> None:
+    m = make_methods()
+
+    async def scenario() -> Any:
+        spawned = await m.council_run({"prompt": "design the landing page"})
+        done = await wait_council_terminal(m, spawned["council_id"])
+        return spawned, done
+
+    spawned, done = run(scenario())
+    assert spawned["council_id"].startswith("council_")
+    assert spawned["winner"] is None  # no silent fake winner before the judge runs
+    assert [member["role"] for member in spawned["members"]] == [
+        "proposer",
+        "critic",
+        "judge",
+    ]
+    assert all(member["provider"] == "echo" for member in spawned["members"])
+    assert spawned["turns_consumed"] == 0  # local plan consumes nothing
+    assert spawned["leaves_machine_any"] is False
+
+    assert done["winner"] is not None
+    judge = done["members"][2]
+    assert done["winner"] == judge["result"]
+    assert [member["status"] for member in done["members"]] == ["completed"] * 3
+
+
+def test_council_run_rejects_a_missing_prompt() -> None:
+    m = make_methods()
+
+    async def scenario() -> Any:
+        return await m.council_run({"prompt": ""})
+
+    with pytest.raises(BridgeError):
+        run(scenario())
+
+
+def test_council_run_rejects_an_unknown_member_provider() -> None:
+    m = make_methods()
+
+    async def scenario() -> Any:
+        return await m.council_run(
+            {"prompt": "topic", "proposer": {"model_provider": "mystery"}}
+        )
+
+    with pytest.raises(BridgeError, match="unknown provider"):
+        run(scenario())
+
+
+def test_council_run_accepts_per_role_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    # An Aval member must not open a real connection in CI; the child's
+    # backend is swapped for echo, provider metadata stays real.
+    monkeypatch.setattr("dream.subagents._build_backend", lambda _spec: EchoBackend())
+    m = make_methods()
+
+    async def scenario() -> Any:
+        spawned = await m.council_run(
+            {
+                "prompt": "topic",
+                "proposer": {"model_provider": "echo", "model_name": "p-model"},
+                "critic": {"model_provider": "aval", "model_name": "c-model"},
+            }
+        )
+        return spawned
+
+    spawned = run(scenario())
+    assert spawned["members"][0]["provider"] == "echo"
+    assert spawned["members"][0]["model"] == "p-model"
+    assert spawned["members"][1]["provider"] == "aval"
+    assert spawned["members"][1]["leaves_machine"] is True
+
+
+def test_council_get_of_an_unknown_id_is_invalid_params() -> None:
+    m = make_methods()
+
+    async def scenario() -> Any:
+        return m.council_get({"council_id": "council_nope"})
+
+    with pytest.raises(BridgeError):
+        run(scenario())
+
+
+def test_council_children_are_real_subagents() -> None:
+    m = make_methods()
+
+    async def scenario() -> Any:
+        spawned = await m.council_run({"prompt": "prioritise the backlog"})
+        done = await wait_council_terminal(m, spawned["council_id"])
+        listing = m.subagent_list({"pipeline_id": spawned["pipeline_id"]})
+        return done, listing
+
+    done, listing = run(scenario())
+    assert len(listing["subagents"]) == 3
+    pipeline_ids = {agent["pipeline_id"] for agent in listing["subagents"]}
+    assert pipeline_ids == {done["pipeline_id"]}

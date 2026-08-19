@@ -23,6 +23,11 @@ available with deterministic echo fallbacks where native APIs are unavailable.
 - Use memory, skills, subagents, data-science workflows, providers, MCP,
   connectivity settings, provenance, sandbox, browser, and gateway surfaces
   delivered in the existing desktop application.
+- Ask for an opt-in three-role council review — a proposer, a critic and a
+  judge answer one topic in that order and the judge's answer wins — from the
+  Subagents page or the CLI (`dream --council "topic"`). Members default to
+  the offline echo provider, so the first run needs no credentials and
+  nothing leaves the machine.
 - Use the terminal CLI and a paired Telegram private chat. Telegram preserves
   the read-only `/plan`, `/usage`, and `/route` command surface; its live
   bot/network smoke remains owner-run because it needs real credentials.

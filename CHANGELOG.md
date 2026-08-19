@@ -125,6 +125,25 @@ Prompt P-11 — Internationalisation, Documentation, Security Audit & Release.
   `ok`, `error`, `blocked`, and `pending` states. Dangerous calls open an
   approval dialog for allow once, session allowlist, or deny, and in-flight
   work can be stopped; approval remains fail closed.
+- **S09 — Aval AI as the recommended Iranian cloud route.** Aval AI is a
+  first-class provider row and a named router route (`aval`) with honest
+  leave-the-machine sentences in English and Persian; detection is purely
+  from configuration (`AVALAI_API_KEY`, Aval base URLs, or
+  `DREAM_BACKEND=aval`/`avalai`) and never probes the network. The desktop
+  catalog starts with Aval, and `dream --route` / `/route` print the new
+  route.
+- **S10 — Opt-in three-role council (`dream/council.py`).** A council is
+  exactly three sequential children — proposer, critic, judge — run as one
+  `SubAgentManager` pipeline; the judge's result is the winner. It is
+  strictly opt-in (the demo and normal spawns never start one), defaults
+  every member to the offline `echo` provider, grants only the default tool
+  set (no filesystem/shell/network/mail, no approver), and a metered plan
+  consumes the three member turns exactly once before spawn — children can
+  never double-count. New bridge methods `council.run` / `council.get`, a
+  three-column council widget on the desktop Subagents page, and
+  `dream --council "topic"` on the CLI. `build_backend` now also accepts
+  `aval` / `avalai` as OpenAI-compatible endpoints pointed at
+  `api.avalai.ir`.
 
 ### Changed
 

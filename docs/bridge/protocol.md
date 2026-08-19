@@ -481,6 +481,66 @@ The index persists in `data/bridge_projects.json` (override with
 `DREAM_PROJECTS_PATH`), following the sessions-index rules: best-effort
 atomic writes, metadata only, survives a sidecar restart.
 
+### 3.16 `council.*` — opt-in three-role review (S10)
+
+A council is exactly three child agents run as one `subagent.pipeline` in the
+fixed order **proposer → critic → judge**; each stage's result becomes the
+next stage's context, so the critic attacks the proposal and the judge sees
+both. The judge's result is the council **winner**. A council starts **only**
+when the user calls `council.run` — the demo, the default chat send path and
+a normal `subagent.spawn` never start one.
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `council.run` | `{prompt, proposer?, critic?, judge?}` | `Council` |
+| `council.get` | `{council_id}` | `Council` — live member statuses + winner |
+
+```jsonc
+// CouncilRole — optional per-role override; omitted fields default to echo.
+{ "model_provider": "echo", "model_name": "" }
+
+// Council — `refusal` is present only when the ledger refused the council.
+{
+  "council_id": "council_…",
+  "pipeline_id": "pipe_…",
+  "members": [
+    {
+      "role": "proposer",        // proposer | critic | judge
+      "subagent_id": "sub_…",    // a real subagent — list/get/logs all work
+      "provider": "echo",
+      "model": "",
+      "leaves_machine": false,   // echo/ollama stay local; hosted/Aval leave
+      "status": "completed",
+      "result": "…"
+    }
+  ],
+  "winner": "…",                 // the judge's result once the judge completes
+  "turns_consumed": 3,           // 0 on the local plan; 3 once, when metered
+  "leaves_machine_any": false,
+  "sentence_en": "…",
+  "sentence_fa": "…",
+  "refusal": null                // the ledger's Persian reply when refused
+}
+```
+
+Safety and metering:
+
+- Members default to the offline `echo` provider; the tool grant is exactly
+  the default grant (`calculate`, `get_datetime`, `remember_fact`,
+  `search_memory`) — no filesystem, shell, network or mail tools — and
+  `allow_dangerous` is always `false`. A granted dangerous name still fails
+  closed because a council child carries no approver.
+- An unknown `model_provider` refuses the whole council with
+  `INVALID_PARAMS` **before** anything is spawned or consumed.
+- A metered plan (`DREAM_PLAN` not `local`, or `DREAM_LEDGER` set) consumes
+  the council's three member turns **once**, atomically, before spawn. A
+  refused council (quota exhausted, corrupt or misconfigured ledger) spawns
+  nothing and returns the ledger's Persian reply in `refusal`. The local
+  plan consumes nothing and needs no ledger file.
+- The children are the same subagents as any pipeline: `subagent.list`,
+  `subagent.get`, and `subagent.logs` work on each `subagent_id`, and
+  `subagent.list` filters by `pipeline_id`.
+
 ---
 
 ## 4. Error taxonomy
