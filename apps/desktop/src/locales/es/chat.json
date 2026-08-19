@@ -2,5 +2,15 @@
   "inputPlaceholder": "Escribe un mensaje…",
   "send": "Enviar",
   "empty": "Inicia una conversación",
-  "emptyDesc": "Pregúntale a Dream o pega un documento para resumirlo."
+  "emptyDesc": "Pregúntale a Dream o pega un documento para resumirlo.",
+  "approval": {
+    "title": "Aprobación requerida",
+    "description": "quiere ejecutar con estos argumentos:",
+    "allowOnce": "Permitir una vez",
+    "alwaysAllow": "Siempre permitir esta herramienta (esta sesión)",
+    "deny": "Denegar",
+    "waitingForApproval": "Esperando aprobación…",
+    "blocked": "Bloqueado",
+    "blockedByUser": "Denegado por el usuario"
+  }
 }

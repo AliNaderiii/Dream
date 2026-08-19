@@ -639,3 +639,75 @@ The sidecar may emit notifications with **no** `id`:
 | Scheduler & cron | `dream/scheduler.py`, `dream/cron.py`, `dream/nl_schedule.py` | — | `routes/schedules.tsx` |
 | Connectivity gateway | `dream/connectivity/` (`gateway.py`, `adapters/`) | — | `lib/bridge/echo-gateway.ts`, `routes/connectivity.tsx` |
 | Data science pipeline | `dream/skills/data_science.py`, `dream/skills/notebooks.py` | — | `lib/bridge/data-science.ts`, `lib/bridge/echo-data.ts`, `routes/data.tsx`, `routes/data.dataset.tsx` |
+| Conversation UX (S07) | `dream/bridge/methods.py` (existing) | — | `components/chat/tool-card.tsx`, `components/chat/approval-dialog.tsx`, `components/panes/pane.tsx` |
+
+---
+
+## 10. Conversation UX (S07)
+
+S07 adds three frontend-only features that consume — but never modify — the
+existing `conversation.send`, `approval.resolve`, and `conversation.stop`
+methods.
+
+### 10.1 Tool cards
+
+Each `Turn.tool_calls` entry is rendered as a compact card in the transcript.
+The card carries:
+
+```typescript
+interface ToolCardEntry {
+  id: string;
+  name: string;           // e.g. "calculate", "write_file"
+  argsSummary: string;    // truncated JSON of arguments
+  status: 'pending' | 'ok' | 'error' | 'blocked';
+  resultExcerpt: string;  // first 200 chars of result (when ok)
+  approvalId?: string;    // set when status is 'blocked'
+}
+```
+
+Cards are attached to `Message.toolCards` in the pane chat store. Status is
+derived from the `Turn` response: `allowed: false` → `blocked`, otherwise `ok`.
+Error status is set when the bridge returns a tool-level error.
+
+### 10.2 Approval flow for dangerous tools
+
+When `conversation.send` raises `APPROVAL_REQUIRED` (-32005), the frontend:
+
+1. Extracts `data.approval_id`, `data.name`, `data.summary` from the error.
+2. Shows a modal dialog with three actions:
+   - **Allow once**: resolves the approval as allowed, retries the send.
+   - **Always allow this tool this session**: adds the tool to a per-pane
+     `alwaysAllowTools` set (zustand state), then resolves and retries.
+   - **Deny**: resolves the approval as denied, renders a `blocked` card.
+3. The pane's `alwaysAllowTools` set is ephemeral — cleared when the pane
+   or session resets.
+
+The approval gate is **fail-closed**: without an explicit human decision the
+tool does not execute. The dialog dismisses on Escape (which denies).
+
+### 10.3 Stop button
+
+`conversation.stop` (§5.3) is called when the user clicks the stop button
+during a streaming send. The pane clears its sending state and renders any
+partial reply that arrived before cancellation.
+
+### 10.4 Locale keys
+
+All approval dialog copy is bilingual (English + Persian) and generated via
+`scripts/generate-locales.mjs` under `chat.approval.*`:
+
+| Key | English | فارسی |
+|-----|---------|-------|
+| `title` | Approval Required | تأیید لازم است |
+| `allowOnce` | Allow once | یک‌بار اجازه بده |
+| `alwaysAllow` | Always allow this tool this session | همیشه اجازه بده (این نشست) |
+| `deny` | Deny | رد کردن |
+| `waitingForApproval` | Waiting for approval… | در انتظار تأیید… |
+| `blocked` | Blocked | مسدود شده |
+| `blockedByUser` | Denied by user | توسط کاربر رد شد |
+
+### 10.5 RTL safety
+
+The composer `<textarea>` uses `dir="auto"` so Persian input is right-aligned.
+Card and dialog layout use CSS logical properties (`start`/`end`) exclusively —
+no hard-coded `left`/`right`.

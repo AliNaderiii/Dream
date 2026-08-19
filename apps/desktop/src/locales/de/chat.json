@@ -2,5 +2,15 @@
   "inputPlaceholder": "Nachricht schreiben…",
   "send": "Senden",
   "empty": "Unterhaltung starten",
-  "emptyDesc": "Stelle Dream eine Frage oder füge ein Dokument zum Zusammenfassen ein."
+  "emptyDesc": "Stelle Dream eine Frage oder füge ein Dokument zum Zusammenfassen ein.",
+  "approval": {
+    "title": "Freigabe erforderlich",
+    "description": "möchte mit diesen Argumenten ausgeführt werden:",
+    "allowOnce": "Einmal erlauben",
+    "alwaysAllow": "Dieses Werkzeug immer erlauben (diese Sitzung)",
+    "deny": "Verweigern",
+    "waitingForApproval": "Wartet auf Freigabe…",
+    "blocked": "Blockiert",
+    "blockedByUser": "Vom Benutzer verweigert"
+  }
 }

@@ -2,5 +2,15 @@
   "inputPlaceholder": "Écrire un message…",
   "send": "Envoyer",
   "empty": "Démarrer une conversation",
-  "emptyDesc": "Posez une question à Dream ou collez un document pour le résumer."
+  "emptyDesc": "Posez une question à Dream ou collez un document pour le résumer.",
+  "approval": {
+    "title": "Approbation requise",
+    "description": "veut s'exécuter avec ces arguments :",
+    "allowOnce": "Autoriser une fois",
+    "alwaysAllow": "Toujours autoriser cet outil (cette session)",
+    "deny": "Refuser",
+    "waitingForApproval": "En attente d'approbation…",
+    "blocked": "Bloqué",
+    "blockedByUser": "Refusé par l'utilisateur"
+  }
 }

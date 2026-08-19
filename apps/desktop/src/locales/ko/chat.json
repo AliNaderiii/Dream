@@ -2,5 +2,15 @@
   "inputPlaceholder": "메시지 작성…",
   "send": "보내기",
   "empty": "대화 시작",
-  "emptyDesc": "Dream에게 질문하거나 문서를 붙여넣어 요약합니다."
+  "emptyDesc": "Dream에게 질문하거나 문서를 붙여넣어 요약합니다.",
+  "approval": {
+    "title": "승인 필요",
+    "description": "다음 인수로 실행하려 합니다:",
+    "allowOnce": "한번 허용",
+    "alwaysAllow": "이 도구 항상 허용 (이 세션)",
+    "deny": "거부",
+    "waitingForApproval": "승인 대기 중…",
+    "blocked": "차단됨",
+    "blockedByUser": "사용자가 거부함"
+  }
 }

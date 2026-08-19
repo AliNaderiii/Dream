@@ -54,12 +54,28 @@ export interface NotificationRequest {
 /** Risk tier of a tool call, per the design system's risk trio. */
 export type RiskTier = 'safe' | 'guarded' | 'dangerous';
 
-/** A single message in a conversation. Expanded in P-02. */
+/** Status of a tool call rendered as a card in the transcript. */
+export type ToolCardStatus = 'pending' | 'ok' | 'error' | 'blocked';
+
+/** One tool call rendered as a card inside the conversation transcript. */
+export interface ToolCardEntry {
+  id: string;
+  name: string;
+  argsSummary: string;
+  status: ToolCardStatus;
+  resultExcerpt: string;
+  /** Only set when the tool is dangerous and requires approval. */
+  approvalId?: string;
+}
+
+/** A single message in a conversation. Expanded in P-02, S07. */
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt: number;
+  /** Tool-call cards that precede or accompany this message (S07). */
+  toolCards?: ToolCardEntry[];
 }
 
 /** A conversation session. */
@@ -137,6 +153,18 @@ export type SandboxState = 'unavailable' | 'available' | 'error' | 'disabled';
 
 /** Browser feature state. */
 export type BrowserState = 'offline' | 'attached' | 'isolated' | 'unavailable';
+
+/** Approval decision scope for a tool (S07). */
+export type ApprovalDecision = 'allow_once' | 'allow_always_session' | 'deny';
+
+/** A pending approval request shown as a dialog (S07). */
+export interface PendingApproval {
+  approvalId: string;
+  toolName: string;
+  argsSummary: string;
+  risk: string;
+  paneId: string;
+}
 
 /** Gateway feature state. */
 export type GatewayState = 'stopped' | 'running' | 'error' | 'disabled';
