@@ -39,6 +39,7 @@
     "route": "Ruta del modelo",
     "routeDesc": "Dónde se ejecuta cada turno.",
     "routeHosted": "Modelo en la nube",
+    "routeAval": "Aval AI (nube iraní)",
     "routeOllama": "Ollama local",
     "routeByok": "Tu propio endpoint (BYOK)",
     "routeEcho": "Echo sin conexión",

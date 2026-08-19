@@ -111,6 +111,11 @@ uses that local path on Windows. The local plan is unlimited and requires no
 ledger. Paid plans are **TBD after cost measurement**; no made-up IRR prices
 are published.
 
+For hosted cloud models, **Aval AI is the recommended path**: one key from
+`chat.avalai.ir/platform/home` reaches many model families through an
+OpenAI-compatible endpoint (`api.avalai.ir`), and `dream --route` names that
+route `aval` with an honest leave-the-machine sentence.
+
 ## Plans and metering (honest by construction)
 
 Dream 0.2 introduces a commercial kernel (`dream/commerce.py`) with seven
@@ -148,13 +153,14 @@ dream --usage       # turns used/remaining in the current window
 ## Model routing and privacy
 
 `dream/router.py` resolves the model route with a fixed priority —
-**hosted → Ollama → BYOK → echo** — purely from configuration, never from
-network probes:
+**hosted → Aval → Ollama → BYOK → echo** — purely from configuration, never
+from network probes:
 
-1. **hosted** — cloud model service (`OPENAI_API_KEY` or `DREAM_BACKEND=openai`): your message **leaves this machine**.
-2. **ollama** — local Ollama server (`OLLAMA_HOST` or `DREAM_BACKEND=ollama`): your message **never leaves this machine**.
-3. **byok** — bring-your-own-key endpoint (`OPENAI_BASE_URL` points at your own server): your message **leaves this machine** for that server.
-4. **echo** — deterministic offline backend: **no data leaves this machine**.
+1. **hosted** — official cloud model service (`OPENAI_API_KEY` or `DREAM_BACKEND=openai`): your message **leaves this machine**.
+2. **aval** — Aval AI, the recommended hosted path for Iranian users (`AVALAI_API_KEY`, `OPENAI_BASE_URL` on api.avalai.ir / api.avalapis.ir, or `DREAM_BACKEND=aval`): your message **leaves this machine** for Aval (api.avalai.ir).
+3. **ollama** — local Ollama server (`OLLAMA_HOST` or `DREAM_BACKEND=ollama`): your message **never leaves this machine**.
+4. **byok** — bring-your-own-key endpoint (`OPENAI_BASE_URL` points at your own server): your message **leaves this machine** for that server.
+5. **echo** — deterministic offline backend: **no data leaves this machine**.
 
 Every route carries an English and a Persian sentence stating exactly whether
 data leaves the machine, and `dream --route` (or `/route`) prints it — the

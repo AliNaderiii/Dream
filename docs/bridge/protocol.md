@@ -167,7 +167,16 @@ response.
 
 `provider.test` performs a minimal chat completion (instant for offline `echo`). Failures are
 **not** RPC errors — they return `{ok: false, detail}` using fixed, credential-safe detail text.
-Model lists are cached for fifteen minutes. OAuth requires state and an S256 PKCE verifier; access
+Model lists are cached for fifteen minutes.
+
+**S09 (Aval AI):** the catalog's first row is `avalai` — Aval AI, the recommended hosted path
+for Iranian users. `CatalogEntry` keeps its existing shape (`name`, `website`,
+`docs: https://docs.avalai.ir`, `auth_type: "api_key"`, `endpoint: https://api.avalai.ir/v1`,
+`model_list_url: https://api.avalai.ir/v1/models`, `default_models` from the Aval docs model
+explorer). A configured `avalai` provider builds the same `OpenAIBackend` as the other
+OpenAI-compatible kinds; its key goes through the OS keychain like every other provider. Aval's
+fallback host `api.avalapis.ir` is recognised by the router but never probed by any RPC; no
+CI test performs a live call to `avalai.ir`. OAuth requires state and an S256 PKCE verifier; access
 and refresh tokens are stored only in the keychain.
 
 ### 3.4 `memory.*` — durable memory
@@ -446,7 +455,7 @@ numeric IRR except `0` for the free plans.
 | --- | --- | --- |
 | `commerce.plan` | `{}` | `{plan_id, name_fa, name_en, currency, price: int\|null, price_note, metered, period: "day"\|"month"\|"year"\|"unlimited", limits: {daily, monthly, yearly}, ledger_attached}` |
 | `commerce.usage` | `{}` | `{plan_id, window: "day"\|"month"\|"year"\|null, used, limit: int\|null, remaining: int\|null, unlimited}` — `limit`/`remaining` are `null` and `unlimited` is `true` when no ledger is attached (the `local` plan) |
-| `route.resolve` | `{}` | `{name: "hosted"\|"ollama"\|"byok"\|"echo", leaves_machine: bool, sentence_en, sentence_fa}` — the exact route and privacy sentences `dream.router` resolves, same as `dream --route` |
+| `route.resolve` | `{}` | `{name: "hosted"\|"aval"\|"ollama"\|"byok"\|"echo", leaves_machine: bool, sentence_en, sentence_fa}` — the exact route and privacy sentences `dream.router` resolves, same as `dream --route` |
 
 ### 3.15 `project.*` — workspace folders grouping sessions (S06)
 

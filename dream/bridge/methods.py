@@ -335,7 +335,7 @@ def build_configured_backend(config: dict[str, Any] | None) -> Any:
     credential = str(config.get("credential") or config.get("api_key") or "")
     effort = config.get("reasoning_effort")
 
-    if kind in {"openai", "groq", "together", "openrouter", "vllm", "llamacpp"}:
+    if kind in {"openai", "groq", "together", "openrouter", "vllm", "llamacpp", "avalai"}:
         return OpenAIBackend(
             model=model or None,
             api_key=credential,

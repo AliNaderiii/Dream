@@ -11,7 +11,7 @@
   "configure": "Konfigurieren",
   "configured": "{{count}} konfiguriert",
   "connectFirst": "Ersten Anbieter verbinden",
-  "connectFirstDesc": "Wähle aus OpenAI, Anthropic, Google AI, Groq, Together, OpenRouter oder einem lokalen Server.",
+  "connectFirstDesc": "Wähle aus Aval AI, OpenAI, Anthropic, Google AI, Groq, Together, OpenRouter oder einem lokalen Server.",
   "browseCatalog": "Katalog durchsuchen",
   "loading": "Anbieter werden geladen…",
   "deleteTitle": "{{name}} löschen?",

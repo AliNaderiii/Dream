@@ -39,6 +39,7 @@
     "route": "Modell-Route",
     "routeDesc": "Wo jeder Turn ausgeführt wird.",
     "routeHosted": "Gehostetes Cloud-Modell",
+    "routeAval": "Aval AI (iranische Cloud)",
     "routeOllama": "Lokales Ollama",
     "routeByok": "Eigener Endpunkt (BYOK)",
     "routeEcho": "Offline-Echo",

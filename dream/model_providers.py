@@ -36,7 +36,29 @@ NETWORK_TIMEOUT_SECONDS = 15.0
 MODEL_CACHE_SECONDS = 15 * 60
 
 # Public catalog only. There are no credentials in these records.
+#
+# ``avalai`` is listed first on purpose: it is the recommended hosted path for
+# Iranian users (one key from https://chat.avalai.ir/platform/home, many model
+# families through one OpenAI-compatible endpoint). Aval also documents a
+# fallback host, https://api.avalapis.ir/v1, which is mentioned in
+# docs/handoff/S09.md and never probed by this code.
 PROVIDER_CATALOG: dict[str, dict[str, Any]] = {
+    "avalai": {
+        "name": "Aval AI",
+        "website": "https://chat.avalai.ir/platform/home",
+        "docs": "https://docs.avalai.ir",
+        "auth_type": "api_key",
+        "endpoint": "https://api.avalai.ir/v1",
+        "model_list_url": "https://api.avalai.ir/v1/models",
+        "supports_streaming": True,
+        "supports_reasoning": False,
+        # Model ids below are taken from the Aval AI docs model explorer
+        # (docs.avalai.ir/en/models/index), not invented: the flagship OpenAI
+        # family (gpt-5.6-sol, gpt-5.6-luna), Claude Sonnet 5, and Gemini
+        # 3.7 Flash. DeepSeek chat/reasoner ids were retired by Aval on
+        # 2026-07-24 (docs.avalai.ir/en/deprecations), so none are listed.
+        "default_models": ["gpt-5.6-sol", "gpt-5.6-luna", "claude-sonnet-5", "gemini-3.7-flash"],
+    },
     "openai": {
         "name": "OpenAI",
         "website": "https://platform.openai.com",

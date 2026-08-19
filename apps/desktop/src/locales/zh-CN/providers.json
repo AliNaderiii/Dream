@@ -11,7 +11,7 @@
   "configure": "配置",
   "configured": "已配置 {{count}} 个",
   "connectFirst": "连接你的第一个服务商",
-  "connectFirstDesc": "从 OpenAI、Anthropic、Google AI、Groq、Together、OpenRouter 或本地服务器中选择。",
+  "connectFirstDesc": "从 Aval AI、OpenAI、Anthropic、Google AI、Groq、Together、OpenRouter 或本地服务器中选择。",
   "browseCatalog": "浏览目录",
   "loading": "正在加载服务商…",
   "deleteTitle": "删除 {{name}}？",

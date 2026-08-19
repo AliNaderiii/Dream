@@ -71,10 +71,13 @@ dream --route      # or /route
 
 Route selection is configuration-driven and does not probe the network:
 
-1. hosted — messages leave the machine for the configured cloud service;
-2. Ollama — the model runs locally;
-3. BYOK — messages leave for the user-configured endpoint;
-4. echo — deterministic and offline.
+1. hosted — messages leave the machine for the configured official cloud service;
+2. Aval — messages leave for Aval AI (api.avalai.ir), the recommended hosted
+   path for Iranian users (`AVALAI_API_KEY`, an Aval `OPENAI_BASE_URL`, or
+   `DREAM_BACKEND=aval`);
+3. Ollama — the model runs locally;
+4. BYOK — messages leave for the user-configured endpoint;
+5. echo — deterministic and offline.
 
 The route command reports an English and Persian privacy sentence derived from
 the selected route. There is no telemetry that reports the local usage ledger
@@ -86,6 +89,11 @@ Ollama provides a local path that needs no VPN, and `run.bat` selects that path
 on Windows. The local plan is unlimited. Paid plans remain **TBD after cost
 measurement**; no IRR prices will be published until actual compute and support
 costs are measured.
+
+Aval AI is the recommended hosted path: one key from
+`chat.avalai.ir/platform/home` reaches many model families through one
+OpenAI-compatible endpoint, and the `aval` route says plainly that prompts
+leave this machine for Aval.
 
 ## Honest boundaries
 

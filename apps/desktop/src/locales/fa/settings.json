@@ -39,6 +39,7 @@
     "route": "مسیر مدل",
     "routeDesc": "هر نوبت روی چه چیزی اجرا می‌شود.",
     "routeHosted": "مدل ابری میزبان",
+    "routeAval": "Aval AI (ابر ایرانی)",
     "routeOllama": "اولاما محلی",
     "routeByok": "سرور شخصی شما (BYOK)",
     "routeEcho": "آفلاین (echo)",

@@ -81,6 +81,7 @@ def test_read_scan_finds_known_product_variables():
         "OPENAI_BASE_URL",
         "DREAM_MODEL",
         "OLLAMA_HOST",
+        "AVALAI_API_KEY",
     ):
         assert known in read, f"code reads {known} but the scan missed it"
 
