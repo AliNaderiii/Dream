@@ -26,6 +26,9 @@ KNOWN_COMMANDS = (
     "/skill",
     "/skills",
     "/tools",
+    "/plan",
+    "/usage",
+    "/route",
     "/reset",
     "/help",
     "/exit",
@@ -52,6 +55,9 @@ _HELP_FRAGMENTS: dict[str, str] = {
     "/skill": "/skill QUERY",
     "/skills": "/skills",
     "/tools": "/tools",
+    "/plan": "/plan",
+    "/usage": "/usage",
+    "/route": "/route",
     "/reset": "/reset",
     "/help": "/help",
     "/exit": "/exit",
@@ -67,6 +73,10 @@ _HELP_FRAGMENTS: dict[str, str] = {
 #   /skills  ALLOWED — read-only skill listing, needed for visibility
 #   /stats   ALLOWED — read-only aggregate counts, no content
 #   /tools   ALLOWED — read-only tool inventory, no execution
+# S00 additions, all read-only and therefore phone-safe:
+#   /plan    ALLOWED — read-only plan/price display, no billing action
+#   /usage   ALLOWED — read-only ledger readout, no mutation
+#   /route   ALLOWED — read-only privacy disclosure, no execution
 _PHONE_POLICY: dict[str, tuple[bool, str]] = {
     "/mem": (True, "read-only memory search; safe for paired owner"),
     "/mems": (True, "read-only listing; safe"),
@@ -80,6 +90,9 @@ _PHONE_POLICY: dict[str, tuple[bool, str]] = {
     "/skill": (True, "read-only skill search; needed for visibility; safe"),
     "/skills": (True, "read-only skill listing; needed for visibility; safe"),
     "/tools": (True, "read-only tool inventory; no execution; safe"),
+    "/plan": (True, "read-only plan and price display; no billing action; safe"),
+    "/usage": (True, "read-only ledger readout; no mutation; safe"),
+    "/route": (True, "read-only privacy disclosure of the model route; safe"),
     "/reset": (True, "per-chat session reset; safe"),
     "/help": (True, "help is always allowed"),
     "/exit": (False, "terminal session control; not applicable to phone"),
@@ -588,6 +601,18 @@ def dispatch_command(
     elif command == "/tools":
         for name, registered in sorted(REGISTRY.items()):
             output(f"{name}: {registered.risk}")
+    elif command == "/plan":
+        from dream.commerce import current_plan_text
+
+        output(current_plan_text())
+    elif command == "/usage":
+        from dream.commerce import usage_text
+
+        output(usage_text())
+    elif command == "/route":
+        from dream.router import route_text
+
+        output(route_text())
     elif command == "/reset":
         dream.reset_session()
         output("Session context cleared; long-term memories remain.")
@@ -669,6 +694,21 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Suppress the [tool]/[memory] activity lines on stderr",
     )
+    parser.add_argument(
+        "--plan",
+        action="store_true",
+        help="Show the active plan, currency, and price, then exit",
+    )
+    parser.add_argument(
+        "--usage",
+        action="store_true",
+        help="Show ledger usage for the active plan, then exit",
+    )
+    parser.add_argument(
+        "--route",
+        action="store_true",
+        help="Show the active model route and whether data leaves the machine, then exit",
+    )
     return parser
 
 
@@ -676,6 +716,21 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.demo:
         run_demo(args.db)
+        return 0
+    if args.plan:
+        from dream.commerce import current_plan_text
+
+        print(current_plan_text())
+        return 0
+    if args.usage:
+        from dream.commerce import usage_text
+
+        print(usage_text())
+        return 0
+    if args.route:
+        from dream.router import route_text
+
+        print(route_text())
         return 0
     if args.bridge:
         # Start the sidecar instead of the interactive CLI. The bridge runs its

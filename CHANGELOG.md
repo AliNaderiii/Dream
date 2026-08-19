@@ -56,6 +56,32 @@ Prompt P-11 — Internationalisation, Documentation, Security Audit & Release.
 
 ### Added
 
+- **S00 — Commercial kernel (`dream/commerce.py`).** Seven plans — `local`
+  (unlimited, free, no ledger file), `guest` (free, 20 turns/day), `daily`,
+  `individual_monthly`, `individual_yearly`, `team`, and `company` — all in
+  IRR. Only free plans carry a numeric price (0); paid plans carry `null`
+  with the honest note `TBD after cost measurement`. Usage is a JSON ledger
+  (`DREAM_LEDGER`, default `data/dream-ledger.json`) written atomically;
+  `Dream.run` consumes one turn per message only when a ledger is attached
+  (`DREAM_PLAN` not `local`, or `DREAM_LEDGER` set), and metered plans fail
+  closed: an unreadable, non-JSON, or malformed ledger refuses turns with a
+  Persian sentence instead of silently granting unlimited usage. The guest
+  ledger blocks the 21st turn with a Persian quota sentence. New CLI surface:
+  `dream --plan`, `dream --usage`, and the in-session `/plan`, `/usage`
+  commands (read-only, phone-allowed).
+- **S00 — Model router (`dream/router.py`).** Fixed priority
+  hosted → Ollama → BYOK → echo, resolved purely from configuration with no
+  network probes. Every route carries an English and a Persian sentence
+  stating whether data leaves the machine; `dream --route` and `/route`
+  print it.
+- **S00 — Product docs and samples.** `docs/PRODUCT.md` (honest product
+  story, plans, metering, privacy), `examples/iranian-sales-sample.csv` (a
+  hand-made Iranian sales extract with Persian headers) plus
+  `examples/README.md`, and a rewritten top-level README describing Dream 0.2
+  as a local-first Persian agent with a Tauri desktop shell.
+- **S00 — Packaging extras.** `pyproject.toml` now ships `web`
+  (`fastapi`, `uvicorn`) and `data` (`nbformat`) optional extras alongside
+  the existing `dev` extra.
 - `run.bat` and `check.bat` launchers for Windows: `run.bat` activates
   `.venv`, clears `OPENAI_BASE_URL`/`OPENAI_API_KEY`, prompts for the Ollama
   model (`qwen2.5:7b` by default, `qwen2.5:3b` optional), and starts

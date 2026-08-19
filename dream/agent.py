@@ -16,6 +16,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from dream.claims import guard_claims
+from dream.commerce import Ledger, LedgerError, QuotaExceeded, ledger_attached
 from dream.extraction import (
     STATUS_ABANDONED,
     STATUS_ERROR,
@@ -715,6 +716,17 @@ class Dream:
         self.backend = backend or build_backend()
         self.approval_policy = approval_policy or ApprovalPolicy()
         self.max_iterations = max_iterations
+        # The usage ledger hook: attached only when DREAM_PLAN is not local
+        # or DREAM_LEDGER is set, so the unlimited local plan runs with no
+        # ledger file at all. Metered plans fail closed on a corrupt ledger.
+        # A misconfigured ledger (unknown plan name) must not crash the agent
+        # at construction: the Persian refusal is held and returned by run().
+        self.ledger: Ledger | None = None
+        self._ledger_refusal: str | None = None
+        try:
+            self.ledger = Ledger.from_env() if ledger_attached() else None
+        except LedgerError as exc:
+            self._ledger_refusal = str(exc)
         self.memory_block_char_limit = _resolve_memory_block_char_limit(
             os.environ.get("DREAM_MEMORY_BLOCK_CHAR_LIMIT")
         )
@@ -874,6 +886,23 @@ class Dream:
         """Discard conversational context without touching durable memory."""
         self.history.clear()
 
+    def _ledger_block(self) -> str | None:
+        """Consume one turn on the attached ledger; return a Persian refusal.
+
+        Returns ``None`` when the turn may proceed. Raises nothing: every
+        ledger refusal (quota exhausted, corrupt file, unknown plan) becomes
+        the turn's reply so the caller always receives a ``Turn``.
+        """
+        if self._ledger_refusal is not None:
+            return self._ledger_refusal
+        if self.ledger is None:
+            return None
+        try:
+            self.ledger.consume()
+        except (QuotaExceeded, LedgerError) as exc:
+            return str(exc)
+        return None
+
     def _memory_block(self, memories: list[Memory]) -> tuple[str, list[Memory]]:
         """Render complete recalled-memory lines that fit the prompt budget."""
         lines: list[str] = []
@@ -949,6 +978,14 @@ class Dream:
 
     def run(self, message: str) -> Turn:
         """Run one complete user turn, including any model-requested tools."""
+        # Metering gate: a turn is consumed (and possibly refused) before any
+        # backend call, memory write, or journal entry. The refusal is a
+        # normal Turn whose reply is the Persian quota/corruption sentence, so
+        # every caller gets a reply and no code path grants a free turn on a
+        # broken meter.
+        ledger_block = self._ledger_block()
+        if ledger_block is not None:
+            return Turn(ledger_block, [], [], [], 0.0)
         started = time.monotonic()
         self._created.clear()
         self._superseded.clear()
