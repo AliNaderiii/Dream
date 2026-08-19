@@ -9,7 +9,8 @@ network. The priority is fixed:
    (or ``DREAM_BACKEND=ollama``). Messages never leave the machine.
 3. ``byok`` — bring your own key/endpoint: ``OPENAI_BASE_URL`` points at a
    user-chosen server (with ``DREAM_BACKEND=openai`` or a key). Messages
-   leave the machine to that server.
+   leave the machine to that server. A configured local Ollama outranks
+   BYOK: without an official key, the private local server wins.
 4. ``echo`` — the deterministic offline backend. Nothing leaves the machine.
 
 Every resolved route carries a sentence (English and Persian) that states
@@ -121,32 +122,47 @@ def resolve_route() -> Route:
     """Pick the active route by configuration, never by network probes.
 
     An explicit ``DREAM_BACKEND`` wins; otherwise the fixed priority
-    hosted → Ollama → BYOK → echo applies. The result is deterministic and
-    offline-testable.
+    hosted → Ollama → BYOK → echo applies:
+
+    - ``hosted`` needs an API key *and* the official base URL (an unset base
+      URL means the official default).
+    - a configured local Ollama beats BYOK: when the key points at somebody
+      else's endpoint, the local server is the more private option and wins.
+    - ``byok`` needs a custom (non-official) base URL. An official base URL
+      with no key is not a route at all, so it falls through to echo.
+
+    The result is deterministic and offline-testable.
     """
     explicit = _env("DREAM_BACKEND").lower()
+    base_url = _env("OPENAI_BASE_URL")
+    official_base = _is_official_base(base_url)
     if explicit == "openai":
-        return _HOSTED if _is_official_base(_env("OPENAI_BASE_URL")) else _BYOK
+        return _HOSTED if official_base else _BYOK
     if explicit == "ollama":
         return _OLLAMA
     if explicit == "echo":
         return _ECHO
 
-    key = _env("OPENAI_API_KEY")
-    if key:
-        return _HOSTED if _is_official_base(_env("OPENAI_BASE_URL")) else _BYOK
+    if _env("OPENAI_API_KEY") and official_base:
+        return _HOSTED
     if _env("OLLAMA_HOST"):
         return _OLLAMA
-    if _env("OPENAI_BASE_URL"):
+    if base_url and not official_base:
         return _BYOK
     return _ECHO
 
 
 def _is_official_base(base_url: str) -> bool:
-    """True when the endpoint is the official OpenAI-compatible host."""
+    """True when the endpoint is the official OpenAI-compatible host.
+
+    Comparison ignores a trailing slash and surrounding case in the scheme
+    and host, so ``HTTPS://API.OPENAI.COM/v1/`` is still the official base
+    and does not masquerade as a BYOK endpoint.
+    """
     if not base_url:
         return True  # empty means the official default
-    return base_url in OFFICIAL_BASE_URLS
+    normalised = base_url.strip().rstrip("/")
+    return normalised.lower() in {url.rstrip("/").lower() for url in OFFICIAL_BASE_URLS}
 
 
 # Maps a route name to the backend name ``build_backend`` understands.

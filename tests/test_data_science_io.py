@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -131,3 +132,105 @@ def test_load_failure_rolls_back_registration(runtime, tmp_path):
     with pytest.raises(DataScienceError):
         runtime.load_data(str(path))
     assert runtime.list_datasets() == []
+
+
+# --------------------------------------------------------------------------- #
+# Iranian office files — encodings, BOM, Persian digits (sandbox round-trip)
+# --------------------------------------------------------------------------- #
+
+# تاريخ / شركت / قيمت / مشتري use Arabic yeh/kaf so the body is valid cp1256.
+_DATE_AR = "\u062a\u0627\u0631\u064a\u062e"
+_DATE_FA = "\u062a\u0627\u0631\u06cc\u062e"
+_CO_AR = "\u0634\u0631\u0643\u062a"
+_QTY = "\u062a\u0639\u062f\u0627\u062f"
+_PRICE_AR = "\u0642\u064a\u0645\u062a"
+_PRICE_FA = "\u0642\u06cc\u0645\u062a"
+_CUSTOMER_AR = "\u0646\u0627\u0645 \u0645\u0634\u062a\u0631\u064a"
+
+_REPO = Path(__file__).resolve().parents[1]
+
+
+def test_load_cp1256_csv_byte_level(runtime, tmp_path):
+    """A CSV that is actually encoded cp1256 (bytes) loads with the right cells."""
+    body = (
+        f"{_DATE_AR},{_CUSTOMER_AR},{_QTY},{_PRICE_AR}\n"
+        f"1404-01-15,{_CO_AR} 1,2,250000\n"
+        f"1404-02-03,{_CO_AR} 2,150,85000\n"
+    )
+    raw = body.encode("cp1256")
+    utf8_rejected = False
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        utf8_rejected = True
+    assert utf8_rejected
+    path = tmp_path / "office-cp1256.csv"
+    path.write_bytes(raw)
+    result = runtime.load_data(str(path), "office-cp1256")
+    assert result["format"] == "csv"
+    assert result["shape"] == [2, 4]
+    assert result["columns"][0] == _DATE_AR
+    assert _PRICE_AR in result["columns"]
+    assert "\ufeff" not in result["columns"][0]
+    assert result["preview"][0][_QTY] == 2
+    assert result["preview"][1][_PRICE_AR] == 85000
+
+
+def test_load_utf8_sig_csv_strips_bom(runtime, tmp_path):
+    body = "name,score\nada,90\n"
+    path = tmp_path / "bom.csv"
+    path.write_bytes(b"\xef\xbb\xbf" + body.encode("utf-8"))
+    result = runtime.load_data(str(path))
+    assert result["format"] == "csv"
+    assert result["columns"] == ["name", "score"]
+    assert result["preview"][0]["name"] == "ada"
+    assert result["preview"][0]["score"] == 90
+
+
+def test_persian_digits_become_numbers(runtime, tmp_path):
+    """Persian digits in numeric cells are Latin digits, then coerced."""
+    # ۱۲۳ and ۴۵۶.۷۵
+    qty = "\u06f1\u06f2\u06f3"
+    price = "\u06f4\u06f5\u06f6.\u06f7\u06f5"
+    path = tmp_path / "digits.csv"
+    path.write_text(f"qty,price\n{qty},{price}\n", encoding="utf-8")
+    result = runtime.load_data(str(path))
+    assert result["preview"][0]["qty"] == 123
+    assert abs(float(result["preview"][0]["price"]) - 456.75) < 1e-9
+    profile = runtime.profile_data(result["dataset_id"])
+    assert profile["columns"]["qty"]["role"] == "numeric"
+    assert profile["columns"]["price"]["role"] == "numeric"
+    assert abs(profile["columns"]["qty"]["mean"] - 123.0) < 1e-9
+    assert abs(profile["columns"]["price"]["mean"] - 456.75) < 1e-9
+
+
+def test_arabic_yeh_header_matches_farsi_yeh_for_clean(runtime, tmp_path):
+    """File keeps Arabic yeh on display; clean_data accepts the Farsi spelling."""
+    body = f"{_DATE_AR},{_PRICE_AR}\n1404-01-15,10\n"
+    path = tmp_path / "yeh.csv"
+    path.write_bytes(body.encode("cp1256"))
+    ds = runtime.load_data(str(path))["dataset_id"]
+    loaded = runtime.list_datasets()[0]
+    assert loaded["columns"][0] == _DATE_AR
+    out = runtime.clean_data(ds, [{"op": "drop_column", "column": _DATE_FA}])
+    assert out["columns"] == [_PRICE_AR]
+    # The surviving header is still the file's Arabic-yeh spelling.
+    assert out["columns"][0] == _PRICE_AR
+    renamed = runtime.clean_data(
+        ds, [{"op": "rename_column", "column": _PRICE_FA, "new_name": "price"}]
+    )
+    assert renamed["columns"] == ["price"]
+
+
+def test_committed_iranian_examples_load(runtime):
+    cp = runtime.load_data(str(_REPO / "examples" / "iranian-sales-cp1256.csv"))
+    assert cp["format"] == "csv"
+    assert cp["shape"][0] >= 2
+    assert _DATE_AR in cp["columns"]
+    bom = runtime.load_data(str(_REPO / "examples" / "iranian-sales-utf8-sig.csv"))
+    assert bom["format"] == "csv"
+    assert bom["shape"][0] >= 2
+    assert _DATE_FA in bom["columns"]
+    sample = runtime.load_data(str(_REPO / "examples" / "iranian-sales-sample.csv"))
+    assert sample["format"] == "csv"
+    assert sample["shape"][0] == 10

@@ -19,10 +19,14 @@ from dream.skills.data_science import (
     ALLOWED_PALETTES,
     ALLOWED_THEMES,
     CHART_TYPES,
+    CHUNK_THRESHOLD_BYTES,
+    MAX_SOURCE_BYTES,
     DataScienceError,
     DatasetManager,
     DatasetRecord,
     detect_format,
+    resolve_column,
+    sniff_text_encoding,
     suggest_charts,
     validate_analysis,
     validate_chart_spec,
@@ -510,3 +514,122 @@ def test_local_executor_reports_timeout(tmp_path):
         "import time; time.sleep(30)", Path(tmp_path), timeout=1
     )
     assert result.timed_out is True
+
+
+# --------------------------------------------------------------------------- #
+# Iranian office files — encoding sniff, header fold, size cap (host-side)
+# --------------------------------------------------------------------------- #
+
+# تاريخ (Arabic yeh) vs تاریخ (Farsi yeh) — identical on screen, different bytes.
+_DATE_AR = "\u062a\u0627\u0631\u064a\u062e"
+_DATE_FA = "\u062a\u0627\u0631\u06cc\u062e"
+# شركت (Arabic kaf) vs شرکت (Farsi keheh).
+_CO_AR = "\u0634\u0631\u0643\u062a"
+_CO_FA = "\u0634\u0631\u06a9\u062a"
+
+_REPO = Path(__file__).resolve().parents[1]
+
+
+def test_sniff_utf8_plain(tmp_path):
+    path = tmp_path / "plain.csv"
+    path.write_text("a,b\n1,2\n", encoding="utf-8")
+    assert sniff_text_encoding(path) == "utf-8"
+
+
+def test_sniff_utf8_sig_bom(tmp_path):
+    path = tmp_path / "bom.csv"
+    path.write_bytes(b"\xef\xbb\xbf" + b"a,b\n1,2\n")
+    assert sniff_text_encoding(path) == "utf-8-sig"
+
+
+def test_sniff_cp1256_is_byte_level(tmp_path):
+    """The fixture is real Windows-1256 bytes, not UTF-8 pretending to be."""
+    body = f"{_DATE_AR},{_CO_AR}\n1,2\n"
+    raw = body.encode("cp1256")
+    utf8_rejected = False
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        utf8_rejected = True
+    assert utf8_rejected
+    assert raw[:3] != b"\xef\xbb\xbf"
+    path = tmp_path / "win.csv"
+    path.write_bytes(raw)
+    assert sniff_text_encoding(path) == "cp1256"
+
+
+def test_committed_cp1256_example_is_really_cp1256():
+    path = _REPO / "examples" / "iranian-sales-cp1256.csv"
+    raw = path.read_bytes()
+    assert raw[:3] != b"\xef\xbb\xbf"
+    utf8_rejected = False
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        utf8_rejected = True
+    assert utf8_rejected
+    assert sniff_text_encoding(path) == "cp1256"
+    assert _DATE_AR in raw.decode("cp1256")
+
+
+def test_committed_utf8_sig_example_has_bom():
+    path = _REPO / "examples" / "iranian-sales-utf8-sig.csv"
+    raw = path.read_bytes()
+    assert raw.startswith(b"\xef\xbb\xbf")
+    assert sniff_text_encoding(path) == "utf-8-sig"
+    assert _DATE_FA in raw.decode("utf-8-sig")
+
+
+def test_resolve_column_folds_arabic_yeh_without_rewriting_display():
+    """Displayed headers keep the file's yeh/kaf; only matching is folded."""
+    assert _DATE_AR != _DATE_FA
+    assert resolve_column(_DATE_FA, [_DATE_AR, "qty"]) == _DATE_AR
+    assert "\u064a" in _DATE_AR
+    assert "\u06cc" not in _DATE_AR
+
+
+def test_resolve_column_folds_arabic_kaf_without_rewriting_display():
+    assert _CO_AR != _CO_FA
+    assert resolve_column(_CO_FA, [_CO_AR]) == _CO_AR
+    assert resolve_column(_CO_AR, [_CO_AR]) == _CO_AR
+
+
+def test_resolve_column_exact_match_wins_before_fold():
+    assert resolve_column(_DATE_AR, [_DATE_AR, _DATE_FA]) == _DATE_AR
+    assert resolve_column(_DATE_FA, [_DATE_AR, _DATE_FA]) == _DATE_FA
+
+
+def test_validate_clean_op_matches_folded_persian_header():
+    columns = [_DATE_AR, "qty"]
+    out = validate_clean_op({"op": "drop_column", "column": _DATE_FA}, columns)
+    assert out["column"] == _DATE_AR
+
+
+def test_ingestion_cap_stays_500_mb_and_chunk_threshold_100_mb():
+    assert MAX_SOURCE_BYTES == 500 * 1024 * 1024
+    assert CHUNK_THRESHOLD_BYTES == 100 * 1024 * 1024
+
+
+def test_load_data_rejects_over_500_mb(tmp_path, monkeypatch):
+    path = tmp_path / "huge.csv"
+    path.write_text("a,b\n1,2\n", encoding="utf-8")
+    from dream.skills.data_science import DataScienceRuntime, LocalPythonExecutor
+
+    runtime = DataScienceRuntime(
+        DatasetManager(tmp_path / "datasets"), LocalPythonExecutor()
+    )
+    import os
+
+    original = Path.stat
+
+    def fake_stat(self, *args, **kwargs):
+        result = original(self, *args, **kwargs)
+        if self.name == "huge.csv":
+            values = list(result)
+            values[6] = MAX_SOURCE_BYTES + 1  # st_size
+            return os.stat_result(values)
+        return result
+
+    monkeypatch.setattr(Path, "stat", fake_stat)
+    with pytest.raises(DataScienceError, match="500 MB"):
+        runtime.load_data(str(path))

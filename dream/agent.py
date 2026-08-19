@@ -886,6 +886,17 @@ class Dream:
         """Discard conversational context without touching durable memory."""
         self.history.clear()
 
+    @property
+    def ledger_attached(self) -> bool:
+        """True when this agent meters turns against a usage ledger.
+
+        False for the default local plan: ``Dream(store, EchoBackend())``
+        carries no meter and needs no ledger file. It is also true when the
+        ledger is misconfigured, because a broken meter still gates the turn
+        (fail-closed) rather than disappearing.
+        """
+        return self.ledger is not None or self._ledger_refusal is not None
+
     def _ledger_block(self) -> str | None:
         """Consume one turn on the attached ledger; return a Persian refusal.
 

@@ -16,7 +16,9 @@ Pins the acceptance criteria for the commercial kernel:
 from __future__ import annotations
 
 import json
+import os
 import re
+import stat
 from datetime import datetime
 from pathlib import Path
 
@@ -25,11 +27,14 @@ import pytest
 import cli
 from dream.agent import Dream, EchoBackend
 from dream.commerce import (
+    DEFAULT_LEDGER_PATH,
     GUEST_DAILY_LIMIT,
     PLANS,
     Ledger,
     LedgerConfigurationError,
     LedgerCorruptionError,
+    LedgerError,
+    LedgerWriteError,
     QuotaExceeded,
     active_plan,
     ledger_attached,
@@ -379,3 +384,402 @@ def test_usage_text_reports_corruption_not_crash(tmp_path, monkeypatch):
     monkeypatch.setenv("DREAM_LEDGER", str(ledger_path))
     text = usage_text()
     assert PERSIAN.search(text)
+
+
+# ---------------------------------------------------------------------------
+# S01: atomic writes
+# ---------------------------------------------------------------------------
+
+
+def _chmod_is_enforced(path: Path) -> bool:
+    """True when the sandbox actually honours the permission bits.
+
+    Running as root (some CI images) makes a 0o000 file readable anyway, so
+    the permission-based tests skip themselves instead of lying.
+    """
+    try:
+        if path.is_dir():
+            probe = path / "probe.tmp"
+            probe.write_text("x", encoding="utf-8")
+            probe.unlink()
+        else:
+            path.read_text(encoding="utf-8")
+    except OSError:
+        return True
+    return False
+
+
+def test_consume_writes_atomically_and_leaves_no_temp_files(tmp_path):
+    ledger_dir = tmp_path / "atomic"
+    ledger_dir.mkdir()
+    ledger = Ledger(path=str(ledger_dir / "ledger.json"), plan="guest")
+    for _ in range(3):
+        ledger.consume()
+    # A torn write would leave a .tmp sibling behind.
+    assert [entry.name for entry in ledger_dir.iterdir()] == ["ledger.json"]
+
+
+def test_consume_uses_replace_so_readers_never_see_a_partial_file(tmp_path, monkeypatch):
+    """The payload is fully written to a temp file before it is moved in."""
+    ledger_path = tmp_path / "replace.json"
+    ledger = Ledger(path=str(ledger_path), plan="guest")
+    ledger.consume()
+    seen: list[tuple[str, str]] = []
+    real_replace = os.replace
+
+    def spy(src, dst, *args, **kwargs):
+        source = Path(src)
+        # At replace time the temp file already holds the complete ledger.
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        seen.append((str(src), str(dst)))
+        assert len(payload["entries"]) == 2
+        return real_replace(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr("dream.commerce.os.replace", spy)
+    ledger.consume()
+    assert len(seen) == 1
+    src, dst = seen[0]
+    assert dst == str(ledger_path)
+    assert src != str(ledger_path)
+    assert Path(src).parent == ledger_path.parent  # same filesystem: rename is atomic
+
+
+def test_failed_write_keeps_the_previous_ledger_intact(tmp_path, monkeypatch):
+    ledger_path = tmp_path / "intact.json"
+    ledger = Ledger(path=str(ledger_path), plan="guest")
+    ledger.consume()
+    before = ledger_path.read_text(encoding="utf-8")
+
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("dream.commerce.os.replace", boom)
+    with pytest.raises(LedgerWriteError):
+        ledger.consume()
+    # Old content survives untouched and no temp file is left behind.
+    assert ledger_path.read_text(encoding="utf-8") == before
+    assert [entry.name for entry in tmp_path.iterdir()] == ["intact.json"]
+
+
+def test_unrecorded_turn_is_not_counted_as_used(tmp_path, monkeypatch):
+    ledger_path = tmp_path / "notcounted.json"
+    ledger = Ledger(path=str(ledger_path), plan="guest")
+    ledger.consume()
+
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("dream.commerce.os.replace", boom)
+    with pytest.raises(LedgerWriteError):
+        ledger.consume()
+    monkeypatch.undo()
+    assert ledger.usage()["used"] == 1
+
+
+def test_unwritable_ledger_directory_fails_closed(tmp_path):
+    ledger_dir = tmp_path / "readonly"
+    ledger_dir.mkdir()
+    ledger_path = ledger_dir / "ledger.json"
+    Ledger(path=str(ledger_path), plan="guest").consume()
+    ledger_dir.chmod(stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        if not _chmod_is_enforced(ledger_dir):
+            pytest.skip("filesystem does not enforce directory permissions here")
+        ledger = Ledger(path=str(ledger_path), plan="guest")
+        with pytest.raises(LedgerWriteError) as excinfo:
+            ledger.consume()
+        assert PERSIAN.search(str(excinfo.value))
+        assert isinstance(excinfo.value, LedgerError)  # Dream refuses the turn
+    finally:
+        ledger_dir.chmod(stat.S_IRWXU)
+
+
+def test_unwritable_ledger_refuses_the_turn_through_dream(tmp_path, monkeypatch):
+    ledger_dir = tmp_path / "ro-e2e"
+    ledger_dir.mkdir()
+    ledger_path = ledger_dir / "ledger.json"
+    Ledger(path=str(ledger_path), plan="daily").consume()
+    ledger_dir.chmod(stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        if not _chmod_is_enforced(ledger_dir):
+            pytest.skip("filesystem does not enforce directory permissions here")
+        monkeypatch.setenv("DREAM_PLAN", "daily")
+        monkeypatch.setenv("DREAM_LEDGER", str(ledger_path))
+        with MemoryStore(str(tmp_path / "dream.db")) as store:
+            turn = _make_dream(store).run("hello")
+        assert turn.tool_calls == []
+        assert turn.memories_created == []
+        assert PERSIAN.search(turn.reply)
+    finally:
+        ledger_dir.chmod(stat.S_IRWXU)
+
+
+# ---------------------------------------------------------------------------
+# S01: fail-closed reads — every flavour of corruption
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "content"),
+    [
+        ("empty", ""),
+        ("whitespace", "   \n"),
+        ("truncated", '{"version": 1, "plan": "guest", "entries": [{"ts": "2026-'),
+        ("json_list", "[]"),
+        ("json_string", '"entries"'),
+        ("json_null", "null"),
+        ("entries_not_a_list", '{"version": 1, "entries": {}}'),
+        ("entries_missing", '{"version": 1, "plan": "guest"}'),
+        ("entry_not_a_dict", '{"version": 1, "entries": ["2026-08-19"]}'),
+        ("entry_without_ts", '{"version": 1, "entries": [{"when": "2026-08-19"}]}'),
+        ("entry_ts_not_a_string", '{"version": 1, "entries": [{"ts": 1755600000}]}'),
+        ("entry_ts_unparsable", '{"version": 1, "entries": [{"ts": "yesterday"}]}'),
+    ],
+)
+def test_every_corrupt_shape_denies_the_turn(tmp_path, name, content):
+    ledger_path = tmp_path / f"{name}.json"
+    ledger_path.write_text(content, encoding="utf-8")
+    ledger = Ledger(path=str(ledger_path), plan="guest")
+    with pytest.raises(LedgerCorruptionError) as excinfo:
+        ledger.consume()
+    assert PERSIAN.search(str(excinfo.value))
+    # Fail closed: the refused turn wrote nothing.
+    assert ledger_path.read_text(encoding="utf-8") == content
+
+
+def test_non_utf8_ledger_is_corruption_not_a_crash(tmp_path):
+    ledger_path = tmp_path / "binary.json"
+    ledger_path.write_bytes(b"\xff\xfe\x00\x01 not text")
+    with pytest.raises(LedgerCorruptionError):
+        Ledger(path=str(ledger_path), plan="guest").consume()
+
+
+def test_ledger_path_that_is_a_directory_is_corruption(tmp_path):
+    ledger_path = tmp_path / "ledger-as-dir.json"
+    ledger_path.mkdir()
+    with pytest.raises(LedgerCorruptionError):
+        Ledger(path=str(ledger_path), plan="guest").consume()
+
+
+def test_unreadable_ledger_file_is_corruption(tmp_path):
+    ledger_path = tmp_path / "unreadable.json"
+    Ledger(path=str(ledger_path), plan="guest").consume()
+    ledger_path.chmod(0o000)
+    try:
+        if not _chmod_is_enforced(ledger_path):
+            pytest.skip("filesystem does not enforce file permissions here")
+        with pytest.raises(LedgerCorruptionError):
+            Ledger(path=str(ledger_path), plan="guest").consume()
+    finally:
+        ledger_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+
+def test_corrupt_ledger_denies_even_with_quota_left(tmp_path):
+    """Corruption is not "assume zero used": it is a refusal."""
+    ledger_path = tmp_path / "corrupt-with-room.json"
+    ledger_path.write_text("{ broken", encoding="utf-8")
+    ledger = Ledger(path=str(ledger_path), plan="company")  # 20000-turn plan
+    with pytest.raises(LedgerCorruptionError):
+        ledger.consume()
+    with pytest.raises(LedgerCorruptionError):
+        ledger.usage()
+    with pytest.raises(LedgerCorruptionError):
+        ledger.remaining()
+
+
+def test_corrupt_ledger_denies_every_metered_plan(tmp_path):
+    for plan_id in sorted(PAID_PLANS | {"guest"}):
+        ledger_path = tmp_path / f"corrupt-{plan_id}.json"
+        ledger_path.write_text("{ broken", encoding="utf-8")
+        with pytest.raises(LedgerCorruptionError):
+            Ledger(path=str(ledger_path), plan=plan_id).consume()
+
+
+def test_corruption_appearing_mid_session_still_denies(tmp_path):
+    """A ledger that goes bad between turns is re-read, not trusted from cache."""
+    ledger_path = tmp_path / "goes-bad.json"
+    ledger = Ledger(path=str(ledger_path), plan="guest")
+    ledger.consume()
+    ledger_path.write_text("{ corrupted by something else", encoding="utf-8")
+    with pytest.raises(LedgerCorruptionError):
+        ledger.consume()
+
+
+# ---------------------------------------------------------------------------
+# S01: environment fallbacks
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("raw", ["guest", "GUEST", "  Guest  ", "gUeSt\n"])
+def test_plan_name_is_case_and_whitespace_insensitive(monkeypatch, raw):
+    monkeypatch.setenv("DREAM_PLAN", raw)
+    assert active_plan().id == "guest"
+    assert ledger_attached() is True
+    assert Ledger().plan_id == "guest"
+
+
+@pytest.mark.parametrize("raw", ["", "   ", "local", "  LOCAL  "])
+def test_blank_or_local_plan_means_local_and_no_ledger(monkeypatch, raw):
+    monkeypatch.setenv("DREAM_PLAN", raw)
+    monkeypatch.delenv("DREAM_LEDGER", raising=False)
+    assert active_plan().id == "local"
+    assert ledger_attached() is False
+    assert Ledger.from_env() is None
+
+
+def test_blank_ledger_env_does_not_attach_a_ledger(monkeypatch):
+    monkeypatch.delenv("DREAM_PLAN", raising=False)
+    monkeypatch.setenv("DREAM_LEDGER", "   ")
+    assert ledger_attached() is False
+    assert Ledger.from_env() is None
+
+
+def test_blank_ledger_env_falls_back_to_the_default_path(monkeypatch):
+    monkeypatch.setenv("DREAM_PLAN", "guest")
+    monkeypatch.setenv("DREAM_LEDGER", "  ")
+    assert Path(Ledger().path) == Path(DEFAULT_LEDGER_PATH)
+
+
+def test_explicit_path_argument_beats_the_environment(monkeypatch, tmp_path):
+    monkeypatch.setenv("DREAM_LEDGER", str(tmp_path / "from-env.json"))
+    chosen = tmp_path / "explicit.json"
+    assert Ledger(path=str(chosen), plan="guest").path == chosen
+
+
+def test_explicit_plan_argument_beats_the_environment(monkeypatch, tmp_path):
+    monkeypatch.setenv("DREAM_PLAN", "guest")
+    ledger = Ledger(path=str(tmp_path / "x.json"), plan="team")
+    assert ledger.plan_id == "team"
+
+
+def test_unknown_plan_in_env_denies_instead_of_defaulting(monkeypatch, tmp_path):
+    monkeypatch.setenv("DREAM_PLAN", "enterprise-plus")
+    monkeypatch.setenv("DREAM_LEDGER", str(tmp_path / "x.json"))
+    # A typo must never be silently downgraded to local (free unlimited).
+    assert ledger_attached() is True
+    with pytest.raises(LedgerConfigurationError):
+        Ledger.from_env()
+
+
+# ---------------------------------------------------------------------------
+# S01: concurrency — two ledger objects over one file
+# ---------------------------------------------------------------------------
+
+
+def test_two_ledgers_on_one_file_do_not_lose_entries(tmp_path):
+    ledger_path = str(tmp_path / "shared.json")
+    first = Ledger(path=ledger_path, plan="guest")
+    second = Ledger(path=ledger_path, plan="guest")
+    for _ in range(5):
+        first.consume()
+        second.consume()  # interleaved: each read-modify-write re-reads disk
+    payload = json.loads(Path(ledger_path).read_text(encoding="utf-8"))
+    assert len(payload["entries"]) == 10
+    assert first.usage()["used"] == 10
+    assert second.usage()["used"] == 10
+
+
+def test_quota_is_shared_across_ledger_objects(tmp_path):
+    ledger_path = str(tmp_path / "shared-quota.json")
+    now = datetime(2026, 8, 19, 9, 0, 0)
+    first = Ledger(path=ledger_path, plan="guest")
+    second = Ledger(path=ledger_path, plan="guest")
+    for _ in range(GUEST_DAILY_LIMIT):
+        first.consume(now=now)
+    # The second object was created before those turns; it must still refuse.
+    with pytest.raises(QuotaExceeded):
+        second.consume(now=now)
+
+
+# ---------------------------------------------------------------------------
+# S01: the meter is opt-in, and it never records secrets
+# ---------------------------------------------------------------------------
+
+
+def test_default_dream_has_no_attached_meter(monkeypatch, tmp_path):
+    monkeypatch.delenv("DREAM_PLAN", raising=False)
+    monkeypatch.delenv("DREAM_LEDGER", raising=False)
+    workdir = tmp_path / "cwd"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)  # the default ledger path is relative to cwd
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        dream = Dream(store, EchoBackend())
+        assert dream.ledger is None
+        assert dream.ledger_attached is False
+        assert dream.run("hello").reply  # a real reply, not a refusal
+    # Running a local turn creates no ledger file anywhere.
+    assert not (workdir / DEFAULT_LEDGER_PATH).exists()
+    assert list(workdir.rglob("*.json")) == []
+
+
+def test_dream_attaches_a_meter_for_a_metered_plan(monkeypatch, tmp_path):
+    monkeypatch.setenv("DREAM_PLAN", "guest")
+    monkeypatch.setenv("DREAM_LEDGER", str(tmp_path / "attached.json"))
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        dream = Dream(store, EchoBackend())
+        assert dream.ledger_attached is True
+        assert dream.ledger is not None
+        dream.run("hello")
+        assert dream.ledger.usage()["used"] == 1
+
+
+def test_dream_attaches_a_meter_when_only_the_ledger_env_is_set(monkeypatch, tmp_path):
+    monkeypatch.delenv("DREAM_PLAN", raising=False)
+    monkeypatch.setenv("DREAM_LEDGER", str(tmp_path / "explicit.json"))
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        dream = Dream(store, EchoBackend())
+        assert dream.ledger_attached is True
+
+
+def test_misconfigured_plan_still_counts_as_attached(monkeypatch, tmp_path):
+    monkeypatch.setenv("DREAM_PLAN", "banana")
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        dream = Dream(store, EchoBackend())
+        assert dream.ledger_attached is True  # fail-closed: the gate stays on
+        assert PERSIAN.search(dream.run("hello").reply)
+
+
+def test_ledger_records_timestamps_only_and_no_secrets(tmp_path, monkeypatch):
+    ledger_path = tmp_path / "no-secrets.json"
+    monkeypatch.setenv("DREAM_PLAN", "guest")
+    monkeypatch.setenv("DREAM_LEDGER", str(ledger_path))
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-super-secret-value")
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        _make_dream(store).run("my password is hunter2")
+    text = ledger_path.read_text(encoding="utf-8")
+    payload = json.loads(text)
+    assert set(payload) == {"version", "plan", "entries"}
+    for entry in payload["entries"]:
+        assert set(entry) == {"ts"}
+    assert "sk-super-secret-value" not in text
+    assert "hunter2" not in text
+
+
+def test_usage_readout_never_leaks_the_ledger_path(tmp_path, monkeypatch):
+    """/usage is phone-reachable: it must not disclose filesystem paths."""
+    ledger_path = tmp_path / "secret-place" / "ledger.json"
+    ledger_path.parent.mkdir()
+    monkeypatch.setenv("DREAM_PLAN", "guest")
+    monkeypatch.setenv("DREAM_LEDGER", str(ledger_path))
+    Ledger.from_env().consume()
+    text = usage_text()
+    assert "Plan: guest" in text
+    assert str(ledger_path) not in text
+    assert "secret-place" not in text
+    info = Ledger.from_env().usage()
+    assert "path" not in info
+    assert str(ledger_path) not in json.dumps(info)
+
+
+def test_corrupt_ledger_message_does_not_leak_the_path(tmp_path, monkeypatch):
+    ledger_path = tmp_path / "private-dir" / "broken.json"
+    ledger_path.parent.mkdir()
+    ledger_path.write_text("{ broken", encoding="utf-8")
+    monkeypatch.setenv("DREAM_PLAN", "guest")
+    monkeypatch.setenv("DREAM_LEDGER", str(ledger_path))
+    text = usage_text()
+    assert PERSIAN.search(text)
+    assert "private-dir" not in text
+    with MemoryStore(str(tmp_path / "dream.db")) as store:
+        reply = _make_dream(store).run("hi").reply
+    assert "private-dir" not in reply

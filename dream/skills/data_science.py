@@ -41,6 +41,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from dream.memory import normalize_fa
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -62,6 +64,8 @@ __all__ = [
     "SandboxCodeExecutor",
     "detect_format",
     "register_data_science_tools",
+    "resolve_column",
+    "sniff_text_encoding",
     "suggest_charts",
     "validate_analysis",
     "validate_chart_spec",
@@ -74,7 +78,15 @@ __all__ = [
 
 #: Column names accepted anywhere in a request (G9: no injection vector).
 COLUMN_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+#: Iranian office headers: Persian letters, ZWNJ, spaces, light punctuation
+#: (unit-price-in-rial style). Path/injection characters stay forbidden.
+_OFFICE_HEADER_RE = re.compile(
+    r"^[\w\u0600-\u06FF\u200c][\w\u0600-\u06FF\u200c ()%.\-]*$",
+    re.UNICODE,
+)
 MAX_COLUMN_NAME_LEN = 64
+#: Text encodings ``load_data`` will sniff for CSV/TSV office exports.
+SUPPORTED_TEXT_ENCODINGS = ("utf-8", "utf-8-sig", "cp1256")
 
 ALLOWED_FORMATS = ("csv", "tsv", "excel", "json", "yaml", "xml", "sqlite", "parquet")
 
@@ -149,13 +161,36 @@ class DataScienceError(ValueError):
 
 
 def _check_column(name: Any, *, what: str = "column") -> str:
-    if not isinstance(name, str) or not COLUMN_NAME_RE.match(name):
+    if not isinstance(name, str) or not (
+        COLUMN_NAME_RE.match(name) or _OFFICE_HEADER_RE.match(name)
+    ):
         raise DataScienceError(
             f"{what} must match ^[A-Za-z_][A-Za-z0-9_]*$ (got {str(name)[:80]!r})"
         )
     if len(name) > MAX_COLUMN_NAME_LEN:
         raise DataScienceError(f"{what} must be at most {MAX_COLUMN_NAME_LEN} characters")
     return name
+
+
+def resolve_column(name: Any, columns: list[str], *, what: str = "column") -> str:
+    """Return the *displayed* schema name that matches ``name``.
+
+    Exact match wins. Otherwise both sides are folded with
+    :func:`dream.memory.normalize_fa` (Arabic yeh/kaf, Persian digits).
+    Displayed headers are never rewritten.
+    """
+    checked = _check_column(name, what=what)
+    if checked in columns:
+        return checked
+    folded = normalize_fa(checked)
+    hits = [col for col in columns if normalize_fa(col) == folded]
+    if len(hits) == 1:
+        return hits[0]
+    if len(hits) > 1:
+        raise DataScienceError(
+            f"{what} {checked!r} matches more than one column after Persian folding"
+        )
+    raise DataScienceError(f"{what}: column {checked!r} is not in the dataset schema")
 
 
 def _check_scalar(value: Any, *, what: str) -> Any:
@@ -219,6 +254,34 @@ def detect_format(path: Path) -> str:
     raise DataScienceError(f"could not detect the format of {path.name}")
 
 
+def sniff_text_encoding(path: Path, sample_size: int = 65536) -> str:
+    """Sniff UTF-8, UTF-8-with-BOM, or Windows-1256 (cp1256) from a sample.
+
+    Host-side, stdlib only — never loads the whole file (the 500 MB cap is
+    enforced separately). Valid UTF-8 wins; otherwise the sample is treated
+    as Windows Arabic/Persian (cp1256).
+    """
+    try:
+        head = path.open("rb").read(sample_size)
+    except OSError as exc:
+        raise DataScienceError(f"cannot read {path.name}: {exc}") from exc
+    if head.startswith(b"\xef\xbb\xbf"):
+        return "utf-8-sig"
+    try:
+        head.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    else:
+        return "utf-8"
+    try:
+        head.decode("cp1256")
+    except UnicodeDecodeError as exc:
+        raise DataScienceError(
+            f"{path.name} is not valid UTF-8 or Windows-1256 (cp1256)"
+        ) from exc
+    return "cp1256"
+
+
 # --------------------------------------------------------------------------- #
 # Request validators (host-side, no third-party imports)
 # --------------------------------------------------------------------------- #
@@ -243,10 +306,7 @@ def validate_clean_op(op: Any, columns: list[str]) -> dict[str, Any]:
             if required:
                 raise DataScienceError(f"{tag} requires {key!r}")
             return None
-        _check_column(value, what=key)
-        if value not in columns:
-            raise DataScienceError(f"{tag}: column {value!r} is not in the dataset schema")
-        return value
+        return resolve_column(value, columns, what=key)
 
     out: dict[str, Any] = {"op": tag}
     if tag == "drop_na":
@@ -257,10 +317,7 @@ def validate_clean_op(op: Any, columns: list[str]) -> dict[str, Any]:
         if subset is not None:
             if not isinstance(subset, list) or not subset:
                 raise DataScienceError("drop_na: columns must be a non-empty list")
-            for name in subset:
-                _check_column(name, what="columns entry")
-                if name not in columns:
-                    raise DataScienceError(f"drop_na: column {name!r} is not in the schema")
+            subset = [resolve_column(name, columns, what="columns entry") for name in subset]
         out.update(how=how, columns=subset)
     elif tag == "fill_na":
         strategy = op.get("strategy", "constant")
@@ -288,12 +345,7 @@ def validate_clean_op(op: Any, columns: list[str]) -> dict[str, Any]:
         if subset is not None:
             if not isinstance(subset, list) or not subset:
                 raise DataScienceError("remove_duplicates: columns must be a non-empty list")
-            for name in subset:
-                _check_column(name, what="columns entry")
-                if name not in columns:
-                    raise DataScienceError(
-                        f"remove_duplicates: column {name!r} is not in the schema"
-                    )
+            subset = [resolve_column(name, columns, what="columns entry") for name in subset]
         out.update(columns=subset)
     elif tag == "rename_column":
         new_name = op.get("new_name")
@@ -358,10 +410,7 @@ def validate_analysis(analysis: Any, columns: list[str]) -> dict[str, Any]:
             if required:
                 raise DataScienceError(f"{kind} requires {key!r}")
             return None
-        _check_column(value, what=key)
-        if value not in columns:
-            raise DataScienceError(f"{kind}: column {value!r} is not in the dataset schema")
-        return value
+        return resolve_column(value, columns, what=key)
 
     def cols(key: str, *, required: bool = False) -> list[str] | None:
         value = analysis.get(key)
@@ -371,11 +420,7 @@ def validate_analysis(analysis: Any, columns: list[str]) -> dict[str, Any]:
             return None
         if not isinstance(value, list) or not value:
             raise DataScienceError(f"{kind}: {key} must be a non-empty list of columns")
-        for name in value:
-            _check_column(name, what=f"{key} entry")
-            if name not in columns:
-                raise DataScienceError(f"{kind}: column {name!r} is not in the dataset schema")
-        return value
+        return [resolve_column(name, columns, what=f"{key} entry") for name in value]
 
     out: dict[str, Any] = {"kind": kind}
     if kind == "correlation":
@@ -435,10 +480,9 @@ def validate_chart_spec(spec: Any, columns: list[str] | None = None) -> dict[str
             if required:
                 raise DataScienceError(f"{ctype} chart requires {key!r}")
             return None
-        _check_column(value, what=key)
-        if columns is not None and value not in columns:
-            raise DataScienceError(f"chart: column {value!r} is not in the dataset schema")
-        return value
+        if columns is None:
+            return _check_column(value, what=key)
+        return resolve_column(value, columns, what=key)
 
     needs_y = ctype in ("line", "bar", "scatter", "area", "bubble", "box")
     x_required = ctype not in ("heatmap",)
@@ -713,6 +757,7 @@ class DatasetRecord:
     column_meta: list[dict[str, Any]] = field(default_factory=list)
     memory_bytes: int = 0
     cleaned: bool = False
+    encoding: str = "utf-8"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -728,6 +773,7 @@ class DatasetRecord:
             "column_meta": self.column_meta,
             "memory_bytes": self.memory_bytes,
             "cleaned": self.cleaned,
+            "encoding": self.encoding,
         }
 
     @classmethod
@@ -745,6 +791,7 @@ class DatasetRecord:
             column_meta=list(raw.get("column_meta", [])),
             memory_bytes=int(raw.get("memory_bytes", 0)),
             cleaned=bool(raw.get("cleaned", False)),
+            encoding=str(raw.get("encoding", "utf-8")),
         )
 
 
@@ -775,7 +822,9 @@ class DatasetManager:
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(self._index_path)
 
-    def create(self, name: str, source: Path, fmt: str) -> DatasetRecord:
+    def create(
+        self, name: str, source: Path, fmt: str, encoding: str = "utf-8"
+    ) -> DatasetRecord:
         dataset_id = uuid.uuid4().hex
         dataset_dir = self.root / dataset_id
         dataset_dir.mkdir(parents=True, exist_ok=True)
@@ -788,6 +837,7 @@ class DatasetManager:
             format=fmt,
             created_at=time.time(),
             active_file=stored.name,
+            encoding=encoding,
         )
         self._records[dataset_id] = record
         self._save_index()
@@ -857,28 +907,59 @@ _PRELUDE = textwrap.dedent(
         with open("_result.json", "w", encoding="utf-8") as fh:
             json.dump(_clean(obj), fh, ensure_ascii=False, default=str)
 
+    _FA_DIGIT_MAP = str.maketrans(
+        {0x06F0 + i: 48 + i for i in range(10)}
+        | {0x0660 + i: 48 + i for i in range(10)}
+        | {0x066B: 46, 0x066C: None}
+    )
+
+    def fold_fa_cell(value):
+        if isinstance(value, str):
+            return value.translate(_FA_DIGIT_MAP)
+        return value
+
+    def fold_fa_numerics(df):
+        # Persian/Arabic digits -> Latin, then coerce a column to numeric
+        # only when every non-blank cell converts. Displayed headers are
+        # left untouched (yeh/kaf folding is host-side matching only).
+        for name in df.columns:
+            series = df[name]
+            if series.dtype != object and not pd.api.types.is_string_dtype(series):
+                continue
+            folded = series.map(fold_fa_cell)
+            as_num = pd.to_numeric(folded, errors="coerce")
+            present = folded.notna()
+            blanks = folded.map(lambda v: isinstance(v, str) and not str(v).strip())
+            present = present & ~blanks
+            if present.any() and as_num[present].notna().all():
+                df[name] = as_num
+            else:
+                df[name] = folded
+        return df
+
     def load_df(path, fmt):
+        enc = P.get("encoding") or "utf-8"
         if fmt == "csv":
-            return pd.read_csv(path)
-        if fmt == "tsv":
-            return pd.read_csv(path, sep="\\t")
-        if fmt == "excel":
-            return pd.read_excel(path)
-        if fmt == "json":
+            df = pd.read_csv(path, encoding=enc)
+        elif fmt == "tsv":
+            df = pd.read_csv(path, sep="\\t", encoding=enc)
+        elif fmt == "excel":
+            df = pd.read_excel(path)
+        elif fmt == "json":
             try:
-                return pd.read_json(path)
+                df = pd.read_json(path)
             except ValueError:
-                return pd.json_normalize(json.load(open(path, encoding="utf-8")))
-        if fmt == "yaml":
+                df = pd.json_normalize(json.load(open(path, encoding="utf-8")))
+        elif fmt == "yaml":
             try:
                 import yaml
                 data = yaml.safe_load(open(path, encoding="utf-8"))
             except ImportError:
                 data = _mini_yaml(open(path, encoding="utf-8").read())
-            return pd.json_normalize(data)
-        if fmt == "xml":
-            return pd.read_xml(path)
-        if fmt == "sqlite":
+            df = pd.json_normalize(data)
+        elif fmt == "xml":
+            df = pd.read_xml(path)
+        elif fmt == "sqlite":
             import sqlite3
             con = sqlite3.connect(path)
             try:
@@ -887,12 +968,15 @@ _PRELUDE = textwrap.dedent(
                     "AND name NOT LIKE 'sqlite_%' ORDER BY name")]
                 if not tables:
                     raise ValueError("sqlite file contains no tables")
-                return pd.read_sql_query(f'SELECT * FROM \"{tables[0]}\"', con)
+                df = pd.read_sql_query(f'SELECT * FROM \\"{tables[0]}\\"', con)
             finally:
                 con.close()
-        if fmt == "parquet":
-            return pd.read_parquet(path)
-        raise ValueError(f"unsupported format: {fmt}")
+        elif fmt == "parquet":
+            df = pd.read_parquet(path)
+        else:
+            raise ValueError(f"unsupported format: {fmt}")
+        return fold_fa_numerics(df)
+
 
     def _mini_yaml(text):
         # Fallback list-of-flat-mappings parser for fixture-grade YAML when
@@ -1027,7 +1111,11 @@ if P.get("chunked"):
     maximum = {}
     sample = None
     rows = 0
-    for chunk in pd.read_csv(P["active_file"], sep=sep, chunksize=100_000):
+    for chunk in pd.read_csv(
+        P["active_file"], sep=sep, encoding=P.get("encoding") or "utf-8",
+        chunksize=100_000,
+    ):
+        chunk = fold_fa_numerics(chunk)
         rows += len(chunk)
         if sample is None:
             sample = chunk
@@ -1750,6 +1838,7 @@ class DataScienceRuntime:
             "active_format": "csv" if record.cleaned else record.format,
             "preview_rows": self.preview_rows,
             "known_dtypes": record.dtypes if record.cleaned else {},
+            "encoding": "utf-8" if record.cleaned else (record.encoding or "utf-8"),
             **params,
         }
         params_path = workspace / "_params.json"
@@ -1788,9 +1877,12 @@ class DataScienceRuntime:
                 f"{MAX_SOURCE_BYTES // (1024 * 1024)} MB"
             )
         fmt = detect_format(source)
+        encoding = sniff_text_encoding(source) if fmt in ("csv", "tsv") else "utf-8"
         if name is not None and (not isinstance(name, str) or len(name) > 120):
             raise DataScienceError("name must be a string of at most 120 characters")
-        record = self.datasets.create(name or source.stem, source, fmt)
+        record = self.datasets.create(
+            name or source.stem, source, fmt, encoding=encoding
+        )
         try:
             result = self._run(record, _LOAD_BODY, {"preview_rows": self.preview_rows})
         except Exception:
@@ -1860,6 +1952,7 @@ class DataScienceRuntime:
         result = self._run(record, _CLEAN_BODY, {"operations": validated})
         record.active_file = "cleaned.csv"
         record.cleaned = True
+        record.encoding = "utf-8"
         record.shape = [int(v) for v in result["shape"]]
         record.columns = [str(c) for c in result["columns"]]
         record.dtypes = {str(k): str(v) for k, v in result["dtypes"].items()}
