@@ -34,8 +34,8 @@ const BASE_TO_LOCALE: Record<string, Locale> = {
   ko: 'ko',
 };
 
-/** True when the locale renders right-to-left. */
-export function isRtlLocale(locale: Locale): boolean {
+/** True when the locale renders right-to-left. Defaults to the active locale. */
+export function isRtlLocale(locale: Locale = detectLocale()): boolean {
   return RTL_LOCALES.includes(locale);
 }
 

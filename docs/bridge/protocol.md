@@ -240,12 +240,18 @@ gate non-blocking — the synchronous agent loop is never wedged waiting on a UI
 | --- | --- | --- |
 | `approval.request` | `{name, arguments, context?}` | `{approval_id, risk, summary}` |
 | `approval.resolve` | `{approval_id, allowed}` | `ToolResult \| {blocked: true, reason}` |
+| `approval.list` | `{include_resolved?: boolean}` | `{approvals: [{approval_id, name, risk, summary, resolved, decision}]}` |
 
 `approval.request` registers a pending approval for a tool call and returns its
 id and risk tier (the sidecar computes a short, human-readable `summary`).
 `approval.resolve` with `allowed: true` executes the tool (dangerous) and
 returns its result; `allowed: false` returns the standard blocked payload. A
 resolved approval cannot be reused.
+
+`approval.list` (S06) reads the queue the scheduler UI polls: by default only
+unresolved approvals are returned, so a screen can offer approve/deny for a
+blocked scheduled run (`name: "schedule.execute"`) and resolve it through
+`schedule.approve`.
 
 ### 3.8 `subagent.*` — isolated background agents
 
@@ -441,6 +447,30 @@ numeric IRR except `0` for the free plans.
 | `commerce.plan` | `{}` | `{plan_id, name_fa, name_en, currency, price: int\|null, price_note, metered, period: "day"\|"month"\|"year"\|"unlimited", limits: {daily, monthly, yearly}, ledger_attached}` |
 | `commerce.usage` | `{}` | `{plan_id, window: "day"\|"month"\|"year"\|null, used, limit: int\|null, remaining: int\|null, unlimited}` — `limit`/`remaining` are `null` and `unlimited` is `true` when no ledger is attached (the `local` plan) |
 | `route.resolve` | `{}` | `{name: "hosted"\|"ollama"\|"byok"\|"echo", leaves_machine: bool, sentence_en, sentence_fa}` — the exact route and privacy sentences `dream.router` resolves, same as `dream --route` |
+
+### 3.15 `project.*` — workspace folders grouping sessions (S06)
+
+A project is a folder-like grouping, not a CRM record: it owns a name, an
+optional workspace folder path (linked in place — nothing is copied), and the
+sessions grouped under it. Deleting a project **ungroups** its sessions; it
+never deletes a conversation. A session belongs to at most one project:
+adding it to a project lifts it out of any other.
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `project.create` | `{name, folder?, session_ids?}` | `Project` |
+| `project.list` | `{}` | `{projects: Project[]}` — most recently touched first |
+| `project.get` | `{project_id}` | `Project & {sessions: Session[]}` — joins only sessions that still exist |
+| `project.update` | `{project_id, name?, folder?}` | `Project` — `folder: null` or blank clears the folder |
+| `project.delete` | `{project_id}` | `{deleted: true, project_id}` |
+| `project.add_session` | `{project_id, session_id}` | `Project` — `INVALID_PARAMS` when the session is unknown |
+| `project.remove_session` | `{project_id, session_id}` | `Project` — removing an absent session is a quiet no-op |
+
+`Project = {id, project_id, name, folder: string \| null, session_ids,\ncreated_at, updated_at}`
+
+The index persists in `data/bridge_projects.json` (override with
+`DREAM_PROJECTS_PATH`), following the sessions-index rules: best-effort
+atomic writes, metadata only, survives a sidecar restart.
 
 ---
 

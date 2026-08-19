@@ -25,6 +25,7 @@ import { useLocaleSync, useTranslation } from '@/lib/i18n';
 const NAV_SLUG: Record<string, string> = {
   '/': 'dashboard',
   '/projects': 'projects',
+  '/scheduler': 'scheduler',
   '/memory': 'memory',
   '/skills': 'skills',
   '/subagents': 'subagents',

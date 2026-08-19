@@ -430,6 +430,7 @@ class BridgeMethods:
         *,
         sessions_path: str | None = None,
         providers_path: str | None = None,
+        projects_path: str | None = None,
         disabled_skills_path: str | None = None,
         default_provider: str | None = None,
         credential_store: KeychainCredentialStore | None = None,
@@ -492,6 +493,12 @@ class BridgeMethods:
         self._sessions_path = sessions_path or os.environ.get(
             "DREAM_SESSIONS_PATH", "data/bridge_sessions.json"
         )
+        # Projects (S06): folder-like groupings of sessions. The index lives
+        # next to the sessions index and follows its persistence rules.
+        self._projects_path = projects_path or os.environ.get(
+            "DREAM_PROJECTS_PATH", "data/bridge_projects.json"
+        )
+        self.projects: dict[str, dict[str, Any]] = {}
         self._providers_path = providers_path or os.environ.get(
             "DREAM_PROVIDERS_PATH", "data/bridge_providers.json"
         )
@@ -519,6 +526,7 @@ class BridgeMethods:
         )
         scheduler.ensure_schedule_tables(self.store)
         self._load_sessions_index()
+        self._load_projects_index()
 
         #: The dispatcher reads this to route method → handler.
         self.handlers: dict[str, Callable[..., Any]] = self._build_handler_table()
@@ -543,6 +551,7 @@ class BridgeMethods:
     def shutdown(self) -> None:
         """Persist state and close the store. Safe to call more than once."""
         self._save_sessions_index()
+        self._save_projects_index()
         self._save_providers()
         self._save_disabled_skills()
         if self._notebooks is not None:
@@ -717,6 +726,16 @@ class BridgeMethods:
             "commerce.plan": self.commerce_plan,
             "commerce.usage": self.commerce_usage,
             "route.resolve": self.route_resolve,
+            # project.* — workspace folders grouping sessions (S06)
+            "project.create": self.project_create,
+            "project.list": self.project_list,
+            "project.get": self.project_get,
+            "project.update": self.project_update,
+            "project.delete": self.project_delete,
+            "project.add_session": self.project_add_session,
+            "project.remove_session": self.project_remove_session,
+            # approval.list — the pending-approval queue (S06)
+            "approval.list": self.approval_list,
         }
 
     # ------------------------------------------------------------------ #
@@ -3266,6 +3285,206 @@ class BridgeMethods:
             "sentence_en": route.sentence_en,
             "sentence_fa": route.sentence_fa,
         }
+
+    # ------------------------------------------------------------------ #
+    # project.* — workspace folders grouping sessions (S06).
+    # A project is a folder-like grouping, not a CRM record: it owns a
+    # name, an optional workspace folder path, and a list of session ids.
+    # Deleting a project ungroups its sessions; it never deletes them.
+    # The index persists beside the sessions index with the same rules.
+    # ------------------------------------------------------------------ #
+
+    def _require_project(self, params: dict[str, Any]) -> dict[str, Any]:
+        project_id = params.get("project_id") or params.get("id")
+        if not isinstance(project_id, str) or not project_id:
+            raise invalid_params("project_id must be a non-empty string")
+        with self._lock:
+            project = self.projects.get(project_id)
+        if project is None:
+            raise invalid_params(f"no project with id {project_id!r}")
+        return project
+
+    @staticmethod
+    def _project_to_dict(project: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "project_id": project["id"],
+            "id": project["id"],
+            "name": project["name"],
+            "folder": project.get("folder"),
+            "session_ids": list(project.get("session_ids", [])),
+            "created_at": project["created_at"],
+            "updated_at": project["updated_at"],
+        }
+
+    @staticmethod
+    def _clean_session_ids(value: Any) -> list[str]:
+        """Deduplicate a session-id list, keeping first-seen order."""
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise invalid_params("session_ids must be a list of strings")
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for item in value:
+            if not isinstance(item, str) or not item.strip():
+                raise invalid_params("session_ids entries must be non-empty strings")
+            if item not in seen:
+                seen.add(item)
+                cleaned.append(item)
+        return cleaned
+
+    def project_create(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        name = params.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise invalid_params("name must be a non-empty string")
+        folder = params.get("folder")
+        if folder is not None and (not isinstance(folder, str) or not folder.strip()):
+            raise invalid_params("folder must be a non-empty string when set")
+        project = {
+            "id": f"prj_{uuid.uuid4().hex[:20]}",
+            "name": name.strip(),
+            "folder": folder.strip() if isinstance(folder, str) else None,
+            "session_ids": self._clean_session_ids(params.get("session_ids")),
+            "created_at": time.time(),
+            "updated_at": time.time(),
+        }
+        with self._lock:
+            self.projects[project["id"]] = project
+            self._save_projects_index()
+        return self._project_to_dict(project)
+
+    def project_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        del params
+        with self._lock:
+            projects = sorted(
+                (self._project_to_dict(p) for p in self.projects.values()),
+                key=lambda p: p["updated_at"],
+                reverse=True,
+            )
+        return {"projects": projects}
+
+    def project_get(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        project = self._require_project(params or {})
+        payload = self._project_to_dict(project)
+        with self._lock:
+            sessions = {s.id: s.to_index() for s in self.sessions.values()}
+        payload["sessions"] = [
+            sessions[sid] for sid in project["session_ids"] if sid in sessions
+        ]
+        return payload
+
+    def project_update(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        project = self._require_project(params)
+        if "name" in params:
+            name = params.get("name")
+            if not isinstance(name, str) or not name.strip():
+                raise invalid_params("name must be a non-empty string")
+            project["name"] = name.strip()
+        if "folder" in params:
+            folder = params.get("folder")
+            if folder is None or (isinstance(folder, str) and not folder.strip()):
+                project["folder"] = None
+            elif isinstance(folder, str):
+                project["folder"] = folder.strip()
+            else:
+                raise invalid_params("folder must be a string or null")
+        project["updated_at"] = time.time()
+        with self._lock:
+            self._save_projects_index()
+        return self._project_to_dict(project)
+
+    def project_delete(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Ungroup, never destroy: the sessions outlive their project."""
+        project = self._require_project(params or {})
+        with self._lock:
+            self.projects.pop(project["id"], None)
+            self._save_projects_index()
+        return {"deleted": True, "project_id": project["id"]}
+
+    def project_add_session(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        project = self._require_project(params)
+        session_id = params.get("session_id")
+        if not isinstance(session_id, str) or not session_id.strip():
+            raise invalid_params("session_id must be a non-empty string")
+        with self._lock:
+            if session_id not in self.sessions:
+                raise invalid_params(f"no session with id {session_id!r}")
+            if session_id not in project["session_ids"]:
+                project["session_ids"].append(session_id)
+            # A session belongs to one project: lift it out of any other.
+            for other in self.projects.values():
+                if other["id"] != project["id"] and session_id in other["session_ids"]:
+                    other["session_ids"].remove(session_id)
+                    other["updated_at"] = time.time()
+            project["updated_at"] = time.time()
+            self._save_projects_index()
+        return self._project_to_dict(project)
+
+    def project_remove_session(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        project = self._require_project(params)
+        session_id = params.get("session_id")
+        if not isinstance(session_id, str) or not session_id.strip():
+            raise invalid_params("session_id must be a non-empty string")
+        if session_id in project["session_ids"]:
+            project["session_ids"].remove(session_id)
+            project["updated_at"] = time.time()
+            with self._lock:
+                self._save_projects_index()
+        return self._project_to_dict(project)
+
+    def _load_projects_index(self) -> None:
+        try:
+            with open(self._projects_path, encoding="utf-8") as handle:
+                rows = json.load(handle)
+        except (OSError, ValueError):
+            return
+        if not isinstance(rows, list):
+            return
+        for row in rows:
+            if not isinstance(row, dict) or not row.get("id"):
+                continue
+            project_id = str(row["id"])
+            self.projects[project_id] = {
+                "id": project_id,
+                "name": str(row.get("name", "Project")),
+                "folder": row.get("folder") if isinstance(row.get("folder"), str) else None,
+                "session_ids": [
+                    str(sid) for sid in row.get("session_ids", []) if isinstance(sid, str)
+                ],
+                "created_at": float(row.get("created_at", time.time())),
+                "updated_at": float(row.get("updated_at", time.time())),
+            }
+
+    def _save_projects_index(self) -> None:
+        rows = [self._project_to_dict(p) for p in self.projects.values()]
+        self._write_json(self._projects_path, rows)
+
+    # ------------------------------------------------------------------ #
+    # approval.list — the pending-approval queue (S06). The scheduler UI
+    # polls this to offer approve/deny for blocked scheduled runs.
+    # ------------------------------------------------------------------ #
+
+    def approval_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        include_resolved = bool(params.get("include_resolved", False))
+        with self._lock:
+            approvals = [
+                {
+                    "approval_id": approval.id,
+                    "name": approval.name,
+                    "risk": approval.risk,
+                    "summary": approval.summary,
+                    "resolved": approval.resolved,
+                    "decision": approval.decision,
+                }
+                for approval in self.approvals.values()
+                if include_resolved or not approval.resolved
+            ]
+        return {"approvals": approvals}
 
 
 #: English display names for the commercial plans (S05). Persian names come
