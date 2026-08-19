@@ -771,7 +771,13 @@ def test_run_now_executes_immediately(store: MemoryStore) -> None:
 
 
 def test_start_and_stop_are_clean(store: MemoryStore) -> None:
-    make_due(store)
+    # max_runs=1 pins the fire count: after the first execution the schedule
+    # is exhausted and disabled, so the assertion cannot depend on wall-clock
+    # luck. (With an unlimited */1-minute job, a first tick landing just
+    # before a minute boundary sets next_run only milliseconds ahead, and a
+    # later tick inside the sleep window legitimately fires the *next*
+    # occurrence — that race made this test flaky on CI, Python 3.12.)
+    make_due(store, max_runs=1)
     calls: list[str] = []
 
     async def scenario() -> None:
@@ -784,7 +790,7 @@ def test_start_and_stop_are_clean(store: MemoryStore) -> None:
         assert daemon.running is False
 
     run(scenario())
-    assert len(calls) == 1  # fired once, then the schedule moved into the future
+    assert len(calls) == 1  # the loop started, fired once, and stopped cleanly
 
 
 def test_start_is_idempotent(store: MemoryStore) -> None:

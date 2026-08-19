@@ -1046,3 +1046,38 @@ export interface RouteDto {
   sentence_en: string;
   sentence_fa: string;
 }
+
+// --------------------------------------------------------------------------- //
+// Projects — folder-like session groupings (S06). Mirrors `project.*` in
+// `dream/bridge/methods.py`. Deleting a project ungroups its sessions; it
+// never deletes a conversation.
+// --------------------------------------------------------------------------- //
+
+/** One project: a name, an optional workspace folder, grouped sessions. */
+export interface BridgeProject {
+  project_id: string;
+  id: string;
+  name: string;
+  /** Absolute workspace folder path, or `null` when none was chosen. */
+  folder: string | null;
+  session_ids: string[];
+  created_at: number;
+  updated_at: number;
+  /** Only `project.get` joins the session index rows. */
+  sessions?: BridgeSession[];
+}
+
+/** Result of `project.list`. */
+export interface ProjectListResult {
+  projects: BridgeProject[];
+}
+
+/** One approval from `approval.list` — the scheduler UI's approve queue. */
+export interface BridgeApproval {
+  approval_id: string;
+  name: string;
+  risk: string;
+  summary: string;
+  resolved: boolean;
+  decision: boolean | null;
+}

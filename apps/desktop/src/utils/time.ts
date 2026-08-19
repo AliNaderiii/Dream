@@ -45,6 +45,21 @@ export function absoluteTime(seconds: number): string {
   }).format(new Date(seconds * 1000));
 }
 
+/**
+ * Jalali (Persian-calendar) date and time, e.g. "۲۸ مرداد ۱۴۰۵، ۱۴:۰۳".
+ *
+ * The scheduler always offers the Solar-Hijari reading alongside the
+ * document-locale one, because a Persian-speaking user thinks in Jalali
+ * dates regardless of the UI language.
+ */
+export function jalaliDateTime(seconds: number): string {
+  if (!seconds) return '—';
+  return new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+  }).format(new Date(seconds * 1000));
+}
+
 /** Date only, e.g. "12 Aug 2026". */
 export function absoluteDate(seconds: number): string {
   if (!seconds) return '—';

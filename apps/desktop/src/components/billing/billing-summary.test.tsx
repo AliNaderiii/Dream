@@ -2,9 +2,9 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { BillingSummary } from '@/components/billing/billing-summary';
-import { resetBridgeClient, type BridgeClient } from '@/lib/bridge/client';
+import { resetBridgeClient, type BridgeClient, type BridgeTransport } from '@/lib/bridge/client';
 import { getBridgeClient } from '@/lib/bridge/client';
-import type { BridgeTransport, RpcId, RpcParams, StreamChunk } from '@/lib/bridge/types';
+import type { RpcId, RpcParams, StreamChunk } from '@/lib/bridge/types';
 
 /** A transport with canned per-method answers for the S05 RPCs. */
 class StubTransport implements BridgeTransport {
@@ -20,7 +20,7 @@ class StubTransport implements BridgeTransport {
     if (!(method in this.answers)) {
       throw new Error(`StubTransport: no answer for ${method}`);
     }
-    return this.answers[method] as T;
+    return Promise.resolve(this.answers[method] as T);
   }
 
   onState(): () => void {

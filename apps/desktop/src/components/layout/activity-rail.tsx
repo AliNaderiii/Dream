@@ -6,6 +6,7 @@
  */
 
 import {
+  AlarmClock,
   BarChart3,
   Bot,
   Database,
@@ -38,6 +39,7 @@ const PRIMARY_ITEMS: RailItem[] = [
   { to: '/', labelKey: 'nav.dashboard', icon: Sparkles, shortcut: ['mod', '1'], end: true },
   { to: '/chat', labelKey: 'nav.chat', icon: MessageSquare },
   { to: '/projects', labelKey: 'nav.projects', icon: FolderKanban, shortcut: ['mod', '2'] },
+  { to: '/scheduler', labelKey: 'nav.scheduler', icon: AlarmClock },
   { to: '/memory', labelKey: 'nav.memory', icon: Database, shortcut: ['mod', '3'] },
   { to: '/skills', labelKey: 'nav.skills', icon: Wrench, shortcut: ['mod', '4'] },
   { to: '/subagents', labelKey: 'nav.subagents', icon: Bot },

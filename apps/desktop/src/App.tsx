@@ -24,6 +24,9 @@ const DataDatasetRoute = lazy(() =>
 const ProvenanceRoute = lazy(() =>
   import('@/routes/provenance').then((m) => ({ default: m.ProvenanceRoute })),
 );
+const SchedulerRoute = lazy(() =>
+  import('@/routes/scheduler').then((m) => ({ default: m.SchedulerRoute })),
+);
 const SubagentsRoute = lazy(() =>
   import('@/routes/subagents').then((m) => ({ default: m.SubagentsRoute })),
 );
@@ -43,6 +46,14 @@ export default function App() {
         <Route path="memory" element={<MemoryRoute />} />
         <Route path="skills" element={<SkillsRoute />} />
         <Route path="projects" element={<ProjectsRoute />} />
+        <Route
+          path="scheduler"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <SchedulerRoute />
+            </Suspense>
+          }
+        />
         <Route
           path="subagents"
           element={

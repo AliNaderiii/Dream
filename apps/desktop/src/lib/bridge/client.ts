@@ -23,6 +23,7 @@ import { isTauri } from '@/utils/platform';
 import { EchoDataRuntime } from './echo-data';
 import { EchoCommerceRuntime } from './echo-commerce';
 import { EchoGatewayRuntime, requireGatewayPlatform } from './echo-gateway';
+import { EchoProjectsRuntime } from './echo-projects';
 import { EchoScheduleRuntime, EchoSubagentRuntime } from './echo-subagents';
 import { BridgeRpcError, toBridgeError } from './errors';
 import type {
@@ -436,6 +437,8 @@ export class EchoBridgeTransport implements BridgeTransport {
   private nextMemoryId = this.memories.length + 1;
   private subagents = new EchoSubagentRuntime();
   private schedules = new EchoScheduleRuntime();
+  // Projects may only group sessions the echo transport actually knows.
+  private projects = new EchoProjectsRuntime((sessionId) => this.sessions.has(sessionId));
   private gateway = new EchoGatewayRuntime();
   private data = new EchoDataRuntime();
   private commerce = new EchoCommerceRuntime();
@@ -801,6 +804,28 @@ export class EchoBridgeTransport implements BridgeTransport {
         return this.schedules.preview(params);
       case 'schedule.run_now':
         return this.schedules.runNow(params);
+
+      // -- projects (S06) -------------------------------------------------- //
+      case 'project.create':
+        return this.projects.create(params);
+      case 'project.list':
+        return this.projects.list(params);
+      case 'project.get':
+        return this.projects.get(params);
+      case 'project.update':
+        return this.projects.update(params);
+      case 'project.delete':
+        return this.projects.delete(params);
+      case 'project.add_session':
+        return this.projects.addSession(params);
+      case 'project.remove_session':
+        return this.projects.removeSession(params);
+
+      // -- approvals (S06) ------------------------------------------------- //
+      // The echo transport never holds a pending approval: its run-now path
+      // denies approval-required runs outright (fail-closed, gate G11).
+      case 'approval.list':
+        return { approvals: [] };
 
       // -- connectivity gateway ------------------------------------------ //
       case 'gateway.platforms':
