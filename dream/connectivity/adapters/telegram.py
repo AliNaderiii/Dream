@@ -20,7 +20,7 @@ from dream.connectivity.base import OnMessage, PlatformAdapter
 from dream.connectivity.models import IncomingMessage, utc_now
 from dream.telegram import (
     _TOKEN_FULL_RE,
-    DEFAULT_API_BASE_URL,
+    _resolve_api_base_url,
     redact_token,
 )
 
@@ -50,7 +50,7 @@ class TelegramTransport:
     def __init__(self, token: str, api_base_url: str | None = None) -> None:
         if not token or _TOKEN_FULL_RE.fullmatch(token) is None:
             raise TelegramConfigurationError("telegram token is missing or malformed")
-        base = (api_base_url or DEFAULT_API_BASE_URL).rstrip("/")
+        base = _resolve_api_base_url(api_base_url)
         self._base_url = f"{base}/bot{token}"
 
     def _call(self, method: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -179,6 +179,7 @@ class TelegramAdapter(PlatformAdapter):
         while not self._stop_event.is_set():
             try:
                 updates = await asyncio.to_thread(transport.get_updates, self._offset)
+                await self._process_updates(updates)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -187,12 +188,20 @@ class TelegramAdapter(PlatformAdapter):
                 await asyncio.sleep(min(BACKOFF_MAX, 2 ** min(failures, 5)))
                 continue
             failures = 0
-            for update in updates:
-                update_id = _integer_identifier(update.get("update_id"))
-                if update_id is not None:
-                    self._offset = max(self._offset, update_id + 1)
-                await self._handle_update(update)
             await asyncio.sleep(self._poll_interval())
+
+    async def _process_updates(self, updates: list[dict[str, Any]]) -> None:
+        """Deliver in order and acknowledge each update only after success."""
+        ordered: list[tuple[int, dict[str, Any]]] = []
+        for update in updates:
+            update_id = _integer_identifier(update.get("update_id"))
+            if update_id is not None and update_id >= self._offset:
+                ordered.append((update_id, update))
+        for update_id, update in sorted(ordered, key=lambda pair: pair[0]):
+            if update_id < self._offset:
+                continue  # duplicate identifier in one batch
+            await self._handle_update(update)
+            self._offset = max(self._offset, update_id + 1)
 
     async def _handle_update(self, update: dict[str, Any]) -> None:
         message = update.get("message")
@@ -201,6 +210,10 @@ class TelegramAdapter(PlatformAdapter):
         chat = message.get("chat")
         sender = message.get("from")
         if not isinstance(chat, dict) or not isinstance(sender, dict):
+            return
+        # Pairing and owner data are private-chat only.  A linked user must
+        # not be able to invoke Dream from a group where others can observe.
+        if str(chat.get("type", "")) != "private":
             return
         chat_id = _integer_identifier(chat.get("id"))
         user_id = _integer_identifier(sender.get("id"))

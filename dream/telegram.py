@@ -20,6 +20,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
@@ -51,6 +52,22 @@ MAX_MESSAGE_LENGTH = 4_000
 
 _TOKEN_RE = re.compile(r"\d+:[A-Za-z0-9_-]{20,}")
 _TOKEN_FULL_RE = re.compile(r"\d+:[A-Za-z0-9_-]{20,}\Z")
+_API_KEY_RE = re.compile(
+    r"(?<![A-Za-z0-9_-])(?:"
+    r"sk-[A-Za-z0-9_-]{16,}|"
+    r"AIza[A-Za-z0-9_-]{20,}|"
+    r"xox[baprs]-[A-Za-z0-9-]{16,}|"
+    r"xapp-[A-Za-z0-9-]{16,}|"
+    r"gh[pousr]_[A-Za-z0-9_]{20,}"
+    r")(?![A-Za-z0-9_-])"
+)
+_BEARER_RE = re.compile(r"(?i)\bBearer[ \t]+[A-Za-z0-9._~+/=-]{8,}")
+_LABELED_CREDENTIAL_RE = re.compile(
+    r"(?i)(?P<label>(?:[a-z0-9]+[_-])*"
+    r"(?:api[_-]?key|access[_-]?token|bot[_-]?token|password|credential)"
+    r"\s*[:=]\s*)(?P<value>[^\s,;]+)"
+)
+_SECRET_ENV_MARKERS = ("token", "secret", "password", "api_key", "credential")
 
 # New Persian strings are kept as backslash-u escapes.
 REFUSAL_TEXT = (
@@ -65,6 +82,7 @@ TEXT_ONLY_TEXT = (
     "\u0641\u0642\u0637 \u067e\u06cc\u0627\u0645 \u0645\u062a\u0646\u06cc "
     "\u067e\u0630\u06cc\u0631\u0641\u062a\u0647 \u0645\u06cc\u200c\u0634\u0648\u062f."
 )
+COMMAND_REFUSAL_TEXT = "This command is not available in Telegram. Type /help."
 REMINDER_LABEL = (
     "\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc:"
 )
@@ -104,8 +122,29 @@ class TelegramNetworkError(RuntimeError):
 
 
 def redact_token(text: object) -> str:
-    """Mask a Telegram-token-shaped value anywhere in printable text."""
-    return _TOKEN_RE.sub("<redacted-token>", str(text))
+    """Mask bot tokens and API credentials anywhere in printable text.
+
+    The historical name is retained for callers, but the boundary is broader
+    than Telegram-token syntax: common API-key shapes, Bearer credentials,
+    labelled values, and credential-like environment values are all removed.
+    This function is used before terminal output, Telegram sends, status
+    errors, and persisted connectivity logs.
+    """
+    safe = _TOKEN_RE.sub("<redacted-token>", str(text))
+    safe = _API_KEY_RE.sub("<redacted-api-key>", safe)
+    safe = _BEARER_RE.sub("Bearer <redacted-credential>", safe)
+    safe = _LABELED_CREDENTIAL_RE.sub(
+        lambda match: f"{match.group('label')}<redacted-credential>", safe
+    )
+    for name, value in os.environ.items():
+        lowered = name.lower()
+        if (
+            isinstance(value, str)
+            and bool(value)
+            and any(marker in lowered for marker in _SECRET_ENV_MARKERS)
+        ):
+            safe = safe.replace(value, "<redacted-credential>")
+    return safe
 
 
 def _exception_text(exc: BaseException) -> str:
@@ -253,6 +292,15 @@ class TelegramTransport:
         )
 
 
+@dataclass(slots=True)
+class _PendingMessage:
+    """A split outbound message whose successful chunks stay acknowledged."""
+
+    chat_id: int
+    chunks: tuple[str, ...]
+    next_chunk: int = 0
+
+
 class _Conversation(Protocol):
     store: MemoryStore
 
@@ -323,8 +371,8 @@ class TelegramBot:
         self._sleep = sleep
         self.offset = 0
         self._conversations: dict[int, _Conversation] = {}
-        self._pending_replies: dict[int, tuple[int, str]] = {}
-        self._pending_reminders: list[tuple[int, str]] = []
+        self._pending_replies: dict[int, _PendingMessage] = {}
+        self._pending_reminders: list[_PendingMessage] = []
         self._last_reminder_check: float | None = None
         self._stopping = threading.Event()
 
@@ -520,22 +568,47 @@ class TelegramBot:
         if command in {"/help", "/start"}:
             return CHAT_HELP
         if command not in CHAT_COMMANDS:
-            return "This command is not available in Telegram. Type /help."
+            return COMMAND_REFUSAL_TEXT
         lines: list[str] = []
         dispatch_command(rebuilt, conversation, output=lines.append, quiet=True)
         if command == "/stats":
             lines = [_phone_stats_line(line) for line in lines]
         return "\n".join(lines) if lines else "Command completed."
 
+    def _message_chunks(self, text: str) -> tuple[str, ...]:
+        """Return credential-safe chunks within Telegram's message limit."""
+        remaining = redact_token(text)
+        chunks: list[str] = []
+        while len(remaining) > MAX_MESSAGE_LENGTH:
+            window = remaining[: MAX_MESSAGE_LENGTH + 1]
+            split_at = max(window.rfind("\n"), window.rfind(" "))
+            if split_at <= 0:
+                split_at = MAX_MESSAGE_LENGTH
+            chunk = remaining[:split_at].rstrip()
+            if not chunk:  # whitespace-only boundary; make guaranteed progress
+                chunk = remaining[:MAX_MESSAGE_LENGTH]
+                split_at = len(chunk)
+            chunks.append(chunk)
+            remaining = remaining[split_at:].lstrip()
+        if remaining or not chunks:
+            chunks.append(remaining)
+        return tuple(chunks)
+
+    def _pending_message(self, chat_id: int, text: str) -> _PendingMessage:
+        return _PendingMessage(chat_id=chat_id, chunks=self._message_chunks(text))
+
+    def _deliver_pending(self, pending: _PendingMessage) -> None:
+        """Send unsent chunks, retaining progress if a later chunk fails."""
+        while pending.next_chunk < len(pending.chunks):
+            self.transport.send_message(
+                chat_id=pending.chat_id,
+                text=pending.chunks[pending.next_chunk],
+                http_timeout=HTTP_TIMEOUT,
+            )
+            pending.next_chunk += 1
+
     def _send_message(self, chat_id: int, text: str) -> None:
-        safe = redact_token(text)
-        if len(safe) > MAX_MESSAGE_LENGTH:
-            safe = safe[: MAX_MESSAGE_LENGTH - 18] + "\n... (truncated)"
-        self.transport.send_message(
-            chat_id=chat_id,
-            text=safe,
-            http_timeout=HTTP_TIMEOUT,
-        )
+        self._deliver_pending(self._pending_message(chat_id, text))
 
     def _prepare_reply(self, update: Mapping[str, Any]) -> tuple[int, str] | None:
         message = update.get("message")
@@ -593,11 +666,12 @@ class TelegramBot:
                 return
             pending = self._pending_replies.get(update_id)
             if pending is None:
-                pending = self._prepare_reply(update)
-                if pending is not None:
+                prepared = self._prepare_reply(update)
+                if prepared is not None:
+                    pending = self._pending_message(*prepared)
                     self._pending_replies[update_id] = pending
             if pending is not None:
-                self._send_message(*pending)
+                self._deliver_pending(pending)
                 self._pending_replies.pop(update_id, None)
             # This assignment deliberately follows all command/model and send
             # work. An exception above leaves the failed update replayable.
@@ -653,8 +727,7 @@ class TelegramBot:
 
     def _flush_pending_reminders(self) -> None:
         while self._pending_reminders:
-            chat_id, text = self._pending_reminders[0]
-            self._send_message(chat_id, text)
+            self._deliver_pending(self._pending_reminders[0])
             self._pending_reminders.pop(0)
 
     def check_due_reminders(self, now: float | None = None) -> list[Any]:
@@ -672,7 +745,7 @@ class TelegramBot:
                 due.extend(chat_due)
                 for reminder in chat_due:
                     self._pending_reminders.append(
-                        (chat_id, self._reminder_text(reminder.text))
+                        self._pending_message(chat_id, self._reminder_text(reminder.text))
                     )
             self._flush_pending_reminders()
             return due

@@ -48,6 +48,13 @@ dream --backend ollama
 python doctor.py --backend ollama
 ```
 
+On Windows the primary launcher is `run.bat`. It sets `DREAM_MODEL=qwen2.5:7b`
+(unless you already set one) and starts `cli.py --backend ollama`. If Ollama
+is not installed it prints a Persian + English message pointing at
+<https://ollama.com/download> and pauses. The library default remains
+`llama3.2` when `DREAM_MODEL` is unset. Offline diagnostics:
+`python doctor.py` or double-click `check.bat`.
+
 `doctor.py --backend …` tests actual tool calling, not just a successful text
 response. If it reports no tool call, select a model that supports tool/function
 calling or check the endpoint and model configuration.

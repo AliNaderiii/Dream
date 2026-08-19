@@ -1,4 +1,5 @@
 @echo off
+REM Secondary launcher (desktop window + .env). Primary launcher is run.bat.
 chcp 65001 >nul 2>nul
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"

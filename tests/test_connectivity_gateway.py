@@ -11,6 +11,10 @@ import tempfile
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
+from dream.agent import ApprovalPolicy, Dream
+from dream.connectivity.auth import AuthStore
 from dream.connectivity.base import PlatformAdapter
 from dream.connectivity.config import REDACTED_VALUE, ConnectivityConfig
 from dream.connectivity.gateway import (
@@ -21,6 +25,8 @@ from dream.connectivity.gateway import (
     Gateway,
 )
 from dream.connectivity.models import IncomingMessage
+from dream.memory import MemoryStore
+from dream.telegram import COMMAND_REFUSAL_TEXT
 
 
 class FakeDream:
@@ -400,3 +406,169 @@ def test_status_aggregates_adapters_and_counters():
         assert status["rate_limit"]["default"] == 20
     finally:
         gateway.stop_loop()
+
+
+class TelegramFakeAdapter(FakeAdapter):
+    platform_name = "telegram"
+    max_message_length = 4000
+
+
+def _make_telegram_gateway(*, dream_factory=FakeDream):
+    paths = _tmp_paths()
+    config = ConnectivityConfig(paths["config"])
+    config.set("telegram", {"enabled": True, "require_auth": False})
+    gateway = Gateway(
+        config,
+        sessions_path=paths["sessions"],
+        links_path=paths["links"],
+        log_path=paths["log"],
+        dream_factory=dream_factory,
+    )
+    adapter = TelegramFakeAdapter({}, on_message=gateway._on_adapter_message)
+    gateway.register_adapter(adapter)
+    gateway.start_loop()
+    gateway.submit(gateway.start_all())
+    return gateway, adapter
+
+
+def test_link_code_expires_after_ten_minutes_and_cannot_authorise(tmp_path):
+    now = [1_000.0]
+    auth = AuthStore(str(tmp_path / "links.json"), clock=lambda: now[0])
+    issued = auth.issue("telegram")
+    assert issued.expires_at == 1_600.0
+
+    now[0] = 1_600.0
+    assert auth.redeem("telegram", "owner", issued.code) is None
+    assert auth.pending("telegram") is None
+    assert auth.is_linked("telegram", "owner") is False
+
+
+def test_connectivity_telegram_help_and_cli_phone_commands(monkeypatch):
+    class PhoneCommandDream(FakeDream):
+        def __init__(self) -> None:
+            super().__init__()
+            self.store = SimpleNamespace()
+
+    monkeypatch.setenv("DREAM_PLAN", "local")
+    monkeypatch.setenv("DREAM_BACKEND", "echo")
+    gateway, adapter = _make_telegram_gateway(dream_factory=PhoneCommandDream)
+    try:
+        for command in ("/help", "/plan", "/usage", "/route"):
+            _send(gateway, _message("telegram", "owner", command))
+
+        replies = [text for _, text in adapter.sent]
+        assert all(command in replies[0] for command in ("/plan", "/usage", "/route"))
+        assert "local" in replies[1].lower()
+        assert replies[2]
+        assert "echo" in replies[3].lower()
+    finally:
+        gateway.stop_loop()
+
+
+def test_connectivity_telegram_refuses_non_allowlisted_phone_command():
+    FakeDream.instances = 0
+    gateway, adapter = _make_telegram_gateway()
+    try:
+        _send(gateway, _message("telegram", "owner", "/shell echo unsafe"))
+        assert adapter.sent == [("owner", COMMAND_REFUSAL_TEXT)]
+        assert FakeDream.instances == 0
+    finally:
+        gateway.stop_loop()
+
+
+def test_connectivity_logs_status_and_errors_never_expose_credentials(caplog):
+    configured_secret = "provider-secret-with-an-unusual-shape"
+    api_key = "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789"
+
+    class LeakyDream(FakeDream):
+        def run(self, message: str) -> Any:
+            raise RuntimeError(f"provider rejected {configured_secret} and {api_key}")
+
+    paths = _tmp_paths()
+    config = ConnectivityConfig(paths["config"])
+    config.set("telegram", {"enabled": True, "require_auth": False})
+    gateway = Gateway(
+        config,
+        sessions_path=paths["sessions"],
+        links_path=paths["links"],
+        log_path=paths["log"],
+        dream_factory=LeakyDream,
+    )
+    adapter = TelegramFakeAdapter({}, on_message=gateway._on_adapter_message)
+    gateway.register_adapter(adapter)
+    gateway.start_loop()
+    try:
+        gateway.submit(gateway.start_all())
+        gateway.configure("telegram", {"api_key": configured_secret})
+        adapter._mark_error(f"transport leaked {configured_secret} and {api_key}")
+        with pytest.raises(RuntimeError) as caught:
+            gateway.submit(
+                gateway._on_adapter_message(
+                    _message(
+                        "telegram",
+                        "owner",
+                        f"Authorization: Bearer {api_key}; configured={configured_secret}",
+                    )
+                )
+            )
+
+        status_text = str(gateway.status())
+        log_text = str(gateway.logs("telegram"))
+        retry_error = str(caught.value)
+        with open(paths["log"], encoding="utf-8") as log_file:
+            disk_text = log_file.read()
+        captured = caplog.text
+        for secret in (configured_secret, api_key):
+            assert secret not in status_text
+            assert secret not in log_text
+            assert secret not in disk_text
+            assert secret not in captured
+            assert secret not in retry_error
+        assert "<redacted-credential>" in status_text
+        assert "<redacted-credential>" in log_text
+        assert "<redacted-credential>" in captured
+    finally:
+        gateway.stop_loop()
+
+
+def test_model_requested_dangerous_tool_is_denied_without_gateway_approver(tmp_path):
+    side_effect = tmp_path / "must-not-exist"
+
+    class DangerousBackend:
+        def __init__(self) -> None:
+            self.saw_denial = False
+
+        def chat(self, messages, tools=None):
+            if tools is None:  # post-turn memory extraction, with no tools
+                return {"content": "[]", "tool_calls": []}
+            if messages[-1]["role"] == "tool":
+                self.saw_denial = "dangerous tool denied: no approver configured" in messages[-1][
+                    "content"
+                ]
+                return {"content": "Denied safely.", "tool_calls": []}
+            return {
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "danger-1",
+                        "name": "run_shell",
+                        "arguments": {"command": f"touch {side_effect}"},
+                    }
+                ],
+            }
+
+    backend = DangerousBackend()
+    store = MemoryStore(str(tmp_path / "dangerous.db"))
+
+    def factory():
+        return Dream(store, backend, ApprovalPolicy())
+
+    gateway, adapter = _make_telegram_gateway(dream_factory=factory)
+    try:
+        _send(gateway, _message("telegram", "owner", "run a shell command"))
+        assert adapter.sent[-1] == ("owner", "Denied safely.")
+        assert backend.saw_denial is True
+        assert side_effect.exists() is False
+    finally:
+        gateway.stop_loop()
+        store.close()

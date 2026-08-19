@@ -13,9 +13,57 @@ from dream.agent import ApprovalPolicy, build_backend
 from dream.memory import MemoryStore, normalize_fa
 from dream.tools import REGISTRY, openai_schemas
 
+OLLAMA_DOWNLOAD_URL = "https://ollama.com/download"
+
+# Gloss of each FAIL line, shown only when the console can encode Persian.
+_FAIL_FA: dict[str, str] = {
+    "Python": "پایتون ۳٫۱۰ یا جدیدتر نصب کنید.",
+    "SQLite FTS5": "SQLite با FTS5 در دسترس نیست؛ یک ساخت دارای FTS5 نصب کنید.",
+    "Package and memory": "بسته یا حافظه درست کار نمی‌کند؛ مجوز پایگاه داده را بررسی کنید.",
+    "Normalisation": "نرمال‌سازی فارسی و عربی هم‌خوان نیست.",
+    "Tool registry": "رجیستری ابزار خالی است؛ Dream را دوباره نصب کنید.",
+    "Approval gate": "ابزار خطرناک بدون تأیید اجازه داده شد؛ سیاست را اصلاح کنید.",
+    "Live tool calling": "مدل ابزار را صدا نزد؛ مدل یا تنظیم --backend را بررسی کنید.",
+}
+
+_SUMMARY_FAIL_EN = "One or more checks failed. Follow the action named above, then rerun doctor."
+_SUMMARY_FAIL_FA = (
+    "یک یا چند بررسی ناموفق بود. کار نوشته‌شده در بالا را انجام دهید و دوباره doctor را اجرا کنید."
+)
+_CRASH_FA = "بررسی doctor شکست خورد. Dream را دوباره نصب کنید و doctor را اجرا کنید."
+
+_OLLAMA_MISSING_EN = (
+    "Ollama was not found on this computer.",
+    "Dream needs Ollama to run a local model without a VPN or an API key.",
+    f"Download and install Ollama from: {OLLAMA_DOWNLOAD_URL}",
+    "Then open Ollama once so it is running, and double-click run.bat again.",
+)
+_OLLAMA_MISSING_FA = (
+    "اولاما روی این رایانه پیدا نشد.",
+    "برای اجرای مدل محلی بدون فیلترشکن یا کلید API به اولاما نیاز است.",
+    f"اولاما را از این نشانی دانلود و نصب کنید: {OLLAMA_DOWNLOAD_URL}",
+    "بعد از نصب، یک‌بار اولاما را باز کنید و دوباره run.bat را اجرا کنید.",
+)
+
+
+def _can_print_persian(stream: object | None = None) -> bool:
+    """True when *stream* (default stdout) can encode a Persian letter."""
+    target = stream if stream is not None else sys.stdout
+    encoding = getattr(target, "encoding", None) or "ascii"
+    try:
+        "\u0633\u0644\u0627\u0645".encode(encoding)
+    except (LookupError, UnicodeEncodeError):
+        return False
+    return True
+
 
 def _report(name: str, passed: bool, detail: str, output: Callable[[str], None]) -> bool:
-    output(f"{'PASS' if passed else 'FAIL'} {name}: {detail}")
+    line = f"{'PASS' if passed else 'FAIL'} {name}: {detail}"
+    if not passed:
+        fa = _FAIL_FA.get(name)
+        if fa and _can_print_persian():
+            line = f"{line}  |  {fa}"
+    output(line)
     return passed
 
 
@@ -23,7 +71,19 @@ def _mask(value: str) -> str:
     """Return a recognisable but safe representation of a secret."""
     if not value:
         return "not configured"
-    return "***" if len(value) < 8 else f"{value[:3]}…{value[-2:]}"
+    return "***" if len(value) < 8 else f"{value[:3]}\u2026{value[-2:]}"
+
+
+def print_ollama_missing(output: Callable[[str], None] = print) -> None:
+    """Print the no-VPN Ollama-missing message (English always; Persian if UTF-8)."""
+    output("")
+    for line in _OLLAMA_MISSING_EN:
+        output(line)
+    if _can_print_persian():
+        output("")
+        for line in _OLLAMA_MISSING_FA:
+            output(line)
+    output("")
 
 
 def run_checks(backend: str | None = None, output: Callable[[str], None] = print) -> bool:
@@ -59,7 +119,7 @@ def run_checks(backend: str | None = None, output: Callable[[str], None] = print
         checks.append(
             _report("Package and memory", False, f"{exc}; check database permissions", output)
         )
-    normalized = normalize_fa("مي‌خواهم كتاب") == normalize_fa("می‌خواهم کتاب")
+    normalized = normalize_fa("مي\u200cخواهم كتاب") == normalize_fa("می‌خواهم کتاب")
     checks.append(
         _report(
             "Normalisation",
@@ -122,9 +182,19 @@ def _live_tool_check(backend_name: str, output: Callable[[str], None]) -> bool:
             output,
         )
     except (OSError, ValueError, KeyError, TypeError) as exc:
-        return _report(
-            "Live tool calling", False, f"{exc}; verify backend URL, model, and API key.", output
-        )
+        detail = f"{exc}; verify backend URL, model, and API key."
+        if backend_name == "ollama":
+            detail = (
+                f"{exc}; is Ollama running? If it is not installed, download it from "
+                f"{OLLAMA_DOWNLOAD_URL}."
+            )
+        return _report("Live tool calling", False, detail, output)
+
+
+def _print_failure_summary() -> None:
+    print(_SUMMARY_FAIL_EN, file=sys.stderr)
+    if _can_print_persian(sys.stderr):
+        print(_SUMMARY_FAIL_FA, file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -132,17 +202,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--backend", choices=("openai", "ollama"), help="Also test a live model's tool calling"
     )
+    parser.add_argument(
+        "--message",
+        choices=("ollama-missing",),
+        help="Print a named onboarding message and exit (used by run.bat)",
+    )
     args = parser.parse_args(argv)
+    if args.message == "ollama-missing":
+        print_ollama_missing()
+        return 1
     try:
         passed = run_checks(args.backend)
     except Exception as exc:  # Diagnostics must name recovery, not show a traceback.
         print(f"FAIL doctor: {exc}. Reinstall Dream and run doctor again.", file=sys.stderr)
+        if _can_print_persian(sys.stderr):
+            print(_CRASH_FA, file=sys.stderr)
         return 1
     if not passed:
-        print(
-            "One or more checks failed. Follow the action named above, then rerun doctor.",
-            file=sys.stderr,
-        )
+        _print_failure_summary()
         return 1
     print("Dream is ready.")
     return 0

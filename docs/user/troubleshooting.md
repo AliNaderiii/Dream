@@ -2,7 +2,11 @@
 
 | Symptom | Cause | Solution |
 | --- | --- | --- |
-| `dream` not found | venv not active / not installed | `. .venv/bin/activate` then `pip install -e ".[dev]"` (Windows: `.venv\Scripts\activate`) |
+| `dream` not found | venv not active / not installed | `. .venv/bin/activate` then `pip install -e .` (Windows: double-click `run.bat`, or `.venv\Scripts\activate`) |
+| Double-click confusion / many `.bat` files | more than one launcher | Use **`run.bat` only** for first run. `check.bat` is diagnostics; `Dream.bat` / `Dream-Start.bat` are the experimental desktop window. |
+| Ollama-missing message (EN + FA) | Ollama is not installed or not on PATH | Download <https://ollama.com/download>, open Ollama once, then double-click `run.bat` again |
+| `.venv` missing on Windows | first run, or venv create failed | `run.bat` creates it. If that fails, run the one command `python -m venv .venv` and double-click `run.bat` again |
+| Need the web gateway or notebooks | optional extras not installed | Web: `pip install -e ".[web]"`. Notebooks: `pip install -e ".[data]"`. See [quick-start.md](quick-start.md) |
 | "FTS5 not available" | SQLite build lacks FTS5 | Install a SQLite build with FTS5, or use the bundled `sqlite3` fallback |
 | Provider returns HTTP 400 | malformed history / bad schema | update to latest; run `doctor.py`; check provider schema version |
 | Persian search returns nothing | different Unicode spelling (yeh vs keheh) | Expected to work — Dream normalises; if still empty run `doctor.py` memory check |

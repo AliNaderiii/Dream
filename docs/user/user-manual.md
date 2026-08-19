@@ -15,7 +15,8 @@ Dream is a **local-first personal assistant**. Two properties set it apart:
 ### Installation
 
 See [quick-start.md](quick-start.md). The CLI entry point is `dream`; the
-desktop shell is a separate Tauri app under `apps/desktop`.
+desktop shell is a separate Tauri app under `apps/desktop`. On Windows,
+double-click **`run.bat`** — that is the only first-run launcher.
 
 ### Language
 

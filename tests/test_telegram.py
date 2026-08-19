@@ -19,8 +19,10 @@ from dream.memory import MemoryStore
 from dream.telegram import (
     ALLOWED_UPDATES,
     API_BASE_URL_ENV,
+    COMMAND_REFUSAL_TEXT,
     DEFAULT_API_BASE_URL,
     HTTP_TIMEOUT,
+    MAX_MESSAGE_LENGTH,
     PAIRING_CONFIRMED_TEXT,
     POLL_BACKOFF_INITIAL,
     POLL_BACKOFF_MAX,
@@ -829,3 +831,102 @@ def test_terminal_entrypoint_test_uses_finite_input_helper(tmp_path, monkeypatch
 
     monkeypatch.setattr("builtins.input", _feeding_input(["/exit"]))
     assert terminal_main(["--db", str(tmp_path / "terminal.db"), "--backend", "echo"]) == 0
+
+
+def test_long_reply_is_split_and_midstream_retry_resumes_unsent_chunk(tmp_path):
+    """Telegram's 4096-char limit must not truncate or duplicate a reply."""
+
+    class FailSecondChunkTransport(FakeTransport):
+        def send_message(self, *, chat_id, text, http_timeout):
+            if len(self.send_attempts) == 1:
+                self.fail_sends = 1
+            super().send_message(chat_id=chat_id, text=text, http_timeout=http_timeout)
+
+    reply = ("long reply block " * 900).strip()
+    transport = FailSecondChunkTransport()
+    update = _update(90, OWNER, "please answer at length")
+    with MemoryStore(str(tmp_path / "split-retry.db")) as store:
+        conversation = RecordingConversation(store, reply=reply)
+        bot, _ = _bot(store, transport, conversation_factory=lambda _chat: conversation)
+
+        assert bot.process_updates([update]) is False
+        assert bot.offset == 0
+        assert len(transport.sent) == 1
+
+        assert bot.process_updates([update]) is True
+        assert bot.offset == 91
+
+    attempted = [text for _, text, _ in transport.send_attempts]
+    delivered = [text for _, text, _ in transport.sent]
+    assert conversation.messages == ["please answer at length"]
+    assert len(delivered) >= 3
+    assert attempted[1] == attempted[2]  # only the failed chunk is replayed
+    assert attempted[0] not in attempted[1:]  # successful prefix is not duplicated
+    assert all(0 < len(chunk) <= MAX_MESSAGE_LENGTH for chunk in delivered)
+    assert " ".join(" ".join(delivered).split()) == reply
+
+
+def test_api_keys_are_redacted_from_errors_and_model_replies(tmp_path, monkeypatch):
+    keys = {
+        "OPENAI_API_KEY": "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789",
+        "ANTHROPIC_API_KEY": "ant-api03-abcdefghijklmnopqrstuvwxyz0123456789",
+        "GOOGLE_API_KEY": "AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ0123456",
+    }
+    for name, value in keys.items():
+        monkeypatch.setenv(name, value)
+    leak = " ".join(keys.values())
+    transport = FakeTransport()
+    transport.fail_sends = 1
+    transport.send_error = RuntimeError(f"provider failed with {leak}")
+    with MemoryStore(str(tmp_path / "api-key-redaction.db")) as store:
+        conversation = RecordingConversation(store, reply=f"unsafe reply {leak}")
+        bot, output = _bot(store, transport, conversation_factory=lambda _chat: conversation)
+        assert bot.process_updates([_update(1, OWNER, "redact credentials")]) is False
+
+    observable = "\n".join(output + [text for _, text, _ in transport.send_attempts])
+    assert all(value not in observable for value in keys.values())
+    assert "<redacted-credential>" in observable
+
+
+def test_plan_usage_and_route_commands_work_on_phone(tmp_path, monkeypatch):
+    monkeypatch.setenv("DREAM_PLAN", "local")
+    monkeypatch.setenv("DREAM_BACKEND", "echo")
+    transport = FakeTransport()
+    with MemoryStore(str(tmp_path / "phone-commerce.db")) as store:
+        bot, _ = _bot(store, transport)
+        assert bot.process_updates(
+            [
+                _update(1, OWNER, "/plan"),
+                _update(2, OWNER, "/usage"),
+                _update(3, OWNER, "/route"),
+            ]
+        ) is True
+
+    replies = [text for _, text, _ in transport.sent]
+    assert len(replies) == 3
+    assert "local" in replies[0].lower()
+    assert replies[1]
+    assert "echo" in replies[2].lower()
+
+
+def test_unknown_phone_command_is_refused_without_reaching_model(tmp_path):
+    transport = FakeTransport()
+    with MemoryStore(str(tmp_path / "command-refusal.db")) as store:
+        conversation = RecordingConversation(store)
+        bot, _ = _bot(store, transport, conversation_factory=lambda _chat: conversation)
+        assert bot.process_updates([_update(1, OWNER, "/shell rm -rf /tmp/no")]) is True
+
+    assert conversation.messages == []
+    assert [text for _, text, _ in transport.sent] == [COMMAND_REFUSAL_TEXT]
+
+
+def test_model_issued_dangerous_tool_is_fail_closed_without_approver(tmp_path):
+    with MemoryStore(str(tmp_path / "dangerous-policy.db")) as store:
+        bot, _ = _bot(store, FakeTransport())
+        conversation = bot.conversation_for(OWNER)
+        allowed, reason = conversation.approval_policy.allows(
+            "run_shell", {"command": "touch should-never-exist"}
+        )
+
+    assert allowed is False
+    assert reason == "dangerous tool denied: no approver configured"

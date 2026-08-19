@@ -118,6 +118,10 @@ class PlatformAdapter(ABC):
         """The adapter's config dict (callers must not leak secret values)."""
         return self._config
 
+    def update_config(self, config: dict[str, Any]) -> None:
+        """Replace live config after a gateway configure operation."""
+        self._config = dict(config or {})
+
     # -- helpers for subclasses ------------------------------------------ #
 
     async def deliver(self, message: IncomingMessage) -> None:
@@ -130,8 +134,15 @@ class PlatformAdapter(ABC):
 
         self._status.last_activity = utc_now()
 
+    def redact_error(self, error: object) -> str:
+        """Return an error safe for logs and public adapter status."""
+        from dream.connectivity.config import redact_text
+
+        return redact_text(error, self._config)
+
     def _mark_error(self, error: str, *, running: bool = False) -> None:
-        """Record a failure on the status object without raising."""
-        self._status.error = error
+        """Record a credential-safe failure on the status object."""
+        safe_error = self.redact_error(error)
+        self._status.error = safe_error
         self._status.running = running
-        logger.warning("%s adapter error: %s", self.platform_name, error)
+        logger.warning("%s adapter error: %s", self.platform_name, safe_error)
