@@ -84,6 +84,20 @@
     "providersTitle": "プロバイダー",
     "providersDesc": "モデルとキーを設定"
   },
+  "firstRun": {
+    "title": "オフラインで動作 — アカウント不要",
+    "desc": "Dream はオフラインの echo エンジンでこのマシン上だけで動作します。",
+    "echo": "オフライン echo エンジン — ネットワークもアカウントも不要",
+    "ollamaTitle": "Ollama でローカルモデルを追加",
+    "ollamaDesc": "より賢い応答。それでもデータはマシンの外に出ません。",
+    "ollamaCta": "Ollama を設定",
+    "byokTitle": "自分で API キーを持ち込む",
+    "byokDesc": "任意 — 有効にするとプロンプトはそのプロバイダーへ送信されます。",
+    "byokCta": "プロバイダーキーを追加",
+    "routeTitle": "現在のルート",
+    "leavesMachine": "プロンプトはこのマシンから送信されます",
+    "staysLocal": "プロンプトはこのマシンの外に出ません"
+  },
   "projects": {
     "title": "プロジェクト",
     "description": "プロジェクトのダッシュボード、ファイル、プロジェクト別の記憶。P-03 で構築。"

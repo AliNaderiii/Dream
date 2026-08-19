@@ -2,6 +2,7 @@ import { Bot, Server, Settings as SettingsIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { ACPConfigSection } from '@/components/acp/acp-config-section';
+import { BillingSummary } from '@/components/billing/billing-summary';
 import { BrowserSettings } from '@/components/browser/browser-settings';
 import { GatewaySettings } from '@/components/gateway/gateway-settings';
 import { MCPServersList } from '@/components/mcp/mcp-servers-list';
@@ -311,6 +312,13 @@ export function SettingsRoute() {
                   {tc('generic.choose')}
                 </Button>
               </Row>
+            </section>
+
+            {/* S05: plan, usage, and model route */}
+            <section>
+              <h2 className="pb-2 text-h2 font-semibold text-fg-primary">{t('billing.title')}</h2>
+              <p className="pb-2 text-caption text-fg-secondary">{t('billing.desc')}</p>
+              <BillingSummary />
             </section>
 
             {/* P-08: Docker sandbox */}

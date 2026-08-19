@@ -429,6 +429,19 @@ Notebook paths are confined to the datasets directory (escapes raise
 execution methods raise code `-32012` with an actionable message; file-level
 methods (`create`/`read`) keep working.
 
+### 3.14 `commerce.*` / `route.*` — plan, usage, and model route (S05)
+
+Read-only serialisers over `dream.commerce` and `dream.router`. The pricing
+policy lives in Python (`commerce.py`): a paid plan's `price` is `null` with
+`price_note: "TBD after cost measurement"` — the desktop must never render a
+numeric IRR except `0` for the free plans.
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `commerce.plan` | `{}` | `{plan_id, name_fa, name_en, currency, price: int\|null, price_note, metered, period: "day"\|"month"\|"year"\|"unlimited", limits: {daily, monthly, yearly}, ledger_attached}` |
+| `commerce.usage` | `{}` | `{plan_id, window: "day"\|"month"\|"year"\|null, used, limit: int\|null, remaining: int\|null, unlimited}` — `limit`/`remaining` are `null` and `unlimited` is `true` when no ledger is attached (the `local` plan) |
+| `route.resolve` | `{}` | `{name: "hosted"\|"ollama"\|"byok"\|"echo", leaves_machine: bool, sentence_en, sentence_fa}` — the exact route and privacy sentences `dream.router` resolves, same as `dream --route` |
+
 ---
 
 ## 4. Error taxonomy

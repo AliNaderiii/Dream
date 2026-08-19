@@ -20,5 +20,32 @@
   "closeToTrayDesc": "Hält Dream beim Schließen des Fensters im Tray am Laufen.",
   "workspace": "Arbeitsbereich",
   "workspaceFolder": "Arbeitsbereichsordner",
-  "noWorkspace": "Kein Ordner gewählt — Dateizugriff ist nicht eingeschränkt."
+  "noWorkspace": "Kein Ordner gewählt — Dateizugriff ist nicht eingeschränkt.",
+  "billing": {
+    "title": "Plan & Verbrauch",
+    "desc": "Ihr Plan, Turn-Verbrauch und die Route Ihrer Nachrichten.",
+    "plan": "Plan",
+    "period": "Zeitraum",
+    "periodDay": "Pro Tag",
+    "periodMonth": "Pro Monat",
+    "periodYear": "Pro Jahr",
+    "periodUnlimited": "Unbegrenzt",
+    "usage": "Verbrauch",
+    "turnsUsed": "{{used}} von {{limit}} Turns verbraucht",
+    "turnsUnlimited": "Unbegrenzte Turns",
+    "price": "Preis",
+    "free": "Kostenlos",
+    "priceTbd": "Nach Kostenmessung festzulegen",
+    "route": "Modell-Route",
+    "routeDesc": "Wo jeder Turn ausgeführt wird.",
+    "routeHosted": "Gehostetes Cloud-Modell",
+    "routeOllama": "Lokales Ollama",
+    "routeByok": "Eigener Endpunkt (BYOK)",
+    "routeEcho": "Offline-Echo",
+    "leavesMachine": "Nachrichten verlassen diesen Rechner",
+    "staysLocal": "Nachrichten verlassen diesen Rechner nie",
+    "upgrade": "Upgrade (in Kürze)",
+    "unavailable": "Planinformationen sind derzeit nicht verfügbar.",
+    "retry": "Erneut versuchen"
+  }
 }

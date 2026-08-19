@@ -84,6 +84,20 @@
     "providersTitle": "Providers",
     "providersDesc": "Configure models and keys"
   },
+  "firstRun": {
+    "title": "Works offline — no account needed",
+    "desc": "Dream runs fully on this machine with the offline echo engine.",
+    "echo": "Offline echo engine — no network or account required",
+    "ollamaTitle": "Add a local model with Ollama",
+    "ollamaDesc": "Smarter replies that still never leave your machine.",
+    "ollamaCta": "Set up Ollama",
+    "byokTitle": "Bring your own API key",
+    "byokDesc": "Optional — your prompts then leave this machine to that provider.",
+    "byokCta": "Add a provider key",
+    "routeTitle": "Current route",
+    "leavesMachine": "Prompts leave this machine",
+    "staysLocal": "Prompts never leave this machine"
+  },
   "projects": {
     "title": "Projects",
     "description": "Project dashboards, files and per-project memory. Built in P-03."

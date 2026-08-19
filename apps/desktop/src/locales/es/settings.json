@@ -20,5 +20,32 @@
   "closeToTrayDesc": "Mantiene Dream en la bandeja al cerrar la ventana.",
   "workspace": "Espacio de trabajo",
   "workspaceFolder": "Carpeta de espacio de trabajo",
-  "noWorkspace": "Sin carpeta seleccionada: el acceso a archivos no está restringido."
+  "noWorkspace": "Sin carpeta seleccionada: el acceso a archivos no está restringido.",
+  "billing": {
+    "title": "Plan y uso",
+    "desc": "Tu plan, uso de turnos y la ruta que siguen tus mensajes.",
+    "plan": "Plan",
+    "period": "Período",
+    "periodDay": "Por día",
+    "periodMonth": "Por mes",
+    "periodYear": "Por año",
+    "periodUnlimited": "Ilimitado",
+    "usage": "Uso",
+    "turnsUsed": "{{used}} de {{limit}} turnos usados",
+    "turnsUnlimited": "Turnos ilimitados",
+    "price": "Precio",
+    "free": "Gratis",
+    "priceTbd": "Por determinar tras medir costes",
+    "route": "Ruta del modelo",
+    "routeDesc": "Dónde se ejecuta cada turno.",
+    "routeHosted": "Modelo en la nube",
+    "routeOllama": "Ollama local",
+    "routeByok": "Tu propio endpoint (BYOK)",
+    "routeEcho": "Echo sin conexión",
+    "leavesMachine": "Los mensajes salen de esta máquina",
+    "staysLocal": "Los mensajes nunca salen de esta máquina",
+    "upgrade": "Mejorar (próximamente)",
+    "unavailable": "La información del plan no está disponible ahora.",
+    "retry": "Reintentar"
+  }
 }

@@ -20,5 +20,32 @@
   "closeToTrayDesc": "ウィンドウを閉じても Dream をトレイで実行し続けます。",
   "workspace": "ワークスペース",
   "workspaceFolder": "ワークスペースフォルダー",
-  "noWorkspace": "フォルダー未選択——ファイルアクセスは制限されません。"
+  "noWorkspace": "フォルダー未選択——ファイルアクセスは制限されません。",
+  "billing": {
+    "title": "プランと使用量",
+    "desc": "プラン、ターン使用量、プロンプトの経路。",
+    "plan": "プラン",
+    "period": "期間",
+    "periodDay": "日ごと",
+    "periodMonth": "月ごと",
+    "periodYear": "年ごと",
+    "periodUnlimited": "無制限",
+    "usage": "使用量",
+    "turnsUsed": "{{limit}} ターン中 {{used}} ターン使用",
+    "turnsUnlimited": "ターン無制限",
+    "price": "価格",
+    "free": "無料",
+    "priceTbd": "コスト測定後に決定",
+    "route": "モデルルート",
+    "routeDesc": "各ターンの実行先。",
+    "routeHosted": "ホスト型クラウドモデル",
+    "routeOllama": "ローカル Ollama",
+    "routeByok": "独自エンドポイント (BYOK)",
+    "routeEcho": "オフライン echo",
+    "leavesMachine": "プロンプトはこのマシンから送信されます",
+    "staysLocal": "プロンプトはこのマシンの外に出ません",
+    "upgrade": "アップグレード（近日公開）",
+    "unavailable": "現在プラン情報を取得できません。",
+    "retry": "再試行"
+  }
 }

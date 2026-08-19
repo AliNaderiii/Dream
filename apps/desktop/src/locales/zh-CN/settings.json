@@ -20,5 +20,32 @@
   "closeToTrayDesc": "关闭窗口后让 Dream 继续在托盘中运行。",
   "workspace": "工作区",
   "workspaceFolder": "工作区文件夹",
-  "noWorkspace": "未选择文件夹——文件访问不受限制。"
+  "noWorkspace": "未选择文件夹——文件访问不受限制。",
+  "billing": {
+    "title": "方案与用量",
+    "desc": "你的方案、轮次用量以及提示词所走的路由。",
+    "plan": "方案",
+    "period": "周期",
+    "periodDay": "按天",
+    "periodMonth": "按月",
+    "periodYear": "按年",
+    "periodUnlimited": "不限量",
+    "usage": "用量",
+    "turnsUsed": "已用 {{used}} / {{limit}} 轮",
+    "turnsUnlimited": "轮次不限量",
+    "price": "价格",
+    "free": "免费",
+    "priceTbd": "成本测量后确定",
+    "route": "模型路由",
+    "routeDesc": "每轮在哪里运行。",
+    "routeHosted": "托管云模型",
+    "routeOllama": "本地 Ollama",
+    "routeByok": "自有端点 (BYOK)",
+    "routeEcho": "离线 echo",
+    "leavesMachine": "提示词会离开本机",
+    "staysLocal": "提示词绝不会离开本机",
+    "upgrade": "升级（即将推出）",
+    "unavailable": "当前无法获取方案信息。",
+    "retry": "重试"
+  }
 }

@@ -84,6 +84,20 @@
     "providersTitle": "Proveedores",
     "providersDesc": "Configura modelos y claves"
   },
+  "firstRun": {
+    "title": "Funciona sin conexión — sin necesidad de cuenta",
+    "desc": "Dream funciona por completo en esta máquina con el motor echo sin conexión.",
+    "echo": "Motor echo sin conexión — sin red ni cuenta",
+    "ollamaTitle": "Añade un modelo local con Ollama",
+    "ollamaDesc": "Respuestas más inteligentes que nunca salen de tu máquina.",
+    "ollamaCta": "Configurar Ollama",
+    "byokTitle": "Trae tu propia clave API",
+    "byokDesc": "Opcional — tus mensajes saldrán de esta máquina hacia ese proveedor.",
+    "byokCta": "Añadir clave de proveedor",
+    "routeTitle": "Ruta actual",
+    "leavesMachine": "Los mensajes salen de esta máquina",
+    "staysLocal": "Los mensajes nunca salen de esta máquina"
+  },
   "projects": {
     "title": "Proyectos",
     "description": "Paneles de proyecto, archivos y memoria por proyecto. Construido en P-03."
