@@ -158,9 +158,25 @@ Prompt P-11 — Internationalisation, Documentation, Security Audit & Release.
   council widget renders the run; a ledger `refusal` is shown inline
   instead of being swallowed. No new model ids, no invented IRR, no kernel
   change.
+- **S12 — Windows installer that actually attaches + sidecar finds Python.**
+  The desktop sidecar no longer assumes `python3`: when
+  `DREAM_SIDECAR_PYTHON` is unset it tries `python`, `py` (the Windows
+  launcher), then `python3`, skips interpreters that exit before the
+  protocol handshake (Store stubs, wrong Python, missing `dream`), and
+  logs an English and Persian explanation when none of them can start.
+  `desktop-release.yml` now publishes — not drafts — the GitHub Release for
+  every `v*` tag with the unsigned Windows NSIS installer attached (no
+  Authenticode secrets required, SmartScreen may warn) and fails the job
+  when the release ends up without installers. The desktop shell version
+  was bumped to 0.3.0; the `v0.2.0` and `v0.2.1` releases shipped with zero
+  assets, so 0.3.0 is the first release intended to carry a Windows NSIS
+  built from current main.
 
 ### Changed
 
+- Desktop shell version bumped to **0.3.0** (`apps/desktop/package.json`,
+  `apps/desktop/src-tauri/tauri.conf.json`); the Python package version is
+  unchanged.
 - The system prompt no longer spends most of its length teaching the model
   when to call `remember_fact`: the extraction pass writes memory on its own,
   so the prompt now carries a short Persian instruction to *use* recalled
