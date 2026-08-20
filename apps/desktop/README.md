@@ -61,7 +61,9 @@ utilities (`bg-canvas`, `text-fg-primary`, `shadow-e2`). Themes are driven by
 
 ## Updater
 
-`tauri.conf.json` carries the updater **public** key. Releases are signed in CI
-with `TAURI_SIGNING_PRIVATE_KEY`; updater artifacts are only produced when that
-secret exists (see `tauri.release.conf.json`). The private key generated during
+`tauri.conf.json` carries the updater **public** key. Updater artifacts are
+signed in CI with `TAURI_SIGNING_PRIVATE_KEY` and are only produced when that
+secret exists (see `tauri.release.conf.json`). The Windows installers
+themselves are **unsigned** unless an Authenticode certificate is configured,
+so SmartScreen may warn on first run. The private key generated during
 development is intentionally **not** committed.

@@ -61,12 +61,23 @@ data science, providers, connectivity, provenance, and settings.
 
 ### Windows
 
-Double-click **`run.bat`**. That is the only first-run launcher.
+Two ways to run Dream on Windows — both are honest about what they are:
 
-It creates `.venv` if needed (or prints the one command `python -m venv .venv`
-and waits), installs Dream, and starts the local Ollama backend with model
-`qwen2.5:7b`. If Ollama is missing it prints a Persian and English message
-with <https://ollama.com/download> and waits so the window stays readable.
+1. **Use today — `run.bat` (the first-run path).** Clone the repository,
+   install [Ollama](https://ollama.com/download), and double-click
+   **`run.bat`**. It creates `.venv` if needed (or prints the one command
+   `python -m venv .venv` and waits), installs Dream, and starts the local
+   Ollama backend with model `qwen2.5:7b`. If Ollama is missing it prints a
+   Persian and English message with <https://ollama.com/download> and waits so
+   the window stays readable.
+2. **Tauri installer (after the `v0.3.0` tag).** The GitHub Release for the
+   tag publishes an **unsigned** NSIS installer (`Dream_*-setup.exe`) built
+   from current main. It installs the UI shell only — it does **not** bundle
+   Python. Before launching the installed app, install Python 3.10+ and the
+   Dream package (`pip install -e .` from the repository root) so the sidecar
+   can start; the app shows the bridge disconnected otherwise. WebView2 may be
+   downloaded during installation, and SmartScreen may warn because the
+   installer is unsigned — that is expected.
 
 See [docs/user/quick-start.md](docs/user/quick-start.md) for extras
 (`.[web]`, `.[data]`) and the first conversation.

@@ -5,7 +5,9 @@ is also available for setup, diagnostics, automation, and an offline demo.
 Python 3.10+ is required. Node.js 22+ and Rust stable are required only when
 building the desktop app from source.
 
-## Windows first run — `run.bat` + Ollama
+## Windows — two honest paths
+
+### 1. Use today: `run.bat` + Ollama
 
 The supported first-run path today is the local CLI launcher, not an installer:
 
@@ -24,6 +26,28 @@ or Ollama is missing, it prints the next step and pauses so the message remains
 visible. `check.bat` runs offline diagnostics. `Dream.bat` and
 `Dream-Start.bat` launch the older `desktop.py` window; they are not the Tauri
 product UI and are not the first-run path.
+
+### 2. Tauri installer (from the `v0.3.0` tag onward)
+
+After the owner tags `v0.3.0`, the GitHub Release for that tag carries an
+**unsigned** NSIS installer (`Dream_*-setup.exe`) built from current main. It
+installs the desktop UI shell only — it does **not** bundle Python:
+
+1. Install Python 3.10+ and make sure it is on PATH (`python` or `py`).
+2. Install the Dream kernel into that Python, from the repository root:
+
+   ```bat
+   python -m pip install -e .
+   ```
+
+3. Download `Dream_*-setup.exe` from the GitHub Release and install it.
+
+The installed app looks for `python`, `py`, then `python3` to start its Python
+sidecar (`python -m dream.bridge`); if none of them can start, the bridge
+stays disconnected and the log explains why. WebView2 may be downloaded during
+installation. The installer is unsigned, so SmartScreen may warn — that is
+expected. Bundling the Python kernel into the installer is planned for a later
+session; until then the installer assumes a local Python as above.
 
 ## Install the Python CLI (any OS)
 
