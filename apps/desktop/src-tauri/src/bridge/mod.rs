@@ -11,6 +11,7 @@
 //! `bridge_restart`, `bridge_kill` — and listens to `bridge://chunk` /
 //! `bridge://state` events (see `src/lib/bridge/`).
 
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -101,13 +102,29 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) {
 impl<R: Runtime> Bridge<R> {
     /// Construct a bridge with fresh, empty coordination state.
     fn new(app: AppHandle<R>) -> Self {
+        let mut config = SidecarConfig::default();
+        // Prefer a bundled CPython (the Windows embeddable shipped in the
+        // installer) over the PATH fallback, unless `DREAM_SIDECAR_PYTHON` was
+        // set — that is a hard override and must stay the only candidate. On
+        // POSIX the helper finds no bundled interpreter and the config is left
+        // unchanged, so Linux/macOS keep using the system Python.
+        let is_override = std::env::var("DREAM_SIDECAR_PYTHON")
+            .ok()
+            .is_some_and(|value| !value.trim().is_empty());
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(Path::to_path_buf));
+        if let Some(exe_dir) = exe_dir {
+            let resource_dir = app.path().resource_dir().ok();
+            config.prepend_bundled(&exe_dir, resource_dir.as_deref(), is_override);
+        }
         Self {
             app,
             state: Arc::new(SharedState::default()),
             dispatcher: Arc::new(Mutex::new(Dispatcher::new())),
             writer_tx: Arc::new(Mutex::new(None)),
             killed: Arc::new(AtomicBool::new(false)),
-            config: SidecarConfig::default(),
+            config,
         }
     }
 

@@ -1,12 +1,12 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Dream",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "identifier": "com.dream.assistant",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "node ./scripts/bundle-sidecar.mjs && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -83,7 +83,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [],
+    "resources": ["resources/python/**"],
     "externalBin": [],
     "macOS": {
       "minimumSystemVersion": "13.0",

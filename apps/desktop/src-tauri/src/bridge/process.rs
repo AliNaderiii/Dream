@@ -11,6 +11,7 @@
 //! State transitions are written to the shared [`SharedState`] and emitted as
 //! `bridge://state` events so the frontend status indicator stays in sync.
 
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -30,11 +31,15 @@ use crate::bridge::state::{ConnectionState, SharedState};
 pub struct SidecarConfig {
     /// Interpreter candidates, tried in order until one starts.
     /// `DREAM_SIDECAR_PYTHON` is a hard override: when set, it is the only
-    /// candidate. Otherwise the order is `python`, `py` (the Windows
-    /// launcher), `python3`.
+    /// candidate. Otherwise the order is the bundled interpreter (if any),
+    /// then `python`, `py` (the Windows launcher), `python3`.
     pub python: Vec<String>,
     /// Module to run (default `dream.bridge`, override via `DREAM_SIDECAR_MODULE`).
     pub module: String,
+    /// Subset of `python` that point at the bundled CPython runtime shipped
+    /// next to the app (Windows only). Spawning one of these isolates the
+    /// interpreter from user site-packages (see [`SidecarConfig::is_bundled`]).
+    bundled: Vec<String>,
 }
 
 /// Interpreter candidates when `DREAM_SIDECAR_PYTHON` is unset. On Windows the
@@ -55,12 +60,50 @@ impl SidecarConfig {
         let module = getenv("DREAM_SIDECAR_MODULE")
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| "dream.bridge".to_string());
-        Self { python, module }
+        Self {
+            python,
+            module,
+            bundled: Vec::new(),
+        }
     }
 
     /// Interpreter candidates to try, in order.
     pub fn candidates(&self) -> &[String] {
         &self.python
+    }
+
+    /// Prepend a bundled CPython interpreter ahead of the PATH candidates.
+    ///
+    /// `is_override` is true when `DREAM_SIDECAR_PYTHON` was set: in that case
+    /// the explicit interpreter stays the only candidate and nothing is
+    /// prepended. Bundled paths that exist on disk are also recorded so
+    /// [`spawn`] can isolate them from user site-packages.
+    pub fn prepend_bundled(
+        &mut self,
+        exe_dir: &Path,
+        resource_dir: Option<&Path>,
+        is_override: bool,
+    ) {
+        if is_override {
+            return;
+        }
+        let bundled: Vec<String> = bundled_interpreter_paths(exe_dir, resource_dir)
+            .into_iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect();
+        if bundled.is_empty() {
+            return;
+        }
+        let mut merged = bundled.clone();
+        merged.extend(self.python.iter().cloned());
+        self.python = merged;
+        self.bundled = bundled;
+    }
+
+    /// Whether `exe` is a bundled (embedded) interpreter, so the spawner can
+    /// isolate it from a host-level user install.
+    fn is_bundled(&self, exe: &str) -> bool {
+        self.bundled.iter().any(|bundled| bundled.as_str() == exe)
     }
 }
 
@@ -68,6 +111,32 @@ impl Default for SidecarConfig {
     fn default() -> Self {
         Self::from_env(&|key| std::env::var(key).ok())
     }
+}
+
+/// Absolute paths of a bundled CPython interpreter, in priority order.
+///
+/// The Windows installer embeds a CPython runtime (`python/python.exe`) next to
+/// the app; the supervisor prefers it over the PATH fallback so a bare Release
+/// download can start the sidecar. Candidates are resolved from, in order: the
+/// Tauri resource directory, the executable's directory, then a `resources`
+/// subdirectory of the executable's directory. Only paths that exist on disk
+/// are returned. On POSIX there is no bundled interpreter (Linux/macOS still
+/// use the system Python), so no `python.exe` file exists next to the binary
+/// and this naturally returns an empty list.
+pub(crate) fn bundled_interpreter_paths(
+    exe_dir: &Path,
+    resource_dir: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(dir) = resource_dir {
+        candidates.push(dir.join("python").join("python.exe"));
+    }
+    candidates.push(exe_dir.join("python").join("python.exe"));
+    candidates.push(exe_dir.join("resources").join("python").join("python.exe"));
+    candidates
+        .into_iter()
+        .filter(|path| path.is_file())
+        .collect()
 }
 
 /// Backoff schedule (seconds) between restart attempts. Three attempts max.
@@ -350,6 +419,12 @@ fn spawn(config: &SidecarConfig, exe: &str) -> std::io::Result<Child> {
     if let Ok(path) = std::env::var("DREAM_PYTHONPATH") {
         cmd.env("PYTHONPATH", path);
     }
+    // The bundled embeddable CPython runs `import site`; disable user
+    // site-packages so a `pip install --user dream` on the host cannot shadow
+    // the embedded kernel, and force UTF-8 for the stdio JSON-RPC framing.
+    if config.is_bundled(exe) {
+        cmd.env("PYTHONNOUSERSITE", "1").env("PYTHONUTF8", "1");
+    }
     cmd.spawn()
 }
 
@@ -479,5 +554,100 @@ mod tests {
             0,
             "POSIX sidecar has no console-hiding flag"
         );
+    }
+
+    #[test]
+    fn bundled_interpreter_paths_prefer_resource_then_exe_then_resources_subdir() {
+        // Pure path construction + existence filter: create dummy `python.exe`
+        // files in each location (never spawn a real interpreter) and assert
+        // the priority order.
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let exe_dir = tmp.path().join("exe");
+        let resource_dir = tmp.path().join("resource");
+        std::fs::create_dir_all(exe_dir.join("python")).unwrap();
+        std::fs::create_dir_all(exe_dir.join("resources").join("python")).unwrap();
+        std::fs::create_dir_all(resource_dir.join("python")).unwrap();
+        std::fs::write(exe_dir.join("python").join("python.exe"), b"").unwrap();
+        std::fs::write(exe_dir.join("resources").join("python").join("python.exe"), b"").unwrap();
+        std::fs::write(resource_dir.join("python").join("python.exe"), b"").unwrap();
+
+        let paths = bundled_interpreter_paths(&exe_dir, Some(&resource_dir));
+        assert_eq!(
+            paths,
+            vec![
+                resource_dir.join("python").join("python.exe"),
+                exe_dir.join("python").join("python.exe"),
+                exe_dir.join("resources").join("python").join("python.exe"),
+            ]
+        );
+    }
+
+    #[test]
+    fn bundled_interpreter_paths_only_returns_existing_files() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let exe_dir = tmp.path().join("exe");
+        let resource_dir = tmp.path().join("resource");
+        std::fs::create_dir_all(exe_dir.join("python")).unwrap();
+        std::fs::create_dir_all(&resource_dir).unwrap();
+        // Only exe_dir/python/python.exe exists; the resource dir and the
+        // exe_dir/resources subdir are empty and must be filtered out.
+        std::fs::write(exe_dir.join("python").join("python.exe"), b"").unwrap();
+
+        let paths = bundled_interpreter_paths(&exe_dir, Some(&resource_dir));
+        assert_eq!(paths, vec![exe_dir.join("python").join("python.exe")]);
+    }
+
+    #[test]
+    fn bundled_interpreter_paths_empty_when_nothing_present() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let exe_dir = tmp.path().join("exe");
+        std::fs::create_dir_all(&exe_dir).unwrap();
+
+        let paths = bundled_interpreter_paths(&exe_dir, None);
+        assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn prepend_bundled_puts_bundled_first() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let exe_dir = tmp.path().join("exe");
+        std::fs::create_dir_all(exe_dir.join("python")).unwrap();
+        let bundled = exe_dir.join("python").join("python.exe");
+        std::fs::write(&bundled, b"").unwrap();
+        let bundled_str = bundled.to_string_lossy().into_owned();
+
+        let mut config = SidecarConfig::from_env(&env_from(&HashMap::new()));
+        config.prepend_bundled(&exe_dir, None, false);
+
+        assert_eq!(
+            config.python,
+            vec![
+                bundled_str.clone(),
+                "python".to_string(),
+                "py".to_string(),
+                "python3".to_string(),
+            ]
+        );
+        assert!(config.is_bundled(&bundled_str));
+    }
+
+    #[test]
+    fn dream_sidecar_python_override_is_not_shadowed_by_bundled() {
+        // Even when a bundled interpreter exists on disk, an explicit
+        // `DREAM_SIDECAR_PYTHON` override must stay the only candidate and
+        // must not be treated as a bundled runtime.
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let exe_dir = tmp.path().join("exe");
+        std::fs::create_dir_all(exe_dir.join("python")).unwrap();
+        std::fs::write(exe_dir.join("python").join("python.exe"), b"").unwrap();
+
+        let mut env = HashMap::new();
+        env.insert("DREAM_SIDECAR_PYTHON", "C:\\dream\\venv\\python.exe");
+        let mut config = SidecarConfig::from_env(&env_from(&env));
+
+        config.prepend_bundled(&exe_dir, None, true);
+
+        assert_eq!(config.python, vec!["C:\\dream\\venv\\python.exe"]);
+        assert!(!config.is_bundled("C:\\dream\\venv\\python.exe"));
     }
 }

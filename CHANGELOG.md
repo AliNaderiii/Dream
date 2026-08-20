@@ -5,6 +5,45 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-08-20
+
+The first Windows installer a Release-only user can download, install, and run
+end-to-end — no separate `pip install` required.
+
+### Added
+
+- **Windows NSIS embeds a CPython runtime + the Dream kernel.** At `tauri build`
+  time a new `apps/desktop/scripts/bundle-sidecar.mjs` downloads the pinned
+  CPython 3.12.10 Windows embeddable amd64 package from python.org (SHA-256
+  verified), bootstraps pip, and installs the Dream package **non-editable**
+  into `src-tauri/resources/python/`, which the NSIS bundle ships next to the
+  app. The supervisor now prefers this bundled `python/python.exe` over PATH
+  (`python`/`py`/`python3`), so a Release download can start the sidecar with
+  no local Python.
+- **Bundled interpreter is isolated from user site-packages.** Spawning the
+  bundled CPython sets `PYTHONNOUSERSITE=1` and `PYTHONUTF8=1` so a host
+  `pip install --user dream` cannot shadow the embedded kernel.
+
+### Fixed
+
+- **S13 crash fix ships in this installer.** The `Cannot read properties of
+  undefined (reading 'dot')` crash and the Windows console flashing are fixed
+  in the binaries this release installs (S13 is on `main`; the broken
+  `v0.3.0` build is superseded).
+
+### Changed
+
+- Desktop version bumped to **0.3.1** (`apps/desktop/package.json`,
+  `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/src-tauri/Cargo.toml`).
+  The Python package version is unchanged.
+
+### Known notes
+
+- The Windows installer is **unsigned** — SmartScreen is expected to warn
+  (`More info → Run anyway`). No Authenticode signature yet.
+- The WebView2 bootstrapper is unchanged and may be downloaded during install.
+- Linux/macOS still use the system Python; the bundled runtime is Windows-only.
+
 ## [0.2.0] - 2026-08-17
 
 Prompt P-11 — Internationalisation, Documentation, Security Audit & Release.
