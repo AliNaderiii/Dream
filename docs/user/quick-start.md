@@ -27,27 +27,24 @@ visible. `check.bat` runs offline diagnostics. `Dream.bat` and
 `Dream-Start.bat` launch the older `desktop.py` window; they are not the Tauri
 product UI and are not the first-run path.
 
-### 2. Tauri installer (from the `v0.3.0` tag onward)
+### 2. Tauri installer (from the `v0.3.1` release onward)
 
-After the owner tags `v0.3.0`, the GitHub Release for that tag carries an
-**unsigned** NSIS installer (`Dream_*-setup.exe`) built from current main. It
-installs the desktop UI shell only — it does **not** bundle Python:
+Download `Dream_0.3.1_x64-setup.exe` from the GitHub Release, install it, and
+run Dream. The kernel is inside the installer — no separate `pip install`, no
+local Python required:
 
-1. Install Python 3.10+ and make sure it is on PATH (`python` or `py`).
-2. Install the Dream kernel into that Python, from the repository root:
+1. Download **`Dream_0.3.1_x64-setup.exe`** from the
+   [GitHub Release](https://github.com/AliNaderiii/Dream/releases) for `v0.3.1`.
+2. Run the installer. SmartScreen may warn because the installer is
+   **unsigned** — choose **More info → Run anyway**.
+3. WebView2 may be downloaded during installation if it is missing.
+4. Open Dream and use it.
 
-   ```bat
-   python -m pip install -e .
-   ```
-
-3. Download `Dream_*-setup.exe` from the GitHub Release and install it.
-
-The installed app looks for `python`, `py`, then `python3` to start its Python
-sidecar (`python -m dream.bridge`); if none of them can start, the bridge
-stays disconnected and the log explains why. WebView2 may be downloaded during
-installation. The installer is unsigned, so SmartScreen may warn — that is
-expected. Bundling the Python kernel into the installer is planned for a later
-session; until then the installer assumes a local Python as above.
+The Windows installer embeds a CPython runtime plus the Dream kernel
+(`python/python.exe` next to the app), and the shell prefers that bundled
+interpreter before falling back to `python` / `py` / `python3` on PATH.
+Ollama is optional for a real local model; without it the router may fall
+through to echo — Dream never pretends a hosted model is running locally.
 
 ## Install the Python CLI (any OS)
 
@@ -142,18 +139,19 @@ prices.
 
 ## Windows desktop troubleshooting (the installed app)
 
-The installer ships the **UI shell only** — it deliberately does **not** bundle
-Python. After installing `Dream_*-setup.exe`, the app must find a working
-Python to start its sidecar (`python -u -m dream.bridge`). If it cannot, the
-status bar shows **Disconnected** and a calm banner explains
+The installer bundles a CPython runtime plus the Dream kernel, so the sidecar
+(`python -u -m dream.bridge`) starts from the bundled `python/python.exe` with
+no local Python. If the bridge cannot start (for example a corrupted install),
+the status bar shows **Disconnected** and a calm banner explains
 (English + Persian) that the engine is not installed or did not start. This is
-expected, not a crash — the app stays usable and never pretends the model is
-local.
+not a crash — the app stays usable and never pretends the model is local.
 
 **Symptoms and fixes**
 
 - **"Disconnected" banner: the engine (Python kernel) is not installed or did
-  not start."** Install Python 3.10+ from python.org and make sure `python`
+  not start."** Re-run the installer to repair the bundled runtime, then click
+  **Reconnect**. If you are running from source (`run.bat` or `npm run tauri
+  dev`) instead of the installer, install Python 3.10+ and make sure `python`
   (or `py`) is on PATH, then install the Dream kernel from the repository
   root:
 
@@ -161,14 +159,13 @@ local.
   python -m pip install -e .
   ```
 
-  Click **Reconnect** in the banner once that succeeds. No need to reinstall the
-  app.
+  Click **Reconnect** in the banner once that succeeds.
 
-- **A console window flashes and closes in a loop.** This is a failed sidecar
-  discovery attempt (for example the Windows Store `python.exe` stub, or no
-  Python on PATH). The sidecar now hides its console during discovery, so the
-  flashing is gone; the real fix is still to install Python + the Dream kernel
-  as above.
+- **A console window flashes and closes in a loop.** This was a failed sidecar
+  discovery attempt (for example the Windows Store `python.exe` stub). It is
+  fixed since `v0.3.1`: the sidecar spawns without a console window, and the
+  installer's bundled interpreter starts first, so discovery retries no longer
+  flash a `cmd` window.
 
 - **SmartScreen / "Windows protected your PC".** The installer is unsigned, so
   SmartScreen warns. Choose **More info → Run anyway** if you trust the
