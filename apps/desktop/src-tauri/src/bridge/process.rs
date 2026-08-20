@@ -308,23 +308,22 @@ async fn supervise_reader<R: Runtime>(
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-/// Brings `CommandExt::creation_flags` into scope so the sidecar can be spawned
-/// without a console window. Windows-only; a no-op include elsewhere.
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
-
 /// Creation flags for the sidecar process on the host platform.
 ///
-/// On Windows we hide the console window; on POSIX there is no such flag. The
-/// function is pure and cfg-gated so it can be unit-tested without spawning a
-/// real process.
+/// On Windows we hide the console window (CREATE_NO_WINDOW); on POSIX there is
+/// no such flag and the function returns 0. The POSIX variant is only compiled
+/// in test builds to avoid a `dead_code` lint on the lib target.
+///
+/// The function is pure and cfg-gated so it can be unit-tested without spawning
+/// a real process.
 #[cfg(windows)]
 pub(crate) fn sidecar_creation_flags() -> u32 {
     CREATE_NO_WINDOW
 }
 
-/// See [`sidecar_creation_flags`].
-#[cfg(not(windows))]
+/// POSIX stub — only compiled in test builds so `cargo clippy --lib` does not
+/// report it as dead code.
+#[cfg(all(not(windows), test))]
 pub(crate) fn sidecar_creation_flags() -> u32 {
     0
 }
@@ -343,11 +342,11 @@ fn spawn(config: &SidecarConfig, exe: &str) -> std::io::Result<Child> {
     // caller still logs spawn diagnostics via `log::warn!`/`log::error!`. POSIX
     // keeps the inherited stderr so local debugging keeps working.
     #[cfg(windows)]
-    let _ = cmd.creation_flags(sidecar_creation_flags());
+    cmd.creation_flags(sidecar_creation_flags());
     #[cfg(windows)]
-    let _ = cmd.stderr(Stdio::null());
+    cmd.stderr(Stdio::null());
     #[cfg(not(windows))]
-    let _ = cmd.stderr(Stdio::inherit());
+    cmd.stderr(Stdio::inherit());
     if let Ok(path) = std::env::var("DREAM_PYTHONPATH") {
         cmd.env("PYTHONPATH", path);
     }
