@@ -6,7 +6,7 @@ time on Windows, `scripts/bundle-sidecar.mjs` downloads the pinned CPython
 unpacks it here, bootstraps pip, and installs the Dream kernel non-editable.
 
 The resulting tree is shipped by NSIS (`bundle.resources` →
-`resources/python/**`) so a bare Release download can start the sidecar
+`resources/python/**/*`) so a bare Release download can start the sidecar
 (`python -u -m dream.bridge`) without a separate `pip install`.
 
 Everything except this README and `.gitkeep` is git-ignored — the runtime is a
