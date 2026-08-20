@@ -139,3 +139,46 @@ Ollama runs the model locally and the Windows `run.bat` path does not require a
 VPN. Local-plan use is unlimited and does not need a usage ledger. Paid-plan
 prices are **TBD after cost measurement**; Dream does not publish invented IRR
 prices.
+
+## Windows desktop troubleshooting (the installed app)
+
+The installer ships the **UI shell only** — it deliberately does **not** bundle
+Python. After installing `Dream_*-setup.exe`, the app must find a working
+Python to start its sidecar (`python -u -m dream.bridge`). If it cannot, the
+status bar shows **Disconnected** and a calm banner explains
+(English + Persian) that the engine is not installed or did not start. This is
+expected, not a crash — the app stays usable and never pretends the model is
+local.
+
+**Symptoms and fixes**
+
+- **"Disconnected" banner: the engine (Python kernel) is not installed or did
+  not start."** Install Python 3.10+ from python.org and make sure `python`
+  (or `py`) is on PATH, then install the Dream kernel from the repository
+  root:
+
+  ```bat
+  python -m pip install -e .
+  ```
+
+  Click **Reconnect** in the banner once that succeeds. No need to reinstall the
+  app.
+
+- **A console window flashes and closes in a loop.** This is a failed sidecar
+  discovery attempt (for example the Windows Store `python.exe` stub, or no
+  Python on PATH). The sidecar now hides its console during discovery, so the
+  flashing is gone; the real fix is still to install Python + the Dream kernel
+  as above.
+
+- **SmartScreen / "Windows protected your PC".** The installer is unsigned, so
+  SmartScreen warns. Choose **More info → Run anyway** if you trust the
+  release. An Authenticode signature is planned for a later session.
+
+- **WebView2 prompt during install.** The Tauri WebView needs the WebView2
+  runtime; Windows usually fetches it automatically. If offline, install the
+  WebView2 runtime from Microsoft first.
+
+- **Still stuck.** From a terminal in the repository root, run
+  `python doctor.py` (offline checks) and `python -m dream.bridge` to confirm
+  the kernel starts. If either fails, the message tells you the next step.
+

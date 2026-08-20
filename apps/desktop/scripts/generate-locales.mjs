@@ -463,6 +463,9 @@ const en = {
   },
   errors: {
     bridgeOffline: 'The Dream engine is offline.',
+    bridgeKernelMissing: 'The Dream engine (Python kernel) is not installed or did not start.',
+    bridgeKernelHelp:
+      'Install Python 3.10+ with `python` on PATH, then run `pip install -e .` from the project folder. Click Reconnect once it is ready.',
     network: 'A network request failed. Check your connection.',
     permission: 'You do not have permission to do that.',
   },
@@ -910,6 +913,9 @@ const fa = {
   },
   errors: {
     bridgeOffline: 'موتور Dream آفلاین است.',
+    bridgeKernelMissing: 'موتور Dream (هستهٔ پایتون) نصب نشده یا اجرا نشده است.',
+    bridgeKernelHelp:
+      'پایتون ۳.۱۰ یا بالاتر را با دسترسی `python` روی PATH نصب کنید، سپس از ریشهٔ پروژه `pip install -e .` را اجرا کنید. وقتی آماده شد روی «اتصال دوباره» کلیک کنید.',
     network: 'درخواست شبکه ناموفق بود. اتصال خود را بررسی کنید.',
     permission: 'شما مجاز به این کار نیستید.',
   },
@@ -1355,6 +1361,9 @@ const zhCN = {
   },
   errors: {
     bridgeOffline: 'Dream 引擎已离线。',
+    bridgeKernelMissing: 'The Dream engine (Python kernel) is not installed or did not start.',
+    bridgeKernelHelp:
+      'Install Python 3.10+ with `python` on PATH, then run `pip install -e .` from the project folder. Click Reconnect once it is ready.',
     network: '网络请求失败。请检查你的连接。',
     permission: '你没有权限执行此操作。',
   },
@@ -1800,6 +1809,9 @@ const ja = {
   },
   errors: {
     bridgeOffline: 'Dream エンジンはオフラインです。',
+    bridgeKernelMissing: 'The Dream engine (Python kernel) is not installed or did not start.',
+    bridgeKernelHelp:
+      'Install Python 3.10+ with `python` on PATH, then run `pip install -e .` from the project folder. Click Reconnect once it is ready.',
     network: 'ネットワーク要求に失敗しました。接続を確認してください。',
     permission: 'その操作を行う権限がありません。',
   },
@@ -2247,6 +2259,9 @@ const es = {
   },
   errors: {
     bridgeOffline: 'El motor de Dream está sin conexión.',
+    bridgeKernelMissing: 'The Dream engine (Python kernel) is not installed or did not start.',
+    bridgeKernelHelp:
+      'Install Python 3.10+ with `python` on PATH, then run `pip install -e .` from the project folder. Click Reconnect once it is ready.',
     network: 'Falló una solicitud de red. Revisa tu conexión.',
     permission: 'No tienes permiso para hacer eso.',
   },
@@ -2694,6 +2709,9 @@ const de = {
   },
   errors: {
     bridgeOffline: 'Die Dream-Engine ist offline.',
+    bridgeKernelMissing: 'The Dream engine (Python kernel) is not installed or did not start.',
+    bridgeKernelHelp:
+      'Install Python 3.10+ with `python` on PATH, then run `pip install -e .` from the project folder. Click Reconnect once it is ready.',
     network: 'Eine Netzwerkanfrage ist fehlgeschlagen. Prüfe deine Verbindung.',
     permission: 'Du hast keine Berechtigung dafür.',
   },
@@ -3141,6 +3159,9 @@ const fr = {
   },
   errors: {
     bridgeOffline: 'Le moteur Dream est hors ligne.',
+    bridgeKernelMissing: 'The Dream engine (Python kernel) is not installed or did not start.',
+    bridgeKernelHelp:
+      'Install Python 3.10+ with `python` on PATH, then run `pip install -e .` from the project folder. Click Reconnect once it is ready.',
     network: 'Une requête réseau a échoué. Vérifiez votre connexion.',
     permission: 'Vous n’avez pas la permission de faire cela.',
   },
@@ -3587,6 +3608,9 @@ const ko = {
   },
   errors: {
     bridgeOffline: 'Dream 엔진이 오프라인입니다.',
+    bridgeKernelMissing: 'The Dream engine (Python kernel) is not installed or did not start.',
+    bridgeKernelHelp:
+      'Install Python 3.10+ with `python` on PATH, then run `pip install -e .` from the project folder. Click Reconnect once it is ready.',
     network: '네트워크 요청에 실패했습니다. 연결을 확인하세요.',
     permission: '이 작업을 수행할 권한이 없습니다.',
   },

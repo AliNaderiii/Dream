@@ -302,6 +302,32 @@ async fn supervise_reader<R: Runtime>(
     (outcome, reached_ready)
 }
 
+/// Windows `CREATE_NO_WINDOW` (0x08000000): spawn the sidecar without a
+/// visible console window, so discovery retries (and the Windows Store
+/// `python` stub) do not flash a cmd window at the user.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+/// Creation flags for the sidecar process on the host platform.
+///
+/// On Windows we hide the console window (CREATE_NO_WINDOW); on POSIX there is
+/// no such flag and the function returns 0. The POSIX variant is only compiled
+/// in test builds to avoid a `dead_code` lint on the lib target.
+///
+/// The function is pure and cfg-gated so it can be unit-tested without spawning
+/// a real process.
+#[cfg(windows)]
+pub(crate) fn sidecar_creation_flags() -> u32 {
+    CREATE_NO_WINDOW
+}
+
+/// POSIX stub — only compiled in test builds so `cargo clippy --lib` does not
+/// report it as dead code.
+#[cfg(all(not(windows), test))]
+pub(crate) fn sidecar_creation_flags() -> u32 {
+    0
+}
+
 /// Spawn the Python sidecar with piped stdio under interpreter `exe`.
 fn spawn(config: &SidecarConfig, exe: &str) -> std::io::Result<Child> {
     // kill_on_drop prevents the sidecar from outliving the app on POSIX.
@@ -309,8 +335,18 @@ fn spawn(config: &SidecarConfig, exe: &str) -> std::io::Result<Child> {
     cmd.args(["-u", "-m", &config.module])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
         .kill_on_drop(true);
+    // On Windows, discovery tries several interpreters (`python`, `py`,
+    // `python3`) and each failed spawn can otherwise flash a console window.
+    // Hide the console (CREATE_NO_WINDOW) and redirect stderr away from it; the
+    // caller still logs spawn diagnostics via `log::warn!`/`log::error!`. POSIX
+    // keeps the inherited stderr so local debugging keeps working.
+    #[cfg(windows)]
+    cmd.creation_flags(sidecar_creation_flags());
+    #[cfg(windows)]
+    cmd.stderr(Stdio::null());
+    #[cfg(not(windows))]
+    cmd.stderr(Stdio::inherit());
     if let Ok(path) = std::env::var("DREAM_PYTHONPATH") {
         cmd.env("PYTHONPATH", path);
     }
@@ -425,5 +461,23 @@ mod tests {
 
         assert!(found.is_none(), "every candidate failed — give up");
         assert_eq!(attempts, 3);
+    }
+
+    #[test]
+    fn sidecar_creation_flags_match_platform() {
+        // On Windows the sidecar must hide its console; on POSIX there is no
+        // such flag. Pure check, no process spawned.
+        #[cfg(windows)]
+        assert_ne!(
+            sidecar_creation_flags() & CREATE_NO_WINDOW,
+            0,
+            "Windows sidecar must set CREATE_NO_WINDOW"
+        );
+        #[cfg(not(windows))]
+        assert_eq!(
+            sidecar_creation_flags(),
+            0,
+            "POSIX sidecar has no console-hiding flag"
+        );
     }
 }

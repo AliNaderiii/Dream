@@ -226,6 +226,36 @@ Prompt P-11 — Internationalisation, Documentation, Security Audit & Release.
   local model now stores the memory under a close-enough kind instead of
   losing it entirely.
 
+- **S13 — Desktop launch must work (hotfix + shell craft).** Fixed the
+  `Cannot read properties of undefined (reading 'dot')` crash that appeared
+  seconds after launching the installed `Dream_0.3.0_x64-setup.exe`. The Rust
+  supervisor emits the `ConnectionState` enum directly as a bare JSON string
+  (e.g. `"restarting"`), but the frontend read `payload.state` off it — which
+  is `undefined` — and then read `.dot` off `undefined`. The `bridge://state`
+  listener now normalises every payload (bare string *or* `{ state: string }`)
+  through `normalizeBridgeState`, which fails closed to `"disconnected"` for
+  any untrusted/unknown value, and `BridgeStatusIndicator` reads
+  `STATE_META[state] ?? STATE_META.disconnected`. The UI union now also carries
+  the first-class `restarting` state (Rust's auto-restart), rendered as
+  "Reconnecting". Unit tests cover the normaliser and render the indicator with
+  `restarting` and with a malformed state without throwing.
+- **S13 — Windows sidecar no longer flashes consoles.** The sidecar spawn now
+  sets `CREATE_NO_WINDOW` (0x08000000) on Windows and redirects stderr away
+  from the console, so the `python`/`py`/`python3` discovery retries (and the
+  Windows Store `python` stub) no longer pop a `cmd` window. The console is
+  only hidden — the sidecar still runs with piped stdio and the same
+  `-u -m dream.bridge` command; spawn diagnostics are still logged via
+  `log::warn!`/`log::error!`. A pure, cfg-gated helper
+  `sidecar_creation_flags()` (no real process spawned) is unit-tested to assert
+  the Windows flag is set and POSIX uses none.
+- **S13 — Honest, bilingual "kernel missing" state.** A calm `bridge-banner`
+  appears in the app shell when the bridge is disconnected (e.g. the owner has
+  no Python kernel), stating in English *and* Persian that the engine is not
+  installed or did not start, with the one action Reconnect. It never pretends
+  the model is local. Copy lives in the locale tree
+  (`errors.bridgeKernelMissing` / `errors.bridgeKernelHelp`) across all eight
+  languages via the generator, keeping identical key trees.
+
 ## [0.1.0] - 2026-07-31
 
 ### Added

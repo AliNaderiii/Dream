@@ -26,12 +26,13 @@ import { EchoGatewayRuntime, requireGatewayPlatform } from './echo-gateway';
 import { EchoProjectsRuntime } from './echo-projects';
 import { EchoScheduleRuntime, EchoSubagentRuntime } from './echo-subagents';
 import { BridgeRpcError, toBridgeError } from './errors';
-import type {
-  BridgeConnectionState,
-  GatewayPlatformName,
-  RpcId,
-  RpcParams,
-  StreamChunk,
+import {
+  normalizeBridgeState,
+  type BridgeConnectionState,
+  type GatewayPlatformName,
+  type RpcId,
+  type RpcParams,
+  type StreamChunk,
 } from './types';
 
 /** Events the client re-emits for hooks/components. */
@@ -84,8 +85,12 @@ export class TauriBridgeTransport implements BridgeTransport {
 
   private async wireState(): Promise<void> {
     // The listener lives for the app lifetime; Tauri dedupes on window close.
-    await listen<{ state: BridgeConnectionState }>(STATE_EVENT, (payload) => {
-      for (const handler of this.stateHandlers) handler(payload.state);
+    // The Rust supervisor emits the `ConnectionState` enum directly — a bare
+    // JSON string such as `"restarting"` — so we normalise first and never
+    // read `.state` off a string payload (which would be `undefined`).
+    await listen<unknown>(STATE_EVENT, (payload) => {
+      const state = normalizeBridgeState(payload);
+      for (const handler of this.stateHandlers) handler(state);
     });
   }
 

@@ -62,7 +62,12 @@ export function useBridge(): UseBridgeResult {
   // disconnect, and resets the backoff once connected.
   useEffect(() => {
     if (client.transportKind !== 'tauri') return; // echo transport never needs this
-    if (state === 'ready' || state === 'connecting' || state === 'reconnecting') {
+    if (
+      state === 'ready' ||
+      state === 'connecting' ||
+      state === 'reconnecting' ||
+      state === 'restarting'
+    ) {
       backoffRef.current = INITIAL_BACKOFF_MS;
       return;
     }

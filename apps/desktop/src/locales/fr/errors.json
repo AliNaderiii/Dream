@@ -1,5 +1,7 @@
 {
   "bridgeOffline": "Le moteur Dream est hors ligne.",
+  "bridgeKernelMissing": "The Dream engine (Python kernel) is not installed or did not start.",
+  "bridgeKernelHelp": "Install Python 3.10+ with `python` on PATH, then run `pip install -e .` from the project folder. Click Reconnect once it is ready.",
   "network": "Une requête réseau a échoué. Vérifiez votre connexion.",
   "permission": "Vous n’avez pas la permission de faire cela."
 }
