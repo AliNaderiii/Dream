@@ -568,7 +568,11 @@ mod tests {
         std::fs::create_dir_all(exe_dir.join("resources").join("python")).unwrap();
         std::fs::create_dir_all(resource_dir.join("python")).unwrap();
         std::fs::write(exe_dir.join("python").join("python.exe"), b"").unwrap();
-        std::fs::write(exe_dir.join("resources").join("python").join("python.exe"), b"").unwrap();
+        std::fs::write(
+            exe_dir.join("resources").join("python").join("python.exe"),
+            b"",
+        )
+        .unwrap();
         std::fs::write(resource_dir.join("python").join("python.exe"), b"").unwrap();
 
         let paths = bundled_interpreter_paths(&exe_dir, Some(&resource_dir));
