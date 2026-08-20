@@ -30,6 +30,11 @@ end-to-end — no separate `pip install` required.
   undefined (reading 'dot')` crash and the Windows console flashing are fixed
   in the binaries this release installs (S13 is on `main`; the broken
   `v0.3.0` build is superseded).
+- **Windows bundle script locates the embeddable `._pth` by directory
+  listing.** The python.org 3.12.10 embeddable ships `python312._pth`
+  (major+minor only), so `bundle-sidecar.mjs` now matches
+  `/^python3\d+\._pth$/i` against the extracted files instead of deriving
+  `python31210._pth` from the full version, which broke the Release job.
 
 ### Changed
 

@@ -24,12 +24,13 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   writeFileSync,
   rmSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { inflateRawSync } from 'node:zlib';
 
@@ -171,12 +172,34 @@ function extractZip(buf, destDir) {
 }
 
 /**
- * Enable `site` in the embeddable distribution's `python312._pth` and make the
+ * Pick the embeddable distribution's `._pth` file from a directory listing.
+ *
+ * The official python.org embeddable zip names it `python<major><minor>._pth`
+ * (e.g. `python312._pth` for CPython 3.12.10) — NOT `python31210._pth`, which
+ * is what stripping every non-digit from the full version string produces.
+ * Match real file names against `/^python3\d+\._pth$/i` and prefer the
+ * canonical `python312._pth` when it is present. Returns null when nothing
+ * matches so the caller can fail loud with the full listing.
+ */
+export function findPthName(names) {
+  const matches = names.filter((name) => /^python3\d+\._pth$/i.test(name));
+  if (matches.length === 0) return null;
+  return matches.includes('python312._pth') ? 'python312._pth' : matches[0];
+}
+
+/**
+ * Enable `site` in the embeddable distribution's `._pth` file and make the
  * `Lib/site-packages` directory (where pip installs land) importable.
  */
 function patchPth() {
-  const pth = join(PYTHON_DIR, `python${PYTHON_VERSION.replace(/\D/g, '')}._pth`);
-  if (!existsSync(pth)) fail(`missing ${pth} — unexpected embeddable layout`);
+  const names = readdirSync(PYTHON_DIR);
+  const pthName = findPthName(names);
+  if (!pthName) {
+    fail(
+      `no \`python3XX._pth\` file in ${PYTHON_DIR} — unexpected embeddable layout (directory contents: ${names.sort().join(', ') || '<empty>'})`,
+    );
+  }
+  const pth = join(PYTHON_DIR, pthName);
 
   let lines = readFileSync(pth, 'utf8').split(/\r?\n/);
   lines = lines.map((line) => {
@@ -267,4 +290,8 @@ async function main() {
   console.log('[bundle-sidecar] bundled CPython + Dream kernel ready');
 }
 
-main();
+// Run only when executed directly (`node ./scripts/bundle-sidecar.mjs`), not
+// when imported — e.g. by a unit test of the pure `findPthName` helper.
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  main();
+}
