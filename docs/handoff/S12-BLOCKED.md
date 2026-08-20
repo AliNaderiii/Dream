@@ -39,9 +39,10 @@ earlier sessions could land workflow files without this push path.
 
 ## What is pending (commit B) — owner action required
 
-The complete `desktop-release.yml` rewrite is committed locally as commit B
-and is also attached to this repo as `docs/handoff/S12-workflow.patch`. The
-owner (who has full repository permissions) can land it with:
+The complete `desktop-release.yml` rewrite is kept as the topmost local commit
+on `arena/01a01e00-dream` and is also attached to this repo as
+`docs/handoff/S12-workflow.patch` (the actionable artifact). The owner (who
+has full repository permissions) can land it with:
 
 ```bash
 cd <clone-of-AliNaderiii/Dream>

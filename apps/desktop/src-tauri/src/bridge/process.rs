@@ -48,7 +48,9 @@ impl SidecarConfig {
     fn from_env(getenv: &dyn Fn(&str) -> Option<String>) -> Self {
         let python = match getenv("DREAM_SIDECAR_PYTHON") {
             Some(explicit) if !explicit.trim().is_empty() => vec![explicit],
-            _ => DEFAULT_PYTHON_CANDIDATES.map(|candidate| candidate.to_string()).to_vec(),
+            _ => DEFAULT_PYTHON_CANDIDATES
+                .map(|candidate| candidate.to_string())
+                .to_vec(),
         };
         let module = getenv("DREAM_SIDECAR_MODULE")
             .filter(|value| !value.trim().is_empty())
@@ -367,7 +369,10 @@ mod tests {
     #[test]
     fn default_candidates_are_python_py_python3() {
         let config = SidecarConfig::from_env(&env_from(&HashMap::new()));
-        assert_eq!(config.python, ["python", "py", "python3"].map(String::from).to_vec());
+        assert_eq!(
+            config.python,
+            ["python", "py", "python3"].map(String::from).to_vec()
+        );
         assert_eq!(config.module, "dream.bridge");
     }
 
@@ -394,7 +399,10 @@ mod tests {
             if exe == "python3" {
                 Ok(42usize)
             } else {
-                Err(io::Error::new(io::ErrorKind::NotFound, "no such interpreter"))
+                Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "no such interpreter",
+                ))
             }
         });
 
@@ -408,7 +416,9 @@ mod tests {
     fn discovery_reports_none_when_no_candidate_spawns() {
         let candidates = ["python", "py", "python3"].map(String::from).to_vec();
         let mut attempts = 0usize;
-        let found = spawn_first(&candidates, |_| {
+        // Annotate the probe value type: every probe fails, so `usize` cannot
+        // be inferred from the closure alone.
+        let found: Option<(usize, &str, usize)> = spawn_first(&candidates, |_| {
             attempts += 1;
             Err(io::Error::new(io::ErrorKind::NotFound, "missing"))
         });
