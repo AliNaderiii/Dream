@@ -8,6 +8,7 @@ import { useLocation, useMatch } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
 
 import { ActivityRail } from '@/components/layout/activity-rail';
+import { BridgeDisconnectedBanner } from '@/components/bridge/bridge-disconnected-banner';
 import { Sidebar } from '@/components/layout/sidebar';
 import { StatusBar } from '@/components/layout/status-bar';
 import { TitleBar } from '@/components/layout/title-bar';
@@ -61,6 +62,7 @@ export function AppShell() {
 
           <main className="relative flex min-w-0 flex-1 flex-col">
             <TopBar title={title} />
+            <BridgeDisconnectedBanner />
             <div className="min-h-0 flex-1 overflow-y-auto">
               <ErrorBoundary>
                 <Outlet />

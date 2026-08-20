@@ -566,7 +566,58 @@ export interface GatewayPlatformConfig {
 }
 
 /** Connection lifecycle of the bridge, surfaced in the status bar. */
-export type BridgeConnectionState = 'connecting' | 'ready' | 'reconnecting' | 'disconnected';
+export type BridgeConnectionState =
+  'connecting' | 'ready' | 'reconnecting' | 'restarting' | 'disconnected';
+
+/** Every UI-can-store bridge connection state. */
+export const BRIDGE_CONNECTION_STATES: readonly BridgeConnectionState[] = [
+  'connecting',
+  'ready',
+  'reconnecting',
+  'restarting',
+  'disconnected',
+];
+
+/**
+ * Normalise any `bridge://state` payload from the (untrusted) Rust side into a
+ * known UI state.
+ *
+ * The supervisor emits the `ConnectionState` enum directly — a bare JSON string
+ * such as `"restarting"` — so the frontend receives the string, not
+ * `{ state: "restarting" }`. Older or future builds may still wrap it as
+ * `{ state: "..." }`. Both shapes are accepted.
+ *
+ * Any value that is not a known state — `undefined`, `null`, a number, an
+ * object without a string `state`, a typo, or a value from a future build —
+ * fails closed to `"disconnected"`. That guarantee is what stops the S13 crash
+ * (`Cannot read properties of undefined (reading 'dot')`): an unexpected
+ * payload can never reach the status indicator as a truthy-but-unknown state.
+ *
+ * The Rust side names the auto-restart state `"restarting"`; the UI models the
+ * same concept as `restarting`, so it is accepted as-is rather than aliased.
+ */
+export function normalizeBridgeState(payload: unknown): BridgeConnectionState {
+  const raw = extractStateToken(payload);
+  switch (raw) {
+    case 'connecting':
+    case 'ready':
+    case 'reconnecting':
+    case 'restarting':
+    case 'disconnected':
+      return raw;
+    default:
+      return 'disconnected';
+  }
+}
+
+function extractStateToken(payload: unknown): string | undefined {
+  if (typeof payload === 'string') return payload;
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const value = (payload as { state?: unknown }).state;
+    if (typeof value === 'string') return value;
+  }
+  return undefined;
+}
 
 /** A stream chunk routed from a `stream.chunk` notification. */
 export interface StreamChunk {

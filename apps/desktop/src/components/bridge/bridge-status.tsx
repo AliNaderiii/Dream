@@ -19,13 +19,18 @@ const STATE_META: Record<BridgeConnectionState, { label: string; dot: string; te
   connecting: { label: 'Connecting', dot: 'bg-warning-fg', text: 'text-warning-fg' },
   ready: { label: 'Connected', dot: 'bg-success-fg', text: 'text-fg-muted' },
   reconnecting: { label: 'Reconnecting', dot: 'bg-warning-fg', text: 'text-warning-fg' },
+  restarting: { label: 'Reconnecting', dot: 'bg-warning-fg', text: 'text-warning-fg' },
   disconnected: { label: 'Disconnected', dot: 'bg-danger-fg', text: 'text-danger-fg' },
 };
 
 /** A compact connection-state readout for the status bar. */
 export function BridgeStatusIndicator() {
   const { state, isFallback, reconnect } = useBridge();
-  const meta = STATE_META[state];
+  // Defensive: `STATE_META` is exhaustive for `BridgeConnectionState`, but an
+  // untrusted event payload normalised to an unexpected value must never throw
+  // — fall back to the disconnected styling instead of reading `.dot` off
+  // `undefined` (the S13 crash: "Cannot read properties of undefined").
+  const meta = STATE_META[state] ?? STATE_META.disconnected;
   const interactive = state === 'disconnected';
 
   return (
