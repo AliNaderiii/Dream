@@ -25,9 +25,10 @@ available with deterministic echo fallbacks where native APIs are unavailable.
   delivered in the existing desktop application.
 - Ask for an opt-in three-role council review — a proposer, a critic and a
   judge answer one topic in that order and the judge's answer wins — from the
-  Subagents page or the CLI (`dream --council "topic"`). Members default to
-  the offline echo provider, so the first run needs no credentials and
-  nothing leaves the machine.
+  Subagents page, from a small opt-in button inside any chat pane, or from the
+  CLI (`dream --council "topic"`). Members default to the offline echo
+  provider, so the first run needs no credentials and nothing leaves the
+  machine.
 - Use the terminal CLI and a paired Telegram private chat. Telegram preserves
   the read-only `/plan`, `/usage`, and `/route` command surface; its live
   bot/network smoke remains owner-run because it needs real credentials.
@@ -39,6 +40,11 @@ virtual environment if needed, installs Dream, and starts the local Ollama CLI
 path. It is not yet a Tauri installer launcher. Source builders can run or
 package the Tauri UI with the scripts in `apps/desktop/package.json`; see
 [user/quick-start.md](user/quick-start.md).
+
+The Tauri dashboard first-run card offers the same offline echo and Ollama
+paths alongside Aval AI as the recommended hosted option — the Aval line
+plainly says prompts leave this machine — with BYOK still available as an
+optional extra.
 
 `dream --demo` is a deterministic offline verification path. The Python kernel
 has no mandatory third-party runtime dependencies, while optional features and

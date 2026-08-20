@@ -3,6 +3,12 @@
   "send": "送信",
   "empty": "会話を開始",
   "emptyDesc": "Dream に質問するか、ドキュメントを貼り付けて要約します。",
+  "councilButton": "委員会レビュー",
+  "councilButtonTitle": "このメッセージに対して 3 ロールの委員会レビューを実行",
+  "councilStarting": "委員会を起動中…",
+  "councilEmpty": "まずメッセージを入力してから委員会に送信してください。",
+  "councilRefusal": "委員会が拒否しました",
+  "councilError": "委員会を開始できませんでした。",
   "approval": {
     "title": "承認が必要です",
     "description": "以下の引数で実行しようとしています：",

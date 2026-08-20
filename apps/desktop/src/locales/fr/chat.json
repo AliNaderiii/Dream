@@ -3,6 +3,12 @@
   "send": "Envoyer",
   "empty": "Démarrer une conversation",
   "emptyDesc": "Posez une question à Dream ou collez un document pour le résumer.",
+  "councilButton": "Examen du conseil",
+  "councilButtonTitle": "Lancer un examen du conseil à trois rôles sur ce message",
+  "councilStarting": "Démarrage du conseil…",
+  "councilEmpty": "Saisissez d’abord un message à envoyer au conseil.",
+  "councilRefusal": "Le conseil a refusé",
+  "councilError": "Le conseil n’a pas pu démarrer.",
   "approval": {
     "title": "Approbation requise",
     "description": "veut s'exécuter avec ces arguments :",

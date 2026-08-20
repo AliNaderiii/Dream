@@ -111,8 +111,10 @@ Prompt P-11 — Internationalisation, Documentation, Security Audit & Release.
   parity and policy enforcement. The final live bot/network smoke remains
   owner-run with real credentials.
 - **S04 — Desktop bridge and build.** The Tauri UI communicates with the
-  Python kernel through a framed JSON-RPC sidecar, and desktop CI/build and
-  release packaging paths are present.
+  Python kernel through a framed JSON-RPC sidecar, the Windows
+  `run.bat` onboarding launcher activates `.venv`, clears provider env,
+  prompts for the Ollama model and starts `cli.py --backend ollama`, and
+  desktop CI/build and release packaging paths are present.
 - **S05 — Plans in desktop.** Desktop settings show plan, usage, route and
   privacy information from the same commerce/router kernel used by the CLI;
   no paid IRR amount is invented.
@@ -144,6 +146,18 @@ Prompt P-11 — Internationalisation, Documentation, Security Audit & Release.
   `dream --council "topic"` on the CLI. `build_backend` now also accepts
   `aval` / `avalai` as OpenAI-compatible endpoints pointed at
   `api.avalai.ir`.
+- **S11 — Iranian first-run + chat council button.** The dashboard
+  first-run card adds Aval AI as the recommended hosted path (one account,
+  many model families, served from the Iranian cloud at `api.avalai.ir`)
+  with a plain leave-the-machine line — the offline echo and Ollama cards
+  stay exactly as they were, BYOK remains an optional extra. The chat
+  composer gets a compact opt-in Council review control that uses the
+  current composer text (or the last user message) and calls `council.run`;
+  Send / `conversation.send` never starts a council. After a successful
+  run the user is taken to `/subagents` so the existing three-column
+  council widget renders the run; a ledger `refusal` is shown inline
+  instead of being swallowed. No new model ids, no invented IRR, no kernel
+  change.
 
 ### Changed
 

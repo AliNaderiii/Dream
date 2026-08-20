@@ -1,16 +1,19 @@
 /**
- * First-run card (S05) — the honest offline-first story on the dashboard.
+ * First-run card (S05 + S11) — the honest offline-first story on the dashboard.
  *
  * - The offline echo engine works with zero network and no account.
  * - Ollama is offered as the local upgrade path (still nothing leaves the
  *   machine).
+ * - Aval AI is the recommended hosted path for Iranian users: one account,
+ *   many model families, served from the Iranian cloud at api.avalai.ir.
+ *   Prompts leave this machine — we say so plainly.
  * - BYOK is optional and says plainly that prompts then leave the machine.
  *
  * The current route line comes from `route.resolve` (sidecar) with the
  * deterministic echo fallback in the browser.
  */
 
-import { KeyRound, PlugZap, Route as RouteIcon, WifiOff } from 'lucide-react';
+import { Cloud, KeyRound, PlugZap, Route as RouteIcon, Sparkles, WifiOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -57,7 +60,7 @@ export function FirstRunCard() {
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="flex flex-col gap-2 rounded-lg border border-border-default bg-surface-2 p-4">
           <span className="flex items-center gap-2 text-body font-medium">
             <PlugZap className="size-4 text-accent-text" aria-hidden />
@@ -71,6 +74,29 @@ export function FirstRunCard() {
             onClick={() => void navigate('/providers')}
           >
             {t('firstRun.ollamaCta')}
+          </Button>
+        </div>
+
+        <div className="relative flex flex-col gap-2 rounded-lg border border-accent bg-surface-2 p-4">
+          <span
+            aria-hidden
+            className="absolute end-3 top-3 inline-flex items-center gap-1 rounded-full border border-accent bg-accent-soft px-2 py-0.5 text-micro font-semibold text-accent-text"
+          >
+            <Sparkles className="size-3" aria-hidden />
+            {t('firstRun.avalBadge')}
+          </span>
+          <span className="flex items-center gap-2 text-body font-medium">
+            <Cloud className="size-4 text-accent-text" aria-hidden />
+            {t('firstRun.avalTitle')}
+          </span>
+          <p className="text-caption text-fg-secondary">{t('firstRun.avalDesc')}</p>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="self-start"
+            onClick={() => void navigate('/providers')}
+          >
+            {t('firstRun.avalCta')}
           </Button>
         </div>
 
