@@ -66,7 +66,7 @@ export function CouncilButton({ input, messages, disabled }: CouncilButtonProps)
       }
       // Successful run: take the user to the Subagents page, where the
       // three-column council widget already exists (S10).
-      navigate('/subagents');
+      void navigate('/subagents');
     } catch (err) {
       setError(err instanceof Error ? `${t('councilError')}: ${err.message}` : t('councilError'));
     } finally {
