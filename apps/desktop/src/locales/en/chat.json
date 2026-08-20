@@ -3,6 +3,12 @@
   "send": "Send",
   "empty": "Start a conversation",
   "emptyDesc": "Ask Dream a question, or paste a document to summarise it.",
+  "councilButton": "Council review",
+  "councilButtonTitle": "Run a three-role council review on this message",
+  "councilStarting": "Starting council…",
+  "councilEmpty": "Type a message first to send it to the council.",
+  "councilRefusal": "Council refused",
+  "councilError": "Council could not start.",
   "approval": {
     "title": "Approval Required",
     "description": "wants to execute with these arguments:",

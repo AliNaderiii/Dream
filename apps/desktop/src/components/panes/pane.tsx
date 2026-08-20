@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { DragEvent, FormEvent, KeyboardEvent, MouseEvent } from 'react';
 
 import { ApprovalDialog } from '@/components/chat/approval-dialog';
+import { CouncilButton } from '@/components/chat/council-button';
 import { ToolCard } from '@/components/chat/tool-card';
 import { Button } from '@/components/ui/button';
 import { getBridgeClient } from '@/lib/bridge/client';
@@ -571,6 +572,11 @@ function PaneChat({ pane }: { pane: PaneState }) {
             <Send aria-hidden />
           </Button>
         )}
+        <CouncilButton
+          input={input}
+          messages={transcript?.messages ?? []}
+          disabled={transcript?.sending}
+        />
       </form>
     </div>
   );

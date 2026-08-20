@@ -3,6 +3,12 @@
   "send": "Enviar",
   "empty": "Inicia una conversación",
   "emptyDesc": "Pregúntale a Dream o pega un documento para resumirlo.",
+  "councilButton": "Revisión del consejo",
+  "councilButtonTitle": "Ejecutar una revisión del consejo de tres roles sobre este mensaje",
+  "councilStarting": "Iniciando consejo…",
+  "councilEmpty": "Escribe primero un mensaje para enviarlo al consejo.",
+  "councilRefusal": "El consejo se negó",
+  "councilError": "El consejo no pudo iniciarse.",
   "approval": {
     "title": "Aprobación requerida",
     "description": "quiere ejecutar con estos argumentos:",

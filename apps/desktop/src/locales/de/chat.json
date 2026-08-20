@@ -3,6 +3,12 @@
   "send": "Senden",
   "empty": "Unterhaltung starten",
   "emptyDesc": "Stelle Dream eine Frage oder füge ein Dokument zum Zusammenfassen ein.",
+  "councilButton": "Council-Überprüfung",
+  "councilButtonTitle": "Drei-Rollen-Council-Überprüfung für diese Nachricht starten",
+  "councilStarting": "Council wird gestartet…",
+  "councilEmpty": "Schreibe zuerst eine Nachricht, um sie an das Council zu senden.",
+  "councilRefusal": "Council hat abgelehnt",
+  "councilError": "Council konnte nicht gestartet werden.",
   "approval": {
     "title": "Freigabe erforderlich",
     "description": "möchte mit diesen Argumenten ausgeführt werden:",

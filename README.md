@@ -85,7 +85,9 @@ in place. The scheduler accepts Persian or English prose and displays both
 document-locale and Jalali next-run dates, history, pause/run controls, and an
 approval queue for gated jobs. An opt-in three-role council (proposer, critic,
 judge) reviews one topic on the Subagents page or via `dream --council "…"`,
-offline by default.
+offline by default. The dashboard first-run card offers Aval AI as the
+recommended hosted path, and the chat composer has a small opt-in Council
+review button that never starts a council from plain Send.
 
 Build or run the full native UI using the scripts that exist in
 `apps/desktop/package.json`:

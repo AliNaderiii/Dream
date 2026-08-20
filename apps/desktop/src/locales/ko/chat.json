@@ -3,6 +3,12 @@
   "send": "보내기",
   "empty": "대화 시작",
   "emptyDesc": "Dream에게 질문하거나 문서를 붙여넣어 요약합니다.",
+  "councilButton": "위원회 검토",
+  "councilButtonTitle": "이 메시지에 대해 세 역할 위원회 검토를 실행",
+  "councilStarting": "위원회 시작 중…",
+  "councilEmpty": "위원회로 보낼 메시지를 먼저 입력하세요.",
+  "councilRefusal": "위원회가 거부했습니다",
+  "councilError": "위원회를 시작할 수 없습니다.",
   "approval": {
     "title": "승인 필요",
     "description": "다음 인수로 실행하려 합니다:",

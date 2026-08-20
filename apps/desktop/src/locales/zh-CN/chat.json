@@ -3,6 +3,12 @@
   "send": "发送",
   "empty": "开始一个对话",
   "emptyDesc": "向 Dream 提问，或粘贴文档进行总结。",
+  "councilButton": "委员会评审",
+  "councilButtonTitle": "对此消息运行三角色委员会评审",
+  "councilStarting": "正在启动委员会…",
+  "councilEmpty": "请先输入要发送给委员会的消息。",
+  "councilRefusal": "委员会已拒绝",
+  "councilError": "委员会无法启动。",
   "approval": {
     "title": "需要批准",
     "description": "希望使用以下参数执行：",
