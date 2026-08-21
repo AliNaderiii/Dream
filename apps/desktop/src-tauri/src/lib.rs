@@ -40,12 +40,11 @@ pub fn run() {
             // Enforce single instance: a second launch focuses the existing window
             // instead of spawning another WebView + tray icon.
             .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-                let _ = app
-                    .get_webview_window(crate::commands::window::MAIN_WINDOW)
-                    .map(|w| {
-                        let _ = w.show();
-                        let _ = w.set_focus();
-                    });
+                if let Some(window) = app.get_webview_window(crate::commands::window::MAIN_WINDOW) {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
             }))
             // Restores position, size and maximized/fullscreen state on launch.
             // VISIBLE is excluded so a window hidden to the tray at exit does not

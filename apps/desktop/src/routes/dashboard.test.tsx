@@ -11,15 +11,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DashboardRoute } from '@/routes/dashboard';
 import { resetBridgeClient } from '@/lib/bridge/client';
 
+type SessionStoreMock = {
+  sessions: never[];
+  createSession: () => { id: string };
+};
+
+const sessionStore: SessionStoreMock = {
+  sessions: [],
+  createSession: () => ({ id: 'test-session-123' }),
+};
+
 // Mock the session store
 vi.mock('@/stores/use-session-store', () => ({
-  useSessionStore: vi.fn((selector) => {
-    const store = {
-      sessions: [],
-      createSession: vi.fn(() => ({ id: 'test-session-123' })),
-    };
-    return selector(store);
-  }),
+  useSessionStore: <T,>(selector: (store: SessionStoreMock) => T): T => selector(sessionStore),
 }));
 
 function renderDashboard() {

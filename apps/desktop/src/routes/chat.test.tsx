@@ -20,7 +20,18 @@ const mockLayoutStore = {
     {
       id: 'screen-1',
       name: 'Main',
-      root: { type: 'leaf' as const, paneId: 'pane-1' },
+      root: {
+        kind: 'pane' as const,
+        pane: {
+          id: 'pane-1',
+          type: 'chat' as const,
+          sessionId: null,
+          providerId: 'echo',
+          modelName: 'echo',
+          reasoningEffort: 0,
+          layout: { direction: 'horizontal' as const, ratio: 0.5 },
+        },
+      },
       activePaneId: 'pane-1',
       maximizedPaneId: null,
     },
@@ -59,17 +70,23 @@ const mockPaneChatStore = {
   isAlwaysAllowed: vi.fn().mockReturnValue(false),
 };
 
+type LayoutStoreMock = typeof mockLayoutStore;
+type ProviderStoreMock = typeof mockProviderStore;
+type PaneChatStoreMock = typeof mockPaneChatStore;
+
 vi.mock('@/stores/use-layout-store', () => ({
-  useLayoutStore: vi.fn((selector) => selector(mockLayoutStore)),
+  useLayoutStore: <T,>(selector: (store: LayoutStoreMock) => T): T => selector(mockLayoutStore),
   findPane: vi.fn(() => null),
 }));
 
 vi.mock('@/stores/use-provider-store', () => ({
-  useProviderStore: vi.fn((selector) => selector(mockProviderStore)),
+  useProviderStore: <T,>(selector: (store: ProviderStoreMock) => T): T =>
+    selector(mockProviderStore),
 }));
 
 vi.mock('@/stores/use-pane-chat-store', () => ({
-  usePaneChatStore: vi.fn((selector) => selector(mockPaneChatStore)),
+  usePaneChatStore: <T,>(selector: (store: PaneChatStoreMock) => T): T =>
+    selector(mockPaneChatStore),
 }));
 
 function renderChat() {
