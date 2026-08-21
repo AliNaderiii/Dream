@@ -266,11 +266,23 @@ async function main() {
     rmSync(getPipPath, { force: true });
   }
 
+  // The current get-pip.py bootstrap installs pip only. Install the build
+  // backend and wheel explicitly before disabling build isolation below.
+  console.log('[bundle-sidecar] installing build dependencies: setuptools + wheel');
+  runOrThrow(PYTHON_EXE, [
+    '-m',
+    'pip',
+    'install',
+    '--no-warn-script-location',
+    'setuptools',
+    'wheel',
+  ]);
+
   // Non-editable install from the repository root. NEVER `-e` — an editable
   // install would point at this build machine's path and be dead on the user's
-  // PC. `--no-build-isolation` uses the setuptools get-pip.py just installed
-  // (the embeddable distribution ships no ensurepip, so an isolated build
-  // cannot bootstrap itself).
+  // PC. `--no-build-isolation` uses the setuptools and wheel packages
+  // installed explicitly above (the embeddable distribution ships no
+  // ensurepip, so an isolated build cannot bootstrap itself).
   console.log(`[bundle-sidecar] installing Dream (non-editable) from ${REPO_ROOT}`);
   runOrThrow(PYTHON_EXE, [
     '-m',
