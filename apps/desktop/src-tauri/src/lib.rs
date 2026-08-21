@@ -32,7 +32,7 @@ pub fn run() {
     let mut builder = tauri::Builder::default();
 
     // ---- Desktop-only plugins -------------------------------------------------
-    #[cfg(desktop)]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         use tauri_plugin_window_state::StateFlags;
 
