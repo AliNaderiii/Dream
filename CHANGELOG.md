@@ -35,6 +35,7 @@ end-to-end — no separate `pip install` required.
   (major+minor only), so `bundle-sidecar.mjs` now matches
   `/^python3\d+\._pth$/i` against the extracted files instead of deriving
   `python31210._pth` from the full version, which broke the Release job.
+- **Windows bundle bootstraps `setuptools` and `wheel` after pip** so the non-isolated package install can import `setuptools.build_meta`.
 
 ### Changed
 
