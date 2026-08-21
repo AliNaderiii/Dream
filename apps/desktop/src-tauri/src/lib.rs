@@ -115,7 +115,9 @@ pub fn run() {
                         window.app_handle().state::<AppState>().lock().close_to_tray;
                     if close_to_tray {
                         api.prevent_close();
-                        let _ = window.hide();
+                        if let Err(error) = window.hide() {
+                            log::warn!("failed to hide Dream window to tray: {error}");
+                        }
                     }
                 }
             }
