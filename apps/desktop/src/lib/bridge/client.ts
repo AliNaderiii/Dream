@@ -1303,10 +1303,21 @@ export class BridgeClient {
   private handlers = new Set<EventHandler>();
   private _state: BridgeConnectionState;
   private readonly autoSelect: boolean;
+  private readonly tauriTransport: TauriBridgeTransport | null;
+  private readonly echoTransport: EchoBridgeTransport;
+  private _isUsingFallback = false;
 
   constructor(transport?: BridgeTransport) {
     this.autoSelect = !transport;
-    this.transport = transport ?? defaultTransport();
+    if (transport) {
+      this.transport = transport;
+      this.tauriTransport = null;
+      this.echoTransport = new EchoBridgeTransport();
+    } else {
+      this.tauriTransport = isTauri() ? new TauriBridgeTransport() : null;
+      this.echoTransport = new EchoBridgeTransport();
+      this.transport = this.tauriTransport ?? this.echoTransport;
+    }
     this._state = this.transport.kind === 'tauri' ? 'connecting' : 'ready';
     this.transport.onState((state) => this.setState(state));
   }
@@ -1347,6 +1358,12 @@ export class BridgeClient {
   reconnect(): void {
     this.setState('reconnecting');
     this.transport.reconnect();
+    // Also switch back to Tauri transport while reconnecting.
+    if (this.tauriTransport && this._isUsingFallback) {
+      this.transport = this.tauriTransport;
+      this.transport.onState((state) => this.setState(state));
+      this._isUsingFallback = false;
+    }
   }
 
   /** Swap the transport (used by tests and by reconnect-with-backoff). */
@@ -1374,6 +1391,27 @@ export class BridgeClient {
 
   private setState(state: BridgeConnectionState): void {
     if (this._state === state) return;
+
+    // S15: When the Tauri transport is disconnected, fall back to Echo so the
+    // UI stays usable. When it becomes ready, switch back.
+    if (this.tauriTransport && this.echoTransport) {
+      if (state === 'ready') {
+        // Sidecar came back online — switch away from fallback.
+        if (this._isUsingFallback) {
+          this.transport = this.tauriTransport;
+          this.transport.onState((s) => this.setState(s));
+          this._isUsingFallback = false;
+        }
+      } else if (state === 'disconnected') {
+        // Sidecar is down — switch to Echo so basic operations work.
+        if (!this._isUsingFallback) {
+          this.transport = this.echoTransport;
+          this.transport.onState(() => {}); // Echo always stays ready; no-op handler.
+          this._isUsingFallback = true;
+        }
+      }
+    }
+
     this._state = state;
     this.emit({ type: 'state', state });
   }
@@ -1385,6 +1423,11 @@ export class BridgeClient {
   /** Whether the auto-selected transport is the echo fallback. */
   get isFallback(): boolean {
     return this.autoSelect && this.transport.kind === 'echo';
+  }
+
+  /** Whether we are currently using the Echo fallback due to sidecar being offline. */
+  get isUsingFallback(): boolean {
+    return this._isUsingFallback;
   }
 }
 

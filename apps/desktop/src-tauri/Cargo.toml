@@ -1,6 +1,6 @@
 [package]
 name = "dream-desktop"
-version = "0.3.1"
+version = "0.3.2"
 description = "Dream — a personal AI assistant with first-class Persian support"
 authors = ["Ali Naderi"]
 license = "MIT"
@@ -36,6 +36,7 @@ log = "0.4"
 tauri-plugin-window-state = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-log = "2"
+tauri-plugin-single-instance = "2"
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }

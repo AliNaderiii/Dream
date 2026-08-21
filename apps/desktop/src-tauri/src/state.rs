@@ -65,7 +65,10 @@ impl Default for AppStateSnapshot {
             pending_approvals: 0,
             workspace_root: None,
             minimize_to_tray: false,
-            close_to_tray: true,
+            // S15: X now quits the app by default, preventing zombie processes
+            // that hold stale tray icons. Users can still enable hide-to-tray via
+            // the tray menu if they prefer that behavior.
+            close_to_tray: false,
         }
     }
 }

@@ -25,6 +25,7 @@ import type { DockEdge, PaneState } from '@/stores/use-layout-store';
 import { useLayoutStore } from '@/stores/use-layout-store';
 import { usePaneChatStore } from '@/stores/use-pane-chat-store';
 import { useProviderStore } from '@/stores/use-provider-store';
+import { SafeIcon } from '@/utils/icons';
 import type { ApprovalDecision, Message, Provider, ToolCardEntry } from '@/types';
 import { cn } from '@/utils/cn';
 
@@ -133,11 +134,19 @@ export function Pane({ pane, active }: PaneProps) {
         onDoubleClick={onHeaderDoubleClick}
         className="flex h-10 shrink-0 items-center gap-1 border-b border-border-default bg-surface px-1.5"
       >
-        <GripVertical className="size-4 shrink-0 cursor-grab text-fg-muted" aria-hidden />
+        <SafeIcon
+          icon={GripVertical}
+          className="size-4 shrink-0 cursor-grab text-fg-muted"
+          aria-hidden
+        />
         {pane.type === 'chat' ? (
-          <MessageSquare className="size-3.5 shrink-0 text-accent-text" aria-hidden />
+          <SafeIcon
+            icon={MessageSquare}
+            className="size-3.5 shrink-0 text-accent-text"
+            aria-hidden
+          />
         ) : (
-          <Bot className="size-3.5 shrink-0 text-accent-text" aria-hidden />
+          <SafeIcon icon={Bot} className="size-3.5 shrink-0 text-accent-text" aria-hidden />
         )}
         <span className="max-w-24 truncate text-caption font-medium">
           {pane.sessionId ? `Chat ${pane.sessionId.slice(-5)}` : 'New chat'}
@@ -186,7 +195,7 @@ export function Pane({ pane, active }: PaneProps) {
           title="Split right"
           onClick={() => addPane(pane.id, 'horizontal')}
         >
-          <ArrowRightToLine aria-hidden />
+          <SafeIcon icon={ArrowRightToLine} aria-hidden />
         </Button>
         <Button
           variant="ghost"
@@ -196,7 +205,7 @@ export function Pane({ pane, active }: PaneProps) {
           title="Split below"
           onClick={() => addPane(pane.id, 'vertical')}
         >
-          <ArrowDownToLine aria-hidden />
+          <SafeIcon icon={ArrowDownToLine} aria-hidden />
         </Button>
         <Button
           variant="ghost"
@@ -206,7 +215,7 @@ export function Pane({ pane, active }: PaneProps) {
           title="Maximize / restore (⌘⇧M)"
           onClick={() => toggleMaximize(pane.id)}
         >
-          <Maximize2 aria-hidden />
+          <SafeIcon icon={Maximize2} aria-hidden />
         </Button>
         <Button
           variant="ghost"
@@ -216,7 +225,7 @@ export function Pane({ pane, active }: PaneProps) {
           title="Close pane (⌘W)"
           onClick={() => closePane(pane.id)}
         >
-          <X aria-hidden />
+          <SafeIcon icon={X} aria-hidden />
         </Button>
       </header>
 
@@ -484,7 +493,7 @@ function PaneChat({ pane }: { pane: PaneState }) {
       <div className="selectable min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-5">
         {messages.length === 0 && !transcript?.streaming && (
           <div className="mx-auto flex h-full max-w-sm flex-col items-center justify-center text-center text-fg-muted">
-            <MessageSquare className="mb-3 size-8 text-accent-text" aria-hidden />
+            <SafeIcon icon={MessageSquare} className="mb-3 size-8 text-accent-text" aria-hidden />
             <p className="font-medium text-fg-primary">Independent conversation</p>
             <p className="mt-1 text-caption">
               This pane has its own session, provider, model, and reasoning effort.
@@ -559,7 +568,7 @@ function PaneChat({ pane }: { pane: PaneState }) {
             onClick={stop}
             aria-label="Stop response"
           >
-            <Square aria-hidden />
+            <SafeIcon icon={Square} aria-hidden />
           </Button>
         ) : (
           <Button
@@ -569,7 +578,7 @@ function PaneChat({ pane }: { pane: PaneState }) {
             disabled={!input.trim()}
             aria-label="Send message"
           >
-            <Send aria-hidden />
+            <SafeIcon icon={Send} aria-hidden />
           </Button>
         )}
         <CouncilButton
@@ -586,7 +595,7 @@ function PanePlaceholder({ pane }: { pane: PaneState }) {
   return (
     <div className="flex size-full items-center justify-center text-center text-fg-muted">
       <div>
-        <Bot className="mx-auto mb-2 size-8" aria-hidden />
+        <SafeIcon icon={Bot} className="mx-auto mb-2 size-8" aria-hidden />
         <p className="font-medium capitalize text-fg-primary">{pane.type} pane</p>
         <p className="text-caption">Content routing is isolated to this pane.</p>
       </div>

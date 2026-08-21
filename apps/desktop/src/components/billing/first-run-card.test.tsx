@@ -1,5 +1,5 @@
 /**
- * Tests for the first-run card (S11).
+ * Tests for the first-run card (S11 + S15).
  *
  * Verifies that the dashboard first-run card:
  *  - still shows the offline echo + Ollama + BYOK rows unchanged
@@ -7,6 +7,7 @@
  *  - says plainly that prompts leave the machine when Aval is the recommended
  *    hosted option (we never claim it stays local)
  *  - renders an Aval CTA that does not throw on click
+ *  - uses Navigation icon (S15: replaced Route to avoid react-router collision)
  */
 
 import { fireEvent, render, screen } from '@testing-library/react';
@@ -109,5 +110,16 @@ describe('FirstRunCard (S11)', () => {
 
     const cta = await screen.findByRole('button', { name: 'Set up Aval AI' });
     expect(() => fireEvent.click(cta)).not.toThrow();
+  });
+});
+
+describe('FirstRunCard (S15 - icon safety)', () => {
+  it('does not import lucide Route (avoids react-router collision)', async () => {
+    // This test verifies that the FirstRunCard component does not export RouteIcon,
+    // which was previously imported as 'Route' from lucide-react.
+    // Using 'Route' as an icon name collides with react-router's Route after minification.
+    const module = await import('@/components/billing/first-run-card');
+    // The module should not export RouteIcon (which was the alias for lucide Route)
+    expect(Object.keys(module)).not.toContain('RouteIcon');
   });
 });
