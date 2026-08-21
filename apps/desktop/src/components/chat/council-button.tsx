@@ -18,6 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '@/lib/i18n';
 import { useBridge } from '@/lib/bridge/hooks';
 import { Button } from '@/components/ui/button';
+import { SafeIcon } from '@/utils/icons';
 import type { CouncilDto } from '@/lib/bridge/types';
 import type { Message } from '@/types';
 
@@ -85,7 +86,7 @@ export function CouncilButton({ input, messages, disabled }: CouncilButtonProps)
         aria-label={t('councilButton')}
         title={t('councilButtonTitle')}
       >
-        <Scale aria-hidden />
+        <SafeIcon icon={Scale} aria-hidden />
       </Button>
       {error && (
         <p

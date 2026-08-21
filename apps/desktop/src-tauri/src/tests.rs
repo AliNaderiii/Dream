@@ -26,14 +26,14 @@ fn agent_status_labels_are_stable() {
 }
 
 #[test]
-fn app_state_defaults_to_idle_and_close_to_tray() {
+fn app_state_defaults_to_idle_and_quit_on_close() {
     let state = AppState::default();
     let snapshot = state.snapshot();
 
     assert_eq!(snapshot.agent_status, AgentStatus::Idle);
     assert_eq!(snapshot.pending_approvals, 0);
     assert!(snapshot.workspace_root.is_none());
-    assert!(snapshot.close_to_tray);
+    assert!(!snapshot.close_to_tray);
     assert!(!snapshot.minimize_to_tray);
 }
 

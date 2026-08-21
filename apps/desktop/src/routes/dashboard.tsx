@@ -7,6 +7,7 @@ import { FirstRunCard } from '@/components/billing/first-run-card';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/lib/i18n';
 import { useSessionStore } from '@/stores/use-session-store';
+import { SafeIcon } from '@/utils/icons';
 import { formatShortcut } from '@/utils/platform';
 
 /** A quick-launch tile on the dashboard. */
@@ -61,21 +62,18 @@ export function DashboardRoute() {
       <FirstRunCard />
 
       <div className="grid gap-3 sm:grid-cols-3">
-        {TILES.map((tile) => {
-          const Icon = tile.icon;
-          return (
-            <button
-              key={tile.to}
-              type="button"
-              onClick={() => void navigate(tile.to)}
-              className="flex flex-col items-start gap-2 rounded-lg border border-border-default bg-surface p-4 text-start transition-colors duration-fast hover:border-border-strong hover:bg-surface-2"
-            >
-              <Icon className="size-5 text-accent-text" aria-hidden />
-              <span className="text-h3 font-semibold">{t(tile.labelKey)}</span>
-              <span className="text-caption text-fg-secondary">{t(tile.descKey)}</span>
-            </button>
-          );
-        })}
+        {TILES.map((tile) => (
+          <button
+            key={tile.to}
+            type="button"
+            onClick={() => void navigate(tile.to)}
+            className="flex flex-col items-start gap-2 rounded-lg border border-border-default bg-surface p-4 text-start transition-colors duration-fast hover:border-border-strong hover:bg-surface-2"
+          >
+            <SafeIcon icon={tile.icon} className="size-5 text-accent-text" aria-hidden />
+            <span className="text-h3 font-semibold">{t(tile.labelKey)}</span>
+            <span className="text-caption text-fg-secondary">{t(tile.descKey)}</span>
+          </button>
+        ))}
       </div>
     </div>
   );

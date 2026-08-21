@@ -5,6 +5,37 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-08-21
+
+### Fixed
+
+- **S15 — `G is not a function` production crash fixed.** The `DashboardRoute`
+  and `ChatRoute` both crashed immediately after launching the installed
+  `Dream_0.3.1_x64-setup.exe`. The `FirstRunCard` component imported
+  `Route as RouteIcon` from lucide-react, which could collide with
+  react-router's `Route` after minification in the same non-lazy chunk.
+  Replaced with `Navigation` and added a `SafeIcon` wrapper that returns
+  `null` for non-function values, preventing the error in production builds.
+- **S15 — Tray icon leak on Windows fixed.** Each launch of Dream from the
+  Start menu was creating another tray icon under "Show hidden icons". The
+  root causes were (1) multiple processes without single-instance enforcement
+  and (2) the default close behavior hiding to tray. Fixed by adding
+  `tauri-plugin-single-instance` so a second launch focuses the existing
+  window, and changed the default `close_to_tray` to `false` so X quits the
+  app cleanly.
+
+### Changed
+
+- **S15 — Echo fallback when sidecar is offline.** When the Python sidecar
+  stays disconnected (never becomes `ready`), the UI previously blocked on
+  the Tauri transport. The bridge client now automatically falls back to the
+  `EchoBridgeTransport` when the sidecar emits `disconnected`, so the
+  Dashboard, Chat, Memory and Skills screens render and function using
+  in-memory echo data. When the sidecar recovers to `ready`, the client
+  switches back automatically.
+- Desktop version bumped to **0.3.2** (`apps/desktop/package.json`,
+  `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/src-tauri/Cargo.toml`).
+
 ## [0.3.1] - 2026-08-20
 
 The first Windows installer a Release-only user can download, install, and run

@@ -13,7 +13,7 @@
  * deterministic echo fallback in the browser.
  */
 
-import { Cloud, KeyRound, PlugZap, Route as RouteIcon, Sparkles, WifiOff } from 'lucide-react';
+import { Cloud, KeyRound, Navigation, PlugZap, Sparkles, WifiOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -119,7 +119,7 @@ export function FirstRunCard() {
 
       {route && (
         <div className="mt-4 flex items-center gap-2 rounded-lg bg-surface-2 px-3 py-2">
-          <RouteIcon className="size-4 shrink-0 text-fg-muted" aria-hidden />
+          <Navigation className="size-4 shrink-0 text-fg-muted" aria-hidden />
           <span className="text-caption font-medium">{t('firstRun.routeTitle')}:</span>
           <span
             className={

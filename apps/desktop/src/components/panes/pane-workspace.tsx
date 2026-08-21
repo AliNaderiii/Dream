@@ -8,6 +8,7 @@ import { SplitLayout } from '@/components/panes/split-layout';
 import { Button } from '@/components/ui/button';
 import { findPane, useLayoutStore } from '@/stores/use-layout-store';
 import { useProviderStore } from '@/stores/use-provider-store';
+import { SafeIcon } from '@/utils/icons';
 import { cn } from '@/utils/cn';
 
 export function PaneWorkspace() {
@@ -52,7 +53,7 @@ export function PaneWorkspace() {
     return (
       <div className="flex size-full items-center justify-center">
         <Button onClick={resetLayout}>
-          <RotateCcw aria-hidden /> Restore workspace
+          <SafeIcon icon={RotateCcw} aria-hidden /> Restore workspace
         </Button>
       </div>
     );
@@ -107,7 +108,7 @@ export function PaneWorkspace() {
                 }}
                 className="rounded-xs p-0.5 opacity-0 hover:bg-sunken group-hover:opacity-100 focus:opacity-100"
               >
-                <X className="size-3" aria-hidden />
+                <SafeIcon icon={X} className="size-3" aria-hidden />
               </span>
             )}
           </button>
@@ -120,10 +121,10 @@ export function PaneWorkspace() {
           title="New virtual screen"
           onClick={() => addScreen()}
         >
-          <Plus aria-hidden />
+          <SafeIcon icon={Plus} aria-hidden />
         </Button>
         <span className="ms-auto mb-1 hidden items-center gap-1 text-micro text-fg-muted lg:flex">
-          <Monitor className="size-3" aria-hidden />
+          <SafeIcon icon={Monitor} className="size-3" aria-hidden />
           Drag a pane here to move screens
         </span>
       </nav>

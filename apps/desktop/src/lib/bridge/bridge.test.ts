@@ -133,6 +133,61 @@ describe('BridgeClient', () => {
     expect(client.state).toBe('ready');
     expect(client.isFallback).toBe(false); // transport was explicitly provided
   });
+
+  it('isUsingFallback is false when echo is provided explicitly', () => {
+    expect(client.isUsingFallback).toBe(false);
+  });
+});
+
+describe('BridgeClient echo fallback (S15)', () => {
+  it('memory.list works via echo transport', async () => {
+    const transport = new EchoBridgeTransport();
+    const client = new BridgeClient(transport);
+
+    // Echo should handle memory.list
+    const result = await client.call<{ memories: unknown[] }>('memory.list');
+    expect(result.memories).toBeDefined();
+    expect(Array.isArray(result.memories)).toBe(true);
+    // Echo has seed memories
+    expect(result.memories.length).toBeGreaterThan(0);
+  });
+
+  it('conversation.send works via echo transport', async () => {
+    const transport = new EchoBridgeTransport();
+    const client = new BridgeClient(transport);
+
+    // Create a session first
+    const { session_id } = await client.call<{ session_id: string }>('session.create');
+
+    // Echo should handle conversation.send
+    const result = await client.call<{ reply: string }>('conversation.send', {
+      session_id,
+      message: 'Hello',
+    });
+
+    // Echo reply format
+    expect(result.reply).toBe('Echo: Hello');
+  });
+
+  it('session.create works via echo transport', async () => {
+    const transport = new EchoBridgeTransport();
+    const client = new BridgeClient(transport);
+
+    const result = await client.call<{ session_id: string }>('session.create');
+    expect(result.session_id).toBeDefined();
+    expect(result.session_id).toMatch(/^echo-\d+$/);
+  });
+
+  it('skill.list works via echo transport', async () => {
+    const transport = new EchoBridgeTransport();
+    const client = new BridgeClient(transport);
+
+    const result = await client.call<{ skills: unknown[] }>('skill.list');
+    expect(result.skills).toBeDefined();
+    expect(Array.isArray(result.skills)).toBe(true);
+    // Echo has seed skills
+    expect(result.skills.length).toBeGreaterThan(0);
+  });
 });
 
 describe('BridgeRpcError', () => {
