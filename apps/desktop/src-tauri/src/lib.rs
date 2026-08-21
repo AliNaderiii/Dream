@@ -37,18 +37,6 @@ pub fn run() {
         use tauri_plugin_window_state::StateFlags;
 
         builder = builder
-            // Enforce single instance: a second launch focuses the existing window
-            // instead of spawning another WebView + tray icon.
-            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-                if let Some(window) = app.get_webview_window(crate::commands::window::MAIN_WINDOW) {
-                    if let Err(error) = window.show() {
-                        log::warn!("failed to show existing Dream window: {error}");
-                    }
-                    if let Err(error) = window.set_focus() {
-                        log::warn!("failed to focus existing Dream window: {error}");
-                    }
-                }
-            }))
             // Restores position, size and maximized/fullscreen state on launch.
             // VISIBLE is excluded so a window hidden to the tray at exit does not
             // come back invisible and unreachable on the next launch.
