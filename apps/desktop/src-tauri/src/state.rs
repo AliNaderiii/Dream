@@ -43,7 +43,7 @@ impl AgentStatus {
 }
 
 /// Serializable view of [`AppState`], returned by `get_app_state` and emitted on change.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppStateSnapshot {
     /// Current agent lifecycle status.
@@ -56,21 +56,6 @@ pub struct AppStateSnapshot {
     pub minimize_to_tray: bool,
     /// Hide to tray instead of quitting when the window is closed.
     pub close_to_tray: bool,
-}
-
-impl Default for AppStateSnapshot {
-    fn default() -> Self {
-        Self {
-            agent_status: AgentStatus::default(),
-            pending_approvals: 0,
-            workspace_root: None,
-            minimize_to_tray: false,
-            // S15: X now quits the app by default, preventing zombie processes
-            // that hold stale tray icons. Users can still enable hide-to-tray via
-            // the tray menu if they prefer that behavior.
-            close_to_tray: false,
-        }
-    }
 }
 
 /// Thread-safe container registered with `app.manage(...)`.
