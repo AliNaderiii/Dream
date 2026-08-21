@@ -32,7 +32,7 @@ pub fn run() {
     let mut builder = tauri::Builder::default();
 
     // ---- Desktop-only plugins -------------------------------------------------
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     {
         use tauri_plugin_window_state::StateFlags;
 
@@ -41,9 +41,12 @@ pub fn run() {
             // instead of spawning another WebView + tray icon.
             .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
                 if let Some(window) = app.get_webview_window(crate::commands::window::MAIN_WINDOW) {
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
+                    if let Err(error) = window.show() {
+                        log::warn!("failed to show existing Dream window: {error}");
+                    }
+                    if let Err(error) = window.set_focus() {
+                        log::warn!("failed to focus existing Dream window: {error}");
+                    }
                 }
             }))
             // Restores position, size and maximized/fullscreen state on launch.
