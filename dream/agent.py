@@ -11,7 +11,7 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -24,6 +24,15 @@ from dream.extraction import (
     extract_facts,
 )
 from dream.memory import Memory, MemoryStore, normalize_fa
+from dream.memory_stores import (
+    BOUNDED_MEMORY_USAGE,
+    NOTES_LABEL,
+    PROFILE_LABEL,
+    TARGET_MEMORY,
+    TARGET_USER,
+    BoundedMemory,
+    BoundedSnapshot,
+)
 from dream.normalization import normalize_importance, normalize_kind
 from dream.providers import BuiltInMemoryProvider, ProviderManager
 from dream.reminders import (
@@ -64,6 +73,27 @@ DEFAULT_RETRY_BACKOFF_SECONDS = 1.0
 # reply goes out anyway. Five seconds keeps typical extractions reported while
 # bounding the damage of a provider that never answers.
 DEFAULT_EXTRACTION_TIMEOUT_SECONDS = 5.0
+
+
+# Tools Dream registers as per-instance closures bound to the owning
+# agent's stores (memory, reminders, bounded stores). A child agent rebinds
+# the memory/reminder names to its own ephemeral store in its own
+# ``__init__``; the bounded-store names only exist when a parent attached
+# ``BoundedMemory``, so a child can never rebind them. The subagent builder
+# uses this set to refuse grants that would hand a child a parent-bound
+# closure verbatim (MEM Stage A: agent_notes/user_profile must never reach
+# a parent's bounded stores from inside a subagent).
+INSTANCE_BOUND_TOOL_NAMES = frozenset(
+    {
+        "remember_fact",
+        "search_memory",
+        "forget_memory",
+        "create_reminder",
+        "cancel_reminder",
+        "agent_notes",
+        "user_profile",
+    }
+)
 
 
 def _resolve_temperature(raw: str | None) -> float:
@@ -702,6 +732,7 @@ class Dream:
         approval_policy: ApprovalPolicy | None = None,
         max_iterations: int = 4,
         manager: ProviderManager | None = None,
+        bounded: BoundedMemory | None = None,
     ) -> None:
         if manager is not None:
             self.manager = manager
@@ -747,8 +778,16 @@ class Dream:
         self._created: list[Memory] = []
         self._superseded: list[Memory] = []
         self._merged: list[Memory] = []
+        # The dual bounded stores (MEM Stage A): agent notes + user profile.
+        # Attachment is explicit so existing embedders see no new files; the
+        # snapshots are frozen for the session at construction time.
+        self.bounded = bounded
+        self._bounded_snapshots: dict[str, BoundedSnapshot] | None = None
+        self._bounded_prompt: str | None = None
+        self._refresh_bounded_snapshots()
         self._register_memory_tools()
         self._register_reminder_tools()
+        self._register_bounded_memory_tools()
 
     def _register_memory_tools(self) -> None:
         store = self.store
@@ -893,8 +932,122 @@ class Dream:
             }
 
     def reset_session(self) -> None:
-        """Discard conversational context without touching durable memory."""
+        """Discard conversational context without touching durable memory.
+
+        Starting a new conversational session also takes a fresh frozen
+        snapshot of the bounded stores: the previous session's snapshot was
+        frozen for that session's lifetime, and the new one must reflect
+        everything the tools wrote since.
+        """
         self.history.clear()
+        self._refresh_bounded_snapshots()
+
+    def _refresh_bounded_snapshots(self) -> None:
+        """Freeze the bounded-store snapshots and render their prompt block.
+
+        Called once at construction (session start) and again by
+        :meth:`reset_session`. Between those points the block is a constant
+        string: writes made through the tools land in the stores and in the
+        tools' own result payloads, never retroactively in the running
+        session's prompt.
+        """
+        if self.bounded is None:
+            self._bounded_snapshots = None
+            self._bounded_prompt = None
+            return
+        snapshots = self.bounded.snapshots()
+        self._bounded_snapshots = snapshots
+        sections = [BOUNDED_MEMORY_USAGE]
+        for label, snapshot in (
+            (NOTES_LABEL, snapshots[TARGET_MEMORY]),
+            (PROFILE_LABEL, snapshots[TARGET_USER]),
+        ):
+            section = f"\n\n[{label}]\n{snapshot.header}"
+            if snapshot.text:
+                section += f"\n{snapshot.text}"
+            sections.append(section)
+        self._bounded_prompt = "".join(sections)
+
+    def _register_bounded_memory_tools(self) -> None:
+        """Register the two bounded-store edit tools (MEM Stage A).
+
+        The action surface is exactly add / replace / remove; there is no
+        read action because the frozen snapshot is already in the system
+        prompt and every mutation returns the fresh store state. The risk
+        tier is ``guarded`` — local, reversible writes, logged on execution —
+        matching ``remember_fact``.
+        """
+        if self.bounded is None:
+            return
+        bounded = self.bounded
+
+        def _bounded_result(target: str, action: str, snapshot: BoundedSnapshot):
+            return {
+                "target": target,
+                "action": action,
+                "header": snapshot.header,
+                "used_chars": snapshot.used_chars,
+                "capacity": snapshot.capacity,
+                "entries": len(snapshot.entries),
+                "content": snapshot.text,
+            }
+
+        def _apply(
+            store, target: str, action: str, text: str, old: str, new: str
+        ):
+            if action == "add":
+                return _bounded_result(target, action, store.add(text))
+            if action == "replace":
+                return _bounded_result(target, action, store.replace(old, new))
+            if action == "remove":
+                return _bounded_result(target, action, store.remove(old))
+            raise ValueError(f"action must be add, replace, or remove, got {action!r}")
+
+        @tool(risk="guarded")
+        def agent_notes(
+            action: Literal["add", "replace", "remove"],
+            text: str = "",
+            old: str = "",
+            new: str = "",
+        ) -> dict[str, Any]:
+            """Edit the agent's durable notes store (bounded, §-separated).
+
+            The store is character-bounded; when it is full the tool returns
+            an error instead of truncating — consolidate near-duplicate
+            entries with replace, or drop stale ones with remove, then retry
+            in the same turn.
+
+            :param action: add appends an entry; replace swaps the unique
+                entry containing old for new; remove deletes the unique entry
+                containing old.
+            :param text: Entry text, for action add.
+            :param old: Substring identifying one entry, for replace/remove.
+            :param new: Replacement entry text, for action replace.
+            """
+            return _apply(bounded.notes, TARGET_MEMORY, action, text, old, new)
+
+        @tool(risk="guarded")
+        def user_profile(
+            action: Literal["add", "replace", "remove"],
+            text: str = "",
+            old: str = "",
+            new: str = "",
+        ) -> dict[str, Any]:
+            """Edit the durable user-profile store (bounded, §-separated).
+
+            Holds durable facts about the user: preferences, constraints,
+            identity details worth remembering across sessions. The store is
+            character-bounded; on overflow the tool errors — consolidate with
+            replace or remove, then retry in the same turn.
+
+            :param action: add appends an entry; replace swaps the unique
+                entry containing old for new; remove deletes the unique entry
+                containing old.
+            :param text: Entry text, for action add.
+            :param old: Substring identifying one entry, for replace/remove.
+            :param new: Replacement entry text, for action replace.
+            """
+            return _apply(bounded.profile, TARGET_USER, action, text, old, new)
 
     @property
     def ledger_attached(self) -> bool:
@@ -990,6 +1143,11 @@ class Dream:
         )
         if skills_block:
             prompt += skills_block
+        # The frozen bounded-store snapshots (MEM Stage A) ride with the
+        # system prompt as a constant per-session block, after the usage
+        # sentences and before the per-turn reminder/recalled-memory sections.
+        if self._bounded_prompt is not None:
+            prompt += self._bounded_prompt
         if memory_block is None:
             memory_block, _ = self._memory_block(memories)
         middle = ""
