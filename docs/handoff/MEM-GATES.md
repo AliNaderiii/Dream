@@ -357,3 +357,259 @@ against the 50 ms budget, cold and warm; existing suites untouched and green.
 
 PR-1 (Stages A+B) evidence is complete; Stage C (skills v2 runtime) may begin
 on PR-2's branch after owner review.
+
+---
+
+# Gate C — Skills v2 runtime (in-place)
+
+Implementation: [`MEM-C.md`](./MEM-C.md) · Files: `dream/skills/format.py`,
+`registry.py`, `store.py`, `slash.py` (new), `dream/skills/__init__.py`,
+`dream/tools.py`, `dream/agent.py`, `cli.py`, `tests/test_skills_v2.py` (23).
+**No existing test was edited; no bridge protocol or desktop file changed.**
+
+## Step 0 — this session, before Stage C code
+
+```text
+$ git log --oneline -1
+c664d54 feat(memory): kernel memory loop — bounded stores + FTS5 session search (MEM Stages A+B)
+
+$ .venv/bin/python -m pytest -q
+1852 passed, 11 skipped in 78.29s (0:01:18)
+```
+
+Matches the required 1852 / 11 baseline. Desktop tree vs `c664d54` is 0 lines
+(Stage C does not touch `apps/desktop` or `.github`).
+
+## C.1 — Token-cost (body absent until skill_view; catalog budget at 50)
+
+```text
+$ .venv/bin/python -m pytest tests/test_skills_v2.py::test_body_absent_from_system_prompt_until_skill_view tests/test_skills_v2.py::test_catalog_stays_within_budget_with_fifty_skills -q
+2 passed in 0.28s
+
+catalog_skills 50
+catalog_chars 2425 budget 8000
+body_in_catalog False
+system_chars 4922
+body_in_system False
+```
+
+Pinned: distinctive body marker is in no system prompt and in no catalog
+line; 50 installed skills contribute 2,425 characters against the 8,000
+budget; `skill_view` returns the body.
+
+## C.2 — Slash stacking (path-like args and the 5-cap)
+
+```text
+$ .venv/bin/python -m pytest tests/test_skills_v2.py::test_path_like_argument_is_not_swallowed tests/test_skills_v2.py::test_five_skill_stack_with_trailing_instruction tests/test_skills_v2.py::test_cli_and_agent_share_the_same_slash_parser -q
+3 passed
+```
+
+`/ocr-and-documents /tmp/scan.pdf extract the tables` loads one skill; the
+path is the argument. A 5-skill stack keeps the trailing instruction; a
+sixth slash stays in the remainder.
+
+## C.3 — Write-approval denial fails closed
+
+```text
+$ .venv/bin/python -m pytest tests/test_skills_v2.py::test_write_approval_denial_fails_closed -q
+1 passed
+```
+
+`ApprovalPolicy(always_ask={"guarded","dangerous"}, ask=False)` blocks
+`save_skill`; the workspace gains no skill file.
+
+## C.4 — Invalid SKILL.md is per-skill; registry stays up
+
+```text
+$ .venv/bin/python -m pytest tests/test_skills_v2.py::test_invalid_skill_md_does_not_drop_the_rest_of_the_registry tests/test_skills_v2.py::test_description_over_sixty_chars_is_a_bilingual_per_skill_error -q
+2 passed
+```
+
+A broken neighbour is a bilingual `SkillProblem`; the valid skill still
+loads. Description > 60 characters is refused with both languages.
+
+## C.5 — Version / use-log, no auto-overwrite
+
+```text
+$ .venv/bin/python -m pytest tests/test_skills_v2.py::test_versions_append_and_never_overwrite tests/test_skills_v2.py::test_save_skill_md_refuses_to_clobber_without_replace tests/test_skills_v2.py::test_use_log_records_view_and_slash -q
+3 passed
+```
+
+Edits append version 2; identical content is a no-op; `save_skill_md`
+without `replace` leaves the file byte-identical. Slash and `skill_view`
+write use-log rows.
+
+## C.6 — Full suites, RF-4, static, desktop 0-diff
+
+```text
+$ .venv/bin/python -m pytest tests/test_skills_v2.py -q
+23 passed in 0.35s
+
+$ .venv/bin/python -m ruff check .
+All checks passed!
+
+$ .venv/bin/python -m pytest -q
+1875 passed, 11 skipped in 83.94s (0:01:23)
+
+$ git diff --stat c664d54 -- apps/desktop .github | wc -l
+0
+```
+
+1852 + 23 new = 1875 passed / 11 skipped. Existing tests unmodified.
+`pyproject.toml` unchanged (stdlib only). Machine gates
+`test_m16_escaping` / `test_m16_conditional_assertions` green.
+
+## Gate C decision
+
+**GREEN.** In-place v2: SKILL.md + v1 `.txt` side by side, progressive
+disclosure (catalog name+description only; bodies via `skill_view` or slash
+user-turn), Hermes stacking with path-safe parse, guarded writes fail
+closed on denial, append-only version/use ledger under `DREAM_SKILLS_DB`.
+
+Stage D (`/learn` and autonomous proposals) may begin on the same PR.
+
+---
+
+# Gate D — /learn and autonomous proposals
+
+Implementation: [`MEM-D.md`](./MEM-D.md) · Files: `dream/skills/learn.py`,
+`dream/skills/propose.py` (new), `dream/tools.py`, `dream/agent.py`,
+`cli.py`, `tests/test_skills_learn.py` (11). **No existing test edited;
+bridge protocol and desktop untouched.**
+
+## D.1 — Every source type
+
+```text
+$ .venv/bin/python -m pytest tests/test_skills_learn.py -q
+11 passed in 0.30s
+```
+
+- path (`/learn notes/tea.txt`)
+- conversation (`/learn conversation`)
+- notes (`/learn How to brew tea…`)
+- corpus (`/learn docs/book` → `references/` + `glossary.md`)
+- URL with network enabled (fetch stubbed; page text classified as `url`)
+- URL offline: bilingual refusal, no DNS/socket touch, no skill written
+
+## D.2 — Knowledge-base split and merge-on-re-learn
+
+`test_learn_from_corpus_writes_references` — `references/soil.md`,
+`water.md`, `glossary.md`; long source passages are not reproduced.
+`test_merge_on_relearn_does_not_duplicate` — second `/learn` on the same
+name returns `status=merged`, one skill, both bodies present.
+
+## D.3 — Post-task proposals
+
+`test_proposals_default_off_and_never_in_demo` — default off; `demo=True`
+never proposes even when the env flag is on.
+`test_proposal_approved_applies_denied_discards` — apply writes one skill;
+discard writes nothing; a guarded denial of `apply_skill_proposal` leaves
+the disk unchanged.
+
+## D.4 — Full suites at close
+
+```text
+$ .venv/bin/python -m ruff check .
+All checks passed!
+
+$ .venv/bin/python -m pytest -q
+1886 passed, 11 skipped in 80.33s (0:01:20)
+
+$ git diff --stat c664d54 -- apps/desktop .github | wc -l
+0
+```
+
+1875 (Gate C) + 11 = 1886 passed / 11 skipped. Suites only grew.
+
+## Gate D decision
+
+**GREEN.** `/learn` is a composed normal turn (no private ingestion engine);
+URL learning fails closed offline; large sources become knowledge-base
+skills; re-learn merges; proposals are opt-in, never in `--demo`, and
+write only through the approved path.
+
+PR-2 (Stages C+D) evidence is complete.
+
+---
+
+# C/D — Integrity Appendix
+
+Round-3 review: Gates C and D stay conditionally GREEN pending this
+appendix. Each item below is a live command from the repository root on
+`arena/01a02a8d-dream` at `74b01b2` (C+D code) plus this docs commit.
+No existing test was edited to produce a cleaner grep.
+
+## I.1 — RF-4 proof (existing tests untouched)
+
+```text
+$ git diff --stat c664d54..HEAD -- tests/
+ tests/test_skills_learn.py | 334 ++++++++++++++++++++++++++++++++++
+ tests/test_skills_v2.py    | 437 +++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 771 insertions(+)
+```
+
+Only the two new files. Zero deletions, zero edits to any pre-existing
+test. That also settles the `test_m12` / `KNOWN_COMMANDS` concern from
+the session log: `/learn` was added to `KNOWN_COMMANDS` in product code
+(`cli.py`) without touching `tests/test_m12*.py` or any other existing
+suite file. Handoff notes live under `docs/handoff/`, not `tests/`.
+
+## I.2 — Dead-assertion sweep
+
+```text
+$ grep -rn "or True" tests/
+$ grep -rn "and False" tests/
+$ grep -rn "if False" tests/
+tests/test_session_search.py:231:    index.index_session("chat", "project", ["первое" if False else "first turn"])
+```
+
+`or True` and `and False` return nothing (exit 1). The single `if False`
+hit is **not** a dead assertion and is **not** in this PR: it is a
+ternary used as fixture text inside Stage B
+`test_append_message_grows_the_document` (`["первое" if False else
+"first turn"]`). RF-4 forbids editing that file. No `or True` leftover
+remains in `tests/test_skills_learn.py` (the dummy that appeared during
+drafting was removed before the Stage D commit).
+
+## I.3 — Ledger lifecycle
+
+Root cause and fix are documented in [`MEM-C.md`](./MEM-C.md) §4
+(paragraph "Ledger lifecycle"). Summary: a process-global `SkillLedger`
+connection was inherited by `multiprocessing` tests and deadlocked on
+the SQLite file lock; `get_ledger()` now returns a fresh
+`SkillLedger.from_env()` and every product call site is a short-lived
+`with` block (or is the definition itself).
+
+```text
+$ grep -n "get_ledger()" dream/skills/*.py dream/tools.py
+dream/skills/__init__.py:1130:    with get_ledger() as ledger:
+dream/skills/__init__.py:1164:    with get_ledger() as ledger:
+dream/skills/__init__.py:1215:    with get_ledger() as ledger:
+dream/skills/propose.py:111:        with get_ledger() as ledger:
+dream/skills/store.py:229:def get_ledger() -> SkillLedger:
+dream/tools.py:594:        with get_ledger() as ledger:
+```
+
+Every call site is inside a `with` block. The remaining line is the
+function definition. (For completeness, the only other product call is
+`dream/agent.py:1197`, also `with get_ledger() as ledger:`.)
+
+## I.4 — Unicode sanity
+
+```text
+$ python3 -c "from dream.skills import format, learn, propose"
+$ grep -c '\\\\u' dream/skills/format.py
+0
+```
+
+Imports are clean (exit 0, no traceback). `format.py` contains zero
+double-escaped `\\u` sequences. Product Persian remains single `\u`
+escapes as required by M16.
+
+## Integrity decision
+
+**GREEN.** RF-4 holds (two new test files only). Dead-assertion greps
+are clean except one pre-existing Stage B ternary, left untouched.
+Ledger connections are short-lived. Unicode imports and escape density
+check out. PR-2 may merge; Stages E+F wait for that merge.
+

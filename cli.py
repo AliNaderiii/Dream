@@ -30,6 +30,7 @@ KNOWN_COMMANDS = (
     "/usage",
     "/route",
     "/reset",
+    "/learn",
     "/help",
     "/exit",
 )
@@ -59,6 +60,7 @@ _HELP_FRAGMENTS: dict[str, str] = {
     "/usage": "/usage",
     "/route": "/route",
     "/reset": "/reset",
+    "/learn": "/learn SOURCE",
     "/help": "/help",
     "/exit": "/exit",
 }
@@ -94,6 +96,10 @@ _PHONE_POLICY: dict[str, tuple[bool, str]] = {
     "/usage": (True, "read-only ledger readout; no mutation; safe"),
     "/route": (True, "read-only privacy disclosure of the model route; safe"),
     "/reset": (True, "per-chat session reset; safe"),
+    "/learn": (
+        True,
+        "owner turns a source into a skill; writes go through approval; safe",
+    ),
     "/help": (True, "help is always allowed"),
     "/exit": (False, "terminal session control; not applicable to phone"),
 }
@@ -616,11 +622,25 @@ def dispatch_command(
     elif command == "/reset":
         dream.reset_session()
         output("Session context cleared; long-term memories remain.")
+    elif command == "/learn":
+        turn = dream.run(text)
+        if not quiet:
+            report_turn_activity(turn)
+        output(turn.reply)
     elif command == "/help":
         output(TERMINAL_HELP)
     elif command == "/exit":
         return False
     else:
+        from dream import skills as skills_module
+
+        stack = skills_module.parse_slash_stack(text)
+        if stack.invoked:
+            turn = dream.run(text)
+            if not quiet:
+                report_turn_activity(turn)
+            output(turn.reply)
+            return True
         suggestion = _closest_command(command)
         hint = f" Did you mean {suggestion}?" if suggestion else ""
         output(f"Unknown command: {command}.{hint} Type /help to see available commands.")

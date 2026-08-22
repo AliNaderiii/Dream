@@ -37,7 +37,12 @@ __all__ = [
     "execute",
     "get_datetime",
     "list_notes",
+    "apply_skill_proposal",
+    "delete_skill",
+    "discard_skill_proposal",
+    "edit_skill",
     "list_skills",
+    "save_skill_bundle",
     "openai_schemas",
     "read_note",
     "read_page",
@@ -45,6 +50,7 @@ __all__ = [
     "save_skill",
     "search_web",
     "send_email",
+    "skill_view",
     "tool",
     "use_skill",
     "write_note",
@@ -582,6 +588,13 @@ def use_skill(query: str) -> dict[str, Any]:
     skill = skills.find_skill(query)
     if skill is None:
         return {"match": None}
+    try:
+        from dream.skills.store import get_ledger
+
+        with get_ledger() as ledger:
+            ledger.log_use(skill.name, "success", duration_ms=0.0, source="use_skill")
+    except Exception:
+        pass
     return {
         "match": {
             "name": skill.name,
@@ -612,6 +625,83 @@ def list_skills() -> dict[str, Any]:
             {"filename": problem.filename, "detail": problem.detail} for problem in problems
         ],
     }
+
+
+@tool(risk="safe")
+def skill_view(name: str) -> dict[str, Any]:
+    """Load one installed skill's body. Catalog entries never include the body.
+
+    :param name: Skill name or slash name (for example ``ocr-and-documents``).
+    """
+    from dream import skills  # deferred: dream.skills imports this module
+
+    return skills.view_skill(name)
+
+
+@tool(risk="guarded")
+def edit_skill(name: str, description: str, body: str) -> dict[str, Any]:
+    """Create or version a SKILL.md skill. Never silently overwrites history.
+
+    :param name: Hyphen-case skill name (folder name).
+    :param description: When this skill applies; at most 60 characters.
+    :param body: Markdown instructions. Do not invent commands.
+    """
+    from dream import skills  # deferred: dream.skills imports this module
+
+    return skills.edit_skill(name, description, body)
+
+
+@tool(risk="guarded")
+def delete_skill(name: str) -> dict[str, Any]:
+    """Delete the current file for an installed skill. Version history is kept.
+
+    :param name: Skill name or slash name.
+    """
+    from dream import skills  # deferred: dream.skills imports this module
+
+    return skills.delete_skill(name)
+
+
+@tool(risk="guarded")
+def save_skill_bundle(
+    name: str,
+    description: str,
+    body: str,
+    references: dict | None = None,
+) -> dict[str, Any]:
+    """Save a knowledge-base skill (SKILL.md plus references/). Merges on re-learn.
+
+    :param name: Hyphen-case skill name.
+    :param description: When this skill applies; at most 60 characters.
+    :param body: Lean markdown instructions.
+    :param references: Optional map of topic name to distilled markdown.
+    """
+    from dream.skills.learn import install_skill_bundle
+
+    return install_skill_bundle(name, description, body, references)
+
+
+@tool(risk="guarded")
+def apply_skill_proposal(proposal_id: str) -> dict[str, Any]:
+    """Apply an approved post-task skill proposal. Denial must not call this.
+
+    :param proposal_id: Identifier from the proposal notice.
+    """
+    from dream.skills.propose import apply_proposal
+
+    return apply_proposal(proposal_id)
+
+
+@tool(risk="safe")
+def discard_skill_proposal(proposal_id: str) -> dict[str, Any]:
+    """Discard a pending skill proposal. Nothing is written.
+
+    :param proposal_id: Identifier from the proposal notice.
+    """
+    from dream.skills.propose import discard_proposal
+
+    discarded = discard_proposal(proposal_id)
+    return {"discarded": discarded, "proposal_id": proposal_id}
 
 
 @tool(risk="guarded")
