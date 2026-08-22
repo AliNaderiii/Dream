@@ -31,7 +31,7 @@ from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from dream.agent import ApprovalPolicy, Dream, build_backend
+from dream.agent import INSTANCE_BOUND_TOOL_NAMES, ApprovalPolicy, Dream, build_backend
 from dream.commerce import Ledger
 from dream.memory import MemoryStore
 from dream.tools import REGISTRY, Tool, execute, openai_schemas
@@ -279,6 +279,18 @@ def build_child_tools(
         if registered is None:
             continue
         if registered.risk == "dangerous" and not allow_dangerous:
+            continue
+        # An instance-bound tool the child did NOT re-register is still the
+        # parent's closure — granting it verbatim would let the child touch
+        # the parent's stores. The child rebinds the memory/reminder names to
+        # its own ephemeral store, so identity change means child-owned; the
+        # bounded-store names (agent_notes/user_profile) never rebind, so a
+        # parent's grant of them is dropped here (MEM Stage A isolation).
+        if (
+            name in INSTANCE_BOUND_TOOL_NAMES
+            and name in snapshot
+            and registered is snapshot[name]
+        ):
             continue
         table[name] = registered
     # The child's own policy resolves risk from the private table, and carries
