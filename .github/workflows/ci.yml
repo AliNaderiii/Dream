@@ -43,3 +43,6 @@ jobs:
 
       - name: Suite size
         run: python tools/check_suite_count.py
+      # Keep pytest isolated from frontend/Rust builds in this job. Telegram
+      # timing assertions are sensitive to CPU contention and can flake when a
+      # developer runs a concurrent build; each CI job has its own runner.
