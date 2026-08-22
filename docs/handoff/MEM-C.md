@@ -109,6 +109,18 @@ is still a slash command.
 no-op, never an UPDATE. Use rows are append-only (`invoked` / `success` /
 `error` / `deleted`).
 
+**Ledger lifecycle (hang root cause and fix).** An early draft kept a
+process-global `SkillLedger` singleton so every `get_ledger()` returned the
+same live `sqlite3` connection. Pytest workers that use `multiprocessing`
+inherit that connection after fork; the child then contends for the same
+SQLite file lock the parent still holds, and the full suite hangs. The
+shipped API returns a **fresh** `SkillLedger.from_env()` on every
+`get_ledger()` call. Product call sites open it as a short-lived context
+manager (`with get_ledger() as ledger:`) so `__exit__` closes the
+connection immediately. `reset_ledger_for_tests()` is a no-op kept only so
+existing fixtures still import it. Callers that need several operations on
+one handle construct `SkillLedger` themselves and close it.
+
 ### 5. Write approval
 
 `save_skill`, `edit_skill`, and `delete_skill` are `guarded`. The existing

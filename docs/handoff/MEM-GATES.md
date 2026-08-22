@@ -529,3 +529,87 @@ skills; re-learn merges; proposals are opt-in, never in `--demo`, and
 write only through the approved path.
 
 PR-2 (Stages C+D) evidence is complete.
+
+---
+
+# C/D — Integrity Appendix
+
+Round-3 review: Gates C and D stay conditionally GREEN pending this
+appendix. Each item below is a live command from the repository root on
+`arena/01a02a8d-dream` at `74b01b2` (C+D code) plus this docs commit.
+No existing test was edited to produce a cleaner grep.
+
+## I.1 — RF-4 proof (existing tests untouched)
+
+```text
+$ git diff --stat c664d54..HEAD -- tests/
+ tests/test_skills_learn.py | 334 ++++++++++++++++++++++++++++++++++
+ tests/test_skills_v2.py    | 437 +++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 771 insertions(+)
+```
+
+Only the two new files. Zero deletions, zero edits to any pre-existing
+test. That also settles the `test_m12` / `KNOWN_COMMANDS` concern from
+the session log: `/learn` was added to `KNOWN_COMMANDS` in product code
+(`cli.py`) without touching `tests/test_m12*.py` or any other existing
+suite file. Handoff notes live under `docs/handoff/`, not `tests/`.
+
+## I.2 — Dead-assertion sweep
+
+```text
+$ grep -rn "or True" tests/
+$ grep -rn "and False" tests/
+$ grep -rn "if False" tests/
+tests/test_session_search.py:231:    index.index_session("chat", "project", ["первое" if False else "first turn"])
+```
+
+`or True` and `and False` return nothing (exit 1). The single `if False`
+hit is **not** a dead assertion and is **not** in this PR: it is a
+ternary used as fixture text inside Stage B
+`test_append_message_grows_the_document` (`["первое" if False else
+"first turn"]`). RF-4 forbids editing that file. No `or True` leftover
+remains in `tests/test_skills_learn.py` (the dummy that appeared during
+drafting was removed before the Stage D commit).
+
+## I.3 — Ledger lifecycle
+
+Root cause and fix are documented in [`MEM-C.md`](./MEM-C.md) §4
+(paragraph "Ledger lifecycle"). Summary: a process-global `SkillLedger`
+connection was inherited by `multiprocessing` tests and deadlocked on
+the SQLite file lock; `get_ledger()` now returns a fresh
+`SkillLedger.from_env()` and every product call site is a short-lived
+`with` block (or is the definition itself).
+
+```text
+$ grep -n "get_ledger()" dream/skills/*.py dream/tools.py
+dream/skills/__init__.py:1130:    with get_ledger() as ledger:
+dream/skills/__init__.py:1164:    with get_ledger() as ledger:
+dream/skills/__init__.py:1215:    with get_ledger() as ledger:
+dream/skills/propose.py:111:        with get_ledger() as ledger:
+dream/skills/store.py:229:def get_ledger() -> SkillLedger:
+dream/tools.py:594:        with get_ledger() as ledger:
+```
+
+Every call site is inside a `with` block. The remaining line is the
+function definition. (For completeness, the only other product call is
+`dream/agent.py:1197`, also `with get_ledger() as ledger:`.)
+
+## I.4 — Unicode sanity
+
+```text
+$ python3 -c "from dream.skills import format, learn, propose"
+$ grep -c '\\\\u' dream/skills/format.py
+0
+```
+
+Imports are clean (exit 0, no traceback). `format.py` contains zero
+double-escaped `\\u` sequences. Product Persian remains single `\u`
+escapes as required by M16.
+
+## Integrity decision
+
+**GREEN.** RF-4 holds (two new test files only). Dead-assertion greps
+are clean except one pre-existing Stage B ternary, left untouched.
+Ledger connections are short-lived. Unicode imports and escape density
+check out. PR-2 may merge; Stages E+F wait for that merge.
+
