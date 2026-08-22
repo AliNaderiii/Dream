@@ -37,9 +37,12 @@ __all__ = [
     "execute",
     "get_datetime",
     "list_notes",
+    "apply_skill_proposal",
     "delete_skill",
+    "discard_skill_proposal",
     "edit_skill",
     "list_skills",
+    "save_skill_bundle",
     "openai_schemas",
     "read_note",
     "read_page",
@@ -657,6 +660,48 @@ def delete_skill(name: str) -> dict[str, Any]:
     from dream import skills  # deferred: dream.skills imports this module
 
     return skills.delete_skill(name)
+
+
+@tool(risk="guarded")
+def save_skill_bundle(
+    name: str,
+    description: str,
+    body: str,
+    references: dict | None = None,
+) -> dict[str, Any]:
+    """Save a knowledge-base skill (SKILL.md plus references/). Merges on re-learn.
+
+    :param name: Hyphen-case skill name.
+    :param description: When this skill applies; at most 60 characters.
+    :param body: Lean markdown instructions.
+    :param references: Optional map of topic name to distilled markdown.
+    """
+    from dream.skills.learn import install_skill_bundle
+
+    return install_skill_bundle(name, description, body, references)
+
+
+@tool(risk="guarded")
+def apply_skill_proposal(proposal_id: str) -> dict[str, Any]:
+    """Apply an approved post-task skill proposal. Denial must not call this.
+
+    :param proposal_id: Identifier from the proposal notice.
+    """
+    from dream.skills.propose import apply_proposal
+
+    return apply_proposal(proposal_id)
+
+
+@tool(risk="safe")
+def discard_skill_proposal(proposal_id: str) -> dict[str, Any]:
+    """Discard a pending skill proposal. Nothing is written.
+
+    :param proposal_id: Identifier from the proposal notice.
+    """
+    from dream.skills.propose import discard_proposal
+
+    discarded = discard_proposal(proposal_id)
+    return {"discarded": discarded, "proposal_id": proposal_id}
 
 
 @tool(risk="guarded")

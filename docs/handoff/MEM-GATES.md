@@ -467,3 +467,65 @@ user-turn), Hermes stacking with path-safe parse, guarded writes fail
 closed on denial, append-only version/use ledger under `DREAM_SKILLS_DB`.
 
 Stage D (`/learn` and autonomous proposals) may begin on the same PR.
+
+---
+
+# Gate D — /learn and autonomous proposals
+
+Implementation: [`MEM-D.md`](./MEM-D.md) · Files: `dream/skills/learn.py`,
+`dream/skills/propose.py` (new), `dream/tools.py`, `dream/agent.py`,
+`cli.py`, `tests/test_skills_learn.py` (11). **No existing test edited;
+bridge protocol and desktop untouched.**
+
+## D.1 — Every source type
+
+```text
+$ .venv/bin/python -m pytest tests/test_skills_learn.py -q
+11 passed in 0.30s
+```
+
+- path (`/learn notes/tea.txt`)
+- conversation (`/learn conversation`)
+- notes (`/learn How to brew tea…`)
+- corpus (`/learn docs/book` → `references/` + `glossary.md`)
+- URL with network enabled (fetch stubbed; page text classified as `url`)
+- URL offline: bilingual refusal, no DNS/socket touch, no skill written
+
+## D.2 — Knowledge-base split and merge-on-re-learn
+
+`test_learn_from_corpus_writes_references` — `references/soil.md`,
+`water.md`, `glossary.md`; long source passages are not reproduced.
+`test_merge_on_relearn_does_not_duplicate` — second `/learn` on the same
+name returns `status=merged`, one skill, both bodies present.
+
+## D.3 — Post-task proposals
+
+`test_proposals_default_off_and_never_in_demo` — default off; `demo=True`
+never proposes even when the env flag is on.
+`test_proposal_approved_applies_denied_discards` — apply writes one skill;
+discard writes nothing; a guarded denial of `apply_skill_proposal` leaves
+the disk unchanged.
+
+## D.4 — Full suites at close
+
+```text
+$ .venv/bin/python -m ruff check .
+All checks passed!
+
+$ .venv/bin/python -m pytest -q
+1886 passed, 11 skipped in 80.33s (0:01:20)
+
+$ git diff --stat c664d54 -- apps/desktop .github | wc -l
+0
+```
+
+1875 (Gate C) + 11 = 1886 passed / 11 skipped. Suites only grew.
+
+## Gate D decision
+
+**GREEN.** `/learn` is a composed normal turn (no private ingestion engine);
+URL learning fails closed offline; large sources become knowledge-base
+skills; re-learn merges; proposals are opt-in, never in `--demo`, and
+write only through the approved path.
+
+PR-2 (Stages C+D) evidence is complete.

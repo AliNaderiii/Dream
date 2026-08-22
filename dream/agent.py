@@ -733,6 +733,7 @@ class Dream:
         max_iterations: int = 4,
         manager: ProviderManager | None = None,
         bounded: BoundedMemory | None = None,
+        demo: bool = False,
     ) -> None:
         if manager is not None:
             self.manager = manager
@@ -757,6 +758,7 @@ class Dream:
         self.backend = backend or build_backend()
         self.approval_policy = approval_policy or ApprovalPolicy()
         self.max_iterations = max_iterations
+        self.demo = bool(demo)
         # The usage ledger hook: attached only when DREAM_PLAN is not local
         # or DREAM_LEDGER is set, so the unlimited local plan runs with no
         # ledger file at all. Metered plans fail closed on a corrupt ledger.
@@ -1175,8 +1177,18 @@ class Dream:
         self._merged.clear()
         if self.store is not None:
             self.store.log("user", message)
-        # Slash stacking (CLI + bridge chat path): leading skill tokens load
-        # bodies into the *user* turn, never into the system prompt.
+        original_message = message
+        stripped = message.lstrip()
+        if stripped.startswith("\\"):
+            stripped = "/" + stripped[1:]
+        if stripped.lower().startswith("/learn"):
+            from dream.skills.learn import LearnError, prepare_learn_turn
+
+            try:
+                message = prepare_learn_turn(message, history=self.history)
+            except LearnError as exc:
+                return Turn(str(exc), [], [], [], time.monotonic() - started)
+        # Slash stacking: leading skill tokens load bodies into the user turn.
         model_message, slash_stack = apply_slash_invocation(message)
         if slash_stack.invoked:
             try:
@@ -1246,6 +1258,11 @@ class Dream:
             injected_memories,
             extraction_result.status,
         )
+        from dream.skills.propose import format_proposal_notice, maybe_propose
+
+        proposal = maybe_propose(original_message, calls_made, demo=self.demo)
+        if proposal is not None:
+            reply = reply + format_proposal_notice(proposal)
         self.history.append({"role": "assistant", "content": reply})
         if self.store is not None:
             self.store.log("assistant", reply)
