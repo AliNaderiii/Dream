@@ -65,3 +65,20 @@ Dangerous tools are denied by default when no approval callback is configured.
 The interactive CLI's `--yolo` switch deliberately widens automatic approval to
 include them and prints a warning. It is not enabled by any environment
 variable and is not the default.
+
+## Durable learning and context
+
+| Variable | Controls | Default |
+| --- | --- | --- |
+| `DREAM_BOUNDED_DB` | SQLite path for bounded agent notes and user profile | `data/dream-bounded.db` |
+| `DREAM_SESSION_INDEX_DB` | SQLite FTS5 session-search index | `data/dream-session-index.db` |
+| `DREAM_SKILLS_DB` | SQLite skill-use ledger | implementation default |
+| `DREAM_SKILL_PROPOSALS` | SQLite skill-improvement proposal store | implementation default |
+| `DREAM_CONTEXT_TOKENS` | Context window used by local compaction accounting | echo `16384`, model `8192` |
+| `DREAM_COMPACTION_THRESHOLD` | Fraction of the window that triggers boundary compaction | `0.80` |
+| `DREAM_COMPACTION_KEEP_MESSAGES` | Recent active messages protected from compaction | `4` |
+| `DREAM_MEMORY_NUDGES` | Enables prompt-only durable-memory nudge (`off`, `false`, or `0` disables) | enabled |
+| `DREAM_MEMORY_NUDGE_EVERY_TURNS` | Turns before the once-per-session nudge becomes eligible | `8` |
+
+Compaction runs only at turn boundaries. `/compress` requests it explicitly.
+Nudges are never issued in demo mode and never write data themselves.

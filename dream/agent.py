@@ -17,6 +17,14 @@ from urllib.request import Request, urlopen
 
 from dream.claims import guard_claims
 from dream.commerce import Ledger, LedgerError, QuotaExceeded, ledger_attached
+from dream.compaction import (
+    DEFAULT_ECHO_CONTEXT_TOKENS,
+    DEFAULT_MODEL_CONTEXT_TOKENS,
+    DEFAULT_THRESHOLD,
+    deterministic_summary,
+    split_for_compaction,
+    usage,
+)
 from dream.extraction import (
     STATUS_ABANDONED,
     STATUS_ERROR,
@@ -111,6 +119,24 @@ def _resolve_temperature(raw: str | None) -> float:
     if not 0.0 <= value <= 2.0:
         return DEFAULT_TEMPERATURE
     return value
+
+
+def _positive_int(raw: str | None, default: int, minimum: int = 1, maximum: int = 1_000_000) -> int:
+    """Parse a bounded positive integer environment setting safely."""
+    try:
+        value = int(raw or default)
+    except (TypeError, ValueError):
+        return default
+    return value if minimum <= value <= maximum else default
+
+
+def _fraction(raw: str | None, default: float) -> float:
+    """Parse a safe compaction threshold between zero and one."""
+    try:
+        value = float(raw or default)
+    except (TypeError, ValueError):
+        return default
+    return value if 0.1 <= value < 1.0 else default
 
 
 def _resolve_memory_block_char_limit(raw: str | None) -> int:
@@ -777,6 +803,19 @@ class Dream:
             os.environ.get("DREAM_EXTRACTION_TIMEOUT_SECONDS")
         )
         self.history: list[dict[str, Any]] = []
+        # Stage E: accounting is local and deterministic. Echo defaults generously
+        # so ordinary offline turns never compact unless explicitly configured.
+        default_window = (
+            DEFAULT_ECHO_CONTEXT_TOKENS if isinstance(self.backend, EchoBackend) else DEFAULT_MODEL_CONTEXT_TOKENS  # noqa: E501
+        )
+        self.context_tokens = _positive_int(os.environ.get("DREAM_CONTEXT_TOKENS"), default_window)
+        self.compaction_threshold = _fraction(os.environ.get("DREAM_COMPACTION_THRESHOLD"), DEFAULT_THRESHOLD)  # noqa: E501
+        self.compaction_keep_messages = _positive_int(os.environ.get("DREAM_COMPACTION_KEEP_MESSAGES"), 4, 2, 100)  # noqa: E501
+        self._compaction_summary = ""
+        self._turn_count = 0
+        self.nudge_every_turns = _positive_int(os.environ.get("DREAM_MEMORY_NUDGE_EVERY_TURNS"), 8, 1, 10_000)  # noqa: E501
+        self.nudges_enabled = os.environ.get("DREAM_MEMORY_NUDGES", "1").lower() not in {"0", "false", "off", "no"}  # noqa: E501
+        self._nudge_sent = False
         self._created: list[Memory] = []
         self._superseded: list[Memory] = []
         self._merged: list[Memory] = []
@@ -942,6 +981,9 @@ class Dream:
         everything the tools wrote since.
         """
         self.history.clear()
+        self._compaction_summary = ""
+        self._turn_count = 0
+        self._nudge_sent = False
         self._refresh_bounded_snapshots()
 
     def _refresh_bounded_snapshots(self) -> None:
@@ -1154,6 +1196,14 @@ class Dream:
         # sentences and before the per-turn reminder/recalled-memory sections.
         if self._bounded_prompt is not None:
             prompt += self._bounded_prompt
+        if self._compaction_summary:
+            prompt += "\n\n" + self._compaction_summary
+        if self._nudge_due():
+            prompt += (
+                "\n\nMemory nudge / \u06cc\u0627\u062f\u0622\u0648\u0631\u06cc \u062d\u0627\u0641\u0638\u0647: "
+                "Persist only durable preferences or facts through the bounded memory tools; "
+                "\u0641\u0642\u0637 \u062f\u0627\u0646\u0633\u062a\u0647\u200c\u0647\u0627\u06cc \u0645\u0627\u0646\u062f\u06af\u0627\u0631 \u0631\u0627 \u0630\u062e\u06cc\u0631\u0647 \u06a9\u0646."
+            )
         if memory_block is None:
             memory_block, _ = self._memory_block(memories)
         middle = ""
@@ -1161,8 +1211,42 @@ class Dream:
             middle = _REMINDER_USAGE + reminder_block
         return {"role": "system", "content": prompt + middle + memory_block}
 
+    def context_usage(self) -> dict[str, float | int]:
+        """Expose local accounting for transcripts, tests, and bridge clients."""
+        current = usage(self.history, self.context_tokens)
+        return {"tokens": current.tokens, "window": current.window, "ratio": current.ratio}
+
+    def _nudge_due(self) -> bool:
+        return self.nudges_enabled and not self.demo and not self._nudge_sent and self._turn_count >= self.nudge_every_turns  # noqa: E501
+
+    def compact(self, reason: str = "threshold") -> dict[str, Any]:
+        """Compact only at a turn boundary; retain the active recent exchange."""
+        model_history = [item for item in self.history if item.get("role") in {"user", "assistant", "tool"}]  # noqa: E501
+        before = usage(model_history, self.context_tokens)
+        dropped, kept = split_for_compaction(model_history, self.compaction_keep_messages)
+        if not dropped:
+            return {"compacted": False, "before_tokens": before.tokens, "after_tokens": before.tokens}  # noqa: E501
+        summary = deterministic_summary(dropped, reason)
+        self._compaction_summary = (self._compaction_summary + "\n" + summary).strip()
+        prior_events = [item for item in self.history if item.get("kind") == "compaction"]
+        self.history = prior_events + kept
+        after = usage(kept, self.context_tokens)
+        event = {
+            "kind": "compaction", "timestamp": time.time(), "reason": reason,
+            "before_tokens": before.tokens, "after_tokens": after.tokens,
+            "preserved_messages": len(kept), "summary": summary,
+        }
+        self.history.insert(0, event)
+        return {"compacted": True, **event}
+
+    def _compact_if_needed(self) -> None:
+        estimate = usage(self.history, self.context_tokens)
+        if estimate.ratio >= self.compaction_threshold:
+            self.compact("threshold")
+
     def run(self, message: str) -> Turn:
         """Run one complete user turn, including any model-requested tools."""
+        self._compact_if_needed()
         # Metering gate: a turn is consumed (and possibly refused) before any
         # backend call, memory write, or journal entry. The refusal is a
         # normal Turn whose reply is the Persian quota/corruption sentence, so
@@ -1179,6 +1263,11 @@ class Dream:
             self.store.log("user", message)
         original_message = message
         stripped = message.lstrip()
+        if stripped.lower() == "/compress":
+            outcome = self.compact("explicit")
+            reply = "Context compacted." if outcome["compacted"] else "Nothing eligible for compaction."  # noqa: E501
+            self.history.append({"role": "assistant", "content": reply})
+            return Turn(reply, [], [], [], time.monotonic() - started)
         if stripped.startswith("\\"):
             stripped = "/" + stripped[1:]
         if stripped.lower().startswith("/learn"):
@@ -1207,13 +1296,17 @@ class Dream:
             self.memory_block_char_limit - len(memory_block),
         )
         self.history.append({"role": "user", "content": model_message})
+        # A second boundary before dispatch ensures a small configured window
+        # is never sent an already-overflowing transcript. The just-added user
+        # message remains active; no in-flight tool exchange exists yet.
+        self._compact_if_needed()
         calls_made: list[dict[str, Any]] = []
         reply = "I could not produce an answer."
 
         for _ in range(self.max_iterations):
             messages = [
                 self._system_message(memories, memory_block, reminder_block, message),
-                *self.history,
+                *(item for item in self.history if item.get("role") in {"user", "assistant", "tool"}),  # noqa: E501
             ]
             response = self.backend.chat(messages, tools=openai_schemas())
             calls = response.get("tool_calls", [])
@@ -1266,6 +1359,9 @@ class Dream:
         self.history.append({"role": "assistant", "content": reply})
         if self.store is not None:
             self.store.log("assistant", reply)
+        if self._nudge_due():
+            self._nudge_sent = True
+        self._turn_count += 1
 
         return Turn(
             reply,

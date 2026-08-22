@@ -200,3 +200,53 @@ export function deleteMemory(
 ): Promise<MemoryDeleteResult> {
   return client.call<MemoryDeleteResult>('memory.delete', { memory_id: memoryId, hard }, options);
 }
+
+/** A frozen bounded-store snapshot supplied by the Stage A memory surface. */
+export interface BoundedMemorySnapshot {
+  target: 'memory' | 'user';
+  header: string;
+  used_chars: number;
+  capacity: number;
+  entries: string[];
+}
+
+export type BoundedMemoryTarget = BoundedMemorySnapshot['target'];
+
+/** Read the immutable per-session snapshot or current target state. */
+export function boundedMemorySnapshot(
+  client: BridgeClient,
+  target?: BoundedMemoryTarget,
+  options?: RequestOptions,
+): Promise<BoundedMemorySnapshot | Record<BoundedMemoryTarget, BoundedMemorySnapshot>> {
+  return client.call('memory2.snapshot', target ? { target } : {}, options);
+}
+
+/** Bounded writes are intentionally separate from ordinary memory mutations. */
+export function addBoundedMemory(
+  client: BridgeClient,
+  target: BoundedMemoryTarget,
+  text: string,
+  options?: RequestOptions,
+): Promise<BoundedMemorySnapshot> {
+  if (!text.trim()) return Promise.reject(new Error('text must not be empty'));
+  return client.call('memory2.add', { target, text }, options);
+}
+
+export function replaceBoundedMemory(
+  client: BridgeClient,
+  target: BoundedMemoryTarget,
+  old: string,
+  replacement: string,
+  options?: RequestOptions,
+): Promise<BoundedMemorySnapshot> {
+  return client.call('memory2.replace', { target, old, new: replacement }, options);
+}
+
+export function removeBoundedMemory(
+  client: BridgeClient,
+  target: BoundedMemoryTarget,
+  old: string,
+  options?: RequestOptions,
+): Promise<BoundedMemorySnapshot> {
+  return client.call('memory2.remove', { target, old }, options);
+}

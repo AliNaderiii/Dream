@@ -613,3 +613,50 @@ are clean except one pre-existing Stage B ternary, left untouched.
 Ledger connections are short-lived. Unicode imports and escape density
 check out. PR-2 may merge; Stages E+F wait for that merge.
 
+
+---
+
+# Gate E — context compaction and memory nudges
+
+## E.1 — Ordered acceptance tests
+
+```text
+$ .venv/bin/python -m pytest tests/test_compaction.py -q
+7 passed
+```
+
+- `test_trigger_math_and_byte_stable_echo_summary`: local threshold accounting
+  and byte-stable echo header at a turn boundary.
+- `test_tool_integrity_after_compaction` and
+  `test_compaction_preserves_prior_tool_result_for_follow_up`: a tool exchange
+  remains usable after compaction; bounded tool-result facts are retained in
+  the summary header.
+- `test_small_window_never_grows_without_bound`: a configured small window
+  compacts before dispatch rather than sending unbounded history.
+- `test_explicit_compress_is_a_first_class_persisted_event`: `/compress`
+  forces the same event path.
+- `test_nudge_is_capped_offable_and_never_demo`: nudge cap, named off switch,
+  and demo suppression.
+- `test_compaction_event_is_first_class_history_record_after_reload`: event
+  shape, timestamp, and persisted summary survive transcript-consumer reload.
+
+## E.2 — Full regression and protected gate
+
+```text
+$ .venv/bin/python -m pytest -q
+1893 passed, 11 skipped in 92.27s
+```
+
+The M16 escape gate is inside the full run. The prior literal-escape failure
+was corrected before this final run; no existing test was edited.
+
+```text
+$ .venv/bin/ruff check dream/agent.py dream/compaction.py tests/test_compaction.py
+All checks passed!
+```
+
+## Gate E decision
+
+**GREEN.** Accounting is local, deterministic on echo, bounded at dispatch,
+and records first-class transcript events. Tool output integrity is retained,
+while nudges remain prompt-only, rate-capped, disableable, and absent in demo.
