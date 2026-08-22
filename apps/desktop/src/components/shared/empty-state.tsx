@@ -1,5 +1,5 @@
 /**
- * Standard empty state: 24px icon, one-line explanation, optional action.
+ * Standard empty state: token-sized icon, one-line explanation, optional action.
  * Every screen ships one (design-system §8).
  */
 

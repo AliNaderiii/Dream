@@ -1,5 +1,5 @@
 /**
- * Collapsible context sidebar (260px default).
+ * Collapsible context sidebar using semantic shell geometry.
  *
  * Hosts the session list today; later phases swap its contents per active rail
  * section. Width is user-resizable via a keyboard-accessible drag handle.
@@ -175,7 +175,7 @@ export function Sidebar() {
         )}
       </div>
 
-      {/* Resize handle: 6px hit area, 1px visible, keyboard-adjustable. */}
+      {/* Token-sized resize handle with a visible rule and keyboard adjustment. */}
       <div
         role="separator"
         aria-label={t('sessions.resize')}

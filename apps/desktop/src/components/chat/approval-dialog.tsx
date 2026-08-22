@@ -1,19 +1,18 @@
-/**
- * Approval dialog for dangerous tool calls (S07).
- *
- * Offers three actions:
- *   1. Allow once — execute this call, ask again next time.
- *   2. Always allow this tool this session — add to the pane's allowlist.
- *   3. Deny — block the call (fail-closed).
- *
- * Copy is bilingual via the locale generator (chat.approval.* keys).
- * The dialog traps focus and is keyboard-navigable (Escape = deny).
- */
+/** Focus-trapped, fail-closed approval alert for dangerous tool calls. */
 
 import { ShieldAlert } from 'lucide-react';
-import type { KeyboardEvent } from 'react';
+import { useRef } from 'react';
 
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useTranslation } from '@/lib/i18n';
 import type { ApprovalDecision, PendingApproval } from '@/types';
 
@@ -24,58 +23,63 @@ interface ApprovalDialogProps {
 
 export function ApprovalDialog({ approval, onDecision }: ApprovalDialogProps) {
   const { t } = useTranslation('chat');
-
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      onDecision('deny');
-    }
-  };
+  const allowOnceRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${t('approval.title')}: ${approval.toolName}`}
-      tabIndex={-1}
-      onKeyDown={onKeyDown}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/60 p-4"
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onDecision('deny');
+      }}
     >
-      <div className="w-full max-w-md rounded-lg border border-border-default bg-canvas p-5 shadow-lg">
-        <div className="flex items-start gap-3">
-          <ShieldAlert className="size-6 shrink-0 text-warning-fg" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <h2 className="text-heading font-semibold text-fg-primary">{t('approval.title')}</h2>
-            <p className="mt-1 text-caption text-fg-secondary">
-              <span className="font-medium text-fg-primary">{approval.toolName}</span>{' '}
-              {t('approval.description')}
-            </p>
-            <pre className="mt-2 max-h-24 overflow-auto rounded-sm bg-surface-2 px-2 py-1.5 text-mono text-micro text-fg-secondary">
-              {approval.argsSummary}
-            </pre>
+      <DialogContent
+        hideClose
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={`${t('approval.title')}: ${approval.toolName}`}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          allowOnceRef.current?.focus();
+        }}
+        className="max-w-lg"
+      >
+        <DialogHeader className="bg-warning-bg">
+          <div className="flex items-start gap-3">
+            <span className="rounded-lg bg-surface p-2 text-warning-fg shadow-e1">
+              <ShieldAlert className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <DialogTitle>{t('approval.title')}</DialogTitle>
+              <DialogDescription>
+                <span className="font-medium text-fg-primary bidi-isolate">
+                  {approval.toolName}
+                </span>{' '}
+                {t('approval.description')}
+              </DialogDescription>
+            </div>
           </div>
-        </div>
-
-        <div className="mt-4 flex flex-col gap-2">
-          <Button variant="primary" onClick={() => onDecision('allow_once')} className="w-full">
-            {t('approval.allowOnce')}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => onDecision('allow_always_session')}
-            className="w-full"
-          >
-            {t('approval.alwaysAllow')}
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => onDecision('deny')}
-            className="w-full text-danger-fg"
-          >
+        </DialogHeader>
+        <DialogBody>
+          <div className="mb-2 flex items-center justify-between text-micro text-fg-muted">
+            <span>{t('approval.arguments')}</span>
+            <span>{t('approval.risk', { value: approval.risk })}</span>
+          </div>
+          <pre className="ltr-island selectable max-h-40 overflow-auto rounded-lg bg-sunken p-3 text-code text-fg-secondary">
+            {approval.argsSummary}
+          </pre>
+        </DialogBody>
+        <DialogFooter className="flex-wrap">
+          <Button variant="ghost" onClick={() => onDecision('deny')}>
             {t('approval.deny')}
           </Button>
-        </div>
-      </div>
-    </div>
+          <Button variant="secondary" onClick={() => onDecision('allow_always_session')}>
+            {t('approval.alwaysAllow')}
+          </Button>
+          <Button ref={allowOnceRef} variant="primary" onClick={() => onDecision('allow_once')}>
+            {t('approval.allowOnce')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -22,8 +22,19 @@ function flatten(node, prefix = '', output = new Map()) {
   return output;
 }
 
-if (!String(document.$schema ?? '').includes('tokens.studio')) {
-  errors.push('$schema must target the Tokens Studio schema.');
+const TOKENS_STUDIO_SCHEMA = 'https://schemas.tokens.studio/latest/tokens.json';
+const SUPPORTED_TYPES = new Set([
+  'color',
+  'dimension',
+  'fontFamily',
+  'number',
+  'duration',
+  'cubicBezier',
+  'boxShadow',
+]);
+
+if (document.$schema !== TOKENS_STUDIO_SCHEMA) {
+  errors.push(`$schema must equal ${TOKENS_STUDIO_SCHEMA}.`);
 }
 if (!Array.isArray(document.$themes) || document.$themes.length !== 12) {
   errors.push('Expected exactly 12 theme/accent combinations.');
@@ -39,7 +50,29 @@ for (const [name, tokens] of sets) {
   if (tokens.size === 0) errors.push(`Token set is empty: ${name}`);
   for (const [path, token] of tokens) {
     if (!token.$type) errors.push(`${name}:${path} is missing $type`);
+    else if (!SUPPORTED_TYPES.has(token.$type)) {
+      errors.push(`${name}:${path} uses unsupported Tokens Studio type ${token.$type}`);
+    }
     if (token.$value === undefined) errors.push(`${name}:${path} is missing $value`);
+    if (token.$type === 'cubicBezier' && (!Array.isArray(token.$value) || token.$value.length !== 4)) {
+      errors.push(`${name}:${path} must contain four cubic-bezier coordinates`);
+    }
+    if (token.$type === 'fontFamily' && !Array.isArray(token.$value)) {
+      errors.push(`${name}:${path} must contain a font-family array`);
+    }
+  }
+}
+
+const themeIds = new Set();
+for (const theme of document.$themes ?? []) {
+  if (!theme.id || !theme.name || !theme.group) errors.push('Every theme needs id, name, and group.');
+  if (themeIds.has(theme.id)) errors.push(`Duplicate theme id: ${theme.id}`);
+  themeIds.add(theme.id);
+  for (const [setName, status] of Object.entries(theme.selectedTokenSets ?? {})) {
+    if (!sets.has(setName)) errors.push(`${theme.name} references unknown set ${setName}`);
+    if (status !== 'source' && status !== 'enabled') {
+      errors.push(`${theme.name}:${setName} has unsupported selection status ${status}`);
+    }
   }
 }
 
@@ -98,6 +131,13 @@ const textPairs = [
 const rows = [];
 for (const theme of document.$themes ?? []) {
   const selected = selectedTokens(theme);
+  for (const path of selected.keys()) {
+    try {
+      resolveValue(path, selected);
+    } catch (error) {
+      errors.push(`${theme.name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   for (const [fgPath, bgPath, minimum] of textPairs) {
     try {
       const fg = resolveValue(fgPath, selected);
@@ -113,6 +153,22 @@ for (const theme of document.$themes ?? []) {
   }
 }
 
+const shellTokens = sets.get('core');
+for (const [token, cssVariable] of [
+  ['shell.rail', '--ds-shell-rail'],
+  ['shell.sidebar', '--ds-shell-sidebar'],
+  ['shell.pane-min-inline', '--ds-pane-min-inline'],
+  ['shell.pane-min-block', '--ds-pane-min-block'],
+  ['shell.statusbar', '--ds-shell-statusbar'],
+  ['shell.titlebar', '--ds-shell-titlebar'],
+  ['shell.mac-controls', '--ds-shell-mac-controls'],
+]) {
+  const value = shellTokens?.get(token)?.$value;
+  if (!value || !css.includes(`${cssVariable}: ${value};`)) {
+    errors.push(`Runtime CSS does not round-trip core.${token} to ${cssVariable}.`);
+  }
+}
+
 for (const selector of ["[data-theme='light']", "[data-theme='warm']", "[data-theme='dark']"]) {
   if (!css.includes(selector)) errors.push(`Runtime CSS is missing ${selector}`);
 }
@@ -125,6 +181,20 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
+const tokenCount = [...sets.values()].reduce((total, set) => total + set.size, 0);
 const lowest = [...rows].sort((a, b) => a.ratio - b.ratio).slice(0, 5);
-console.log(`Tokens Studio gate passed: ${sets.size} sets, ${document.$themes.length} themes, ${rows.length} AA checks.`);
+console.log(
+  `Tokens Studio schema-compatible import: PASS — ${sets.size} sets, ${tokenCount} tokens, ${document.$themes.length} themes.`,
+);
+console.log(`Contrast gate: PASS — ${rows.length} AA checks.`);
 for (const row of lowest) console.log(`  ${row.ratio.toFixed(2)}:1  ${row.theme}  ${row.pair}`);
+
+if (process.argv.includes('--contrast-table')) {
+  console.log('\n| Theme | Direction | Semantic pair | Ratio |');
+  console.log('| --- | --- | --- | ---: |');
+  for (const row of rows.filter(({ theme }) => theme.endsWith('/ Violet'))) {
+    for (const direction of ['LTR', 'RTL']) {
+      console.log(`| ${row.theme} | ${direction} | ${row.pair} | ${row.ratio.toFixed(2)}:1 |`);
+    }
+  }
+}

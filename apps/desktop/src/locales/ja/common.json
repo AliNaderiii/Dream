@@ -62,7 +62,30 @@
     "description": "Dream のコマンドを検索して実行します。",
     "searchPlaceholder": "コマンドを入力…",
     "searchAria": "コマンドを検索",
-    "empty": "一致するコマンドがありません"
+    "empty": "一致するコマンドがありません",
+    "open": "Open command palette",
+    "newSession": "New session",
+    "toggleSidebar": "Toggle sidebar",
+    "toggleTheme": "Toggle light and dark theme",
+    "newWindow": "Open a new window",
+    "openDestination": "Open {{destination}}",
+    "setTheme": "Use {{value}} theme",
+    "setAccent": "Use {{value}} accent",
+    "setDensity": "Use {{value}} density",
+    "setZoom": "Set UI zoom to {{value}}%",
+    "switchLanguage": "Switch language to {{value}}",
+    "hintNavigate": "↑↓ Navigate",
+    "hintClose": "Esc",
+    "hintRun": "↵ Run",
+    "count": "{{count}} commands",
+    "categories": {
+      "actions": "Actions",
+      "navigation": "Navigation",
+      "sessions": "Sessions",
+      "tools": "Tools & workbenches",
+      "appearance": "Appearance",
+      "language": "Language"
+    }
   },
   "confirm": {
     "confirm": "確認",

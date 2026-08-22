@@ -6,10 +6,12 @@
  * dialog blocks (no auto-approve).
  */
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ApprovalDialog } from '@/components/chat/approval-dialog';
+import { i18n } from '@/lib/i18n';
 import type { PendingApproval } from '@/types';
 
 const approval: PendingApproval = {
@@ -58,14 +60,31 @@ describe('ApprovalDialog', () => {
   it('calls onDecision("deny") on Escape key', () => {
     const onDecision = vi.fn();
     render(<ApprovalDialog approval={approval} onDecision={onDecision} />);
-    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' });
     expect(onDecision).toHaveBeenCalledWith('deny');
   });
 
-  it('has role="dialog" and is aria-modal', () => {
+  it('renders the generated Persian approval choices', async () => {
+    await i18n.changeLanguage('fa');
+    const view = render(<ApprovalDialog approval={approval} onDecision={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'یک‌بار اجازه بده' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'همیشه اجازه بده (این نشست)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'رد کردن' })).toBeInTheDocument();
+    view.unmount();
+    await i18n.changeLanguage('en');
+  });
+
+  it('uses modal alertdialog semantics, begins on allow once, and traps focus', async () => {
+    const user = userEvent.setup();
     render(<ApprovalDialog approval={approval} onDecision={vi.fn()} />);
-    const dialog = screen.getByRole('dialog');
+    const dialog = screen.getByRole('alertdialog');
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(dialog).toHaveAttribute('aria-label', 'Approval Required: write_file');
+    const allowOnce = screen.getByRole('button', { name: 'Allow once' });
+    await waitFor(() => expect(allowOnce).toHaveFocus());
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Deny' })).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(allowOnce).toHaveFocus();
   });
 });

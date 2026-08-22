@@ -542,6 +542,36 @@
         "$type": "number",
         "$value": 0.82
       }
+    },
+    "shell": {
+      "rail": {
+        "$type": "dimension",
+        "$value": "3rem"
+      },
+      "sidebar": {
+        "$type": "dimension",
+        "$value": "16.25rem"
+      },
+      "pane-min-inline": {
+        "$type": "dimension",
+        "$value": "18.75rem"
+      },
+      "pane-min-block": {
+        "$type": "dimension",
+        "$value": "12.5rem"
+      },
+      "statusbar": {
+        "$type": "dimension",
+        "$value": "1.5rem"
+      },
+      "titlebar": {
+        "$type": "dimension",
+        "$value": "2.375rem"
+      },
+      "mac-controls": {
+        "$type": "dimension",
+        "$value": "4.875rem"
+      }
     }
   },
   "semantic/light": {

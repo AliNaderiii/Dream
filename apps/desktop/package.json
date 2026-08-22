@@ -15,6 +15,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "tokens:check": "node scripts/validate-tokens.mjs",
     "locales:generate": "node scripts/generate-locales.mjs",
+    "locales:check": "python ../../tools/check_locales.py",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

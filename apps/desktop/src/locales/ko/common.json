@@ -62,7 +62,30 @@
     "description": "Dream 명령을 검색하고 실행합니다.",
     "searchPlaceholder": "명령 입력…",
     "searchAria": "명령 검색",
-    "empty": "일치하는 명령이 없습니다"
+    "empty": "일치하는 명령이 없습니다",
+    "open": "Open command palette",
+    "newSession": "New session",
+    "toggleSidebar": "Toggle sidebar",
+    "toggleTheme": "Toggle light and dark theme",
+    "newWindow": "Open a new window",
+    "openDestination": "Open {{destination}}",
+    "setTheme": "Use {{value}} theme",
+    "setAccent": "Use {{value}} accent",
+    "setDensity": "Use {{value}} density",
+    "setZoom": "Set UI zoom to {{value}}%",
+    "switchLanguage": "Switch language to {{value}}",
+    "hintNavigate": "↑↓ Navigate",
+    "hintClose": "Esc",
+    "hintRun": "↵ Run",
+    "count": "{{count}} commands",
+    "categories": {
+      "actions": "Actions",
+      "navigation": "Navigation",
+      "sessions": "Sessions",
+      "tools": "Tools & workbenches",
+      "appearance": "Appearance",
+      "language": "Language"
+    }
   },
   "confirm": {
     "confirm": "확인",

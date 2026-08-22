@@ -56,7 +56,7 @@ export function TopBar({ title }: TopBarProps) {
   };
 
   return (
-    <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border-default bg-surface px-3">
+    <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border-default bg-surface-raised/95 px-3 shadow-e1">
       {collapsed && (
         <Tooltip>
           <TooltipTrigger asChild>

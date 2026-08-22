@@ -78,7 +78,7 @@ export function ArtifactTreeView({ tree, onSelectNode }: ArtifactTreeViewProps) 
                     isSelected
                       ? 'border-accent bg-accent-soft/30 shadow-md ring-2 ring-accent'
                       : 'border-border-default bg-surface-2 hover:border-border-hover hover:bg-surface-3'
-                  } min-w-[200px] max-w-[240px] shrink-0`}
+                  } min-w-48 max-w-60 shrink-0`}
                 >
                   <div className="flex items-center justify-between pb-1">
                     <div className="flex items-center gap-1.5">
@@ -99,7 +99,7 @@ export function ArtifactTreeView({ tree, onSelectNode }: ArtifactTreeViewProps) 
                   </p>
 
                   <div className="mt-2 flex items-center justify-between text-micro text-fg-secondary">
-                    <span className="font-mono truncate max-w-[120px]">{node.agent_id}</span>
+                    <span className="font-mono truncate max-w-30">{node.agent_id}</span>
                     <span>
                       {new Date(node.timestamp).toLocaleTimeString([], {
                         hour: '2-digit',

@@ -60,9 +60,32 @@
   "command": {
     "title": "فرمان‌ها",
     "description": "جستجو و اجرای هر فرمان Dream.",
-    "searchPlaceholder": "یک فرمان بنویسید…",
+    "searchPlaceholder": "جستجوی مسیرها، نشست‌ها، تنظیمات و ابزارها…",
     "searchAria": "جستجوی فرمان‌ها",
-    "empty": "فرمانی یافت نشد"
+    "empty": "فرمانی یافت نشد",
+    "open": "بازکردن فرمان‌ها",
+    "newSession": "نشست جدید",
+    "toggleSidebar": "باز و بسته‌کردن نوار کناری",
+    "toggleTheme": "تغییر پوستهٔ روشن و تیره",
+    "newWindow": "بازکردن پنجرهٔ جدید",
+    "openDestination": "بازکردن {{destination}}",
+    "setTheme": "استفاده از پوستهٔ {{value}}",
+    "setAccent": "استفاده از رنگ تأکیدی {{value}}",
+    "setDensity": "استفاده از تراکم {{value}}",
+    "setZoom": "تنظیم بزرگ‌نمایی رابط روی {{value}}٪",
+    "switchLanguage": "تغییر زبان به {{value}}",
+    "hintNavigate": "↑↓ پیمایش",
+    "hintClose": "Esc",
+    "hintRun": "↵ اجرا",
+    "count": "{{count}} فرمان",
+    "categories": {
+      "actions": "کنش‌ها",
+      "navigation": "پیمایش",
+      "sessions": "نشست‌ها",
+      "tools": "ابزارها و میزکارها",
+      "appearance": "ظاهر",
+      "language": "زبان"
+    }
   },
   "confirm": {
     "confirm": "تأیید",

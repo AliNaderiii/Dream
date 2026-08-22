@@ -80,8 +80,11 @@
   /* Shell geometry */
   --ds-shell-rail: 3rem;
   --ds-shell-sidebar: 16.25rem;
+  --ds-pane-min-inline: 18.75rem;
+  --ds-pane-min-block: 12.5rem;
   --ds-shell-statusbar: 1.5rem;
   --ds-shell-titlebar: 2.375rem;
+  --ds-shell-mac-controls: 4.875rem;
   --content-readable: 48rem;
   --overlay-sm: 28rem;
   --overlay-md: 36rem;

@@ -53,7 +53,7 @@ export function AppShell() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen flex-col overflow-hidden bg-canvas text-fg-primary">
+      <div className="surface-gradient flex h-screen flex-col overflow-hidden text-fg-primary">
         <TitleBar />
 
         <div className="flex min-h-0 flex-1">

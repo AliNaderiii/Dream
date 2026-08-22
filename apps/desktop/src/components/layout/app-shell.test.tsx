@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -95,12 +95,18 @@ describe('app shell', () => {
     const user = userEvent.setup();
     renderApp('/');
 
+    const sidebar = screen.getByRole('complementary', { name: 'Sessions' });
+    expect(sidebar.className).toContain('border-e');
+    expect(sidebar.className).not.toMatch(/\bborder-(?:l|r)\b/);
+
     // Open the language menu in the status bar, then pick Persian.
     await user.click(screen.getByRole('button', { name: 'Language' }));
     await user.click(screen.getByRole('menuitem', { name: /فارسی/ }));
 
     expect(document.documentElement.getAttribute('dir')).toBe('rtl');
     expect(document.documentElement.getAttribute('lang')).toBe('fa');
+    expect(sidebar.className).toContain('border-e');
+    expect(sidebar.className).not.toMatch(/\bborder-(?:l|r)\b/);
   });
 
   it('creates a session from the sidebar and navigates to it', async () => {
@@ -114,6 +120,18 @@ describe('app shell', () => {
     expect(screen.getByRole('heading', { name: 'Conversation' })).toBeInTheDocument();
   });
 
+  it('opens the local command palette within the perceived-interaction budget', () => {
+    renderApp('/');
+    const started = performance.now();
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
+    const elapsed = performance.now() - started;
+    console.info(`command_palette_open_ms=${elapsed.toFixed(3)} budget_ms=100`);
+    expect(elapsed).toBeLessThan(100);
+    fireEvent.keyDown(document.activeElement ?? window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
+  });
+
   it('opens the command palette with the keyboard and runs a command', async () => {
     const user = userEvent.setup();
     renderApp('/');
@@ -121,7 +139,7 @@ describe('app shell', () => {
     await user.keyboard('{Control>}k{/Control}');
     const dialog = await screen.findByRole('dialog', { name: 'Command palette' });
 
-    await user.type(within(dialog).getByRole('textbox', { name: 'Search commands' }), 'settings');
+    await user.type(within(dialog).getByRole('combobox', { name: 'Search commands' }), 'settings');
     await user.keyboard('{Enter}');
 
     expect(screen.getByRole('heading', { level: 2, name: 'Appearance' })).toBeInTheDocument();

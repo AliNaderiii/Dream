@@ -33,6 +33,10 @@
   "zoomDesc": "Scale the complete interface from 80% to 150%.",
   "reduceMotion": "Reduce motion",
   "reduceMotionDesc": "Use instant state changes and static loading indicators.",
+  "motionOptions": {
+    "reduce": "Reduce interface motion",
+    "enable": "Enable interface motion"
+  },
   "numerals": "Display numerals",
   "numeralsDesc": "Display preference only; stored data stays normalized.",
   "numeralOptions": {

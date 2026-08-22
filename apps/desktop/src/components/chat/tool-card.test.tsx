@@ -5,6 +5,7 @@
  */
 
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { ToolCard } from '@/components/chat/tool-card';
@@ -24,8 +25,8 @@ function makeCard(overrides: Partial<ToolCardEntry> = {}): ToolCardEntry {
 describe('ToolCard', () => {
   it('renders ok status with check icon and result excerpt', () => {
     render(<ToolCard card={makeCard({ status: 'ok', resultExcerpt: 'Result is 42' })} />);
-    const card = screen.getByRole('status');
-    expect(card).toHaveAttribute('aria-label', 'calculate — OK');
+    const card = screen.getByRole('article');
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'calculate — OK');
     expect(card).toHaveTextContent('calculate');
     expect(card).toHaveTextContent('OK');
     expect(card).toHaveTextContent('Result is 42');
@@ -33,23 +34,23 @@ describe('ToolCard', () => {
 
   it('renders error status with error label', () => {
     render(<ToolCard card={makeCard({ status: 'error', resultExcerpt: '' })} />);
-    const card = screen.getByRole('status');
-    expect(card).toHaveAttribute('aria-label', 'calculate — Error');
+    const card = screen.getByRole('article');
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'calculate — Error');
     expect(card).toHaveTextContent('Error');
   });
 
   it('renders blocked status with warning message', () => {
     render(<ToolCard card={makeCard({ status: 'blocked' })} />);
-    const card = screen.getByRole('status');
-    expect(card).toHaveAttribute('aria-label', 'calculate — Blocked');
+    const card = screen.getByRole('article');
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'calculate — Blocked');
     expect(card).toHaveTextContent('Blocked');
     expect(card).toHaveTextContent('Waiting for approval…');
   });
 
   it('renders pending status with running label', () => {
     render(<ToolCard card={makeCard({ status: 'pending' })} />);
-    const card = screen.getByRole('status');
-    expect(card).toHaveAttribute('aria-label', 'calculate — Running…');
+    const card = screen.getByRole('article');
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'calculate — Running…');
     expect(card).toHaveTextContent('Running…');
   });
 
@@ -61,5 +62,19 @@ describe('ToolCard', () => {
   it('does not render result excerpt for blocked status', () => {
     render(<ToolCard card={makeCard({ status: 'blocked', resultExcerpt: 'should not appear' })} />);
     expect(screen.queryByText('should not appear')).toBeNull();
+  });
+
+  it('exposes and toggles localized disclosure semantics', async () => {
+    const user = userEvent.setup();
+    render(<ToolCard card={makeCard()} />);
+    const disclosure = screen.getByRole('button', { name: 'Hide details for calculate' });
+    expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+    expect(disclosure).toHaveAttribute('aria-controls', 'tool-tc-1-details');
+    await user.click(disclosure);
+    expect(screen.getByRole('button', { name: 'Show details for calculate' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.queryByText('{"expression": "2+2"}')).not.toBeInTheDocument();
   });
 });

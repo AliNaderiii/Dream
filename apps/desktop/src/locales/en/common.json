@@ -60,9 +60,32 @@
   "command": {
     "title": "Command palette",
     "description": "Search and run any Dream command.",
-    "searchPlaceholder": "Type a command…",
+    "searchPlaceholder": "Search routes, sessions, settings, and tools…",
     "searchAria": "Search commands",
-    "empty": "No matching commands"
+    "empty": "No matching commands",
+    "open": "Open command palette",
+    "newSession": "New session",
+    "toggleSidebar": "Toggle sidebar",
+    "toggleTheme": "Toggle light and dark theme",
+    "newWindow": "Open a new window",
+    "openDestination": "Open {{destination}}",
+    "setTheme": "Use {{value}} theme",
+    "setAccent": "Use {{value}} accent",
+    "setDensity": "Use {{value}} density",
+    "setZoom": "Set UI zoom to {{value}}%",
+    "switchLanguage": "Switch language to {{value}}",
+    "hintNavigate": "↑↓ Navigate",
+    "hintClose": "Esc",
+    "hintRun": "↵ Run",
+    "count": "{{count}} commands",
+    "categories": {
+      "actions": "Actions",
+      "navigation": "Navigation",
+      "sessions": "Sessions",
+      "tools": "Tools & workbenches",
+      "appearance": "Appearance",
+      "language": "Language"
+    }
   },
   "confirm": {
     "confirm": "Confirm",

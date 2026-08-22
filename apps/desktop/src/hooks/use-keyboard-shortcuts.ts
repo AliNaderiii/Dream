@@ -1,29 +1,27 @@
-/**
- * Global keyboard shortcut system.
- *
- * `mod` maps to ⌘ on macOS and Ctrl elsewhere. Shortcuts are suppressed while the
- * user is typing in an input, textarea or contenteditable, except for ⌘K which
- * must always reach the command palette (accessibility contract, design-system §10).
- */
+/** Global keyboard shortcuts and complete command-palette registry. */
 
 import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { LANGUAGES, useTranslation } from '@/lib/i18n';
+import { windowApi } from '@/lib/tauri';
 import { useAppStore } from '@/stores/use-app-store';
 import { useSessionStore } from '@/stores/use-session-store';
-import { windowApi } from '@/lib/tauri';
+import type { Accent, Density, ThemeMode } from '@/types';
 
-/** A single registered shortcut. */
-export interface Shortcut {
-  /** Key combination, e.g. `['mod', 'k']`. */
-  keys: readonly string[];
-  /** Human-readable description, shown in the command palette and help. */
+export interface CommandItem {
+  id: string;
+  keys?: readonly string[];
   description: string;
-  /** Handler invoked when the combination fires. */
+  category: string;
+  keywords?: string[];
   run: () => void;
   /** Fire even while a text field has focus. */
   allowInInput?: boolean;
 }
+
+/** Backward-compatible name for call sites that register a keyboard command. */
+export type Shortcut = CommandItem;
 
 /** True when the event target is a text-entry surface. */
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -37,7 +35,7 @@ function matches(event: KeyboardEvent, keys: readonly string[]): boolean {
   const wantMod = keys.includes('mod');
   const wantShift = keys.includes('shift');
   const wantAlt = keys.includes('alt');
-  const key = keys.find((k) => !['mod', 'shift', 'alt'].includes(k));
+  const key = keys.find((item) => !['mod', 'shift', 'alt'].includes(item));
   if (!key) return false;
 
   const modPressed = event.metaKey || event.ctrlKey;
@@ -49,58 +47,205 @@ function matches(event: KeyboardEvent, keys: readonly string[]): boolean {
   );
 }
 
-/**
- * Registers Dream's global shortcuts. Mount once, at the app root.
- *
- * Returns the shortcut list so the command palette can render it.
- */
-export function useKeyboardShortcuts(): Shortcut[] {
-  const navigate = useNavigate();
-  const toggleCommandPalette = useAppStore((s) => s.toggleCommandPalette);
-  const toggleSidebar = useAppStore((s) => s.toggleSidebar);
-  const toggleTheme = useAppStore((s) => s.toggleTheme);
-  const createSession = useSessionStore((s) => s.createSession);
+interface RouteCommand {
+  id: string;
+  path: string;
+  key: string;
+  keys?: readonly string[];
+  tool?: boolean;
+}
 
-  const shortcuts = useMemo<Shortcut[]>(
-    () => [
+const ROUTES: readonly RouteCommand[] = [
+  { id: 'dashboard', path: '/', key: 'nav.dashboard', keys: ['mod', '1'] },
+  { id: 'chat', path: '/chat', key: 'nav.chat' },
+  { id: 'projects', path: '/projects', key: 'nav.projects', keys: ['mod', '2'] },
+  { id: 'memory', path: '/memory', key: 'nav.memory', keys: ['mod', '3'] },
+  { id: 'providers', path: '/providers', key: 'nav.providers' },
+  { id: 'settings', path: '/settings', key: 'nav.settings', keys: ['mod', ','] },
+  { id: 'skills', path: '/skills', key: 'nav.skills', keys: ['mod', '4'], tool: true },
+  { id: 'scheduler', path: '/scheduler', key: 'nav.scheduler', tool: true },
+  { id: 'subagents', path: '/subagents', key: 'nav.subagents', tool: true },
+  { id: 'data', path: '/data', key: 'nav.data', tool: true },
+  { id: 'connectivity', path: '/connectivity', key: 'nav.connectivity', tool: true },
+  { id: 'provenance', path: '/provenance', key: 'nav.provenance', tool: true },
+] as const;
+
+const THEMES: ThemeMode[] = ['light', 'warm', 'dark', 'system'];
+const ACCENTS: Accent[] = ['violet', 'ocean', 'forest', 'ember'];
+const DENSITIES: Density[] = ['comfortable', 'dense'];
+const ZOOM_STOPS = [80, 100, 125, 150];
+
+/**
+ * Registers Dream's global shortcuts and returns every palette command:
+ * navigation, sessions, settings, tools, locale, theme, density, and zoom.
+ */
+export function useKeyboardShortcuts(): CommandItem[] {
+  const { t } = useTranslation('common');
+  const { t: ts } = useTranslation('settings');
+  const navigate = useNavigate();
+  const sessions = useSessionStore((state) => state.sessions);
+  const createSession = useSessionStore((state) => state.createSession);
+  const setActiveSession = useSessionStore((state) => state.setActiveSession);
+  const toggleCommandPalette = useAppStore((state) => state.toggleCommandPalette);
+  const toggleSidebar = useAppStore((state) => state.toggleSidebar);
+  const toggleTheme = useAppStore((state) => state.toggleTheme);
+  const setTheme = useAppStore((state) => state.setTheme);
+  const setAccent = useAppStore((state) => state.setAccent);
+  const setDensity = useAppStore((state) => state.setDensity);
+  const setZoom = useAppStore((state) => state.setZoom);
+  const setLocale = useAppStore((state) => state.setLocale);
+  const setReduceMotion = useAppStore((state) => state.setReduceMotion);
+  const reduceMotion = useAppStore((state) => state.reduceMotion);
+
+  const commands = useMemo<CommandItem[]>(() => {
+    const categories = {
+      actions: t('command.categories.actions'),
+      navigation: t('command.categories.navigation'),
+      sessions: t('command.categories.sessions'),
+      tools: t('command.categories.tools'),
+      appearance: t('command.categories.appearance'),
+      language: t('command.categories.language'),
+    };
+
+    const create = () => {
+      const session = createSession();
+      void navigate(`/chat/${session.id}`);
+    };
+
+    const keyboard: CommandItem[] = [
       {
+        id: 'palette.open',
         keys: ['mod', 'k'],
-        description: 'Open command palette',
+        description: t('command.open'),
+        category: categories.actions,
         run: toggleCommandPalette,
         allowInInput: true,
       },
       {
+        id: 'session.new',
         keys: ['mod', 'n'],
-        description: 'New session',
-        run: () => {
-          const session = createSession();
-          void navigate(`/chat/${session.id}`);
-        },
+        description: t('command.newSession'),
+        category: categories.actions,
+        run: create,
       },
-      { keys: ['mod', 'b'], description: 'Toggle sidebar', run: toggleSidebar },
-      { keys: ['mod', 'shift', 'l'], description: 'Toggle light / dark theme', run: toggleTheme },
-      { keys: ['mod', '1'], description: 'Go to dashboard', run: () => void navigate('/') },
-      { keys: ['mod', '2'], description: 'Go to projects', run: () => void navigate('/projects') },
-      { keys: ['mod', '3'], description: 'Go to memory', run: () => void navigate('/memory') },
-      { keys: ['mod', '4'], description: 'Go to skills', run: () => void navigate('/skills') },
-      { keys: ['mod', ','], description: 'Open settings', run: () => void navigate('/settings') },
       {
+        id: 'sidebar.toggle',
+        keys: ['mod', 'b'],
+        description: t('command.toggleSidebar'),
+        category: categories.actions,
+        run: toggleSidebar,
+      },
+      {
+        id: 'theme.toggle',
+        keys: ['mod', 'shift', 'l'],
+        description: t('command.toggleTheme'),
+        category: categories.appearance,
+        run: toggleTheme,
+      },
+      {
+        id: 'window.new',
         keys: ['mod', 'shift', 'n'],
-        description: 'Open a new window',
+        description: t('command.newWindow'),
+        category: categories.actions,
         run: () => void windowApi.open({ route: '/' }),
       },
-    ],
-    [navigate, toggleCommandPalette, toggleSidebar, toggleTheme, createSession],
-  );
+    ];
+
+    const routeCommands: CommandItem[] = ROUTES.map((route) => ({
+      id: `route.${route.id}`,
+      ...(route.keys ? { keys: route.keys } : {}),
+      description: t('command.openDestination', { destination: t(route.key) }),
+      category: route.tool ? categories.tools : categories.navigation,
+      keywords: [t(route.key)],
+      run: () => void navigate(route.path),
+    }));
+
+    const sessionCommands: CommandItem[] = sessions.map((session) => ({
+      id: `session.${session.id}`,
+      description: session.title,
+      category: categories.sessions,
+      keywords: [t('sessions.title')],
+      run: () => {
+        setActiveSession(session.id);
+        void navigate(`/chat/${session.id}`);
+      },
+    }));
+
+    const themeCommands: CommandItem[] = THEMES.map((theme) => ({
+      id: `theme.${theme}`,
+      description: t('command.setTheme', { value: ts(`themeOptions.${theme}`) }),
+      category: categories.appearance,
+      run: () => setTheme(theme),
+    }));
+    const accentCommands: CommandItem[] = ACCENTS.map((accent) => ({
+      id: `accent.${accent}`,
+      description: t('command.setAccent', { value: ts(`accentOptions.${accent}`) }),
+      category: categories.appearance,
+      run: () => setAccent(accent),
+    }));
+    const densityCommands: CommandItem[] = DENSITIES.map((density) => ({
+      id: `density.${density}`,
+      description: t('command.setDensity', { value: ts(`densityOptions.${density}`) }),
+      category: categories.appearance,
+      run: () => setDensity(density),
+    }));
+    const zoomCommands: CommandItem[] = ZOOM_STOPS.map((zoom) => ({
+      id: `zoom.${zoom}`,
+      description: t('command.setZoom', { value: zoom }),
+      category: categories.appearance,
+      keywords: [ts('zoom')],
+      run: () => setZoom(zoom),
+    }));
+    const localeCommands: CommandItem[] = LANGUAGES.map((language) => ({
+      id: `locale.${language.code}`,
+      description: t('command.switchLanguage', { value: t(language.nameKey) }),
+      category: categories.language,
+      run: () => setLocale(language.code),
+    }));
+
+    return [
+      ...keyboard,
+      ...routeCommands,
+      ...sessionCommands,
+      ...themeCommands,
+      ...accentCommands,
+      ...densityCommands,
+      ...zoomCommands,
+      {
+        id: 'motion.reduce',
+        description: reduceMotion ? ts('motionOptions.enable') : ts('motionOptions.reduce'),
+        category: categories.appearance,
+        run: () => setReduceMotion(!reduceMotion),
+      },
+      ...localeCommands,
+    ];
+  }, [
+    createSession,
+    navigate,
+    reduceMotion,
+    sessions,
+    setAccent,
+    setActiveSession,
+    setDensity,
+    setLocale,
+    setReduceMotion,
+    setTheme,
+    setZoom,
+    t,
+    toggleCommandPalette,
+    toggleSidebar,
+    toggleTheme,
+    ts,
+  ]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const typing = isTypingTarget(event.target);
-      for (const shortcut of shortcuts) {
-        if (typing && !shortcut.allowInInput) continue;
-        if (matches(event, shortcut.keys)) {
+      for (const command of commands) {
+        if (!command.keys || (typing && !command.allowInInput)) continue;
+        if (matches(event, command.keys)) {
           event.preventDefault();
-          shortcut.run();
+          command.run();
           return;
         }
       }
@@ -108,7 +253,7 @@ export function useKeyboardShortcuts(): Shortcut[] {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [shortcuts]);
+  }, [commands]);
 
-  return shortcuts;
+  return commands;
 }

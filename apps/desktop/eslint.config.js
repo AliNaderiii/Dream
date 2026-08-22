@@ -33,7 +33,7 @@ export default tseslint.config(
   },
   {
     // Config files are not covered by the app tsconfig's type-aware program.
-    files: ['*.config.{js,ts}', 'eslint.config.js', '.ladle/**/*.{ts,tsx}'],
+    files: ['*.config.{js,ts}', 'eslint.config.js'],
     extends: [tseslint.configs.disableTypeChecked],
   },
   prettier,

@@ -1,22 +1,24 @@
-/** Recursive binary split renderer with constrained pointer resizing. */
+/** Recursive binary split renderer with constrained pointer and keyboard resizing. */
 
 import { useRef } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
 import { Pane } from '@/components/panes/pane';
+import { splitRatioFromKey, splitRatioFromPointer } from '@/components/panes/split-geometry';
+import { useTranslation } from '@/lib/i18n';
 import type { LayoutNode } from '@/stores/use-layout-store';
 import { useLayoutStore } from '@/stores/use-layout-store';
 import { cn } from '@/utils/cn';
 
 const MIN_WIDTH = 300;
 const MIN_HEIGHT = 200;
-
 interface SplitLayoutProps {
   node: LayoutNode;
   activePaneId: string;
 }
 
 export function SplitLayout({ node, activePaneId }: SplitLayoutProps) {
+  const { t } = useTranslation('chat');
   const resizeSplit = useLayoutStore((state) => state.resizeSplit);
   const splitRef = useRef<HTMLDivElement>(null);
 
@@ -35,10 +37,17 @@ export function SplitLayout({ node, activePaneId }: SplitLayoutProps) {
     const minimum = horizontal ? MIN_WIDTH : MIN_HEIGHT;
     const minRatio = size >= minimum * 2 ? minimum / size : 0.1;
     const maxRatio = 1 - minRatio;
+    const rtl = document.documentElement.dir === 'rtl';
 
     const onMove = (moveEvent: PointerEvent) => {
-      const position = horizontal ? moveEvent.clientX - rect.left : moveEvent.clientY - rect.top;
-      resizeSplit(node.id, Math.min(maxRatio, Math.max(minRatio, position / size)));
+      const ratio = splitRatioFromPointer(
+        rect,
+        horizontal,
+        moveEvent.clientX,
+        moveEvent.clientY,
+        rtl,
+      );
+      resizeSplit(node.id, Math.min(maxRatio, Math.max(minRatio, ratio)));
     };
     const finish = () => {
       window.removeEventListener('pointermove', onMove);
@@ -64,17 +73,32 @@ export function SplitLayout({ node, activePaneId }: SplitLayoutProps) {
       </div>
       <div
         role="separator"
+        tabIndex={0}
         aria-orientation={horizontal ? 'vertical' : 'horizontal'}
-        aria-label="Resize panes"
+        aria-label={t('pane.header.resize')}
+        aria-valuemin={10}
+        aria-valuemax={90}
+        aria-valuenow={Math.round(node.ratio * 100)}
         onPointerDown={startResize}
+        onKeyDown={(event) => {
+          const next = splitRatioFromKey(
+            node.ratio,
+            event.key,
+            horizontal,
+            document.documentElement.dir === 'rtl',
+          );
+          if (next === null) return;
+          event.preventDefault();
+          resizeSplit(node.id, next);
+        }}
         className={cn(
-          'group relative z-10 shrink-0 bg-border-default transition-colors hover:bg-accent',
+          'group relative z-10 shrink-0 bg-border-default transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
           horizontal ? 'w-1 cursor-col-resize' : 'h-1 cursor-row-resize',
         )}
       >
         <span
           className={cn(
-            'absolute bg-accent opacity-0 transition-opacity group-hover:opacity-100',
+            'absolute bg-accent opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100',
             horizontal ? '-inset-x-0.5 inset-y-0' : 'inset-x-0 -inset-y-0.5',
           )}
         />

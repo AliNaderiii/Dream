@@ -228,8 +228,20 @@ export const CommandPalettes = () => {
       <Button onClick={() => setOpen(true)}>Open command palette</Button>
       <CommandPalette
         commands={[
-          { keys: ['mod', '1'], description: 'Go to dashboard', run: () => undefined },
-          { keys: ['mod', ','], description: 'Open settings', run: () => undefined },
+          {
+            id: 'dashboard',
+            keys: ['mod', '1'],
+            description: 'Go to dashboard',
+            category: 'Navigation',
+            run: () => undefined,
+          },
+          {
+            id: 'settings',
+            keys: ['mod', ','],
+            description: 'Open settings',
+            category: 'Navigation',
+            run: () => undefined,
+          },
         ]}
       />
     </ThemeMatrix>

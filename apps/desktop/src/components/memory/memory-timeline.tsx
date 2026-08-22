@@ -114,7 +114,7 @@ export function MemoryTimeline({
                   <li key={memory.id} className="relative py-2">
                     <span
                       aria-hidden
-                      className="absolute -start-[21px] top-4 size-2.5 rounded-full border-2 border-canvas"
+                      className="absolute -start-5 top-4 size-2.5 rounded-full border-2 border-canvas"
                       style={{ backgroundColor: KIND_COLOR[memory.kind] ?? 'var(--color-chart-8)' }}
                     />
                     <button

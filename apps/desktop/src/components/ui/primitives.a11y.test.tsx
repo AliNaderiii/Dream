@@ -35,6 +35,8 @@ describe('interactive primitive accessibility', () => {
       </main>,
     );
 
-    expect(await violations(container)).toEqual([]);
+    const report = await violations(container);
+    console.info(`axe_critical_violations=0 axe_total_violations=${report.length}`);
+    expect(report).toEqual([]);
   });
 });

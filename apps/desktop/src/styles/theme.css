@@ -83,8 +83,11 @@
   --shadow-e3: var(--ds-elevation-modal);
   --spacing-rail: var(--ds-shell-rail);
   --spacing-sidebar: var(--ds-shell-sidebar);
+  --spacing-pane-min-inline: var(--ds-pane-min-inline);
+  --spacing-pane-min-block: var(--ds-pane-min-block);
   --spacing-statusbar: var(--ds-shell-statusbar);
   --spacing-titlebar: var(--ds-shell-titlebar);
+  --spacing-mac-controls: var(--ds-shell-mac-controls);
 }
 
 @layer base {

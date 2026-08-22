@@ -6,12 +6,14 @@ import { useEffect } from 'react';
 import { Pane, PANE_DRAG_TYPE } from '@/components/panes/pane';
 import { SplitLayout } from '@/components/panes/split-layout';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/lib/i18n';
 import { findPane, useLayoutStore } from '@/stores/use-layout-store';
 import { useProviderStore } from '@/stores/use-provider-store';
 import { SafeIcon } from '@/utils/icons';
 import { cn } from '@/utils/cn';
 
 export function PaneWorkspace() {
+  const { t } = useTranslation('chat');
   const screens = useLayoutStore((state) => state.screens);
   const activeScreenId = useLayoutStore((state) => state.activeScreenId);
   const setActiveScreen = useLayoutStore((state) => state.setActiveScreen);
@@ -53,7 +55,7 @@ export function PaneWorkspace() {
     return (
       <div className="flex size-full items-center justify-center">
         <Button onClick={resetLayout}>
-          <SafeIcon icon={RotateCcw} aria-hidden /> Restore workspace
+          <SafeIcon icon={RotateCcw} aria-hidden /> {t('pane.workspace.restore')}
         </Button>
       </div>
     );
@@ -66,16 +68,19 @@ export function PaneWorkspace() {
   return (
     <div className="flex size-full min-h-0 flex-col bg-sunken">
       <nav
-        aria-label="Screens"
+        aria-label={t('pane.workspace.screens')}
         className="flex h-9 shrink-0 items-end gap-0.5 overflow-x-auto border-b border-border-default bg-surface px-2 pt-1"
       >
-        {screens.map((screen) => (
+        {screens.map((screen, index) => (
           <button
             key={screen.id}
             type="button"
             onClick={() => setActiveScreen(screen.id)}
             onDoubleClick={() => {
-              const name = window.prompt('Rename screen', screen.name);
+              const name = window.prompt(
+                t('pane.workspace.rename'),
+                screen.name || t('pane.workspace.defaultName', { count: index + 1 }),
+              );
               if (name) renameScreen(screen.id, name);
             }}
             onDragOver={(event) => {
@@ -93,12 +98,16 @@ export function PaneWorkspace() {
                 : 'border-transparent text-fg-secondary hover:bg-surface-2 hover:text-fg-primary',
             )}
           >
-            <span className="min-w-0 flex-1 truncate">{screen.name}</span>
+            <span className="min-w-0 flex-1 truncate">
+              {screen.name || t('pane.workspace.defaultName', { count: index + 1 })}
+            </span>
             {screens.length > 1 && (
               <span
                 role="button"
                 tabIndex={0}
-                aria-label={`Close ${screen.name}`}
+                aria-label={t('pane.workspace.close', {
+                  name: screen.name || t('pane.workspace.defaultName', { count: index + 1 }),
+                })}
                 onClick={(event) => {
                   event.stopPropagation();
                   removeScreen(screen.id);
@@ -117,15 +126,15 @@ export function PaneWorkspace() {
           variant="ghost"
           size="icon-sm"
           className="mb-0.5 size-7 shrink-0"
-          aria-label="New screen"
-          title="New virtual screen"
+          aria-label={t('pane.workspace.newScreen')}
+          title={t('pane.workspace.newVirtualScreen')}
           onClick={() => addScreen()}
         >
           <SafeIcon icon={Plus} aria-hidden />
         </Button>
         <span className="ms-auto mb-1 hidden items-center gap-1 text-micro text-fg-muted lg:flex">
           <SafeIcon icon={Monitor} className="size-3" aria-hidden />
-          Drag a pane here to move screens
+          {t('pane.workspace.dragHint')}
         </span>
       </nav>
 
