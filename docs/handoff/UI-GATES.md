@@ -524,3 +524,182 @@ diff_check=PASS
 ## Gate decision
 
 **Stage D: GREEN.** Session manager, memory explorer, skills manager, subagent dashboard, scheduler UI, cancellation/timeout behavior, lifecycle states, virtualization, bilingual/RTL semantics, regression suites, and protected-path boundaries pass. Stage E may proceed from the Arena-fixed branch `arena/01a02863-dream`.
+
+---
+
+# Gate E — performance, bundle, and accessibility
+
+Full implementation and R4-1 assertion audit: [`UI-E.md`](./UI-E.md).
+
+## Production bundle
+
+The existing Vite 500kB warning threshold is unchanged. Stage D emitted one 1,006.32kB / 313.01kB-gzip entry and printed the large-chunk advisory. Stage E resolves that graph through lazy routes, a nested lazy pane workspace, on-demand locale resources, and explicit React/UI/i18n vendor chunks.
+
+```text
+$ npm run build
+vite v7.3.6 building client environment for production...
+✓ 2044 modules transformed.
+dist/assets/pane-workspace-Cf2TMdji.js  28.77 kB │ gzip:  9.72 kB
+dist/assets/i18n-vendor-CkSKoGz1.js    49.67 kB │ gzip: 16.37 kB
+dist/assets/ui-vendor-Cb0Ln_mG.js      76.66 kB │ gzip: 24.94 kB
+dist/assets/index-BScXyVnd.js         203.78 kB │ gzip: 63.22 kB
+dist/assets/react-vendor-BSOuYUyy.js  255.94 kB │ gzip: 83.25 kB
+✓ built in 5.00s
+```
+
+Every production app JavaScript chunk is below 500kB uncompressed. The entry is 63.22kB gzip, below 250kB. No >500kB advisory is emitted by the app build.
+
+Ladle is a development-only tooling graph containing its own axe/runtime code; it uses `.ladle/vite.config.mjs` rather than the Tauri app's production vendor partition so story-tool dependencies do not create circular chunks.
+
+## JSON performance budgets
+
+```text
+$ npm run performance:check
+{
+  "schemaVersion": 1,
+  "budgets": {
+    "paletteOpenMs": 100,
+    "routeChangeMs": 300,
+    "streamingLongestTaskMs": 50,
+    "retained500MessagesMiB": 15,
+    "coldStartMs": 2000,
+    "maxChunkKiB": 500
+  },
+  "measurements": {
+    "paletteOpenMs": 52.125,
+    "routeChangeMs": 168.487,
+    "streamingLongestTaskMs": 0.123,
+    "retained500MessagesMemoryDeltaBytes": 637632,
+    "retained500MessagesMemoryDeltaMiB": 0.60809326171875,
+    "serialized500MessagesBytes": 567531,
+    "mounted500MessageRows": 11,
+    "coldDashboardRenderMs": 353.039,
+    "coldAssetReadMs": 0.6367719999998371,
+    "maximumRouteAssetReadMs": 1.226571999999578,
+    "largestChunkBytes": 255940,
+    "largestChunkKiB": 249.94140625,
+    "largestChunkFile": "react-vendor-BSOuYUyy.js",
+    "unhandledPromiseRejections": 0,
+    "eventLoopYielded": true
+  },
+  "pass": true
+}
+```
+
+`apps/desktop/scripts/perf-check.ts` emits and writes this JSON. Desktop CI builds the app, runs the guard, and uploads `apps/desktop/performance-results.json` as `desktop-performance-${{ github.sha }}`.
+
+## Variable-height transcript virtualization
+
+```text
+chat_fixture_rows=120 mounted_message_rows=11
+message_fixture_rows=500 mounted_message_rows=11
+variable_fixture_rows=1000 mounted_rows=15
+✓ releases tail ownership after the reader scrolls away
+```
+
+The newest row is rendered on initial chat mount. Settled and active streaming rows share the bounded feed. Pure `pane-chat-model.ts` and `variable-virtual-geometry.ts` tests pin ordering, non-mutation, offset/range calculations, and sticky-tail release.
+
+## Contrast
+
+```text
+$ npm run tokens:check
+Tokens Studio schema-compatible import: PASS — 12 sets, 208 tokens, 12 themes.
+Contrast gate: PASS — 108 AA checks.
+Light muted/canvas ≥5.0: PASS — Violet 5.47:1, Ocean 5.47:1, Forest 5.47:1, Ember 5.47:1.
+  5.20:1  Dream / Warm / Forest  color.accent.text / color.surface.base
+```
+
+The token source and runtime CSS both use `#5D6673`; the validator enforces 5.0 for the muted/canvas pair.
+
+## axe and reduced motion
+
+```text
+$ npm run accessibility:check
+axe_surface=sessions violations=0
+axe_surface=memory violations=0
+axe_surface=skills violations=0
+axe_surface=subagents violations=0
+axe_surface=scheduler violations=0
+reduced_motion_os=PASS reduced_motion_manual=PASS
+reduced_motion_surfaces=streaming,palette,dialogs,pane-resize,toast,tooltips status=PASS
+Test Files  3 passed (3)
+Tests       9 passed (9)
+```
+
+jsdom axe disables only color contrast because jsdom cannot paint. The separate token resolver performs the 108 color checks. The all-five-surface axe run found one real critical issue during development—the unavailable memory meter omitted required `aria-valuenow`—which was fixed and given a stricter assertion before the final zero-violation run.
+
+## Final desktop suite
+
+```text
+$ npm run test
+cold_dashboard_render_ms=366.748 budget_ms=2000
+warm_route_change_ms=172.624 budget_ms=300
+command_palette_open_ms=44.412 budget_ms=100
+session_fixture_rows=1000 mounted_rows=26
+memory_fixture_rows=1000 mounted_rows=8
+skills_fixture_rows=1000 mounted_rows=10
+subagent_log_rows=1000 mounted_rows=5
+scheduler_history_rows=1000 mounted_rows=26
+chat_fixture_rows=120 mounted_message_rows=11
+message_fixture_rows=500 mounted_message_rows=11
+variable_fixture_rows=1000 mounted_rows=15
+stream_fixture_tokens=500 writes=1 longest_task_ms=0.120
+stream_runtime_chunks=500 event_loop_yielded=true unhandled_rejections=0
+Test Files  69 passed (69)
+Tests       505 passed (505)
+Duration    120.15s
+```
+
+The suite exceeds the Stage D 484-test baseline. As in the accepted Stage D run, passing Vitest emits existing React `act(...)` diagnostics from background/Radix updates; no clean-stderr claim is made.
+
+## TypeScript, lint, formatting, and locales
+
+```text
+$ npm run typecheck
+> tsc --noEmit
+# exit 0
+
+$ npm run lint
+✖ 11 problems (0 errors, 11 warnings)
+
+$ npm run format:check
+All matched files use Prettier code style!
+
+$ npm run locales:check
+Locale integrity: PASS — 8 locales × 14 namespaces; 655 leaves and identical key/type/placeholder trees.
+English fallback counts: fa=0, zh-CN=267, ja=267, es=267, de=267, fr=267, ko=267; fa gate=PASS
+```
+
+The warning count returned from the transient 14 to the accepted 11 baseline with no suppression: memory score logic was extracted to a pure model, and two internal scheduler/subagent values stopped being exported. The remaining advisories are one TanStack/React-Compiler compatibility notice and ten pre-existing Fast Refresh file-boundary notices.
+
+## Ladle
+
+```text
+$ npm run storybook:build
+vite v6.4.3 building for production...
+✓ 1998 modules transformed.
+✓ built in 7.14s
+✓ Meta.json successfully created.
+Ladle finished the production build in 7s producing 1.53 MiB of assets.
+```
+
+## Python and protected paths
+
+Pytest ran by itself, with no concurrent frontend or Ladle build. The CI comment records the known Telegram polling timing sensitivity and keeps Python jobs isolated from build work.
+
+```text
+$ .venv/bin/pytest -q
+1748 passed, 11 skipped in 61.43s (0:01:01)
+
+$ git diff --stat -- dream/ tests/
+# no output
+protected_paths=dream/,tests/ unchanged
+
+$ git diff --check
+# no output
+diff_check=PASS
+```
+
+## Gate E decision
+
+**Stage E: GREEN.** App bundle, entry gzip, palette, route, streaming task, retained memory, runtime health, transcript virtualization, contrast, axe, reduced motion, full desktop/Python suites, static checks, locale integrity, Ladle, CI artifact wiring, test-edit audit, and protected boundaries pass.

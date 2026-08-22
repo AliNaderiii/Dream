@@ -14,6 +14,8 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "tokens:check": "node scripts/validate-tokens.mjs",
+    "performance:check": "node --experimental-strip-types --expose-gc scripts/perf-check.ts",
+    "accessibility:check": "vitest run src/routes/stage-d-accessibility.test.tsx src/hooks/use-theme.test.ts src/styles/reduced-motion.test.ts",
     "locales:generate": "node scripts/generate-locales.mjs",
     "locales:check": "python ../../tools/check_locales.py",
     "typecheck": "tsc --noEmit",

@@ -5,7 +5,7 @@ import { useTranslation } from '@/lib/i18n';
 import { absoluteTime } from '@/utils/time';
 
 /** i18n key for one history-row status. */
-export function runStatusKey(status: string): string {
+function runStatusKey(status: string): string {
   switch (status) {
     case 'success':
       return 'statusSuccess';

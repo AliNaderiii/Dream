@@ -1,11 +1,8 @@
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import {
-  explainMemoryScore,
-  MEMORY_SCORE_WEIGHTS,
-  MemoryScore,
-} from '@/components/memory/memory-score';
+import { MemoryScore } from '@/components/memory/memory-score';
+import { explainMemoryScore, MEMORY_SCORE_WEIGHTS } from '@/components/memory/memory-score-model';
 import type { BridgeMemory } from '@/lib/bridge/types';
 import { i18n } from '@/lib/i18n';
 
@@ -53,10 +50,9 @@ describe('memory score explanation', () => {
     const parts = explainMemoryScore(unranked, memory.created_at);
     expect(parts.find((part) => part.factor === 'relevance')?.value).toBeNull();
     render(<MemoryScore memory={unranked} />);
-    expect(screen.getByRole('meter', { name: 'Relevance score factor' })).toHaveAttribute(
-      'aria-valuetext',
-      'Unavailable',
-    );
+    const relevanceMeter = screen.getByRole('meter', { name: 'Relevance score factor' });
+    expect(relevanceMeter).toHaveAttribute('aria-valuenow', '0');
+    expect(relevanceMeter).toHaveAttribute('aria-valuetext', 'Unavailable');
     expect(screen.getByText('Not ranked')).toBeInTheDocument();
   });
 

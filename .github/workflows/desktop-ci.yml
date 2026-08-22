@@ -5,14 +5,14 @@ name: Desktop CI
 
 on:
   push:
-    branches: [main, 'arena/**', 'feat/**', 'release/**']
+    branches: [main, "arena/**", "feat/**", "release/**"]
     paths:
-      - 'apps/desktop/**'
-      - '.github/workflows/desktop-ci.yml'
+      - "apps/desktop/**"
+      - ".github/workflows/desktop-ci.yml"
   pull_request:
     paths:
-      - 'apps/desktop/**'
-      - '.github/workflows/desktop-ci.yml'
+      - "apps/desktop/**"
+      - ".github/workflows/desktop-ci.yml"
   workflow_dispatch:
 
 concurrency:
@@ -54,6 +54,24 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: Build performance bundle
+        run: npm run build
+
+      - name: Performance budgets
+        run: npm run performance:check
+
+      - name: Accessibility and reduced-motion gates
+        run: npm run accessibility:check
+
+      - name: Upload performance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-performance-${{ github.sha }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: apps/desktop/performance-results.json
 
   # G1 + G9: the Rust side must compile and pass clippy/fmt on all three OS.
   rust:

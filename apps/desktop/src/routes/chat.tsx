@@ -1,11 +1,13 @@
 /** Multi-pane conversation workspace. */
 
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-
-import { PaneWorkspace } from '@/components/panes/pane-workspace';
 import { useLayoutStore } from '@/stores/use-layout-store';
 import { useSessionStore } from '@/stores/use-session-store';
+
+const PaneWorkspace = lazy(() =>
+  import('@/components/panes/pane-workspace').then((module) => ({ default: module.PaneWorkspace })),
+);
 
 export function ChatRoute() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -19,7 +21,9 @@ export function ChatRoute() {
   return (
     <div className="size-full min-h-0 overflow-hidden">
       {session && <h2 className="sr-only">{session.title}</h2>}
-      <PaneWorkspace />
+      <Suspense fallback={<div className="size-full" aria-busy="true" />}>
+        <PaneWorkspace />
+      </Suspense>
     </div>
   );
 }

@@ -119,7 +119,7 @@ function contrast(a, b) {
 const textPairs = [
   ['color.text.primary', 'color.surface.base', 4.5],
   ['color.text.secondary', 'color.surface.base', 4.5],
-  ['color.text.muted', 'color.surface.canvas', 4.5],
+  ['color.text.muted', 'color.surface.canvas', 5.0],
   ['color.accent.text', 'color.surface.base', 4.5],
   ['color.accent.fg', 'color.accent.solid', 4.5],
   ['color.status.success-fg', 'color.status.success-bg', 4.5],
@@ -187,6 +187,14 @@ console.log(
   `Tokens Studio schema-compatible import: PASS — ${sets.size} sets, ${tokenCount} tokens, ${document.$themes.length} themes.`,
 );
 console.log(`Contrast gate: PASS — ${rows.length} AA checks.`);
+const lightMuted = rows.filter(
+  (row) =>
+    row.theme.startsWith('Dream / Light /') &&
+    row.pair === 'color.text.muted / color.surface.canvas',
+);
+console.log(
+  `Light muted/canvas ≥5.0: PASS — ${lightMuted.map((row) => `${row.theme.split(' / ').at(-1)} ${row.ratio.toFixed(2)}:1`).join(', ')}.`,
+);
 for (const row of lowest) console.log(`  ${row.ratio.toFixed(2)}:1  ${row.theme}  ${row.pair}`);
 
 if (process.argv.includes('--contrast-table')) {

@@ -17,7 +17,8 @@ import type { DragEvent, FormEvent, KeyboardEvent, MouseEvent } from 'react';
 import { ApprovalDialog } from '@/components/chat/approval-dialog';
 import { resolveApprovalOnBridge } from '@/components/chat/approval-policy';
 import { CouncilButton } from '@/components/chat/council-button';
-import { ToolCard } from '@/components/chat/tool-card';
+import { VirtualMessageList } from '@/components/chat/virtual-message-list';
+import { paneChatItems } from '@/components/panes/pane-chat-model';
 import { dockEdgeAt } from '@/components/panes/pane-geometry';
 import { Button } from '@/components/ui/button';
 import { getBridgeClient } from '@/lib/bridge/client';
@@ -510,6 +511,8 @@ function PaneChat({ pane }: { pane: PaneState }) {
   };
 
   const messages = transcript?.messages ?? [];
+  const chatItems = paneChatItems(messages, transcript?.streaming, pane.id);
+
   return (
     <div className="flex size-full min-h-0 flex-col">
       {/* Approval dialog overlay (S07) */}
@@ -517,65 +520,44 @@ function PaneChat({ pane }: { pane: PaneState }) {
         <ApprovalDialog approval={transcript.pendingApproval} onDecision={handleApprovalDecision} />
       )}
 
-      <div
-        ref={scrollRef}
-        onScroll={(event) => {
-          const node = event.currentTarget;
-          followTail.current = node.scrollHeight - node.scrollTop - node.clientHeight < 64;
+      <VirtualMessageList
+        items={chatItems}
+        label={t('messageLabel')}
+        scrollRef={scrollRef}
+        onScroll={() => {
+          const node = scrollRef.current;
+          if (node) {
+            followTail.current = node.scrollHeight - node.scrollTop - node.clientHeight < 64;
+          }
         }}
-        className="selectable min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-5"
-      >
-        {messages.length === 0 && !transcript?.streaming && (
-          <div className="mx-auto flex h-full max-w-sm flex-col items-center justify-center text-center text-fg-muted">
-            <SafeIcon icon={MessageSquare} className="mb-3 size-8 text-accent-text" aria-hidden />
-            <p className="font-medium text-fg-primary">{t('pane.independentTitle')}</p>
-            <p className="mt-1 text-caption">{t('pane.independentDesc')}</p>
-            <code className="mt-3 rounded-sm bg-surface-2 px-2 py-1 text-caption">
-              /provider openai
-            </code>
-          </div>
-        )}
-        {messages.map((message) => (
-          <article key={message.id} className="content-auto">
-            {/* Tool cards (S07) — rendered above the assistant text bubble */}
-            {message.toolCards && message.toolCards.length > 0 && (
-              <div className="mb-1 space-y-1">
-                {message.toolCards.map((card) => (
-                  <ToolCard key={card.id} card={card} />
-                ))}
+        footer={
+          <>
+            {messages.length === 0 && !transcript?.streaming && (
+              <div className="mx-auto flex h-full max-w-sm flex-col items-center justify-center text-center text-fg-muted">
+                <SafeIcon
+                  icon={MessageSquare}
+                  className="mb-3 size-8 text-accent-text"
+                  aria-hidden
+                />
+                <p className="font-medium text-fg-primary">{t('pane.independentTitle')}</p>
+                <p className="mt-1 text-caption">{t('pane.independentDesc')}</p>
+                <code className="mt-3 rounded-sm bg-surface-2 px-2 py-1 text-caption">
+                  /provider openai
+                </code>
               </div>
             )}
-            {message.content && (
-              <div
-                className={cn(
-                  'max-w-[85%] rounded-lg px-3 py-2 text-body whitespace-pre-wrap',
-                  message.role === 'user'
-                    ? 'ms-auto bg-accent text-fg-inverse'
-                    : 'me-auto border border-border-default bg-surface text-fg-primary',
-                )}
+            {transcript?.error && (
+              <p
+                role="alert"
+                className="rounded-md bg-danger-bg px-3 py-2 text-caption text-danger-fg"
               >
-                {message.content}
-              </div>
+                {transcript.error}
+              </p>
             )}
-          </article>
-        ))}
-        {transcript?.streaming && (
-          <article
-            aria-live="polite"
-            aria-busy="true"
-            className="streaming-sweep me-auto max-w-[85%] rounded-lg border border-border-default bg-surface px-3 py-2 whitespace-pre-wrap"
-          >
-            {transcript.streaming}
-            <span className="ms-0.5 inline-block h-4 w-0.5 bg-accent" aria-hidden />
-          </article>
-        )}
-        {transcript?.error && (
-          <p role="alert" className="rounded-md bg-danger-bg px-3 py-2 text-caption text-danger-fg">
-            {transcript.error}
-          </p>
-        )}
-        <div ref={endRef} />
-      </div>
+            <div ref={endRef} />
+          </>
+        }
+      />
 
       <form
         onSubmit={(event) => void send(event)}

@@ -27,12 +27,16 @@ describe('app shell', () => {
     document.documentElement.removeAttribute('data-theme');
   });
 
-  it('renders the shell chrome on the dashboard', () => {
+  it('renders the shell chrome and cold dashboard route within the startup budget', async () => {
+    const started = performance.now();
     renderApp('/');
 
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Sessions' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    const elapsed = performance.now() - started;
+    console.info(`cold_dashboard_render_ms=${elapsed.toFixed(3)} budget_ms=2000`);
+    expect(elapsed).toBeLessThan(2_000);
   });
 
   it.each([
@@ -52,23 +56,25 @@ describe('app shell', () => {
   it.each([
     ['/memory', 'Memory explorer'],
     ['/skills', 'Skills manager'],
-  ])('renders the %s workspace', (route, label) => {
+  ])('renders the %s workspace', async (route, label) => {
     renderApp(route);
     // These two routes are full workspaces rather than a single headed panel,
     // so they are identified by their landmark rather than an h2.
-    expect(screen.getByRole('region', { name: label })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: label })).toBeInTheDocument();
   });
 
-  it('redirects an unknown route to the dashboard', () => {
+  it('redirects an unknown route to the dashboard', async () => {
     renderApp('/does-not-exist');
-    expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
   });
 
-  it('renders a conversation for a known session id', () => {
+  it('renders a conversation for a known session id', async () => {
     const session = useSessionStore.getState().createSession('Persian grammar');
     renderApp(`/chat/${session.id}`);
 
-    expect(screen.getByRole('heading', { level: 2, name: 'Persian grammar' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Persian grammar' }),
+    ).toBeInTheDocument();
   });
 
   it('toggles the sidebar closed and open again', async () => {
@@ -118,6 +124,19 @@ describe('app shell', () => {
 
     expect(useSessionStore.getState().sessions).toHaveLength(1);
     expect(await screen.findByRole('heading', { name: 'Conversation' })).toBeInTheDocument();
+  });
+
+  it('changes a warm route within the route-interaction budget', async () => {
+    renderApp('/');
+    await screen.findByRole('heading', { name: 'Dashboard' });
+    const started = performance.now();
+    fireEvent.click(screen.getByRole('link', { name: 'Settings' }));
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Appearance' }),
+    ).toBeInTheDocument();
+    const elapsed = performance.now() - started;
+    console.info(`warm_route_change_ms=${elapsed.toFixed(3)} budget_ms=300`);
+    expect(elapsed).toBeLessThan(300);
   });
 
   it('opens the local command palette within the perceived-interaction budget', () => {

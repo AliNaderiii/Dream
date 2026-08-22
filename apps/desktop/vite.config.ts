@@ -39,6 +39,19 @@ export default defineConfig({
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('/node_modules/')) return undefined;
+          if (/\/(react|react-dom|react-router|scheduler|use-sync-external-store)\//.test(id)) {
+            return 'react-vendor';
+          }
+          if (/\/(?:@radix-ui|cmdk)\//.test(id)) return 'ui-vendor';
+          if (/\/(?:i18next|react-i18next)\//.test(id)) return 'i18n-vendor';
+          return undefined;
+        },
+      },
+    },
   },
 
   test: {

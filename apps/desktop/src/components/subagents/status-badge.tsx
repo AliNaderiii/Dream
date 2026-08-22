@@ -31,7 +31,7 @@ interface StatusMeta {
   spin?: boolean;
 }
 
-export const SUBAGENT_STATUS_META: Record<SubAgentStatus, StatusMeta> = {
+const SUBAGENT_STATUS_META: Record<SubAgentStatus, StatusMeta> = {
   idle: { labelKey: 'status.idle', icon: CircleDashed, variant: 'neutral', bar: 'bg-fg-muted' },
   running: {
     labelKey: 'status.running',

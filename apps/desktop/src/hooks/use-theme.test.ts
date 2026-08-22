@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { applyAppearance, resolveTheme } from '@/hooks/use-theme';
@@ -45,5 +48,19 @@ describe('appearance engine', () => {
 
   it('keeps Warm explicit instead of treating it as a system alias', () => {
     expect(resolveTheme('warm')).toBe('warm');
+  });
+
+  it('stops repeated animation and transition motion for both OS and manual preferences', () => {
+    const css = readFileSync(path.resolve('src/styles/theme.css'), 'utf8');
+    const systemPreference = css.match(
+      /@media \(prefers-reduced-motion: reduce\) \{\s*\*,[\s\S]*?animation-iteration-count: 1 !important;[\s\S]*?transition-duration: 0\.01ms !important;[\s\S]*?\}/,
+    );
+    const manualPreference = css.match(
+      /\[data-reduce-motion='true'\] \*,[\s\S]*?animation-iteration-count: 1 !important;[\s\S]*?transition-duration: 0\.01ms !important;[\s\S]*?\}/,
+    );
+
+    expect(systemPreference).not.toBeNull();
+    expect(manualPreference).not.toBeNull();
+    console.info('reduced_motion_os=PASS reduced_motion_manual=PASS');
   });
 });

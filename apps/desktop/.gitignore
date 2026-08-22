@@ -22,5 +22,6 @@ src-tauri/gen/schemas/
 .vscode/*
 !.vscode/extensions.json
 
-# Test output
+# Test and generated performance output
 coverage/
+performance-results.json
