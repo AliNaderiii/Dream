@@ -11,14 +11,19 @@ import {
   Square,
   X,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DragEvent, FormEvent, KeyboardEvent, MouseEvent } from 'react';
 
 import { ApprovalDialog } from '@/components/chat/approval-dialog';
+import { resolveApprovalOnBridge } from '@/components/chat/approval-policy';
 import { CouncilButton } from '@/components/chat/council-button';
-import { ToolCard } from '@/components/chat/tool-card';
+import { VirtualMessageList } from '@/components/chat/virtual-message-list';
+import { paneChatItems } from '@/components/panes/pane-chat-model';
+import { dockEdgeAt } from '@/components/panes/pane-geometry';
 import { Button } from '@/components/ui/button';
 import { getBridgeClient } from '@/lib/bridge/client';
+import { useTranslation } from '@/lib/i18n';
+import { createFrameBatcher } from '@/lib/performance/frame-batcher';
 import { RPC_ERROR } from '@/lib/bridge/types';
 import type { BridgeTurn } from '@/lib/bridge/types';
 import type { DockEdge, PaneState } from '@/stores/use-layout-store';
@@ -51,13 +56,11 @@ function dockEdge(event: DragEvent<HTMLElement>): DockEdge {
   const rect = event.currentTarget.getBoundingClientRect();
   const x = (event.clientX - rect.left) / rect.width;
   const y = (event.clientY - rect.top) / rect.height;
-  if (x < 0.25) return 'left';
-  if (x > 0.75) return 'right';
-  if (y < 0.5) return 'top';
-  return 'bottom';
+  return dockEdgeAt(x, y, document.documentElement.dir === 'rtl');
 }
 
 export function Pane({ pane, active }: PaneProps) {
+  const { t } = useTranslation('chat');
   const providers = useProviderStore((state) => state.providers);
   const setActivePane = useLayoutStore((state) => state.setActivePane);
   const addPane = useLayoutStore((state) => state.addPane);
@@ -104,7 +107,7 @@ export function Pane({ pane, active }: PaneProps) {
   return (
     <section
       className={cn(
-        'relative flex size-full min-h-[200px] min-w-[300px] flex-col overflow-hidden bg-canvas',
+        'relative flex size-full min-h-pane-min-block min-w-pane-min-inline flex-col overflow-hidden bg-canvas',
         active && 'ring-1 ring-inset ring-accent',
       )}
       onPointerDown={() => setActivePane(pane.id)}
@@ -149,13 +152,15 @@ export function Pane({ pane, active }: PaneProps) {
           <SafeIcon icon={Bot} className="size-3.5 shrink-0 text-accent-text" aria-hidden />
         )}
         <span className="max-w-24 truncate text-caption font-medium">
-          {pane.sessionId ? `Chat ${pane.sessionId.slice(-5)}` : 'New chat'}
+          {pane.sessionId
+            ? t('pane.header.session', { id: pane.sessionId.slice(-5) })
+            : t('pane.header.newChat')}
         </span>
 
         <select
           ref={modelSelect}
-          aria-label="Pane model"
-          title="Quick provider switch (⌘P / Ctrl+P)"
+          aria-label={t('pane.header.model')}
+          title={t('pane.header.quickProvider')}
           value={selectedModelValue(pane, providers)}
           onChange={(event) => {
             const [providerId, modelName] = event.target.value.split('::');
@@ -173,7 +178,7 @@ export function Pane({ pane, active }: PaneProps) {
         </select>
 
         <select
-          aria-label="Reasoning effort"
+          aria-label={t('pane.header.reasoning')}
           value={String(pane.reasoningEffort)}
           disabled={
             !providers.find((provider) => provider.id === pane.providerId)?.supportsReasoning
@@ -181,28 +186,28 @@ export function Pane({ pane, active }: PaneProps) {
           onChange={(event) => configureSession({ reasoningEffort: Number(event.target.value) })}
           className="w-[4.6rem] rounded-xs border border-border-default bg-canvas px-1 py-0.5 text-caption text-fg-secondary disabled:opacity-50"
         >
-          <option value="0">Auto</option>
-          <option value="0.25">Low</option>
-          <option value="0.65">Medium</option>
-          <option value="1">High</option>
+          <option value="0">{t('pane.header.effort.auto')}</option>
+          <option value="0.25">{t('pane.header.effort.low')}</option>
+          <option value="0.65">{t('pane.header.effort.medium')}</option>
+          <option value="1">{t('pane.header.effort.high')}</option>
         </select>
 
         <Button
           variant="ghost"
           size="icon-sm"
           className="size-6"
-          aria-label="Split pane right"
-          title="Split right"
+          aria-label={t('pane.header.splitEnd')}
+          title={t('pane.header.splitEnd')}
           onClick={() => addPane(pane.id, 'horizontal')}
         >
-          <SafeIcon icon={ArrowRightToLine} aria-hidden />
+          <SafeIcon icon={ArrowRightToLine} className="rtl:-scale-x-100" aria-hidden />
         </Button>
         <Button
           variant="ghost"
           size="icon-sm"
           className="size-6"
-          aria-label="Split pane below"
-          title="Split below"
+          aria-label={t('pane.header.splitBelow')}
+          title={t('pane.header.splitBelow')}
           onClick={() => addPane(pane.id, 'vertical')}
         >
           <SafeIcon icon={ArrowDownToLine} aria-hidden />
@@ -211,8 +216,8 @@ export function Pane({ pane, active }: PaneProps) {
           variant="ghost"
           size="icon-sm"
           className="size-6"
-          aria-label="Maximize or restore pane"
-          title="Maximize / restore (⌘⇧M)"
+          aria-label={t('pane.header.maximize')}
+          title={t('pane.header.maximizeShortcut')}
           onClick={() => toggleMaximize(pane.id)}
         >
           <SafeIcon icon={Maximize2} aria-hidden />
@@ -221,8 +226,8 @@ export function Pane({ pane, active }: PaneProps) {
           variant="ghost"
           size="icon-sm"
           className="size-6"
-          aria-label="Close pane"
-          title="Close pane (⌘W)"
+          aria-label={t('pane.header.close')}
+          title={t('pane.header.closeShortcut')}
           onClick={() => closePane(pane.id)}
         >
           <SafeIcon icon={X} aria-hidden />
@@ -249,6 +254,7 @@ export function Pane({ pane, active }: PaneProps) {
 }
 
 function PaneChat({ pane }: { pane: PaneState }) {
+  const { t } = useTranslation('chat');
   const providers = useProviderStore((state) => state.providers);
   const updatePane = useLayoutStore((state) => state.updatePane);
   const ensure = usePaneChatStore((state) => state.ensure);
@@ -262,10 +268,33 @@ function PaneChat({ pane }: { pane: PaneState }) {
   const alwaysAllowTool = usePaneChatStore((state) => state.alwaysAllowTool);
   const isAlwaysAllowed = usePaneChatStore((state) => state.isAlwaysAllowed);
   const [input, setInput] = useState('');
+  const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const followTail = useRef(true);
+  const scrollFrame = useRef<number | null>(null);
+  const scheduleTailScroll = useCallback(() => {
+    if (!followTail.current || scrollFrame.current !== null) return;
+    scrollFrame.current = requestAnimationFrame(() => {
+      endRef.current?.scrollIntoView({ block: 'nearest' });
+      scrollFrame.current = null;
+    });
+  }, []);
+  const [streamBatcher] = useState(() =>
+    createFrameBatcher((chunk) => appendChunk(pane.id, chunk)),
+  );
 
   useEffect(() => ensure(pane.id), [ensure, pane.id]);
-  useEffect(() => endRef.current?.scrollIntoView({ block: 'nearest' }), [transcript]);
+  useEffect(
+    () => () => {
+      streamBatcher.cancel();
+      if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current);
+    },
+    [streamBatcher],
+  );
+  useEffect(
+    () => scheduleTailScroll(),
+    [scheduleTailScroll, transcript?.messages.length, transcript?.streaming],
+  );
 
   const switchProviderCommand = (text: string): boolean => {
     if (!text.toLowerCase().startsWith('/provider')) return false;
@@ -276,14 +305,14 @@ function PaneChat({ pane }: { pane: PaneState }) {
         item.name.toLowerCase() === requested.toLowerCase(),
     );
     if (!provider) {
-      failStream(pane.id, `Provider "${requested || 'unknown'}" is not configured.`);
+      failStream(pane.id, t('pane.providerMissing', { provider: requested || t('pane.unknown') }));
       return true;
     }
     const model =
       provider.enabledModelIds.find((item) => item === requestedModel) ??
       provider.enabledModelIds[0];
     if (!model) {
-      failStream(pane.id, `${provider.name} has no enabled models.`);
+      failStream(pane.id, t('pane.noModels', { provider: provider.name }));
       return true;
     }
     updatePane(pane.id, { providerId: provider.id, modelName: model });
@@ -316,7 +345,7 @@ function PaneChat({ pane }: { pane: PaneState }) {
         const result = await client.stream<BridgeTurn>(
           'conversation.send',
           { session_id: sessionId, message: text },
-          { onChunk: (chunk) => appendChunk(pane.id, chunk.token) },
+          { onChunk: (chunk) => streamBatcher.push(chunk.token) },
         );
         return result;
       } catch (err: unknown) {
@@ -336,7 +365,7 @@ function PaneChat({ pane }: { pane: PaneState }) {
         const rawSummary = data['summary'];
         const rawRisk = data['risk'];
         const approvalId = typeof rawApprovalId === 'string' ? rawApprovalId : '';
-        const toolName = typeof rawToolName === 'string' ? rawToolName : 'unknown tool';
+        const toolName = typeof rawToolName === 'string' ? rawToolName : t('pane.unknownTool');
         const argsSummary = typeof rawSummary === 'string' ? rawSummary : '';
         const risk = typeof rawRisk === 'string' ? rawRisk : 'dangerous';
 
@@ -363,16 +392,14 @@ function PaneChat({ pane }: { pane: PaneState }) {
 
         if (decision === 'deny') {
           // Resolve the approval as denied on the bridge.
-          void client
-            .call('approval.resolve', { approval_id: approvalId, allowed: false })
-            .catch(() => {});
+          void resolveApprovalOnBridge(client, approvalId, decision).catch(() => {});
           // Record a blocked tool card.
           const blockedCard: ToolCardEntry = {
             id: `tc-blocked-${Date.now()}`,
             name: toolName,
             argsSummary,
             status: 'blocked',
-            resultExcerpt: 'Denied by user',
+            resultExcerpt: t('approval.blockedByUser'),
           };
           addMessage(pane.id, {
             id: `tool-${Date.now()}-${pane.id}`,
@@ -388,10 +415,8 @@ function PaneChat({ pane }: { pane: PaneState }) {
           alwaysAllowTool(pane.id, toolName);
         }
 
-        // Resolve the approval as allowed, then retry the send.
-        void client
-          .call('approval.resolve', { approval_id: approvalId, allowed: true })
-          .catch(() => {});
+        // Resolve the chosen approval policy as allowed, then retry the send.
+        void resolveApprovalOnBridge(client, approvalId, decision).catch(() => {});
       }
     }
     throw new Error('Approval retry limit reached');
@@ -433,6 +458,8 @@ function PaneChat({ pane }: { pane: PaneState }) {
         updatePane(pane.id, { sessionId });
       }
       const result = await sendWithApproval(sessionId, text, client);
+      // The final result is authoritative; discard a pending visual-only token batch.
+      streamBatcher.cancel();
 
       // Build tool cards from the turn's tool_calls (S07).
       const toolCards: ToolCardEntry[] = (result.tool_calls ?? []).map((tc, index) => ({
@@ -456,11 +483,12 @@ function PaneChat({ pane }: { pane: PaneState }) {
 
       finishStream(pane.id, result.reply);
     } catch (err) {
+      streamBatcher.cancel();
       // Don't double-report if we already handled it (blocked tool).
       const msg =
         err instanceof Error && err.message === 'Tool call denied by user'
           ? ''
-          : 'Message failed. Check the bridge and provider connection.';
+          : t('pane.messageFailed');
       if (msg) failStream(pane.id, msg);
       else {
         // Still clear the sending state.
@@ -483,6 +511,8 @@ function PaneChat({ pane }: { pane: PaneState }) {
   };
 
   const messages = transcript?.messages ?? [];
+  const chatItems = paneChatItems(messages, transcript?.streaming, pane.id);
+
   return (
     <div className="flex size-full min-h-0 flex-col">
       {/* Approval dialog overlay (S07) */}
@@ -490,56 +520,44 @@ function PaneChat({ pane }: { pane: PaneState }) {
         <ApprovalDialog approval={transcript.pendingApproval} onDecision={handleApprovalDecision} />
       )}
 
-      <div className="selectable min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-5">
-        {messages.length === 0 && !transcript?.streaming && (
-          <div className="mx-auto flex h-full max-w-sm flex-col items-center justify-center text-center text-fg-muted">
-            <SafeIcon icon={MessageSquare} className="mb-3 size-8 text-accent-text" aria-hidden />
-            <p className="font-medium text-fg-primary">Independent conversation</p>
-            <p className="mt-1 text-caption">
-              This pane has its own session, provider, model, and reasoning effort.
-            </p>
-            <code className="mt-3 rounded-sm bg-surface-2 px-2 py-1 text-caption">
-              /provider openai
-            </code>
-          </div>
-        )}
-        {messages.map((message) => (
-          <article key={message.id}>
-            {/* Tool cards (S07) — rendered above the assistant text bubble */}
-            {message.toolCards && message.toolCards.length > 0 && (
-              <div className="mb-1 space-y-1">
-                {message.toolCards.map((card) => (
-                  <ToolCard key={card.id} card={card} />
-                ))}
+      <VirtualMessageList
+        items={chatItems}
+        label={t('messageLabel')}
+        scrollRef={scrollRef}
+        onScroll={() => {
+          const node = scrollRef.current;
+          if (node) {
+            followTail.current = node.scrollHeight - node.scrollTop - node.clientHeight < 64;
+          }
+        }}
+        footer={
+          <>
+            {messages.length === 0 && !transcript?.streaming && (
+              <div className="mx-auto flex h-full max-w-sm flex-col items-center justify-center text-center text-fg-muted">
+                <SafeIcon
+                  icon={MessageSquare}
+                  className="mb-3 size-8 text-accent-text"
+                  aria-hidden
+                />
+                <p className="font-medium text-fg-primary">{t('pane.independentTitle')}</p>
+                <p className="mt-1 text-caption">{t('pane.independentDesc')}</p>
+                <code className="mt-3 rounded-sm bg-surface-2 px-2 py-1 text-caption">
+                  /provider openai
+                </code>
               </div>
             )}
-            {message.content && (
-              <div
-                className={cn(
-                  'max-w-[85%] rounded-lg px-3 py-2 text-body whitespace-pre-wrap',
-                  message.role === 'user'
-                    ? 'ms-auto bg-accent text-fg-inverse'
-                    : 'me-auto border border-border-default bg-surface text-fg-primary',
-                )}
+            {transcript?.error && (
+              <p
+                role="alert"
+                className="rounded-md bg-danger-bg px-3 py-2 text-caption text-danger-fg"
               >
-                {message.content}
-              </div>
+                {transcript.error}
+              </p>
             )}
-          </article>
-        ))}
-        {transcript?.streaming && (
-          <article className="me-auto max-w-[85%] rounded-lg border border-border-default bg-surface px-3 py-2 whitespace-pre-wrap">
-            {transcript.streaming}
-            <span className="ms-0.5 inline-block h-4 w-0.5 animate-pulse bg-accent" />
-          </article>
-        )}
-        {transcript?.error && (
-          <p role="alert" className="rounded-md bg-danger-bg px-3 py-2 text-caption text-danger-fg">
-            {transcript.error}
-          </p>
-        )}
-        <div ref={endRef} />
-      </div>
+            <div ref={endRef} />
+          </>
+        }
+      />
 
       <form
         onSubmit={(event) => void send(event)}
@@ -555,8 +573,8 @@ function PaneChat({ pane }: { pane: PaneState }) {
             }
           }}
           rows={1}
-          placeholder="Message Dream…"
-          aria-label="Message"
+          placeholder={t('inputPlaceholder')}
+          aria-label={t('messageLabel')}
           dir="auto"
           className="selectable min-h-9 min-w-0 flex-1 resize-none rounded-md border border-border-default bg-canvas px-3 py-1.5 text-body outline-none focus:border-accent"
         />
@@ -566,7 +584,7 @@ function PaneChat({ pane }: { pane: PaneState }) {
             size="icon"
             variant="secondary"
             onClick={stop}
-            aria-label="Stop response"
+            aria-label={t('stop')}
           >
             <SafeIcon icon={Square} aria-hidden />
           </Button>
@@ -576,7 +594,7 @@ function PaneChat({ pane }: { pane: PaneState }) {
             size="icon"
             variant="primary"
             disabled={!input.trim()}
-            aria-label="Send message"
+            aria-label={t('send')}
           >
             <SafeIcon icon={Send} aria-hidden />
           </Button>
@@ -592,12 +610,15 @@ function PaneChat({ pane }: { pane: PaneState }) {
 }
 
 function PanePlaceholder({ pane }: { pane: PaneState }) {
+  const { t } = useTranslation('chat');
   return (
     <div className="flex size-full items-center justify-center text-center text-fg-muted">
       <div>
         <SafeIcon icon={Bot} className="mx-auto mb-2 size-8" aria-hidden />
-        <p className="font-medium capitalize text-fg-primary">{pane.type} pane</p>
-        <p className="text-caption">Content routing is isolated to this pane.</p>
+        <p className="font-medium text-fg-primary">
+          {t('pane.placeholderTitle', { type: t(`pane.type.${pane.type}`) })}
+        </p>
+        <p className="text-caption">{t('pane.placeholderDescription')}</p>
       </div>
     </div>
   );

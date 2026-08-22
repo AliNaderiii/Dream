@@ -4,16 +4,24 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { AppShell } from '@/components/layout/app-shell';
-import { ChatRoute } from '@/routes/chat';
-import { DashboardRoute } from '@/routes/dashboard';
-import { MemoryRoute } from '@/routes/memory';
-import { ProjectsRoute } from '@/routes/projects';
-import { ProvidersRoute } from '@/routes/providers';
-import { SettingsRoute } from '@/routes/settings';
-import { SkillsRoute } from '@/routes/skills';
 
-// Heavy screens are code-split so the shell paints before their chunks load.
+// Workspaces are code-split so the shell paints before their chunks load.
 // Each lazy route resolves the named export to a default export for React.lazy.
+const DashboardRoute = lazy(() =>
+  import('@/routes/dashboard').then((m) => ({ default: m.DashboardRoute })),
+);
+const ChatRoute = lazy(() => import('@/routes/chat').then((m) => ({ default: m.ChatRoute })));
+const MemoryRoute = lazy(() => import('@/routes/memory').then((m) => ({ default: m.MemoryRoute })));
+const ProjectsRoute = lazy(() =>
+  import('@/routes/projects').then((m) => ({ default: m.ProjectsRoute })),
+);
+const ProvidersRoute = lazy(() =>
+  import('@/routes/providers').then((m) => ({ default: m.ProvidersRoute })),
+);
+const SettingsRoute = lazy(() =>
+  import('@/routes/settings').then((m) => ({ default: m.SettingsRoute })),
+);
+const SkillsRoute = lazy(() => import('@/routes/skills').then((m) => ({ default: m.SkillsRoute })));
 const ConnectivityRoute = lazy(() =>
   import('@/routes/connectivity').then((m) => ({ default: m.ConnectivityRoute })),
 );
@@ -33,19 +41,71 @@ const SubagentsRoute = lazy(() =>
 
 /** Lightweight fallback shown while a lazy chunk is still loading. */
 function RouteFallback() {
-  return <div className="flex h-full items-center justify-center text-fg-muted" />;
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      className="flex h-full flex-col gap-3 p-6 motion-reduce:animate-none"
+    >
+      <div className="skeleton-shape h-8 w-48 rounded-lg" />
+      <div className="skeleton-shape h-24 w-full rounded-xl" />
+      <div className="skeleton-shape h-24 w-full rounded-xl" />
+    </div>
+  );
 }
 
 export default function App() {
   return (
     <Routes>
       <Route element={<AppShell />}>
-        <Route index element={<DashboardRoute />} />
-        <Route path="chat/:sessionId" element={<ChatRoute />} />
-        <Route path="chat" element={<ChatRoute />} />
-        <Route path="memory" element={<MemoryRoute />} />
-        <Route path="skills" element={<SkillsRoute />} />
-        <Route path="projects" element={<ProjectsRoute />} />
+        <Route
+          index
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <DashboardRoute />
+            </Suspense>
+          }
+        />
+        <Route
+          path="chat/:sessionId"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <ChatRoute />
+            </Suspense>
+          }
+        />
+        <Route
+          path="chat"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <ChatRoute />
+            </Suspense>
+          }
+        />
+        <Route
+          path="memory"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <MemoryRoute />
+            </Suspense>
+          }
+        />
+        <Route
+          path="skills"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <SkillsRoute />
+            </Suspense>
+          }
+        />
+        <Route
+          path="projects"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <ProjectsRoute />
+            </Suspense>
+          }
+        />
         <Route
           path="scheduler"
           element={
@@ -94,8 +154,22 @@ export default function App() {
             </Suspense>
           }
         />
-        <Route path="providers" element={<ProvidersRoute />} />
-        <Route path="settings" element={<SettingsRoute />} />
+        <Route
+          path="providers"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <ProvidersRoute />
+            </Suspense>
+          }
+        />
+        <Route
+          path="settings"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <SettingsRoute />
+            </Suspense>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

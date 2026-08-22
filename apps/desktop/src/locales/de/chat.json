@@ -12,11 +12,69 @@
   "approval": {
     "title": "Freigabe erforderlich",
     "description": "möchte mit diesen Argumenten ausgeführt werden:",
+    "arguments": "Arguments",
+    "risk": "Risk: {{value}}",
     "allowOnce": "Einmal erlauben",
     "alwaysAllow": "Dieses Werkzeug immer erlauben (diese Sitzung)",
     "deny": "Verweigern",
     "waitingForApproval": "Wartet auf Freigabe…",
     "blocked": "Blockiert",
     "blockedByUser": "Vom Benutzer verweigert"
+  },
+  "tool": {
+    "running": "Running…",
+    "ok": "OK",
+    "error": "Error",
+    "showDetails": "Show details for {{tool}}",
+    "hideDetails": "Hide details for {{tool}}"
+  },
+  "messageLabel": "Message",
+  "stop": "Stop response",
+  "pane": {
+    "workspace": {
+      "restore": "Restore workspace",
+      "screens": "Screens",
+      "rename": "Rename screen",
+      "defaultName": "Screen {{count}}",
+      "close": "Close {{name}}",
+      "newScreen": "New screen",
+      "newVirtualScreen": "New virtual screen",
+      "dragHint": "Drag a pane here to move screens"
+    },
+    "header": {
+      "session": "Chat {{id}}",
+      "newChat": "New chat",
+      "model": "Pane model",
+      "quickProvider": "Quick provider switch (⌘P / Ctrl+P)",
+      "reasoning": "Reasoning effort",
+      "resize": "Resize panes",
+      "effort": {
+        "auto": "Auto",
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+      },
+      "splitEnd": "Split pane toward the end",
+      "splitBelow": "Split pane below",
+      "maximize": "Maximize or restore pane",
+      "maximizeShortcut": "Maximize or restore pane (⌘⇧M)",
+      "close": "Close pane",
+      "closeShortcut": "Close pane (⌘W)"
+    },
+    "type": {
+      "chat": "Chat",
+      "subagent": "Subagent",
+      "file": "File",
+      "data": "Data"
+    },
+    "placeholderTitle": "{{type}} pane",
+    "placeholderDescription": "Content routing is isolated to this pane.",
+    "independentTitle": "Independent conversation",
+    "independentDesc": "This pane has its own session, provider, model, and reasoning effort.",
+    "providerMissing": "Provider “{{provider}}” is not configured.",
+    "noModels": "{{provider}} has no enabled models.",
+    "unknown": "unknown",
+    "unknownTool": "unknown tool",
+    "messageFailed": "Message failed. Check the Dream engine and provider connection."
   }
 }

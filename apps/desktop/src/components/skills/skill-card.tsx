@@ -9,6 +9,7 @@
 import { Check } from 'lucide-react';
 
 import type { BridgeSkillEx } from '@/lib/bridge/types';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/utils/cn';
 import { absoluteDate } from '@/utils/time';
 
@@ -32,6 +33,7 @@ export function SkillCard({
   onToggleEnabled,
   onToggleChecked,
 }: SkillCardProps) {
+  const { t } = useTranslation('skills');
   return (
     <div
       className={cn(
@@ -44,7 +46,7 @@ export function SkillCard({
           type="checkbox"
           checked={checked}
           onChange={(event) => onToggleChecked(skill, event.target.checked)}
-          aria-label={`Select ${skill.name} for export`}
+          aria-label={t('card.selectExport', { name: skill.name })}
           className="size-4 accent-[var(--accent-solid)]"
         />
       </label>
@@ -59,14 +61,14 @@ export function SkillCard({
           <span className="truncate text-body font-medium text-fg-primary">{skill.name}</span>
           {!skill.enabled && (
             <span className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-micro text-fg-muted">
-              Disabled
+              {t('disabled')}
             </span>
           )}
         </div>
         <p className="line-clamp-2 text-caption text-fg-secondary">{skill.description}</p>
         <p className="pt-1 text-micro text-fg-muted">
-          {skill.steps.length} {skill.steps.length === 1 ? 'step' : 'steps'}
-          {createdAt ? ` · added ${absoluteDate(createdAt)}` : ''}
+          {t('card.stepCount', { count: skill.steps.length })}
+          {createdAt ? ` · ${t('added', { date: absoluteDate(createdAt) })}` : ''}
         </p>
       </button>
 
@@ -74,7 +76,7 @@ export function SkillCard({
         type="button"
         role="switch"
         aria-checked={skill.enabled}
-        aria-label={`${skill.enabled ? 'Disable' : 'Enable'} ${skill.name}`}
+        aria-label={t(skill.enabled ? 'card.disable' : 'card.enable', { name: skill.name })}
         onClick={() => onToggleEnabled(skill, !skill.enabled)}
         className={cn(
           'relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors duration-fast ease-standard',

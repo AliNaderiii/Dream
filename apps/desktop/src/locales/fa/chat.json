@@ -12,11 +12,69 @@
   "approval": {
     "title": "تأیید لازم است",
     "description": "می‌خواهد با این آرگومان‌ها اجرا شود:",
+    "arguments": "آرگومان‌ها",
+    "risk": "ریسک: {{value}}",
     "allowOnce": "یک‌بار اجازه بده",
     "alwaysAllow": "همیشه اجازه بده (این نشست)",
     "deny": "رد کردن",
     "waitingForApproval": "در انتظار تأیید…",
     "blocked": "مسدود شده",
     "blockedByUser": "توسط کاربر رد شد"
+  },
+  "tool": {
+    "running": "در حال اجرا…",
+    "ok": "موفق",
+    "error": "خطا",
+    "showDetails": "نمایش جزئیات {{tool}}",
+    "hideDetails": "پنهان‌کردن جزئیات {{tool}}"
+  },
+  "messageLabel": "پیام",
+  "stop": "توقف پاسخ",
+  "pane": {
+    "workspace": {
+      "restore": "بازگردانی میزکار",
+      "screens": "صفحه‌ها",
+      "rename": "تغییر نام صفحه",
+      "defaultName": "صفحهٔ {{count}}",
+      "close": "بستن {{name}}",
+      "newScreen": "صفحهٔ جدید",
+      "newVirtualScreen": "صفحهٔ مجازی جدید",
+      "dragHint": "برای جابه‌جایی، پنل را اینجا بکشید"
+    },
+    "header": {
+      "session": "گفتگو {{id}}",
+      "newChat": "گفتگوی جدید",
+      "model": "مدل پنل",
+      "quickProvider": "تغییر سریع سرویس (⌘P / Ctrl+P)",
+      "reasoning": "میزان استدلال",
+      "resize": "تغییر اندازهٔ پنل‌ها",
+      "effort": {
+        "auto": "خودکار",
+        "low": "کم",
+        "medium": "متوسط",
+        "high": "زیاد"
+      },
+      "splitEnd": "تقسیم پنل به‌سمت انتها",
+      "splitBelow": "تقسیم پنل به پایین",
+      "maximize": "بزرگ‌نمایی یا بازگردانی پنل",
+      "maximizeShortcut": "بزرگ‌نمایی یا بازگردانی پنل (⌘⇧M)",
+      "close": "بستن پنل",
+      "closeShortcut": "بستن پنل (⌘W)"
+    },
+    "type": {
+      "chat": "گفتگو",
+      "subagent": "عامل فرعی",
+      "file": "پرونده",
+      "data": "داده"
+    },
+    "placeholderTitle": "پنل {{type}}",
+    "placeholderDescription": "مسیریابی محتوا به این پنل محدود است.",
+    "independentTitle": "گفتگوی مستقل",
+    "independentDesc": "این پنل نشست، سرویس، مدل و میزان استدلال مستقل دارد.",
+    "providerMissing": "سرویس «{{provider}}» پیکربندی نشده است.",
+    "noModels": "مدل فعالی برای {{provider}} وجود ندارد.",
+    "unknown": "ناشناخته",
+    "unknownTool": "ابزار ناشناخته",
+    "messageFailed": "ارسال پیام ناموفق بود. اتصال موتور Dream و سرویس را بررسی کنید."
   }
 }

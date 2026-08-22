@@ -1,5 +1,5 @@
 /**
- * 24px status bar: agent status, provider reachability, workspace, language,
+ * Token-sized status bar: agent status, provider reachability, workspace, language,
  * sandbox, browser, and gateway indicators.
  */
 
@@ -44,7 +44,10 @@ export function StatusBar() {
   const activeLanguage = LANGUAGES.find((l) => l.code === locale);
 
   return (
-    <footer className="flex h-6 shrink-0 items-center gap-3 border-t border-border-default bg-surface px-3 text-caption text-fg-secondary">
+    <footer className="flex h-6 shrink-0 items-center gap-3 border-t border-border-default bg-surface-raised px-3 text-caption text-fg-secondary">
+      {agentStatus === 'running' && (
+        <span className="activity-travel h-0.5 w-8 rounded-full bg-surface-2" aria-hidden />
+      )}
       <span className="flex items-center gap-1.5">
         <Circle className={cn('size-2 fill-current', status.className)} aria-hidden />
         <span>{t(status.labelKey)}</span>

@@ -7,6 +7,7 @@
  * out (design-system §2.3).
  */
 
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/utils/cn';
 
 /** Per-kind swatch, keyed by the backend's kind string. */
@@ -27,6 +28,7 @@ interface KindBadgeProps {
 }
 
 export function KindBadge({ kind, className }: KindBadgeProps) {
+  const { t } = useTranslation('memory');
   const color = KIND_COLOR[kind] ?? 'var(--color-chart-8)';
   return (
     <span
@@ -40,7 +42,7 @@ export function KindBadge({ kind, className }: KindBadgeProps) {
         className="size-2 shrink-0 rounded-full"
         style={{ backgroundColor: color }}
       />
-      {kindLabel(kind)}
+      {t(`kind.${kind}`, { defaultValue: kindLabel(kind) })}
     </span>
   );
 }

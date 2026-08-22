@@ -4,6 +4,7 @@ import { HashRouter } from 'react-router-dom';
 
 import App from '@/App';
 import { ErrorBoundary } from '@/components/shared/error-boundary';
+import { applyAppearance } from '@/hooks/use-theme';
 import { initI18n, resolveInitialLocale } from '@/lib/i18n';
 import { useAppStore } from '@/stores/use-app-store';
 import '@/styles/theme.css';
@@ -15,6 +16,8 @@ if (!container) throw new Error('Root element #root is missing from index.html')
 // before the first render, then initialise i18next to match.
 const initialLocale = resolveInitialLocale();
 useAppStore.getState().setLocale(initialLocale);
+const initialAppearance = useAppStore.getState();
+applyAppearance(initialAppearance);
 
 void (async () => {
   await initI18n(initialLocale);

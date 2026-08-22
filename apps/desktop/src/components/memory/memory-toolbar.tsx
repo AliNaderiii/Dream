@@ -8,7 +8,7 @@
 import { List, Plus, Rows3, Search } from 'lucide-react';
 
 import { ImportanceSlider } from '@/components/memory/importance-stars';
-import { KIND_COLOR, kindLabel } from '@/components/memory/kind-badge';
+import { KIND_COLOR } from '@/components/memory/kind-badge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { MEMORY_KINDS, MEMORY_SORTS } from '@/lib/bridge/types';
 import type { MemoryKind, MemorySort } from '@/lib/bridge/types';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/utils/cn';
 
 /** Everything the explorer filters on. Shared by both views. */
@@ -42,13 +43,6 @@ export const DEFAULT_FILTERS: MemoryFilters = {
   sort: 'date_newest',
 };
 
-const SORT_LABEL: Record<MemorySort, string> = {
-  relevance: 'Relevance',
-  date_newest: 'Newest first',
-  date_oldest: 'Oldest first',
-  importance: 'Importance',
-};
-
 interface MemoryToolbarProps {
   filters: MemoryFilters;
   onChange: (patch: Partial<MemoryFilters>) => void;
@@ -68,11 +62,12 @@ export function MemoryToolbar({
   onViewChange,
   onCreate,
 }: MemoryToolbarProps) {
+  const { t } = useTranslation('memory');
   const tabs: Array<{ value: MemoryKind | 'all'; label: string; count: number }> = [
-    { value: 'all', label: 'All', count: total },
+    { value: 'all', label: t('toolbar.all'), count: total },
     ...MEMORY_KINDS.map((kind) => ({
       value: kind,
-      label: kindLabel(kind),
+      label: t(`kind.${kind}`),
       count: counts[kind] ?? 0,
     })),
   ];
@@ -89,8 +84,8 @@ export function MemoryToolbar({
             type="search"
             value={filters.search}
             onChange={(event) => onChange({ search: event.target.value })}
-            placeholder="Search memories…"
-            aria-label="Search memories"
+            placeholder={t('toolbar.search')}
+            aria-label={t('toolbar.search')}
             className="selectable h-8 w-full rounded-md border border-border-default bg-canvas ps-8 pe-2 text-body text-fg-primary placeholder:text-fg-muted"
           />
         </div>
@@ -98,18 +93,18 @@ export function MemoryToolbar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="secondary">
-              {SORT_LABEL[filters.sort]}
+              {t(`toolbar.sort.${filters.sort}`)}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+            <DropdownMenuLabel>{t('toolbar.sortBy')}</DropdownMenuLabel>
             {MEMORY_SORTS.map((sort) => (
               <DropdownMenuCheckboxItem
                 key={sort}
                 checked={filters.sort === sort}
                 onCheckedChange={() => onChange({ sort })}
               >
-                {SORT_LABEL[sort]}
+                {t(`toolbar.sort.${sort}`)}
               </DropdownMenuCheckboxItem>
             ))}
           </DropdownMenuContent>
@@ -118,7 +113,7 @@ export function MemoryToolbar({
         <div
           className="flex rounded-md border border-border-default"
           role="group"
-          aria-label="View"
+          aria-label={t('toolbar.view')}
         >
           <Button
             size="sm"
@@ -128,7 +123,7 @@ export function MemoryToolbar({
             onClick={() => onViewChange('list')}
           >
             <List aria-hidden />
-            List
+            {t('toolbar.list')}
           </Button>
           <Button
             size="sm"
@@ -138,18 +133,18 @@ export function MemoryToolbar({
             onClick={() => onViewChange('timeline')}
           >
             <Rows3 aria-hidden />
-            Timeline
+            {t('toolbar.timeline')}
           </Button>
         </div>
 
         <Button size="sm" variant="primary" onClick={onCreate}>
           <Plus aria-hidden />
-          New memory
+          {t('newMemory')}
         </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
-        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Filter by kind">
+        <div className="flex flex-wrap gap-1" role="tablist" aria-label={t('toolbar.filterKind')}>
           {tabs.map((tab) => {
             const active = filters.kind === tab.value;
             return (
@@ -183,31 +178,31 @@ export function MemoryToolbar({
         </div>
 
         <label className="flex items-center gap-2 text-caption text-fg-secondary">
-          <span>From</span>
+          <span>{t('toolbar.from')}</span>
           <input
             type="date"
             value={filters.dateFrom}
             onChange={(event) => onChange({ dateFrom: event.target.value })}
-            aria-label="Created from"
+            aria-label={t('toolbar.createdFrom')}
             className="ltr-island h-7 rounded-md border border-border-default bg-canvas px-2 text-caption text-fg-primary"
           />
         </label>
         <label className="flex items-center gap-2 text-caption text-fg-secondary">
-          <span>To</span>
+          <span>{t('toolbar.to')}</span>
           <input
             type="date"
             value={filters.dateTo}
             onChange={(event) => onChange({ dateTo: event.target.value })}
-            aria-label="Created to"
+            aria-label={t('toolbar.createdTo')}
             className="ltr-island h-7 rounded-md border border-border-default bg-canvas px-2 text-caption text-fg-primary"
           />
         </label>
 
         <div className="flex items-center gap-2 text-caption text-fg-secondary">
-          <span id="min-importance-label">Min importance</span>
+          <span id="min-importance-label">{t('toolbar.minImportance')}</span>
           <ImportanceSlider
             id="min-importance"
-            label="Minimum importance"
+            label={t('toolbar.minImportance')}
             value={filters.minStars}
             onChange={(minStars) => onChange({ minStars })}
           />

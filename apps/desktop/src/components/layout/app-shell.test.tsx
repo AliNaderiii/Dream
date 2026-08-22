@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -27,12 +27,16 @@ describe('app shell', () => {
     document.documentElement.removeAttribute('data-theme');
   });
 
-  it('renders the shell chrome on the dashboard', () => {
+  it('renders the shell chrome and cold dashboard route within the startup budget', async () => {
+    const started = performance.now();
     renderApp('/');
 
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Sessions' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    const elapsed = performance.now() - started;
+    console.info(`cold_dashboard_render_ms=${elapsed.toFixed(3)} budget_ms=2000`);
+    expect(elapsed).toBeLessThan(2_000);
   });
 
   it.each([
@@ -52,23 +56,25 @@ describe('app shell', () => {
   it.each([
     ['/memory', 'Memory explorer'],
     ['/skills', 'Skills manager'],
-  ])('renders the %s workspace', (route, label) => {
+  ])('renders the %s workspace', async (route, label) => {
     renderApp(route);
     // These two routes are full workspaces rather than a single headed panel,
     // so they are identified by their landmark rather than an h2.
-    expect(screen.getByRole('region', { name: label })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: label })).toBeInTheDocument();
   });
 
-  it('redirects an unknown route to the dashboard', () => {
+  it('redirects an unknown route to the dashboard', async () => {
     renderApp('/does-not-exist');
-    expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
   });
 
-  it('renders a conversation for a known session id', () => {
+  it('renders a conversation for a known session id', async () => {
     const session = useSessionStore.getState().createSession('Persian grammar');
     renderApp(`/chat/${session.id}`);
 
-    expect(screen.getByRole('heading', { level: 2, name: 'Persian grammar' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Persian grammar' }),
+    ).toBeInTheDocument();
   });
 
   it('toggles the sidebar closed and open again', async () => {
@@ -95,12 +101,18 @@ describe('app shell', () => {
     const user = userEvent.setup();
     renderApp('/');
 
+    const sidebar = screen.getByRole('complementary', { name: 'Sessions' });
+    expect(sidebar.className).toContain('border-e');
+    expect(sidebar.className).not.toMatch(/\bborder-(?:l|r)\b/);
+
     // Open the language menu in the status bar, then pick Persian.
     await user.click(screen.getByRole('button', { name: 'Language' }));
     await user.click(screen.getByRole('menuitem', { name: /فارسی/ }));
 
     expect(document.documentElement.getAttribute('dir')).toBe('rtl');
     expect(document.documentElement.getAttribute('lang')).toBe('fa');
+    expect(sidebar.className).toContain('border-e');
+    expect(sidebar.className).not.toMatch(/\bborder-(?:l|r)\b/);
   });
 
   it('creates a session from the sidebar and navigates to it', async () => {
@@ -111,7 +123,32 @@ describe('app shell', () => {
     await user.click(within(sidebar).getByRole('button', { name: 'New session' }));
 
     expect(useSessionStore.getState().sessions).toHaveLength(1);
-    expect(screen.getByRole('heading', { name: 'Conversation' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Conversation' })).toBeInTheDocument();
+  });
+
+  it('changes a warm route within the route-interaction budget', async () => {
+    renderApp('/');
+    await screen.findByRole('heading', { name: 'Dashboard' });
+    const started = performance.now();
+    fireEvent.click(screen.getByRole('link', { name: 'Settings' }));
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Appearance' }),
+    ).toBeInTheDocument();
+    const elapsed = performance.now() - started;
+    console.info(`warm_route_change_ms=${elapsed.toFixed(3)} budget_ms=300`);
+    expect(elapsed).toBeLessThan(300);
+  });
+
+  it('opens the local command palette within the perceived-interaction budget', () => {
+    renderApp('/');
+    const started = performance.now();
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
+    const elapsed = performance.now() - started;
+    console.info(`command_palette_open_ms=${elapsed.toFixed(3)} budget_ms=100`);
+    expect(elapsed).toBeLessThan(100);
+    fireEvent.keyDown(document.activeElement ?? window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
   });
 
   it('opens the command palette with the keyboard and runs a command', async () => {
@@ -121,7 +158,7 @@ describe('app shell', () => {
     await user.keyboard('{Control>}k{/Control}');
     const dialog = await screen.findByRole('dialog', { name: 'Command palette' });
 
-    await user.type(within(dialog).getByRole('textbox', { name: 'Search commands' }), 'settings');
+    await user.type(within(dialog).getByRole('combobox', { name: 'Search commands' }), 'settings');
     await user.keyboard('{Enter}');
 
     expect(screen.getByRole('heading', { level: 2, name: 'Appearance' })).toBeInTheDocument();

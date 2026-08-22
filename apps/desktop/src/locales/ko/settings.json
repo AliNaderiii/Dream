@@ -9,8 +9,40 @@
   "appearance": "모양",
   "theme": "테마",
   "themeDesc": "재정의하지 않으면 시스템 설정을 따릅니다.",
+  "themeOptions": {
+    "light": "Light",
+    "warm": "Warm",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "accent": "Accent",
+  "accentDesc": "Applied consistently to actions, focus, and selection.",
+  "accentOptions": {
+    "violet": "Violet",
+    "ocean": "Ocean",
+    "forest": "Forest",
+    "ember": "Ember"
+  },
   "density": "밀도",
   "densityDesc": "컴팩트는 컴포넌트 여백을 25% 줄입니다.",
+  "densityOptions": {
+    "comfortable": "Comfortable",
+    "dense": "Dense"
+  },
+  "zoom": "UI zoom",
+  "zoomDesc": "Scale the complete interface from 80% to 150%.",
+  "reduceMotion": "Reduce motion",
+  "reduceMotionDesc": "Use instant state changes and static loading indicators.",
+  "motionOptions": {
+    "reduce": "Reduce interface motion",
+    "enable": "Enable interface motion"
+  },
+  "numerals": "Display numerals",
+  "numeralsDesc": "Display preference only; stored data stays normalized.",
+  "numeralOptions": {
+    "latin": "0123",
+    "persian": "۰۱۲۳"
+  },
   "language": "언어",
   "languageDesc": "페르시아어는 전체 셸을 오른쪽에서 왼쪽으로 바꿉니다.",
   "window": "창",

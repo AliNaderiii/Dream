@@ -43,10 +43,19 @@ export type BridgeClientEvent =
 
 type EventHandler = (event: BridgeClientEvent) => void;
 
-/** Callbacks for an in-flight streaming request. */
-export interface StreamHandlers {
+/** Every renderer-side bridge await is bounded; callers may tighten or cancel it. */
+export interface RequestOptions {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
+/** Callbacks and bounds for an in-flight streaming request. */
+export interface StreamHandlers extends RequestOptions {
   onChunk?: (chunk: StreamChunk) => void;
 }
+
+export const DEFAULT_CALL_TIMEOUT_MS = 30_000;
+export const DEFAULT_STREAM_TIMEOUT_MS = 300_000;
 
 /**
  * A transport carries one request at a time and reports state changes.
@@ -1338,9 +1347,12 @@ export class BridgeClient {
     return () => this.handlers.delete(handler);
   }
 
-  /** Typed request/response. Rejects with `BridgeRpcError` on failure. */
-  async call<T>(method: string, params: RpcParams = {}): Promise<T> {
-    return this.dispatch<T>(method, params);
+  /** Typed request/response. Rejects on RPC failure, timeout, or cancellation. */
+  async call<T>(method: string, params: RpcParams = {}, options: RequestOptions = {}): Promise<T> {
+    return this.dispatch<T>(method, params, undefined, {
+      timeoutMs: options.timeoutMs ?? DEFAULT_CALL_TIMEOUT_MS,
+      signal: options.signal,
+    });
   }
 
   /**
@@ -1348,10 +1360,18 @@ export class BridgeClient {
    * promise resolves with the final result (or rejects with `BridgeRpcError`).
    */
   async stream<T>(method: string, params: RpcParams, handlers: StreamHandlers = {}): Promise<T> {
-    return this.dispatch<T>(method, params, (chunk) => {
-      this.emit({ type: 'chunk', chunk });
-      handlers.onChunk?.(chunk);
-    });
+    return this.dispatch<T>(
+      method,
+      params,
+      (chunk) => {
+        this.emit({ type: 'chunk', chunk });
+        handlers.onChunk?.(chunk);
+      },
+      {
+        timeoutMs: handlers.timeoutMs ?? DEFAULT_STREAM_TIMEOUT_MS,
+        signal: handlers.signal,
+      },
+    );
   }
 
   /** Ask the supervisor to restart the sidecar. */
@@ -1376,16 +1396,40 @@ export class BridgeClient {
   private async dispatch<T>(
     method: string,
     params: RpcParams,
-    onChunk?: (chunk: StreamChunk) => void,
+    onChunk: ((chunk: StreamChunk) => void) | undefined,
+    options: Required<Pick<RequestOptions, 'timeoutMs'>> & Pick<RequestOptions, 'signal'>,
   ): Promise<T> {
     const id = this.nextId++;
+    let active = true;
+    const deliverChunk = onChunk
+      ? (chunk: StreamChunk) => {
+          if (active) onChunk(chunk);
+        }
+      : undefined;
+    const request = this.transport.request<T>(id, method, params, deliverChunk);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let abort: (() => void) | undefined;
+
     try {
-      const result = await this.transport.request<T>(id, method, params, onChunk);
-      return result;
+      const bounded = new Promise<T>((resolve, reject) => {
+        request.then(resolve, reject);
+        timeout = setTimeout(
+          () => reject(new Error(`${method} timed out after ${options.timeoutMs}ms`)),
+          options.timeoutMs,
+        );
+        abort = () => reject(new Error(`${method} was cancelled`));
+        if (options.signal?.aborted) abort();
+        else options.signal?.addEventListener('abort', abort, { once: true });
+      });
+      return await bounded;
     } catch (err) {
       const error = toBridgeError(err);
       this.emit({ type: 'error', error });
       throw error;
+    } finally {
+      active = false;
+      if (timeout) clearTimeout(timeout);
+      if (abort) options.signal?.removeEventListener('abort', abort);
     }
   }
 

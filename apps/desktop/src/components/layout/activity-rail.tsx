@@ -1,5 +1,5 @@
 /**
- * 48px activity rail — the top-level navigation surface (design-system §7).
+ * Token-sized activity rail — the top-level navigation surface (design-system §7).
  *
  * Icons mirror automatically in RTL because the rail is laid out with logical
  * properties; the icons themselves are non-directional.
@@ -22,6 +22,7 @@ import { NavLink } from 'react-router-dom';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useTranslation } from '@/lib/i18n';
+import { useAppStore } from '@/stores/use-app-store';
 import { cn } from '@/utils/cn';
 import { formatShortcut } from '@/utils/platform';
 
@@ -54,6 +55,7 @@ const FOOTER_ITEMS: RailItem[] = [
 
 function RailLink({ item }: { item: RailItem }) {
   const { t } = useTranslation('common');
+  const direction = useAppStore((state) => state.direction);
   const Icon = item.icon;
   const label = t(item.labelKey);
   return (
@@ -85,7 +87,7 @@ function RailLink({ item }: { item: RailItem }) {
           )}
         </NavLink>
       </TooltipTrigger>
-      <TooltipContent side="right">
+      <TooltipContent side={direction === 'rtl' ? 'left' : 'right'}>
         {label}
         {item.shortcut && (
           <span className="ms-2 text-fg-muted ltr-island">{formatShortcut(item.shortcut)}</span>

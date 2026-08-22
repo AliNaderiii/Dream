@@ -20,6 +20,7 @@
   "previewCron": "Cron",
   "previewNext": "Nächster Lauf",
   "previewJalali": "Jalali",
+  "previewRuns": "Next three run dates",
   "previewInvalid": "Noch nicht verstanden — weiterschreiben.",
   "enable": "Aktivieren",
   "disable": "Pausieren",
@@ -43,9 +44,12 @@
   "statusError": "Fehler",
   "statusDenied": "Freigabe verweigert",
   "approvalsTitle": "Wartet auf Freigabe",
+  "approvalWaitingReason": "Blocked by the fail-closed {{risk}}-risk gate until you decide.",
   "approvalsEmpty": "Keine geplanten Läufe warten auf Freigabe.",
   "approve": "Freigeben",
   "deny": "Verweigern",
   "loadError": "Zeitpläne konnten nicht geladen werden.",
+  "loading": "Loading schedules…",
+  "retry": "Retry",
   "created": "Zeitplan erstellt."
 }

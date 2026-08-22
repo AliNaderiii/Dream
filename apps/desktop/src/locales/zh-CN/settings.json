@@ -9,8 +9,40 @@
   "appearance": "外观",
   "theme": "主题",
   "themeDesc": "除非手动覆盖，否则跟随系统设置。",
+  "themeOptions": {
+    "light": "Light",
+    "warm": "Warm",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "accent": "Accent",
+  "accentDesc": "Applied consistently to actions, focus, and selection.",
+  "accentOptions": {
+    "violet": "Violet",
+    "ocean": "Ocean",
+    "forest": "Forest",
+    "ember": "Ember"
+  },
   "density": "密度",
   "densityDesc": "紧凑模式将组件内边距缩小 25%。",
+  "densityOptions": {
+    "comfortable": "Comfortable",
+    "dense": "Dense"
+  },
+  "zoom": "UI zoom",
+  "zoomDesc": "Scale the complete interface from 80% to 150%.",
+  "reduceMotion": "Reduce motion",
+  "reduceMotionDesc": "Use instant state changes and static loading indicators.",
+  "motionOptions": {
+    "reduce": "Reduce interface motion",
+    "enable": "Enable interface motion"
+  },
+  "numerals": "Display numerals",
+  "numeralsDesc": "Display preference only; stored data stays normalized.",
+  "numeralOptions": {
+    "latin": "0123",
+    "persian": "۰۱۲۳"
+  },
   "language": "语言",
   "languageDesc": "波斯语会将整个外壳切换为从右到左。",
   "window": "窗口",

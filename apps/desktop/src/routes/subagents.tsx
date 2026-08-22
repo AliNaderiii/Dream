@@ -15,10 +15,13 @@ import { CouncilWidget } from '@/components/subagents/council-widget';
 import { SpawnDialog } from '@/components/subagents/spawn-dialog';
 import { SubagentDetail } from '@/components/subagents/subagent-detail';
 import { ProgressBar, SubagentStatusBadge } from '@/components/subagents/status-badge';
+import { BridgeOfflineBanner } from '@/components/shared/bridge-offline-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { VirtualList } from '@/components/shared/virtual-list';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/lib/i18n';
+import type { RequestOptions } from '@/lib/bridge/client';
 import { useBridge } from '@/lib/bridge/hooks';
 import type { BridgeLogEntry, BridgeSubagent, CouncilDto, RpcParams } from '@/lib/bridge/types';
 import { isTerminalStatus } from '@/lib/bridge/types';
@@ -50,8 +53,9 @@ function SubagentRow({
   selected: boolean;
   onSelect: () => void;
 }) {
+  const { t } = useTranslation('subagents');
   return (
-    <li>
+    <div>
       <button
         type="button"
         onClick={onSelect}
@@ -70,16 +74,14 @@ function SubagentRow({
         <ProgressBar
           value={agent.progress}
           status={agent.status}
-          label={`${agent.name} progress`}
+          label={t('progress', { name: agent.name })}
         />
         <span className="flex justify-between text-micro text-fg-muted">
-          <span>
-            {agent.turn_count}/{agent.max_turns} turns
-          </span>
+          <span>{t('turnProgress', { current: agent.turn_count, limit: agent.max_turns })}</span>
           <span className="tabular">{formatDuration(agent.elapsed)}</span>
         </span>
       </button>
-    </li>
+    </div>
   );
 }
 
@@ -97,6 +99,7 @@ export function SubagentsRoute() {
   const [councils, setCouncils] = useState<{ council_id: string; pipeline_id: string }[]>([]);
   const [listOpen, setListOpen] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Guards against a late response from a superseded selection overwriting the
@@ -109,27 +112,42 @@ export function SubagentsRoute() {
     };
   }, []);
 
-  const refresh = useCallback(async () => {
-    try {
-      const result = await call<{ subagents: BridgeSubagent[] }>('subagent.list', {});
-      if (liveRef.current) setAgents(result.subagents);
-    } catch (err) {
-      if (liveRef.current) setError(err instanceof Error ? err.message : String(err));
-    }
-  }, [call]);
+  const refresh = useCallback(
+    async (options?: RequestOptions) => {
+      try {
+        const result = await call<{ subagents: BridgeSubagent[] }>('subagent.list', {}, options);
+        if (liveRef.current) setAgents(result.subagents);
+      } catch (err) {
+        if (liveRef.current && !options?.signal?.aborted) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      }
+    },
+    [call],
+  );
 
   // Initial load: the roster and the tools this parent can delegate.
   useEffect(() => {
+    const controller = new AbortController();
     const load = async () => {
-      await refresh();
+      await refresh({ signal: controller.signal });
       try {
-        const result = await call<{ tools: ToolRow[] }>('tool.list', {});
+        const result = await call<{ tools: ToolRow[] }>(
+          'tool.list',
+          {},
+          {
+            signal: controller.signal,
+          },
+        );
         if (liveRef.current) setTools(result.tools.map((t) => t.name));
       } catch {
         // A missing tool list only costs the spawn form its checkboxes.
+      } finally {
+        if (liveRef.current && !controller.signal.aborted) setLoading(false);
       }
     };
     void load();
+    return () => controller.abort();
   }, [call, refresh]);
 
   const anyRunning = agents.some((a) => !isTerminalStatus(a.status));
@@ -152,12 +170,15 @@ export function SubagentsRoute() {
   useEffect(() => {
     const id = activeId;
     if (!id) return;
-    let current = true;
+    const controller = new AbortController();
 
     const seed = async () => {
       try {
-        const agent = await call<BridgeSubagent>('subagent.get', { subagent_id: id });
-        if (!current) return;
+        const agent = await call<BridgeSubagent>(
+          'subagent.get',
+          { subagent_id: id },
+          { signal: controller.signal },
+        );
         setFollowed((prev) => (prev?.id === id ? { ...prev, agent } : { id, agent, log: [] }));
       } catch {
         // The stream below still carries everything worth showing.
@@ -171,15 +192,16 @@ export function SubagentsRoute() {
           { subagent_id: id },
           (chunk) => {
             const entry = chunk.entry;
-            if (!current || !entry) return;
+            if (controller.signal.aborted || !entry) return;
             setFollowed((prev) =>
               prev?.id === id
                 ? { ...prev, log: [...prev.log, entry] }
                 : { id, agent: null, log: [entry] },
             );
           },
+          { signal: controller.signal },
         );
-        if (!current) return;
+        if (controller.signal.aborted) return;
         setFollowed((prev) =>
           prev?.id === id ? { ...prev, agent: final } : { id, agent: final, log: [] },
         );
@@ -190,9 +212,7 @@ export function SubagentsRoute() {
 
     void seed();
     void follow();
-    return () => {
-      current = false;
-    };
+    return () => controller.abort();
   }, [activeId, call, stream]);
 
   // The list carries fresher counters than the snapshot, so it wins on overlap.
@@ -270,7 +290,9 @@ export function SubagentsRoute() {
       <header className="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3">
         <div className="flex items-center gap-2">
           <h2 className="text-h2 font-semibold">{t('title')}</h2>
-          {activeCount > 0 && <Badge variant="info">{activeCount} running</Badge>}
+          {activeCount > 0 && (
+            <Badge variant="info">{t('runningCount', { count: activeCount })}</Badge>
+          )}
         </div>
         <div className="flex gap-2">
           <Button
@@ -292,16 +314,37 @@ export function SubagentsRoute() {
         </div>
       </header>
 
+      <BridgeOfflineBanner />
+
       {error && (
-        <p
+        <div
           role="alert"
-          className="border-b border-danger-fg/30 bg-danger-bg px-4 py-2 text-caption text-danger-fg"
+          className="flex items-center gap-3 border-b border-danger-fg/30 bg-danger-bg px-4 py-2 text-caption text-danger-fg"
         >
-          {error}
-        </p>
+          <span className="min-w-0 flex-1">{error}</span>
+          <Button size="sm" variant="secondary" onClick={() => void refresh()}>
+            {t('retry')}
+          </Button>
+        </div>
       )}
 
-      {agents.length === 0 ? (
+      {loading ? (
+        <div
+          role="status"
+          className="grid flex-1 grid-cols-[18rem_1fr] gap-4 p-4"
+          aria-label={t('loading')}
+        >
+          <div className="flex flex-col gap-2">
+            {Array.from({ length: 5 }, (_, index) => (
+              <div
+                key={index}
+                className="h-24 animate-pulse rounded-lg bg-surface-2 motion-reduce:animate-none"
+              />
+            ))}
+          </div>
+          <div className="h-72 animate-pulse rounded-xl bg-surface-2 motion-reduce:animate-none" />
+        </div>
+      ) : agents.length === 0 ? (
         <EmptyState
           icon={Bot}
           title={t('noSubagents')}
@@ -328,22 +371,25 @@ export function SubagentsRoute() {
               ) : (
                 <ChevronRight className="size-4" aria-hidden />
               )}
-              {listOpen && <span>{agents.length} total</span>}
+              {listOpen && <span>{t('totalCount', { count: agents.length })}</span>}
             </button>
             {listOpen && (
-              <ul
-                aria-label="Subagents"
-                className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-2 pt-0"
-              >
-                {agents.map((agent) => (
-                  <SubagentRow
-                    key={agent.subagent_id}
-                    agent={agent}
-                    selected={agent.subagent_id === activeId}
-                    onSelect={() => setSelectedId(agent.subagent_id)}
-                  />
-                ))}
-              </ul>
+              <VirtualList
+                items={agents}
+                getKey={(agent) => agent.subagent_id}
+                estimateSize={104}
+                ariaLabel={t('title')}
+                className="flex-1 p-2 pt-0"
+                renderItem={(agent) => (
+                  <div className="h-full pb-1.5">
+                    <SubagentRow
+                      agent={agent}
+                      selected={agent.subagent_id === activeId}
+                      onSelect={() => setSelectedId(agent.subagent_id)}
+                    />
+                  </div>
+                )}
+              />
             )}
           </div>
 

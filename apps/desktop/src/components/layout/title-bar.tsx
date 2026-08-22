@@ -39,9 +39,9 @@ export function TitleBar() {
     <header
       data-tauri-drag-region
       className={cn(
-        'drag-region flex h-[38px] shrink-0 items-center justify-between border-b border-border-default bg-surface',
+        'drag-region flex h-titlebar shrink-0 items-center justify-between border-b border-border-default bg-surface-raised',
         // Reserve room for macOS traffic lights, which sit at the inline start.
-        mac ? 'ps-[78px] pe-3' : 'ps-3 pe-0',
+        mac ? 'ps-mac-controls pe-3' : 'ps-3 pe-0',
       )}
     >
       <div
@@ -64,7 +64,7 @@ export function TitleBar() {
             variant="ghost"
             size="icon"
             aria-label={t('titlebar.minimize')}
-            className="h-[38px] w-11 rounded-none"
+            className="h-titlebar w-11 rounded-none"
             onClick={() => void windowApi.minimize()}
           >
             <Minus aria-hidden />
@@ -73,7 +73,7 @@ export function TitleBar() {
             variant="ghost"
             size="icon"
             aria-label={maximized ? t('titlebar.restore') : t('titlebar.maximize')}
-            className="h-[38px] w-11 rounded-none"
+            className="h-titlebar w-11 rounded-none"
             onClick={() => void windowApi.toggleMaximize().then((v) => setMaximized(Boolean(v)))}
           >
             {maximized ? <Square aria-hidden /> : <Maximize2 aria-hidden />}
@@ -82,7 +82,7 @@ export function TitleBar() {
             variant="ghost"
             size="icon"
             aria-label={t('titlebar.close')}
-            className="h-[38px] w-11 rounded-none hover:bg-danger-fg hover:text-white"
+            className="h-titlebar w-11 rounded-none hover:bg-danger-fg hover:text-surface"
             onClick={() => void windowApi.close()}
           >
             <X aria-hidden />

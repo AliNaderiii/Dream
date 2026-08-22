@@ -22,8 +22,10 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { BridgeOfflineBanner } from '@/components/shared/bridge-offline-banner';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
+import { ScheduleHistory } from '@/components/scheduler/schedule-history';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,6 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import type { RequestOptions } from '@/lib/bridge/client';
 import { useBridge } from '@/lib/bridge/hooks';
 import {
   approveScheduleRun,
@@ -55,6 +58,7 @@ import type {
 } from '@/lib/bridge/types';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useTranslation } from '@/lib/i18n';
+import { upcomingRuns } from '@/lib/schedule/cron';
 import { absoluteTime, jalaliDateTime, relativeTime } from '@/utils/time';
 
 /** Approvals refresh cadence while any scheduled run is waiting on a human. */
@@ -74,35 +78,38 @@ export function SchedulerRoute() {
   const [runs, setRuns] = useState<BridgeScheduleRun[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    setError(null);
-    try {
-      const [scheduleResult, approvalResult] = await Promise.all([
-        listSchedules(client),
-        listApprovals(client),
-      ]);
-      setSchedules(scheduleResult.schedules);
-      setApprovals(
-        approvalResult.approvals.filter((a) => !a.resolved && a.name === 'schedule.execute'),
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('loadError'));
-    }
-  }, [client, t]);
+  const refresh = useCallback(
+    async (options?: RequestOptions) => {
+      setError(null);
+      try {
+        const [scheduleResult, approvalResult] = await Promise.all([
+          listSchedules(client, true, options),
+          listApprovals(client, options),
+        ]);
+        setSchedules(scheduleResult.schedules);
+        setApprovals(
+          approvalResult.approvals.filter((a) => !a.resolved && a.name === 'schedule.execute'),
+        );
+      } catch (err) {
+        if (!options?.signal?.aborted) {
+          setError(err instanceof Error ? err.message : t('loadError'));
+        }
+      }
+    },
+    [client, t],
+  );
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     const load = async () => {
       try {
-        await refresh();
+        await refresh({ signal: controller.signal });
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
     void load();
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [refresh]);
 
   // While a scheduled run waits for a human, keep polling the queue; the
@@ -179,7 +186,10 @@ export function SchedulerRoute() {
   };
 
   return (
-    <section aria-label={t('title')} className="mx-auto w-full max-w-4xl p-6">
+    <section
+      aria-label={t('title')}
+      className="mx-auto flex h-full min-h-0 w-full max-w-4xl flex-col p-6"
+    >
       <header className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h2 className="text-h2 font-semibold">{t('title')}</h2>
@@ -191,13 +201,18 @@ export function SchedulerRoute() {
         </Button>
       </header>
 
+      <BridgeOfflineBanner />
+
       {error && (
-        <p
+        <div
           role="alert"
-          className="mb-4 rounded-md border border-border-default bg-surface p-3 text-caption text-fg-secondary"
+          className="mb-4 flex items-center gap-3 rounded-md border border-border-default bg-surface p-3 text-caption text-fg-secondary"
         >
-          {error}
-        </p>
+          <span className="min-w-0 flex-1">{error}</span>
+          <Button size="sm" variant="secondary" onClick={() => void refresh()}>
+            {t('retry')}
+          </Button>
+        </div>
       )}
 
       {approvals.length > 0 && (
@@ -209,8 +224,11 @@ export function SchedulerRoute() {
           <ul className="flex flex-col gap-2">
             {approvals.map((approval) => (
               <li key={approval.approval_id} className="flex items-center gap-3">
-                <span className="min-w-0 flex-1 truncate text-caption" dir="auto">
-                  {approval.summary}
+                <span className="min-w-0 flex-1 text-caption" dir="auto">
+                  <span className="block truncate">{approval.summary}</span>
+                  <span className="block text-micro text-fg-muted">
+                    {t('approvalWaitingReason', { risk: approval.risk })}
+                  </span>
                 </span>
                 <Button variant="primary" size="sm" onClick={() => void onApproval(approval, true)}>
                   <Check className="size-4" aria-hidden />
@@ -230,7 +248,16 @@ export function SchedulerRoute() {
         </div>
       )}
 
-      {!loading && schedules.length === 0 ? (
+      {loading ? (
+        <div role="status" aria-label={t('loading')} className="flex flex-col gap-3">
+          {Array.from({ length: 3 }, (_, index) => (
+            <div
+              key={index}
+              className="h-40 animate-pulse rounded-xl bg-surface-2 motion-reduce:animate-none"
+            />
+          ))}
+        </div>
+      ) : schedules.length === 0 ? (
         <EmptyState
           icon={AlarmClock}
           title={t('noTasks')}
@@ -336,31 +363,7 @@ export function SchedulerRoute() {
                   <p className="mb-1 text-micro font-semibold uppercase text-fg-muted">
                     {t('historyTitle')}
                   </p>
-                  {runs.length === 0 ? (
-                    <p className="text-caption text-fg-muted">{t('historyEmpty')}</p>
-                  ) : (
-                    <ul className="flex flex-col gap-1">
-                      {runs.map((run) => (
-                        <li key={run.id} className="flex items-center gap-2 text-caption">
-                          <Badge
-                            variant={
-                              run.status === 'success'
-                                ? 'success'
-                                : run.status === 'running'
-                                  ? 'info'
-                                  : 'danger'
-                            }
-                          >
-                            {t(runStatusKey(run.status))}
-                          </Badge>
-                          <span className="text-fg-muted">{absoluteTime(run.started_at)}</span>
-                          <span className="min-w-0 flex-1 truncate" dir="auto">
-                            {run.result_summary}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <ScheduleHistory runs={runs} />
                 </div>
               )}
             </li>
@@ -389,20 +392,6 @@ export function SchedulerRoute() {
       />
     </section>
   );
-}
-
-/** i18n key for one history-row status. */
-function runStatusKey(status: string): string {
-  switch (status) {
-    case 'success':
-      return 'statusSuccess';
-    case 'error':
-      return 'statusError';
-    case 'approval_denied':
-      return 'statusDenied';
-    default:
-      return 'statusRunning';
-  }
 }
 
 /** Create form with a live prose→cron preview and Jalali next-run. */
@@ -434,17 +423,13 @@ function CreateScheduleDialog({
     // a stale preview from a previous keystroke is ignored, never cleared
     // synchronously.
     if (!text) return;
-    let cancelled = false;
-    void previewSchedule(client, { natural_language: text })
-      .then((result) => {
-        if (!cancelled) setPreview(result);
-      })
+    const controller = new AbortController();
+    void previewSchedule(client, { natural_language: text }, { signal: controller.signal })
+      .then((result) => setPreview(result))
       .catch(() => {
-        if (!cancelled) setPreview(null);
+        if (!controller.signal.aborted) setPreview(null);
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [client, debouncedRhythm, open]);
 
   const valid = Boolean(preview?.valid) && Boolean(name.trim()) && Boolean(prompt.trim());
@@ -465,10 +450,14 @@ function CreateScheduleDialog({
     }
   };
 
-  const jalali = useMemo(
-    () => (preview?.valid && preview.next_run ? jalaliDateTime(preview.next_run) : null),
-    [preview],
-  );
+  const nextRuns = useMemo(() => {
+    if (!preview?.valid || !preview.cron_expression) return [];
+    try {
+      return upcomingRuns(preview.cron_expression, 3);
+    } catch {
+      return [];
+    }
+  }, [preview]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -522,15 +511,22 @@ function CreateScheduleDialog({
                 <p className="ltr-island font-mono text-micro text-fg-muted">
                   {t('previewCron')}: {preview.cron_expression}
                 </p>
-                {preview.next_run && (
-                  <p>
-                    {t('previewNext')}: {absoluteTime(preview.next_run)}
-                  </p>
-                )}
-                {jalali && (
-                  <p data-testid="preview-jalali" dir="rtl">
-                    {t('previewJalali')}: {jalali}
-                  </p>
+                {nextRuns.length > 0 && (
+                  <ol aria-label={t('previewRuns')} className="flex flex-col gap-1">
+                    {nextRuns.map((run) => {
+                      const timestamp = run.getTime() / 1000;
+                      return (
+                        <li key={run.getTime()} className="grid gap-x-2 sm:grid-cols-2">
+                          <span>
+                            {t('previewNext')}: {absoluteTime(timestamp)}
+                          </span>
+                          <span data-testid="preview-jalali" dir="rtl">
+                            {t('previewJalali')}: {jalaliDateTime(timestamp)}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ol>
                 )}
               </div>
             ) : (

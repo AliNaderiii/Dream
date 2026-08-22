@@ -25,9 +25,29 @@
     "groupToday": "امروز",
     "groupWeek": "این هفته",
     "groupMonth": "این ماه",
-    "groupOlder": "قدیمی‌تر"
+    "groupOlder": "قدیمی‌تر",
+    "untitled": "نشست جدید",
+    "actions": "اقدام‌های {{title}}",
+    "rename": "تغییر نام",
+    "delete": "حذف",
+    "renameTitle": "تغییر نام نشست",
+    "renameDescription": "نامی کوتاه برای این گفتگو انتخاب کنید.",
+    "name": "نام نشست",
+    "deleteTitle": "نشست حذف شود؟",
+    "deleteDescription": "«{{title}}» و تاریخچهٔ گفتگوی محلی آن حذف خواهند شد.",
+    "loading": "در حال بارگذاری نشست‌ها…",
+    "retry": "تلاش دوباره",
+    "loadError": "بارگذاری نشست‌ها ممکن نشد.",
+    "createError": "ایجاد نشست ممکن نشد.",
+    "renameError": "تغییر نام نشست ممکن نشد.",
+    "deleteError": "حذف نشست ممکن نشد."
   },
   "conversation": "گفتگو",
+  "bridgeOffline": {
+    "short": "موتور Dream آفلاین است",
+    "description": "موتور Dream آفلاین است. تغییرات تا اتصال دوباره متوقف می‌شوند.",
+    "retry": "اتصال دوباره"
+  },
   "status": {
     "idle": "آماده",
     "running": "در حال اجرا",
@@ -60,9 +80,32 @@
   "command": {
     "title": "فرمان‌ها",
     "description": "جستجو و اجرای هر فرمان Dream.",
-    "searchPlaceholder": "یک فرمان بنویسید…",
+    "searchPlaceholder": "جستجوی مسیرها، نشست‌ها، تنظیمات و ابزارها…",
     "searchAria": "جستجوی فرمان‌ها",
-    "empty": "فرمانی یافت نشد"
+    "empty": "فرمانی یافت نشد",
+    "open": "بازکردن فرمان‌ها",
+    "newSession": "نشست جدید",
+    "toggleSidebar": "باز و بسته‌کردن نوار کناری",
+    "toggleTheme": "تغییر پوستهٔ روشن و تیره",
+    "newWindow": "بازکردن پنجرهٔ جدید",
+    "openDestination": "بازکردن {{destination}}",
+    "setTheme": "استفاده از پوستهٔ {{value}}",
+    "setAccent": "استفاده از رنگ تأکیدی {{value}}",
+    "setDensity": "استفاده از تراکم {{value}}",
+    "setZoom": "تنظیم بزرگ‌نمایی رابط روی {{value}}٪",
+    "switchLanguage": "تغییر زبان به {{value}}",
+    "hintNavigate": "↑↓ پیمایش",
+    "hintClose": "Esc",
+    "hintRun": "↵ اجرا",
+    "count": "{{count}} فرمان",
+    "categories": {
+      "actions": "کنش‌ها",
+      "navigation": "پیمایش",
+      "sessions": "نشست‌ها",
+      "tools": "ابزارها و میزکارها",
+      "appearance": "ظاهر",
+      "language": "زبان"
+    }
   },
   "confirm": {
     "confirm": "تأیید",

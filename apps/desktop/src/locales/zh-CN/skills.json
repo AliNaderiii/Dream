@@ -3,6 +3,7 @@
   "installed": "已安装的技能",
   "loadedCount": "已加载 {{count}} 个技能",
   "failedLoad": "加载技能失败。",
+  "retry": "Retry",
   "failedLoadDetail": "加载该技能失败。",
   "failedToggle": "无法更新该技能。",
   "editAria": "编辑 {{name}}",
@@ -28,5 +29,40 @@
   "failedSave": "无法保存此技能。",
   "failedDelete": "无法删除此技能。",
   "failedExport": "无法导出此技能。",
-  "failedExportMany": "无法导出所选技能。"
+  "failedExportMany": "无法导出所选技能。",
+  "validation": {
+    "empty": "The skill file is empty.",
+    "tooLarge": "Skill is {{size}} KB — the limit is 100 KB.",
+    "traversal": "Skill must not contain “..” path segments.",
+    "absolutePath": "Skill must not contain absolute file paths.",
+    "systemImport": "Skill must not contain import statements for system modules.",
+    "shape": "Skill must define name:, description: and at least one step under steps:."
+  },
+  "card": {
+    "selectExport": "Select {{name}} for export",
+    "stepCount_one": "1 step",
+    "stepCount_other": "{{count}} steps",
+    "enable": "Enable {{name}}",
+    "disable": "Disable {{name}}"
+  },
+  "importDialog": {
+    "descriptionBefore": "Choose a",
+    "descriptionAfter": "file or paste its contents. Skills are validated before they are installed.",
+    "installError": "The skill could not be installed.",
+    "chooseFile": "Choose file…",
+    "pasteLabel": "Or paste the skill",
+    "pastePlaceholder": "name: weekly report\ndescription: …\nsteps:\n- first step",
+    "name": "Name",
+    "steps": "Steps",
+    "conflictBefore": "A skill named",
+    "conflictAfter": "already exists. Overwrite it, install under a different name, or cancel.",
+    "newName": "New name",
+    "cancel": "Cancel",
+    "validate": "Validate",
+    "back": "Back",
+    "installing": "Installing…",
+    "install": "Install",
+    "installAsNew": "Install as new name",
+    "overwrite": "Overwrite"
+  }
 }

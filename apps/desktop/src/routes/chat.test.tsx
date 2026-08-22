@@ -7,12 +7,13 @@
  *  - Icons are safely rendered via SafeIcon
  */
 
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatRoute } from '@/routes/chat';
 import { resetBridgeClient } from '@/lib/bridge/client';
+import type { Message } from '@/types';
 
 // Mock stores with empty/initial state
 const mockLayoutStore = {
@@ -57,8 +58,18 @@ const mockProviderStore = {
   load: vi.fn().mockResolvedValue(undefined),
 };
 
+interface MockTranscript {
+  messages: Message[];
+  streaming: string;
+  sending: boolean;
+  error: string | null;
+  pendingApproval: null;
+  alwaysAllowTools: Set<string>;
+  currentToolCards: [];
+}
+
 const mockPaneChatStore = {
-  transcripts: {},
+  transcripts: {} as Record<string, MockTranscript>,
   ensure: vi.fn(),
   addMessage: vi.fn(),
   beginStream: vi.fn(),
@@ -100,6 +111,7 @@ function renderChat() {
 describe('ChatRoute (S15)', () => {
   beforeEach(() => {
     resetBridgeClient();
+    mockPaneChatStore.transcripts = {};
     vi.clearAllMocks();
   });
 
@@ -117,5 +129,31 @@ describe('ChatRoute (S15)', () => {
     // Even if the bridge is in any state, the chat should render
     const { container } = renderChat();
     expect(container.innerHTML).toBeDefined();
+  });
+
+  it('virtualizes transcripts above 100 messages in the real pane workspace', async () => {
+    mockPaneChatStore.transcripts = {
+      'pane-1': {
+        messages: Array.from({ length: 120 }, (_, index): Message => ({
+          id: `message-${index}`,
+          role: index % 2 === 0 ? 'user' : 'assistant',
+          content: `Transcript message ${index} ${'detail '.repeat((index % 5) + 1)}`,
+          createdAt: 1_700_000_000_000 + index,
+        })),
+        streaming: '',
+        sending: false,
+        error: null,
+        pendingApproval: null,
+        alwaysAllowTools: new Set<string>(),
+        currentToolCards: [],
+      },
+    };
+
+    const { container } = renderChat();
+    expect(await screen.findByText(/Transcript message 119/)).toBeInTheDocument();
+    const mountedRows = container.querySelectorAll('[data-message-index]').length;
+    console.info(`chat_fixture_rows=120 mounted_message_rows=${mountedRows}`);
+    expect(mountedRows).toBeGreaterThan(0);
+    expect(mountedRows).toBeLessThan(60);
   });
 });

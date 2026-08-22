@@ -7,7 +7,7 @@
  * submits is re-parsed by the sidecar, and its verdict wins.
  */
 
-import type { BridgeClient } from './client';
+import type { BridgeClient, RequestOptions } from './client';
 import type { BridgeApproval, BridgeSchedule, BridgeScheduleRun, SchedulePreview } from './types';
 
 /** `schedule.create` params — either rhythm form is accepted. */
@@ -49,17 +49,27 @@ export interface ScheduleDeleteResult {
 export function listSchedules(
   client: BridgeClient,
   includeDisabled = true,
+  request?: RequestOptions,
 ): Promise<ScheduleListResult> {
-  return client.call<ScheduleListResult>('schedule.list', { include_disabled: includeDisabled });
+  return client.call<ScheduleListResult>(
+    'schedule.list',
+    { include_disabled: includeDisabled },
+    request,
+  );
 }
 
-export function getSchedule(client: BridgeClient, scheduleId: string): Promise<ScheduleGetResult> {
-  return client.call<ScheduleGetResult>('schedule.get', { schedule_id: scheduleId });
+export function getSchedule(
+  client: BridgeClient,
+  scheduleId: string,
+  request?: RequestOptions,
+): Promise<ScheduleGetResult> {
+  return client.call<ScheduleGetResult>('schedule.get', { schedule_id: scheduleId }, request);
 }
 
 export function createSchedule(
   client: BridgeClient,
   draft: ScheduleDraft,
+  request?: RequestOptions,
 ): Promise<BridgeSchedule> {
   const params: Record<string, unknown> = { name: draft.name, prompt: draft.prompt };
   if (draft.cron_expression !== undefined) params['cron_expression'] = draft.cron_expression;
@@ -69,24 +79,26 @@ export function createSchedule(
   if (draft.enabled !== undefined) params['enabled'] = draft.enabled;
   if (draft.max_runs !== undefined) params['max_runs'] = draft.max_runs;
   if (draft.require_approval !== undefined) params['require_approval'] = draft.require_approval;
-  return client.call<BridgeSchedule>('schedule.create', params);
+  return client.call<BridgeSchedule>('schedule.create', params, request);
 }
 
 export function toggleSchedule(
   client: BridgeClient,
   scheduleId: string,
   enabled?: boolean,
+  request?: RequestOptions,
 ): Promise<BridgeSchedule> {
   const params: Record<string, unknown> = { schedule_id: scheduleId };
   if (enabled !== undefined) params['enabled'] = enabled;
-  return client.call<BridgeSchedule>('schedule.toggle', params);
+  return client.call<BridgeSchedule>('schedule.toggle', params, request);
 }
 
 export function deleteSchedule(
   client: BridgeClient,
   scheduleId: string,
+  request?: RequestOptions,
 ): Promise<ScheduleDeleteResult> {
-  return client.call<ScheduleDeleteResult>('schedule.delete', { schedule_id: scheduleId });
+  return client.call<ScheduleDeleteResult>('schedule.delete', { schedule_id: scheduleId }, request);
 }
 
 /**
@@ -96,26 +108,37 @@ export function deleteSchedule(
 export function previewSchedule(
   client: BridgeClient,
   input: { natural_language?: string; cron_expression?: string },
+  options?: RequestOptions,
 ): Promise<SchedulePreview> {
-  return client.call<SchedulePreview>('schedule.preview', { ...input });
+  return client.call<SchedulePreview>('schedule.preview', { ...input }, options);
 }
 
 export function scheduleHistory(
   client: BridgeClient,
   scheduleId: string,
   limit = 20,
+  request?: RequestOptions,
 ): Promise<ScheduleHistoryResult> {
-  return client.call<ScheduleHistoryResult>('schedule.history', {
-    schedule_id: scheduleId,
-    limit,
-  });
+  return client.call<ScheduleHistoryResult>(
+    'schedule.history',
+    {
+      schedule_id: scheduleId,
+      limit,
+    },
+    request,
+  );
 }
 
 export function runScheduleNow(
   client: BridgeClient,
   scheduleId: string,
+  request?: RequestOptions,
 ): Promise<ScheduleRunNowResult> {
-  return client.call<ScheduleRunNowResult>('schedule.run_now', { schedule_id: scheduleId });
+  return client.call<ScheduleRunNowResult>(
+    'schedule.run_now',
+    { schedule_id: scheduleId },
+    request,
+  );
 }
 
 /** Resolve a pending scheduled-run approval (fail-closed gate G11). */
@@ -123,14 +146,22 @@ export function approveScheduleRun(
   client: BridgeClient,
   approvalId: string,
   allowed: boolean,
+  request?: RequestOptions,
 ): Promise<{ approval_id: string; allowed: boolean }> {
-  return client.call<{ approval_id: string; allowed: boolean }>('schedule.approve', {
-    approval_id: approvalId,
-    allowed,
-  });
+  return client.call<{ approval_id: string; allowed: boolean }>(
+    'schedule.approve',
+    {
+      approval_id: approvalId,
+      allowed,
+    },
+    request,
+  );
 }
 
 /** Pending approvals, for the scheduler's approve/deny queue (S06). */
-export function listApprovals(client: BridgeClient): Promise<{ approvals: BridgeApproval[] }> {
-  return client.call<{ approvals: BridgeApproval[] }>('approval.list', {});
+export function listApprovals(
+  client: BridgeClient,
+  request?: RequestOptions,
+): Promise<{ approvals: BridgeApproval[] }> {
+  return client.call<{ approvals: BridgeApproval[] }>('approval.list', {}, request);
 }

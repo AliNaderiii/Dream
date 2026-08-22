@@ -10,19 +10,22 @@ Top bar toggles: **Light/Dark · EN-LTR/فارسی-RTL · Comfortable/Compact ·
 
 ## Contents
 
-| Path | Deliverable | Gate |
-| --- | --- | --- |
-| `research.md` | Personas (4), current-state audit, reference & competitor study, workflow inventory | G1 ✅ |
-| `user-flows/` | Primary, project/memory/subagent, data science, settings + mobile + RTL flows (Mermaid) | G2 ✅ |
-| `wireframes/` | 17 lo-fi SVG wireframes + `generate.py` | G3 ✅ |
-| `design-system.md` | "Rooya" design system: color, type (Inter+Vazirmatn), spacing, elevation, motion, components | G4 ✅ |
-| `tokens/dream.tokens.json` | Tokens Studio / Figma-importable token file (Light + Dark themes) | G4 ✅ |
-| `tokens/dream.css` | CSS custom properties (drop-in for Tailwind v4) — used by the prototype | G4 ✅ |
-| `prototype/` | Interactive hi-fi prototype (9 core screens, both themes, RTL, states) | G5–G6 ✅ |
-| `animation-specs.md` | Micro-interactions, transitions, streaming, approval sheet motion | G6 ✅ |
-| `accessibility-audit.md` | WCAG 2.1 AA audit with measured contrast + RTL verification checklist | G7–G8 ✅ |
-| `figma-link.txt` | Figma import path (cloud not reachable from sandbox) | — |
-| `approval-signoff.md` | Gate ledger + client sign-off checklist | G9 ⬜ |
+| Path                        | Deliverable                                                                                  | Gate       |
+| --------------------------- | -------------------------------------------------------------------------------------------- | ---------- |
+| `research.md`               | Personas (4), current-state audit, reference & competitor study, workflow inventory          | G1 ✅      |
+| `user-flows/`               | Primary, project/memory/subagent, data science, settings + mobile + RTL flows (Mermaid)      | G2 ✅      |
+| `wireframes/`               | 17 lo-fi SVG wireframes + `generate.py`                                                      | G3 ✅      |
+| `design-system.md`          | "Rooya" design system: color, type (Inter+Vazirmatn), spacing, elevation, motion, components | G4 ✅      |
+| `tokens/dream.tokens.json`  | Tokens Studio / Figma-importable token file (Light + Warm + Dark × four accents)             | G4 ✅      |
+| `tokens/dream.css`          | CSS custom properties (drop-in for Tailwind v4) — used by the prototype and app              | G4 ✅      |
+| `visual-language.md`        | Implemented direction, three-theme rationale, motion philosophy, restraint rules             | Stage F ✅ |
+| `figma-handoff.md`          | Exact Tokens Studio round trip, ownership, and token-proposal workflow                       | Stage F ✅ |
+| `prototype/`                | Interactive hi-fi prototype (9 core screens, both original themes, RTL, states)              | G5–G6 ✅   |
+| `animation-specs.md`        | Micro-interactions, transitions, streaming, approval sheet motion                            | G6 ✅      |
+| `accessibility-audit.md`    | Phase-0 WCAG 2.1 AA audit and RTL checklist                                                  | G7–G8 ✅   |
+| `accessibility-audit-v2.md` | Implemented desktop before/after audit with executable Stage-E evidence                      | Stage F ✅ |
+| `figma-link.txt`            | Figma import path (cloud not reachable from sandbox)                                         | —          |
+| `approval-signoff.md`       | Gate ledger + client sign-off checklist                                                      | G9 ⬜      |
 
 Phase tracking: [`../../MASTER_CHECKLIST.md`](../../MASTER_CHECKLIST.md).
 

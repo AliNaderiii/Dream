@@ -11,5 +11,83 @@
   "failedLoad": "بارگذاری خاطره‌ها ناموفق بود.",
   "failedLoadMore": "بارگذاری خاطره‌های بیشتر ناموفق بود.",
   "failedSave": "ذخیرهٔ این خاطره ممکن نشد.",
-  "failedDelete": "حذف این خاطره ممکن نشد."
+  "failedDelete": "حذف این خاطره ممکن نشد.",
+  "retry": "تلاش دوباره",
+  "resultsLabel": "نتایج حافظه",
+  "archived": "بایگانی‌شده",
+  "kind": {
+    "semantic": "معنایی",
+    "episodic": "رویدادی",
+    "procedural": "رویه‌ای"
+  },
+  "toolbar": {
+    "all": "همه",
+    "search": "جستجوی خاطره‌ها…",
+    "sortBy": "مرتب‌سازی بر اساس",
+    "sort": {
+      "relevance": "ارتباط",
+      "date_newest": "جدیدترین",
+      "date_oldest": "قدیمی‌ترین",
+      "importance": "اهمیت"
+    },
+    "view": "نما",
+    "list": "فهرست",
+    "timeline": "خط زمانی",
+    "filterKind": "فیلتر بر اساس نوع",
+    "from": "از",
+    "to": "تا",
+    "createdFrom": "ایجادشده از",
+    "createdTo": "ایجادشده تا",
+    "minImportance": "حداقل اهمیت"
+  },
+  "timeline": {
+    "jumpDate": "رفتن به تاریخ",
+    "jumpTo": "رفتن به",
+    "zoom": "بزرگ‌نمایی خط زمانی",
+    "day": "روز",
+    "week": "هفته",
+    "month": "ماه",
+    "noMatch": "هیچ خاطره‌ای با این فیلترها سازگار نیست."
+  },
+  "score": {
+    "title": "امتیاز بازیابی",
+    "label": "امتیاز حافظه: {{score}}٪",
+    "notRanked": "رتبه‌بندی‌نشده",
+    "unavailable": "ناموجود",
+    "factorLabel": "عامل امتیاز {{factor}}",
+    "factor": {
+      "relevance": "ارتباط",
+      "recency": "تازگی",
+      "importance": "اهمیت",
+      "usage": "استفاده"
+    },
+    "formula": "۵۵٪ ارتباط + ۲۰٪ تازگی + ۱۵٪ اهمیت + ۱۰٪ استفاده",
+    "relevanceUnavailable": "ارتباط فقط زمانی در دسترس است که این خاطره از بازیابی رتبه‌بندی‌شده آمده باشد."
+  },
+  "drawer": {
+    "newTitle": "خاطرهٔ جدید",
+    "detailTitle": "جزئیات خاطره",
+    "close": "بستن جزئیات خاطره",
+    "content": "محتوا",
+    "size": "{{used}} از ۵۰ کیلوبایت",
+    "kind": "نوع",
+    "importance": "اهمیت",
+    "created": "ایجادشده",
+    "lastUsed": "آخرین استفاده",
+    "source": "منبع",
+    "used": "دفعات استفاده",
+    "tags": "برچسب‌ها",
+    "saving": "در حال ذخیره…",
+    "save": "ذخیره",
+    "cancel": "لغو",
+    "edit": "ویرایش",
+    "delete": "حذف",
+    "deleteTitle": "این خاطره حذف شود؟",
+    "deleteDescription": "خاطره به‌جای پاک‌شدن بایگانی می‌شود و دیگر بازیابی نخواهد شد.",
+    "discardTitle": "تغییرات ذخیره‌نشده کنار گذاشته شوند؟",
+    "discardDescription": "ویرایش‌های این خاطره هنوز ذخیره نشده‌اند.",
+    "discard": "کنار گذاشتن",
+    "validationEmpty": "محتوا نباید خالی باشد.",
+    "validationSize": "{{used}} از سقف ۵۰ کیلوبایت بیشتر است."
+  }
 }

@@ -132,6 +132,23 @@ Prompt P-11 — Internationalisation, Documentation, Security Audit & Release.
 
 ### Added
 
+- **Desktop UI — complete operational workspaces.** Sessions, memory, skills,
+  subagents, and scheduler now share truthful empty, structural loading,
+  actionable retry, offline/reconnect, timeout, and cancellation behavior.
+  Long sessions, chat transcripts, memory/skills rows, scheduler history, and
+  subagent logs stay bounded after 100 items; chat keeps the newest and active
+  streaming rows visible without mounting the whole transcript.
+- **Desktop UI — accessible appearance system.** Light, Warm, and Dark themes
+  support four accents, comfortable/dense modes, persistent 80–150% zoom,
+  English LTR and Persian RTL, and an OS-aware plus in-app reduced-motion mode.
+  Light muted text now measures 5.47:1 on canvas in every accent. Persian has
+  zero English fallbacks for the completed UI stages.
+- **Desktop UI — performance and accessibility gates.** Route, locale, pane,
+  and vendor splitting keep every production chunk below 500kB. The desktop
+  harness emits a JSON report guarding command-palette open, route changes,
+  streaming long tasks, 500-message memory growth, and unhandled rejections;
+  an owner-applied workflow patch adds CI upload, while axe coverage runs on
+  all five operational workspaces.
 - **S00 — Commercial kernel (`dream/commerce.py`).** Seven plans — `local`
   (unlimited, free, no ledger file), `guest` (free, 20 turns/day), `daily`,
   `individual_monthly`, `individual_yearly`, `team`, and `company` — all in

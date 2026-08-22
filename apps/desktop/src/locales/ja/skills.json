@@ -3,6 +3,7 @@
   "installed": "インストール済みスキル",
   "loadedCount": "{{count}} 件のスキルを読み込みました",
   "failedLoad": "スキルを読み込めませんでした。",
+  "retry": "Retry",
   "failedLoadDetail": "スキルを読み込めませんでした。",
   "failedToggle": "スキルを更新できませんでした。",
   "editAria": "{{name}} を編集",
@@ -28,5 +29,40 @@
   "failedSave": "このスキルを保存できませんでした。",
   "failedDelete": "このスキルを削除できませんでした。",
   "failedExport": "このスキルをエクスポートできませんでした。",
-  "failedExportMany": "選択したスキルをエクスポートできませんでした。"
+  "failedExportMany": "選択したスキルをエクスポートできませんでした。",
+  "validation": {
+    "empty": "The skill file is empty.",
+    "tooLarge": "Skill is {{size}} KB — the limit is 100 KB.",
+    "traversal": "Skill must not contain “..” path segments.",
+    "absolutePath": "Skill must not contain absolute file paths.",
+    "systemImport": "Skill must not contain import statements for system modules.",
+    "shape": "Skill must define name:, description: and at least one step under steps:."
+  },
+  "card": {
+    "selectExport": "Select {{name}} for export",
+    "stepCount_one": "1 step",
+    "stepCount_other": "{{count}} steps",
+    "enable": "Enable {{name}}",
+    "disable": "Disable {{name}}"
+  },
+  "importDialog": {
+    "descriptionBefore": "Choose a",
+    "descriptionAfter": "file or paste its contents. Skills are validated before they are installed.",
+    "installError": "The skill could not be installed.",
+    "chooseFile": "Choose file…",
+    "pasteLabel": "Or paste the skill",
+    "pastePlaceholder": "name: weekly report\ndescription: …\nsteps:\n- first step",
+    "name": "Name",
+    "steps": "Steps",
+    "conflictBefore": "A skill named",
+    "conflictAfter": "already exists. Overwrite it, install under a different name, or cancel.",
+    "newName": "New name",
+    "cancel": "Cancel",
+    "validate": "Validate",
+    "back": "Back",
+    "installing": "Installing…",
+    "install": "Install",
+    "installAsNew": "Install as new name",
+    "overwrite": "Overwrite"
+  }
 }

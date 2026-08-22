@@ -9,8 +9,40 @@
   "appearance": "Apariencia",
   "theme": "Tema",
   "themeDesc": "Sigue la configuración del sistema salvo que se anule.",
+  "themeOptions": {
+    "light": "Light",
+    "warm": "Warm",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "accent": "Accent",
+  "accentDesc": "Applied consistently to actions, focus, and selection.",
+  "accentOptions": {
+    "violet": "Violet",
+    "ocean": "Ocean",
+    "forest": "Forest",
+    "ember": "Ember"
+  },
   "density": "Densidad",
   "densityDesc": "Compacto reduce el relleno de los componentes en un 25 %.",
+  "densityOptions": {
+    "comfortable": "Comfortable",
+    "dense": "Dense"
+  },
+  "zoom": "UI zoom",
+  "zoomDesc": "Scale the complete interface from 80% to 150%.",
+  "reduceMotion": "Reduce motion",
+  "reduceMotionDesc": "Use instant state changes and static loading indicators.",
+  "motionOptions": {
+    "reduce": "Reduce interface motion",
+    "enable": "Enable interface motion"
+  },
+  "numerals": "Display numerals",
+  "numeralsDesc": "Display preference only; stored data stays normalized.",
+  "numeralOptions": {
+    "latin": "0123",
+    "persian": "۰۱۲۳"
+  },
   "language": "Idioma",
   "languageDesc": "El persa cambia todo el shell a derecha a izquierda.",
   "window": "Ventana",

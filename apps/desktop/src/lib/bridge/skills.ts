@@ -9,7 +9,7 @@
 
 import { zipSync, strToU8 } from 'fflate';
 
-import type { BridgeClient } from './client';
+import type { BridgeClient, RequestOptions } from './client';
 import type {
   BridgeSkillDetail,
   SkillDeleteResult,
@@ -62,11 +62,21 @@ export interface ParsedSkill {
   steps: string[];
 }
 
+export type SkillValidationCode =
+  'empty' | 'tooLarge' | 'traversal' | 'absolutePath' | 'systemImport' | 'shape';
+
+export interface SkillValidationIssue {
+  code: SkillValidationCode;
+  sizeKb?: string;
+}
+
 /** Outcome of {@link validateSkillContent}. */
 export interface SkillValidation {
   ok: boolean;
   /** Blocking problems — install is refused while any are present. */
   errors: string[];
+  /** Stable codes let UI layers localize every problem. */
+  issues: SkillValidationIssue[];
   /** Parsed sections, present only when `ok`. */
   parsed?: ParsedSkill;
 }
@@ -120,28 +130,35 @@ export function parseSkillText(text: string): ParsedSkill | null {
 /** Validate a pasted or imported skill body before installing it. */
 export function validateSkillContent(text: string): SkillValidation {
   const errors: string[] = [];
+  const issues: SkillValidationIssue[] = [];
   if (!text.trim()) {
-    return { ok: false, errors: ['The skill file is empty.'] };
+    return { ok: false, errors: ['The skill file is empty.'], issues: [{ code: 'empty' }] };
   }
   const bytes = byteLength(text);
   if (bytes > MAX_SKILL_CONTENT_BYTES) {
-    errors.push(`Skill is ${(bytes / 1024).toFixed(1)} KB — the limit is 100 KB.`);
+    const sizeKb = (bytes / 1024).toFixed(1);
+    errors.push(`Skill is ${sizeKb} KB — the limit is 100 KB.`);
+    issues.push({ code: 'tooLarge', sizeKb });
   }
   if (TRAVERSAL_RE.test(text)) {
     errors.push("Skill must not contain '..' path segments.");
+    issues.push({ code: 'traversal' });
   }
   if (ABSOLUTE_PATH_RE.test(text)) {
     errors.push('Skill must not contain absolute file paths.');
+    issues.push({ code: 'absolutePath' });
   }
   if (DANGEROUS_IMPORT_RE.test(text)) {
     errors.push('Skill must not contain import statements for system modules.');
+    issues.push({ code: 'systemImport' });
   }
   const parsed = parseSkillText(text);
   if (!parsed) {
     errors.push('Skill must define name:, description: and at least one step under steps:.');
+    issues.push({ code: 'shape' });
   }
-  if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, errors: [], parsed: parsed ?? undefined };
+  if (errors.length > 0) return { ok: false, errors, issues };
+  return { ok: true, errors: [], issues: [], parsed: parsed ?? undefined };
 }
 
 /** Render a skill back to its file representation. */
@@ -167,16 +184,20 @@ export function exportFilename(name: string): string {
 // --------------------------------------------------------------------------- //
 
 /** All installed skills plus any files that failed to parse. */
-export function listSkills(client: BridgeClient): Promise<SkillListResult> {
-  return client.call<SkillListResult>('skill.list', {});
+export function listSkills(
+  client: BridgeClient,
+  request?: RequestOptions,
+): Promise<SkillListResult> {
+  return client.call<SkillListResult>('skill.list', {}, request);
 }
 
 /** Full detail for one skill, or `null` when it no longer exists. */
 export async function getSkill(
   client: BridgeClient,
   skillId: string,
+  request?: RequestOptions,
 ): Promise<BridgeSkillDetail | null> {
-  const result = await client.call<SkillGetResult>('skill.get', { skill_id: skillId });
+  const result = await client.call<SkillGetResult>('skill.get', { skill_id: skillId }, request);
   return result.match;
 }
 
@@ -185,15 +206,20 @@ export function installSkill(
   client: BridgeClient,
   content: string,
   options: { overwrite?: boolean; name?: string } = {},
+  request?: RequestOptions,
 ): Promise<SkillInstallResult> {
   const params: Record<string, unknown> = { content, overwrite: options.overwrite ?? false };
   if (options.name) params['name'] = options.name;
-  return client.call<SkillInstallResult>('skill.install', params);
+  return client.call<SkillInstallResult>('skill.install', params, request);
 }
 
 /** Delete a skill file. */
-export function deleteSkill(client: BridgeClient, skillId: string): Promise<SkillDeleteResult> {
-  return client.call<SkillDeleteResult>('skill.delete', { skill_id: skillId });
+export function deleteSkill(
+  client: BridgeClient,
+  skillId: string,
+  request?: RequestOptions,
+): Promise<SkillDeleteResult> {
+  return client.call<SkillDeleteResult>('skill.delete', { skill_id: skillId }, request);
 }
 
 /** Flip a skill's enabled flag. */
@@ -201,15 +227,24 @@ export function setSkillEnabled(
   client: BridgeClient,
   skillId: string,
   enabled: boolean,
+  request?: RequestOptions,
 ): Promise<SkillToggleResult> {
-  return client.call<SkillToggleResult>(enabled ? 'skill.enable' : 'skill.disable', {
-    skill_id: skillId,
-  });
+  return client.call<SkillToggleResult>(
+    enabled ? 'skill.enable' : 'skill.disable',
+    {
+      skill_id: skillId,
+    },
+    request,
+  );
 }
 
 /** Fetch a skill's file text for download. */
-export function exportSkill(client: BridgeClient, skillId: string): Promise<SkillExportResult> {
-  return client.call<SkillExportResult>('skill.export', { skill_id: skillId });
+export function exportSkill(
+  client: BridgeClient,
+  skillId: string,
+  request?: RequestOptions,
+): Promise<SkillExportResult> {
+  return client.call<SkillExportResult>('skill.export', { skill_id: skillId }, request);
 }
 
 // --------------------------------------------------------------------------- //

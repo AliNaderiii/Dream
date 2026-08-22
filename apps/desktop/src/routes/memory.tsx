@@ -8,17 +8,20 @@
  */
 
 import { Database } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { MemoryCard } from '@/components/memory/memory-card';
 import { MemoryDrawer, type MemoryDraft } from '@/components/memory/memory-drawer';
+import { buildMemoryQuery } from '@/components/memory/memory-model';
 import { MemoryTimeline } from '@/components/memory/memory-timeline';
 import {
   DEFAULT_FILTERS,
   MemoryToolbar,
   type MemoryFilters,
 } from '@/components/memory/memory-toolbar';
+import { BridgeOfflineBanner } from '@/components/shared/bridge-offline-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { VirtualList } from '@/components/shared/virtual-list';
 import { Button } from '@/components/ui/button';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useTranslation } from '@/lib/i18n';
@@ -28,13 +31,11 @@ import {
   createMemory,
   deleteMemory,
   listMemories,
-  toImportance,
   updateMemory,
 } from '@/lib/bridge/memory';
-import type { BridgeMemory, MemoryListParams } from '@/lib/bridge/types';
-import { dateInputToSeconds, type TimelineZoom } from '@/utils/time';
-
-const PAGE_SIZE = 25;
+import type { RequestOptions } from '@/lib/bridge/client';
+import type { BridgeMemory } from '@/lib/bridge/types';
+import type { TimelineZoom } from '@/utils/time';
 
 export function MemoryRoute() {
   const { t } = useTranslation('memory');
@@ -60,60 +61,63 @@ export function MemoryRoute() {
   const debouncedSearch = useDebouncedValue(filters.search, 300);
   const debouncedStars = useDebouncedValue(filters.minStars, 300);
 
-  const query = useMemo<MemoryListParams>(
-    () => ({
-      limit: PAGE_SIZE,
-      kind_filter: filters.kind === 'all' ? null : filters.kind,
-      search_query: debouncedSearch.trim() || null,
-      date_from: dateInputToSeconds(filters.dateFrom),
-      date_to: dateInputToSeconds(filters.dateTo, true),
-      min_importance: debouncedStars > 0 ? toImportance(debouncedStars) : null,
-      sort_by: filters.sort,
-    }),
+  const query = useMemo(
+    () =>
+      buildMemoryQuery(
+        {
+          kind: filters.kind,
+          dateFrom: filters.dateFrom,
+          dateTo: filters.dateTo,
+          sort: filters.sort,
+        },
+        debouncedSearch,
+        debouncedStars,
+      ),
     [filters.kind, filters.dateFrom, filters.dateTo, filters.sort, debouncedSearch, debouncedStars],
   );
 
-  const refreshCounts = useCallback(async () => {
-    try {
-      const result = await countMemories(client);
-      setCounts(result.by_kind ?? {});
-      setCountTotal(result.total ?? 0);
-    } catch {
-      // Counts are decorative; a failure must not blank the list.
-    }
-  }, [client]);
+  const refreshCounts = useCallback(
+    async (options?: RequestOptions) => {
+      try {
+        const result = await countMemories(client, options);
+        setCounts(result.by_kind ?? {});
+        setCountTotal(result.total ?? 0);
+      } catch {
+        // Counts are decorative; a failure must not blank the list.
+      }
+    },
+    [client],
+  );
 
   // Reload the first page whenever a filter settles. State updates happen in
   // the promise callbacks, never synchronously in the effect body.
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     const load = async () => {
       setLoading(true);
       setError(null);
       try {
-        const page = await listMemories(client, query);
-        if (cancelled) return;
+        const page = await listMemories(client, query, { signal: controller.signal });
         setMemories(page.memories);
         setTotal(page.total);
         setCursor(page.next_cursor);
         setHasMore(page.has_more);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : t('failedLoad'));
+        if (!controller.signal.aborted) {
+          setError(err instanceof Error ? err.message : t('failedLoad'));
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
     void load();
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [client, query, t]);
 
   useEffect(() => {
-    const load = async () => {
-      await refreshCounts();
-    };
-    void load();
+    const controller = new AbortController();
+    void Promise.resolve().then(() => refreshCounts({ signal: controller.signal }));
+    return () => controller.abort();
   }, [refreshCounts]);
 
   const loadMore = useCallback(async () => {
@@ -132,29 +136,22 @@ export function MemoryRoute() {
     }
   }, [client, cursor, hasMore, loadingMore, query, t]);
 
-  // Infinite scroll: a sentinel below the last card triggers the next page.
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const node = sentinelRef.current;
-    if (!node || view !== 'list' || typeof IntersectionObserver === 'undefined') return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) void loadMore();
-      },
-      { rootMargin: '200px' },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [loadMore, view]);
-
   const reload = useCallback(async () => {
-    const page = await listMemories(client, query);
-    setMemories(page.memories);
-    setTotal(page.total);
-    setCursor(page.next_cursor);
-    setHasMore(page.has_more);
-    await refreshCounts();
-  }, [client, query, refreshCounts]);
+    setLoading(true);
+    setError(null);
+    try {
+      const page = await listMemories(client, query);
+      setMemories(page.memories);
+      setTotal(page.total);
+      setCursor(page.next_cursor);
+      setHasMore(page.has_more);
+      await refreshCounts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('failedLoad'));
+    } finally {
+      setLoading(false);
+    }
+  }, [client, query, refreshCounts, t]);
 
   const handleSave = async (draft: MemoryDraft, record: BridgeMemory | null) => {
     setDrawerError(null);
@@ -211,18 +208,30 @@ export function MemoryRoute() {
         {loading ? t('loading') : t('shown', { shown: memories.length, total })}
       </p>
 
+      <BridgeOfflineBanner />
+
       {error && (
-        <p
+        <div
           role="alert"
-          className="border-b border-danger-fg bg-danger-bg px-4 py-2 text-caption text-danger-fg"
+          className="flex items-center gap-3 border-b border-danger-fg bg-danger-bg px-4 py-2 text-caption text-danger-fg"
         >
-          {error}
-        </p>
+          <span className="min-w-0 flex-1">{error}</span>
+          <Button size="sm" variant="secondary" onClick={() => void reload()}>
+            {t('retry')}
+          </Button>
+        </div>
       )}
 
       <div className="min-h-0 flex-1">
         {loading ? (
-          <p className="p-8 text-center text-body text-fg-muted">{t('loading')}</p>
+          <div role="status" aria-label={t('loading')} className="flex flex-col gap-2 p-4">
+            {Array.from({ length: 5 }, (_, index) => (
+              <div
+                key={index}
+                className="h-40 animate-pulse rounded-xl bg-surface-2 motion-reduce:animate-none"
+              />
+            ))}
+          </div>
         ) : memories.length === 0 ? (
           <EmptyState
             icon={Database}
@@ -242,10 +251,17 @@ export function MemoryRoute() {
             selectedId={selectedId}
           />
         ) : (
-          <div className="h-full overflow-y-auto p-4">
-            <ul className="flex flex-col gap-2">
-              {memories.map((memory) => (
-                <li key={memory.id}>
+          <div className="flex h-full min-h-0 flex-col p-4">
+            <VirtualList
+              items={memories}
+              getKey={(memory) => memory.id}
+              estimateSize={168}
+              virtualizeAt={0}
+              ariaLabel={t('resultsLabel')}
+              className="flex-1"
+              onEndReached={hasMore && !loadingMore ? () => void loadMore() : undefined}
+              renderItem={(memory) => (
+                <div className="h-full pb-2">
                   <MemoryCard
                     memory={memory}
                     selected={selectedId === memory.id}
@@ -254,11 +270,9 @@ export function MemoryRoute() {
                       setSelected(next);
                     }}
                   />
-                </li>
-              ))}
-            </ul>
-
-            <div ref={sentinelRef} className="h-4" />
+                </div>
+              )}
+            />
 
             {hasMore && (
               <div className="flex justify-center py-3">

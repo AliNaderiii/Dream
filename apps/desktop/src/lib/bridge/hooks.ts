@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { BridgeClient } from './client';
+import type { BridgeClient, RequestOptions } from './client';
 import { getBridgeClient, resetBridgeClient, type BridgeClientEvent } from './client';
 import type { BridgeRpcError } from './errors';
 import type { BridgeConnectionState, RpcParams, StreamChunk } from './types';
@@ -21,12 +21,13 @@ export interface UseBridgeResult {
   /** True when running on the in-memory echo fallback (no sidecar). */
   isFallback: boolean;
   /** Typed request/response. */
-  call: <T>(method: string, params?: RpcParams) => Promise<T>;
+  call: <T>(method: string, params?: RpcParams, options?: RequestOptions) => Promise<T>;
   /** Streaming request with a per-chunk callback. */
   stream: <T>(
     method: string,
     params: RpcParams,
     onChunk?: (chunk: StreamChunk) => void,
+    options?: RequestOptions,
   ) => Promise<T>;
   /** Force a reconnect/restart of the sidecar. */
   reconnect: () => void;
@@ -89,12 +90,21 @@ export function useBridge(): UseBridgeResult {
   }, []);
 
   const call = useCallback(
-    <T>(method: string, params?: RpcParams) => client.call<T>(method, params ?? {}),
+    <T>(method: string, params?: RpcParams, options?: RequestOptions) =>
+      client.call<T>(method, params ?? {}, options),
     [client],
   );
   const stream = useCallback(
-    <T>(method: string, params: RpcParams, onChunk?: (chunk: StreamChunk) => void) =>
-      client.stream<T>(method, params, { onChunk }),
+    <T>(
+      method: string,
+      params: RpcParams,
+      onChunk?: (chunk: StreamChunk) => void,
+      options?: RequestOptions,
+    ) =>
+      client.stream<T>(method, params, {
+        ...options,
+        ...(onChunk ? { onChunk } : {}),
+      }),
     [client],
   );
   const reconnect = useCallback(() => client.reconnect(), [client]);

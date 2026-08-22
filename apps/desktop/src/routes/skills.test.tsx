@@ -2,8 +2,53 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { resetBridgeClient } from '@/lib/bridge/client';
+import {
+  EchoBridgeTransport,
+  getBridgeClient,
+  resetBridgeClient,
+  type BridgeTransport,
+} from '@/lib/bridge/client';
+import type { BridgeConnectionState, RpcId, RpcParams, StreamChunk } from '@/lib/bridge/types';
 import { SkillsRoute } from '@/routes/skills';
+
+class SkillsStateTransport implements BridgeTransport {
+  readonly kind = 'echo' as const;
+  private readonly echo = new EchoBridgeTransport();
+  listCalls = 0;
+  failListOnce = false;
+  hangList = false;
+  empty = false;
+  large = false;
+
+  request<T>(id: RpcId, method: string, params: RpcParams, onChunk?: (chunk: StreamChunk) => void) {
+    if (method === 'skill.list') {
+      this.listCalls += 1;
+      if (this.hangList) return new Promise<T>(() => {});
+      if (this.failListOnce) {
+        this.failListOnce = false;
+        return Promise.reject(new Error('skill registry unavailable'));
+      }
+      if (this.empty) return Promise.resolve({ skills: [], problems: [] } as T);
+      if (this.large) {
+        const skills = Array.from({ length: 1000 }, (_, index) => ({
+          name: `fixture-skill-${index}`,
+          description: `Fixture skill ${index}`,
+          steps: [],
+          filename: `fixture-${index}.md`,
+          enabled: true,
+        }));
+        return Promise.resolve({ skills, problems: [] } as T);
+      }
+    }
+    return this.echo.request<T>(id, method, params, onChunk);
+  }
+
+  onState(_handler: (state: BridgeConnectionState) => void) {
+    return () => {};
+  }
+
+  reconnect() {}
+}
 
 describe('SkillsRoute', () => {
   beforeEach(() => {
@@ -126,5 +171,48 @@ describe('SkillsRoute', () => {
     await waitFor(() => {
       expect(screen.queryByText('triage inbox')).not.toBeInTheDocument();
     });
+  });
+
+  it('renders a five-card loading skeleton and cancels it on unmount', () => {
+    const transport = new SkillsStateTransport();
+    transport.hangList = true;
+    getBridgeClient().setTransport(transport);
+    const { container, unmount } = render(<SkillsRoute />);
+    expect(screen.getByRole('status', { name: 'Loading skills…' })).toBeInTheDocument();
+    expect(container.querySelectorAll('.animate-pulse')).toHaveLength(5);
+    unmount();
+    expect(screen.queryByRole('status', { name: 'Loading skills…' })).not.toBeInTheDocument();
+  });
+
+  it('keeps a 1,000-skill fixture below the mounted-row bound', async () => {
+    const transport = new SkillsStateTransport();
+    transport.large = true;
+    getBridgeClient().setTransport(transport);
+    render(<SkillsRoute />);
+
+    await screen.findByText('fixture-skill-0');
+    const mountedRows = screen.getAllByRole('listitem').length;
+    expect(mountedRows).toBeLessThan(60);
+    console.info(`skills_fixture_rows=1000 mounted_rows=${mountedRows}`);
+  });
+
+  it('renders the installed-skills empty state', async () => {
+    const transport = new SkillsStateTransport();
+    transport.empty = true;
+    getBridgeClient().setTransport(transport);
+    render(<SkillsRoute />);
+    expect(await screen.findByText('No skills installed')).toBeInTheDocument();
+  });
+
+  it('retries a failed bridge request', async () => {
+    const user = userEvent.setup();
+    const transport = new SkillsStateTransport();
+    transport.failListOnce = true;
+    getBridgeClient().setTransport(transport);
+    render(<SkillsRoute />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('skill registry unavailable');
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('weekly report')).toBeInTheDocument();
+    expect(transport.listCalls).toBe(2);
   });
 });

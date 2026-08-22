@@ -1,27 +1,27 @@
 /**
  * Locale resource loader.
  *
- * The desktop shell is bundled by Tauri and served from the `tauri://localhost`
- * asset protocol, so translations are imported eagerly at build time rather
- * than fetched over HTTP. `import.meta.glob` assembles every
- * `locales/<lang>/<namespace>.json` into the `{ [lang]: { [namespace]: … } }`
- * shape i18next expects.
+ * Locale JSON is emitted as lazy Tauri asset chunks. Startup loads English plus
+ * the active locale; switching language loads only that locale. No external
+ * network endpoint is involved.
  */
 
 import type { Resource } from 'i18next';
 
-const modules = import.meta.glob<{ default: Record<string, unknown> }>('../../locales/*/*.json', {
-  eager: true,
-});
+const modules = import.meta.glob<{ default: Record<string, unknown> }>('../../locales/*/*.json');
 
-/** Build the i18next resource tree from the eager locale imports. */
-export function loadResources(): Resource {
+/** Load the requested locale bundles into i18next's resource shape. */
+export async function loadResources(locales: readonly string[]): Promise<Resource> {
+  const requested = new Set(locales);
   const resources: Resource = {};
-  for (const [path, module] of Object.entries(modules)) {
-    // Path is `…/locales/<lang>/<namespace>.json`.
-    const [lang, file] = path.split('/').slice(-2);
-    const namespace = file.replace(/\.json$/, '');
-    (resources[lang] ??= {})[namespace] = module.default;
-  }
+  await Promise.all(
+    Object.entries(modules).map(async ([path, load]) => {
+      const [lang, file] = path.split('/').slice(-2);
+      if (!requested.has(lang)) return;
+      const namespace = file.replace(/\.json$/, '');
+      const module = await load();
+      (resources[lang] ??= {})[namespace] = module.default;
+    }),
+  );
   return resources;
 }

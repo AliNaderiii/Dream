@@ -13,6 +13,7 @@ import { ImportanceStars } from '@/components/memory/importance-stars';
 import { Button } from '@/components/ui/button';
 import { sanitizeMemoryText, toStars } from '@/lib/bridge/memory';
 import type { BridgeMemory } from '@/lib/bridge/types';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/utils/cn';
 import { bucketKey, bucketLabel, relativeTime, type TimelineZoom } from '@/utils/time';
 
@@ -33,6 +34,7 @@ export function MemoryTimeline({
   onSelect,
   selectedId,
 }: MemoryTimelineProps) {
+  const { t } = useTranslation('memory');
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const groups = useMemo(() => {
@@ -53,10 +55,12 @@ export function MemoryTimeline({
   return (
     <div className="flex h-full min-h-0">
       <nav
-        aria-label="Jump to date"
+        aria-label={t('timeline.jumpDate')}
         className="hidden w-52 shrink-0 overflow-y-auto border-e border-border-default bg-surface p-2 lg:block"
       >
-        <p className="px-2 pb-1 text-micro font-semibold uppercase text-fg-muted">Jump to</p>
+        <p className="px-2 pb-1 text-micro font-semibold uppercase text-fg-muted">
+          {t('timeline.jumpTo')}
+        </p>
         <ul className="flex flex-col gap-0.5">
           {groups.map(([key, items]) => (
             <li key={key}>
@@ -75,8 +79,8 @@ export function MemoryTimeline({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-2 border-b border-border-default px-4 py-2">
-          <span className="text-caption text-fg-secondary">Zoom</span>
-          <div className="flex gap-1" role="group" aria-label="Timeline zoom">
+          <span className="text-caption text-fg-secondary">{t('timeline.zoom')}</span>
+          <div className="flex gap-1" role="group" aria-label={t('timeline.zoom')}>
             {ZOOMS.map((option) => (
               <Button
                 key={option}
@@ -85,7 +89,7 @@ export function MemoryTimeline({
                 aria-pressed={zoom === option}
                 onClick={() => onZoomChange(option)}
               >
-                {option}
+                {t(`timeline.${option}`)}
               </Button>
             ))}
           </div>
@@ -93,9 +97,7 @@ export function MemoryTimeline({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {groups.length === 0 && (
-            <p className="py-8 text-center text-body text-fg-muted">
-              No memories match these filters.
-            </p>
+            <p className="py-8 text-center text-body text-fg-muted">{t('timeline.noMatch')}</p>
           )}
           {groups.map(([key, items]) => (
             <section
@@ -114,7 +116,7 @@ export function MemoryTimeline({
                   <li key={memory.id} className="relative py-2">
                     <span
                       aria-hidden
-                      className="absolute -start-[21px] top-4 size-2.5 rounded-full border-2 border-canvas"
+                      className="absolute -start-5 top-4 size-2.5 rounded-full border-2 border-canvas"
                       style={{ backgroundColor: KIND_COLOR[memory.kind] ?? 'var(--color-chart-8)' }}
                     />
                     <button

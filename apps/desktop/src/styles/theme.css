@@ -1,200 +1,98 @@
-/* Dream design tokens — "Rooya" v1.0.
- * Mirrors docs/design/tokens/dream.css, re-expressed for Tailwind v4's @theme so
- * every token is reachable as a utility (bg-canvas, text-fg-primary, ...).
- * Themes: [data-theme="light"] / [data-theme="dark"] · Direction: dir="ltr" / dir="rtl"
+/* Dream desktop token bridge.
+ * The canonical custom properties live in docs/design/tokens/dream.css and are
+ * imported directly; this file only maps them into Tailwind v4 and defines
+ * reusable behavior. Do not duplicate theme color values here.
  */
 
+@import '../../../../docs/design/tokens/dream.css';
 @import 'tailwindcss';
 
-/* Dark mode is driven by the data-theme attribute the theme store writes, not by
-   the OS query, so an explicit user choice always wins over `prefers-color-scheme`. */
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+@custom-variant warm (&:where([data-theme='warm'], [data-theme='warm'] *));
+@custom-variant rtl (&:where([dir='rtl'], [dir='rtl'] *));
+@custom-variant dense (&:where([data-density='dense'], [data-density='dense'] *));
 
 @theme {
-  /* ---- primitives ---- */
-  --color-n-50: #f8f8fa;
-  --color-n-100: #f1f1f4;
-  --color-n-200: #e4e4e9;
-  --color-n-300: #cfcfd8;
-  --color-n-400: #a2a2b0;
-  --color-n-500: #77778a;
-  --color-n-600: #5b5b70;
-  --color-n-700: #474759;
-  --color-n-800: #333342;
-  --color-n-900: #212129;
-  --color-n-950: #141419;
+  /* Semantic color contract. */
+  --color-canvas: var(--ds-surface-canvas);
+  --color-surface: var(--ds-surface-base);
+  --color-surface-raised: var(--ds-surface-raised);
+  --color-surface-2: var(--ds-surface-subtle);
+  --color-sunken: var(--ds-surface-sunken);
+  --color-overlay: var(--ds-surface-overlay);
+  --color-fg-primary: var(--ds-text-primary);
+  --color-fg-secondary: var(--ds-text-secondary);
+  --color-fg-muted: var(--ds-text-muted);
+  --color-fg-inverse: var(--ds-text-inverse);
+  --color-accent: var(--ds-accent-solid);
+  --color-accent-hover: var(--ds-accent-hover);
+  --color-accent-soft: var(--ds-accent-soft);
+  --color-accent-text: var(--ds-accent-text);
+  --color-accent-fg: var(--ds-accent-fg);
+  --color-border-default: var(--ds-border-subtle);
+  --color-border-strong: var(--ds-border-strong);
+  --color-focus-ring: var(--ds-focus-ring);
+  --color-success-fg: var(--ds-success-fg);
+  --color-success-bg: var(--ds-success-bg);
+  --color-warning-fg: var(--ds-warning-fg);
+  --color-warning-bg: var(--ds-warning-bg);
+  --color-danger-fg: var(--ds-danger-fg);
+  --color-danger-bg: var(--ds-danger-bg);
+  --color-info-fg: var(--ds-info-fg);
+  --color-info-bg: var(--ds-info-bg);
 
-  --color-p-50: #f1effe;
-  --color-p-100: #e4e0fd;
-  --color-p-200: #ccc5fb;
-  --color-p-300: #ada1f7;
-  --color-p-400: #8f82f0;
-  --color-p-500: #7263e8;
-  --color-p-600: #5d4dd3;
-  --color-p-700: #4c3eb2;
-  --color-p-800: #3d3390;
-  --color-p-900: #2f2870;
-  --color-p-950: #1d1946;
-
-  /* categorical chart palette (Okabe–Ito, colorblind-safe) */
-  --color-chart-1: #0072b2;
-  --color-chart-2: #e69f00;
-  --color-chart-3: #009e73;
-  --color-chart-4: #cc79a7;
-  --color-chart-5: #56b4e9;
-  --color-chart-6: #d55e00;
-  --color-chart-7: #f0e442;
-  --color-chart-8: #999999;
-
-  /* ---- semantic aliases (resolved per theme below) ---- */
-  --color-canvas: var(--bg-canvas);
-  --color-surface: var(--bg-surface);
-  --color-surface-2: var(--bg-surface2);
-  --color-sunken: var(--bg-sunken);
-  --color-overlay: var(--bg-overlay);
-
-  --color-fg-primary: var(--fg-primary);
-  --color-fg-secondary: var(--fg-secondary);
-  --color-fg-muted: var(--fg-muted);
-  --color-fg-inverse: var(--fg-inverse);
-
-  --color-accent: var(--accent-solid);
-  --color-accent-text: var(--accent-text);
-  --color-accent-soft: var(--accent-soft);
-
-  --color-border-default: var(--border-default);
-  --color-border-strong: var(--border-strong);
-  --color-focus-ring: var(--focus-ring);
-
-  --color-success-fg: var(--success-fg);
-  --color-success-bg: var(--success-bg);
-  --color-warning-fg: var(--warning-fg);
-  --color-warning-bg: var(--warning-bg);
-  --color-danger-fg: var(--danger-fg);
-  --color-danger-bg: var(--danger-bg);
-  --color-info-fg: var(--info-fg);
-  --color-info-bg: var(--info-bg);
-
-  /* ---- typography ---- */
-  --font-sans: 'Inter', 'Vazirmatn', system-ui, sans-serif;
-  --font-persian: 'Vazirmatn', 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
-
-  --text-display: 30px;
-  --text-display--line-height: 38px;
+  /* Script-aware typography. */
+  --font-sans: var(--ds-font-ui);
+  --font-persian: var(--ds-font-persian);
+  --font-mono: var(--ds-font-mono);
+  --text-display: var(--ds-type-display);
+  --text-display--line-height: var(--ds-leading-heading);
   --text-display--font-weight: 700;
-  --text-h1: 24px;
-  --text-h1--line-height: 32px;
-  --text-h2: 20px;
-  --text-h2--line-height: 28px;
-  --text-h3: 16px;
-  --text-h3--line-height: 24px;
-  --text-body: 14px;
-  --text-body--line-height: 22px;
-  --text-body-lg: 16px;
-  --text-body-lg--line-height: 26px;
-  --text-caption: 12px;
-  --text-caption--line-height: 18px;
-  --text-micro: 11px;
-  --text-micro--line-height: 16px;
-  --text-code: 13px;
-  --text-code--line-height: 20px;
+  --text-h1: var(--ds-type-h1);
+  --text-h1--line-height: var(--ds-leading-heading);
+  --text-h2: var(--ds-type-h2);
+  --text-h2--line-height: var(--ds-leading-heading);
+  --text-h3: var(--ds-type-h3);
+  --text-h3--line-height: var(--ds-leading-heading);
+  --text-body: var(--ds-type-body);
+  --text-body--line-height: var(--ds-leading-body);
+  --text-body-lg: var(--ds-type-body-lg);
+  --text-body-lg--line-height: var(--ds-leading-body-lg);
+  --text-caption: var(--ds-type-caption);
+  --text-caption--line-height: var(--ds-leading-caption);
+  --text-micro: var(--ds-type-micro);
+  --text-micro--line-height: var(--ds-leading-micro);
+  --text-code: 0.8125rem;
+  --text-code--line-height: 1.54;
 
-  /* ---- radius ---- */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-
-  /* ---- motion ---- */
-  --duration-fast: 120ms;
-  --duration-base: 180ms;
-  --duration-slow: 260ms;
-  --duration-slower: 320ms;
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
-  --ease-enter: cubic-bezier(0.05, 0.7, 0.1, 1);
-  --ease-exit: cubic-bezier(0.3, 0, 0.8, 0.15);
-
-  /* ---- elevation ---- */
-  --shadow-e1: var(--elev-1);
-  --shadow-e2: var(--elev-2);
-  --shadow-e3: var(--elev-3);
-
-  /* ---- layout ---- */
-  --spacing-rail: 48px;
-  --spacing-sidebar: 260px;
-  --spacing-statusbar: 24px;
-  --spacing-titlebar: 38px;
+  /* Shape, motion, depth. Existing utility names remain compatible. */
+  --radius-xs: var(--ds-radius-xs);
+  --radius-sm: var(--ds-radius-sm);
+  --radius-md: var(--ds-radius-md);
+  --radius-lg: var(--ds-radius-lg);
+  --radius-xl: var(--ds-radius-xl);
+  --radius-2xl: var(--ds-radius-2xl);
+  --duration-fast: var(--ds-duration-micro);
+  --duration-normal: var(--ds-duration-standard);
+  --duration-slow: var(--ds-duration-expressive);
+  --ease-standard: var(--ds-ease-standard);
+  --ease-enter: var(--ds-ease-enter);
+  --ease-exit: var(--ds-ease-exit);
+  --shadow-e1: var(--ds-elevation-raised);
+  --shadow-e2: var(--ds-elevation-overlay);
+  --shadow-e3: var(--ds-elevation-modal);
+  --spacing-rail: var(--ds-shell-rail);
+  --spacing-sidebar: var(--ds-shell-sidebar);
+  --spacing-pane-min-inline: var(--ds-pane-min-inline);
+  --spacing-pane-min-block: var(--ds-pane-min-block);
+  --spacing-statusbar: var(--ds-shell-statusbar);
+  --spacing-titlebar: var(--ds-shell-titlebar);
+  --spacing-mac-controls: var(--ds-shell-mac-controls);
 }
-
-/* ---- theme definitions ------------------------------------------------- */
-
-[data-theme='light'] {
-  color-scheme: light;
-  --bg-canvas: #f8f8fa;
-  --bg-surface: #ffffff;
-  --bg-surface2: #f1f1f4;
-  --bg-sunken: #e4e4e9;
-  --bg-overlay: #ffffff;
-  --fg-primary: #212129;
-  --fg-secondary: #5b5b70;
-  --fg-muted: #6e6e80;
-  --fg-inverse: #ffffff;
-  --accent-solid: #5d4dd3;
-  --accent-text: #5d4dd3;
-  --accent-soft: #e4e0fd;
-  --border-default: #e4e4e9;
-  --border-strong: #cfcfd8;
-  --focus-ring: #7263e8;
-  --success-fg: #1c6a41;
-  --success-bg: #d8f3e2;
-  --warning-fg: #814e08;
-  --warning-bg: #fdebcf;
-  --danger-fg: #a02222;
-  --danger-bg: #fde3e3;
-  --info-fg: #1d4ed8;
-  --info-bg: #dbeafe;
-  --elev-1: 0 1px 2px rgb(20 20 25 / 0.06), 0 1px 3px rgb(20 20 25 / 0.1);
-  --elev-2: 0 4px 12px rgb(20 20 25 / 0.1), 0 2px 4px rgb(20 20 25 / 0.08);
-  --elev-3: 0 12px 32px rgb(20 20 25 / 0.16), 0 4px 8px rgb(20 20 25 / 0.08);
-}
-
-[data-theme='dark'] {
-  color-scheme: dark;
-  --bg-canvas: #111116;
-  --bg-surface: #141419;
-  --bg-surface2: #1b1b22;
-  --bg-sunken: #0c0c10;
-  --bg-overlay: #20202a;
-  --fg-primary: #ececf1;
-  --fg-secondary: #a2a2b0;
-  --fg-muted: #8a8a9a;
-  --fg-inverse: #141419;
-  --accent-solid: #8f82f0;
-  --accent-text: #ada1f7;
-  --accent-soft: rgb(47 40 112 / 0.4);
-  --border-default: #2a2a35;
-  --border-strong: #3a3a48;
-  --focus-ring: #ada1f7;
-  --success-fg: #4bba7d;
-  --success-bg: rgb(18 63 39 / 0.4);
-  --warning-fg: #e89b2c;
-  --warning-bg: rgb(75 47 12 / 0.4);
-  --danger-fg: #ea6b6b;
-  --danger-bg: rgb(98 25 25 / 0.4);
-  --info-fg: #60a5fa;
-  --info-bg: rgb(30 58 138 / 0.4);
-  --elev-1: none;
-  --elev-2: 0 4px 16px rgb(0 0 0 / 0.45);
-  --elev-3: 0 12px 40px rgb(0 0 0 / 0.6);
-}
-
-/* ---- base ---------------------------------------------------------------- */
 
 @layer base {
   * {
-    border-color: var(--border-default);
+    border-color: var(--ds-border-subtle);
   }
 
   html,
@@ -203,56 +101,102 @@
     height: 100%;
   }
 
+  html {
+    font-size: calc(100% * var(--ui-scale, 1));
+    background: var(--ds-surface-canvas);
+  }
+
   body {
-    background-color: var(--bg-canvas);
-    color: var(--fg-primary);
-    font-family: var(--font-sans);
-    font-size: var(--text-body);
-    line-height: var(--text-body--line-height);
-    -webkit-font-smoothing: antialiased;
-    /* The custom title bar owns window dragging; native text selection in chrome
-       would fight it, so selection is opt-in per component. */
-    user-select: none;
+    margin: 0;
     overflow: hidden;
+    background-color: var(--ds-surface-canvas);
+    color: var(--ds-text-primary);
+    font-family: var(--ds-font-ui);
+    font-size: var(--ds-type-body);
+    line-height: var(--ds-leading-body);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
   }
 
-  /* Persian/Arabic gets the taller line-height the design system specifies. */
   [dir='rtl'] body {
-    font-family: var(--font-persian);
-    line-height: 24px;
+    line-height: var(--ds-leading-body-fa);
   }
 
-  /* Focus contract — never remove. */
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
   :focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--ds-radius-xs);
+    outline: 0.125rem solid var(--ds-focus-ring);
+    outline-offset: 0.125rem;
   }
 
   ::selection {
-    background-color: var(--accent-soft);
-    color: var(--fg-primary);
+    background-color: var(--ds-accent-soft);
+    color: var(--ds-text-primary);
+  }
+}
+
+@layer components {
+  .control-sm {
+    min-height: var(--control-height-sm);
+    padding-inline: var(--control-pad-inline-sm);
+  }
+
+  .control-md {
+    min-height: var(--control-height-md);
+    padding-inline: var(--control-pad-inline-md);
+  }
+
+  .control-lg {
+    min-height: var(--control-height-lg);
+    padding-inline: var(--control-pad-inline-lg);
+  }
+
+  .focus-control {
+    transition:
+      border-color var(--ds-duration-micro) var(--ds-ease-standard),
+      box-shadow var(--ds-duration-micro) var(--ds-ease-standard);
+  }
+
+  .focus-control:focus-visible {
+    border-color: var(--ds-border-strong);
+    box-shadow:
+      0 0 0 0.125rem var(--ds-surface-base),
+      0 0 0 0.25rem var(--ds-focus-ring);
+    outline: none;
   }
 }
 
 @layer utilities {
-  /* LTR islands inside RTL: code, URLs, keys, paths, latency numbers. */
   .ltr-island {
     direction: ltr;
     unicode-bidi: isolate;
     text-align: start;
-    font-family: var(--font-mono);
+    font-family: var(--ds-font-mono);
+  }
+
+  .bidi-isolate {
+    unicode-bidi: isolate;
   }
 
   .tabular {
     font-variant-numeric: tabular-nums;
   }
 
+  [data-numerals='persian'] .local-number {
+    font-feature-settings: 'ss01';
+  }
+
   .selectable {
     user-select: text;
   }
 
-  /* Region the OS treats as the window's drag handle. */
   .drag-region {
     -webkit-app-region: drag;
   }
@@ -261,26 +205,122 @@
     -webkit-app-region: no-drag;
   }
 
-  /* Disconnected / "kernel missing" banner: calm, intentional, one action.
-     Reuses Rooya semantic tokens rather than introducing a second palette. */
+  .content-auto {
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 7rem;
+  }
+
   .bridge-banner {
     display: flex;
     align-items: flex-start;
-    gap: 0.75rem;
-    border-bottom: 1px solid var(--border-default);
-    background-color: var(--bg-surface2);
-    padding: 0.75rem 1rem;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-block-end: 0.0625rem solid var(--ds-border-subtle);
+    background-color: var(--ds-surface-subtle);
+  }
+
+  .surface-gradient {
+    background:
+      radial-gradient(
+        circle at 12% -20%,
+        color-mix(in srgb, var(--ds-accent-soft) 68%, transparent),
+        transparent 42%
+      ),
+      var(--ds-surface-canvas);
+  }
+
+  .motion-enter {
+    animation: dream-enter var(--ds-duration-standard) var(--ds-ease-enter) both;
+  }
+
+  .streaming-sweep,
+  .activity-travel,
+  .skeleton-shape {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+
+  .streaming-sweep::after,
+  .activity-travel::after,
+  .skeleton-shape::after {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    content: '';
+    background: linear-gradient(
+      100deg,
+      transparent 30%,
+      color-mix(in srgb, var(--ds-accent-solid) 14%, transparent) 50%,
+      transparent 70%
+    );
+    transform: translate3d(-110%, 0, 0);
+    animation: dream-travel 1.8s var(--ds-ease-standard) infinite;
+    pointer-events: none;
+  }
+
+  .activity-travel::after {
+    z-index: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 20%,
+      var(--ds-accent-solid) 50%,
+      transparent 80%
+    );
+  }
+
+  .skeleton-shape {
+    background: var(--ds-surface-subtle);
   }
 }
 
-/* Motion tokens collapse to zero when the user asks for reduced motion. */
+@keyframes dream-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.375rem, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes dream-travel {
+  to {
+    transform: translate3d(110%, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ds-duration-micro: 0ms;
+    --ds-duration-standard: 0ms;
+    --ds-duration-expressive: 0ms;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
+    scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+  }
+}
+
+[data-reduce-motion='true'] *,
+[data-reduce-motion='true'] *::before,
+[data-reduce-motion='true'] *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
   }
 }

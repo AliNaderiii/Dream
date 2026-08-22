@@ -1,56 +1,85 @@
-# Dream — Interaction & Motion Specs (Gate G6 support)
+# Dream motion and interaction specification — Rooya 2
 
-Owner: IMD · v1.0 · All values reference motion tokens in `design-system.md` §5.
-Global rules: **transform/opacity only**, 60 fps budget, `prefers-reduced-motion: reduce` zeroes all non-essential motion (spec per item below). Everything here is demonstrated live in `prototype/`.
+**Version 2.0 · 2026-08-22 · Owner: FLUX**
 
-## 1. Buttons & controls
-| Interaction | Spec | Reduced motion |
-| --- | --- | --- |
-| Button hover | background/filter change, `fast` (120 ms) `standard` | instant |
-| Button press | `scale(0.92)` on send icon, `fast` | instant |
-| Button loading | label crossfades to spinner, width locked (no reflow), `base` | swap without fade |
-| Switch toggle | knob `translateX(16px)` (mirrored in RTL), `fast` | instant |
-| Focus ring | appears instantly — never animated (a11y) | same |
+Motion explains causality and activity. It never delays input, hides network state, or turns background work into spectacle.
 
-## 2. Streaming response
-- Tokens append as text; **no per-character animation** (jank risk on long replies). The transcript container autoscrolls only while user is at bottom; any manual scroll pauses follow.
-- Caret: 7×16 px block in `accent/solid`, `blink 1s step-end infinite`. Reduced motion → steady caret.
-- Tool-status dot `running`: opacity pulse 1.2 s ease-in-out. Reduced motion → static dot + "running" label (label always present anyway).
-- Turn entry: `translateY(6px) + fade`, `base` (180 ms) `enter`. Reduced motion → none.
+## Tokens
 
-## 3. Panes
-- **Drag resize is direct manipulation — zero animation, zero transition** on width/height (transitions on layout would fight the pointer). Live width tooltip.
-- Handle hover: visible line 1px → 3px accent, `fast`.
-- Pane open/close (split, collapse): the *entering* pane fades/slides 8 px, `slow` (260 ms) `enter`; layout change itself is instant. Reduced motion → instant.
-- Double-click handle → equalize: instant (data change), contents fade `base`.
+| Role | Duration | Easing | Typical use |
+| --- | ---: | --- | --- |
+| Micro | 120ms (allowed range 100–150) | standard | hover, press, switch |
+| Standard | 220ms (allowed range 200–250) | standard / enter | menu, tab, crossfade |
+| Expressive | 340ms (allowed range 300–400) | emphasized / enter | dialog, onboarding |
 
-## 4. Approval sheet (signature moment)
-1. Scrim fades to 20% black, `slow` `standard` — transcript stays readable (never full blackout).
-2. Sheet: `translateY(16px)→0 + opacity 0→1`, `slow` (260 ms) `enter`, anchored above composer.
-3. Focus moves to **Allow once**; Esc = Deny; focus trapped; `role="alertdialog"`.
-4. On decision: sheet exits down `base` `exit`; a toast confirms the outcome (with the model-refusal note on Deny).
-5. Deny must **never** feel punitive: no shake, no red flash; calm exit + informative toast.
-Reduced motion: scrim/sheet appear instantly; focus behavior unchanged.
+- Standard: `cubic-bezier(0.2, 0, 0, 1)`
+- Emphasized: `cubic-bezier(0.2, 0.8, 0.2, 1)`
+- Enter: `cubic-bezier(0.05, 0.7, 0.1, 1)`
+- Exit: `cubic-bezier(0.3, 0, 0.8, 0.15)`
 
-## 5. Overlays, navigation, lists
-| Element | Enter | Exit |
-| --- | --- | --- |
-| Modal (`e3`) | scale 0.98→1 + fade, `slow` `enter` | fade, `base` `exit` |
-| Popover/menu (`e2`) | fade + 4 px slide from anchor side (logical: `inset-inline-start` aware), `base` | fade `fast` |
-| Toast | rise 6 px + fade `base` `enter`, auto-dismiss 5 s (10 s when it carries Undo) | fade `base` |
-| Tab switch | underline slides `base` `standard`; panels crossfade `fast` | instant |
-| View switch (rail) | new view fades 120 ms; **no slide** (keeps spatial model calm) | — |
-| Onboarding step | slide 24 px `slower` (320 ms), direction-aware (mirrors in RTL) | reduced: crossfade |
-| List row hover | background `fast` | — |
-| Row delete | collapse height via `grid-template-rows` trick + fade `base`; Undo toast | instant removal |
+Sibling stagger is at most **30ms**. At most **three** siblings animate concurrently. Longer lists do not cascade; they settle as one region.
 
-## 6. Loading / skeleton
-- Any wait > 300 ms shows skeleton (shimmer: background-position sweep 1.4 s linear). Reduced motion → static two-tone skeleton.
-- Spinners only inside buttons and tiny inline contexts.
-- Chart bars grow from baseline `slow` `standard` on first render only; data updates transition height `slow`. Reduced motion → instant.
+## Performance contract
 
-## 7. Performance contract
-- Only `transform`, `opacity`, `background-color`, `filter` may transition. Never `width/height/top/left` (exception: pane drag = no transition at all).
-- `will-change` applied only during an active animation; removed after.
-- Streaming render batched via `requestAnimationFrame`; DOM appends coalesced (the prototype simulates 60 ms word batches).
-- Virtualized lists (sessions, memories, grid rows) — no entry animation on virtual scroll, only on true insertion.
+- Animate compositor-friendly `transform` and `opacity`. Color transitions are allowed for direct interaction feedback.
+- Never animate width, height, top, left, margin, padding, or grid sizing.
+- A pane resize is direct pointer manipulation with no transition.
+- `will-change` may exist only during active WAAPI/FLIP work and must be removed on finish/cancel.
+- Reordering uses FLIP: read initial rectangles once, commit order, read final rectangles once, invert with transform, play to identity.
+- Streaming token writes are coalesced to one store update per animation frame. No token path reads `scrollWidth`, `scrollHeight`, or a bounding box.
+- Scroll geometry is read only in the user's scroll handler to update “follow tail.” Programmatic tail following schedules one write in `requestAnimationFrame`.
+
+## Streaming signature
+
+1. New tokens append through `createFrameBatcher`; any number of chunks in one frame becomes one React/store update.
+2. The active assistant row has a low-contrast sweep-light rendered by a translated pseudo-element. It creates no layout or paint-dependent JS loop.
+3. The transcript follows the active thought while the reader remains within the tail threshold.
+4. If the user scrolls up, following stops immediately. New tokens never pull them away. Returning to the bottom resumes following.
+5. Completion removes sweep and caret, then announces completion through the existing polite live region.
+6. Transcript rows below the fold use `content-visibility: auto` with an intrinsic block-size estimate.
+
+Reduced motion: no sweep or pulsing caret; token batching and scroll ownership behavior are unchanged.
+
+## Tool-call cards
+
+- A running card uses the same translated sweep and a static status glyph, not a spinner.
+- The disclosure header is always operable and exposes `aria-expanded` / `aria-controls`.
+- Detail appears with opacity + a 6px-equivalent transform; the card does not tween height.
+- Completion swaps status icon/text and removes activity motion in the same render. Success is calm—no bounce or confetti.
+- Errors and blocks retain arguments and recovery context.
+
+Reduced motion: details appear instantly and status changes remain textual.
+
+## Approval alert dialog
+
+1. Overlay and surface enter together. Surface uses opacity + scale 0.985→1 + a short block-axis translation at Expressive maximum.
+2. Focus is trapped by Radix and begins on **Allow once**. Escape and outside dismissal both resolve to **Deny** (fail closed).
+3. Arguments remain selectable and LTR-isolated; risk remains visible.
+4. Deny uses the same calm close as approval—never shake, flash, or punish.
+5. Focus returns to the invoking workflow.
+
+Reduced motion: dialog appears instantly; focus and fail-closed behavior do not change.
+
+## Shell and navigation
+
+- Rail hover/selection: Micro color transition. Active marker does not slide between remote routes.
+- Route switch: 120ms opacity only; lazy-route skeleton retains geometry.
+- Sidebar collapse: layout commits immediately, workspace content may crossfade Standard.
+- Status bar background activity: a thin traveling light. A spinner is reserved for in-button work only.
+- Popovers/tooltips: 4–6px-equivalent transform + fade, Standard/Micro.
+- Command palette: must become interactive in <100ms. Search is synchronous over the local registry; no network or bridge work occurs on open.
+
+## Skeletons and progress
+
+A wait predicted over 300ms uses geometry-matched skeletons. The shimmer is a translated pseudo-element and never animates background position. Reduced motion renders a static two-tone shape. Determinate work uses progress; indeterminate work communicates stage text and cancellation where supported.
+
+## Reduced-motion implementation
+
+Two equivalent inputs collapse duration tokens:
+
+```css
+@media (prefers-reduced-motion: reduce) { /* OS */ }
+[data-reduce-motion='true'] { /* in-app override */ }
+```
+
+Both remove repeated animation and smooth scrolling. Tests verify root state and static fallback. Essential state, focus, live announcements, and progress remain.

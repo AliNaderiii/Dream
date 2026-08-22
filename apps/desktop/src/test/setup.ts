@@ -9,12 +9,13 @@ import { initReactI18next } from 'react-i18next';
 import { loadResources } from '@/lib/i18n/backend';
 import { SUPPORTED_LOCALES } from '@/lib/i18n/locale-detector';
 
-// Tests render components directly (no main.tsx bootstrap), so initialise the
-// singleton i18next instance here, synchronously, before any test runs.
-// `initImmediate` is a legacy i18next option still honoured at runtime but
-// absent from the current `InitOptions` type, hence the cast.
-void i18n.use(initReactI18next).init({
-  resources: loadResources(),
+// Tests render components directly (no main.tsx bootstrap), so preload all
+// bundled locale chunks before any test runs. `initImmediate` is a legacy
+// i18next option still honoured at runtime but absent from the current
+// `InitOptions` type, hence the cast.
+const testResources = await loadResources(SUPPORTED_LOCALES);
+await i18n.use(initReactI18next).init({
+  resources: testResources,
   lng: 'en',
   fallbackLng: 'en',
   supportedLngs: [...SUPPORTED_LOCALES],

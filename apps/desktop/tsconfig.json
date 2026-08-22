@@ -14,7 +14,7 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["vite/client", "@testing-library/jest-dom"],
+    "types": ["vite/client", "@testing-library/jest-dom", "node"],
 
     /* Strictness — code standard: strict mode, no `any`. */
     "strict": true,
@@ -30,6 +30,6 @@
     "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "vite.config.ts", "eslint.config.js"],
+  "include": ["src", "scripts/**/*.ts", ".ladle/**/*.tsx", "vite.config.ts", "eslint.config.js"],
   "exclude": ["src-tauri", "dist", "node_modules"]
 }

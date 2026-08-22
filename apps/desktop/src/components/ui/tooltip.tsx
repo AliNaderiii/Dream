@@ -33,7 +33,7 @@ export function TooltipContent({
         sideOffset={sideOffset}
         className={cn(
           'z-50 overflow-hidden rounded-sm border border-border-default bg-overlay px-2 py-1 text-caption text-fg-primary shadow-e2',
-          'data-[state=delayed-open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=delayed-open]:fade-in-0',
+          'motion-enter',
           className,
         )}
         {...props}

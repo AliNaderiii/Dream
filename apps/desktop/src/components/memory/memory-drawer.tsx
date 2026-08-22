@@ -12,7 +12,8 @@ import { useMemo, useState } from 'react';
 
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { ImportanceSlider, ImportanceStars } from '@/components/memory/importance-stars';
-import { KindBadge, kindLabel } from '@/components/memory/kind-badge';
+import { KindBadge } from '@/components/memory/kind-badge';
+import { MemoryScore } from '@/components/memory/memory-score';
 import { Button } from '@/components/ui/button';
 import { DialogOverlay } from '@/components/ui/dialog';
 import {
@@ -27,10 +28,10 @@ import {
   MAX_MEMORY_CONTENT_BYTES,
   sanitizeMemoryText,
   toStars,
-  validateMemoryContent,
 } from '@/lib/bridge/memory';
 import { MEMORY_KINDS } from '@/lib/bridge/types';
 import type { BridgeMemory, MemoryKind } from '@/lib/bridge/types';
+import { useTranslation } from '@/lib/i18n';
 import { absoluteTime, relativeTime } from '@/utils/time';
 
 /** The editable fields, in UI units (importance is stars 0–10). */
@@ -62,6 +63,7 @@ function draftFrom(memory: BridgeMemory | 'new' | null): MemoryDraft {
 }
 
 export function MemoryDrawer({ memory, onClose, onSave, onDelete, error }: MemoryDrawerProps) {
+  const { t } = useTranslation('memory');
   const isNew = memory === 'new';
   const record = memory && memory !== 'new' ? memory : null;
 
@@ -91,9 +93,12 @@ export function MemoryDrawer({ memory, onClose, onSave, onDelete, error }: Memor
   };
 
   const save = async () => {
-    const problem = validateMemoryContent(draft.content);
-    if (problem) {
-      setLocalError(problem);
+    if (!draft.content.trim()) {
+      setLocalError(t('drawer.validationEmpty'));
+      return;
+    }
+    if (overLimit) {
+      setLocalError(t('drawer.validationSize', { used: formatBytes(contentBytes) }));
       return;
     }
     setSaving(true);
@@ -129,13 +134,13 @@ export function MemoryDrawer({ memory, onClose, onSave, onDelete, error }: Memor
           >
             <header className="flex items-center gap-2 border-b border-border-default px-4 py-3">
               <DialogPrimitive.Title className="text-h3 font-semibold">
-                {isNew ? 'New memory' : 'Memory detail'}
+                {isNew ? t('drawer.newTitle') : t('drawer.detailTitle')}
               </DialogPrimitive.Title>
               <Button
                 size="icon-sm"
                 variant="ghost"
                 className="ms-auto"
-                aria-label="Close"
+                aria-label={t('drawer.close')}
                 onClick={requestClose}
               >
                 <X aria-hidden />
@@ -156,7 +161,7 @@ export function MemoryDrawer({ memory, onClose, onSave, onDelete, error }: Memor
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1.5">
                     <label htmlFor="memory-content" className="text-caption font-medium">
-                      Content
+                      {t('drawer.content')}
                     </label>
                     <textarea
                       id="memory-content"
@@ -170,16 +175,16 @@ export function MemoryDrawer({ memory, onClose, onSave, onDelete, error }: Memor
                         overLimit ? 'text-micro text-danger-fg' : 'text-micro text-fg-muted'
                       }
                     >
-                      {formatBytes(contentBytes)} of 50 KB
+                      {t('drawer.size', { used: formatBytes(contentBytes) })}
                     </p>
                   </div>
 
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-caption font-medium">Kind</span>
+                    <span className="text-caption font-medium">{t('drawer.kind')}</span>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button size="sm" variant="secondary">
-                          {kindLabel(draft.kind)}
+                          {t(`kind.${draft.kind}`)}
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
@@ -189,7 +194,7 @@ export function MemoryDrawer({ memory, onClose, onSave, onDelete, error }: Memor
                             checked={draft.kind === kind}
                             onCheckedChange={() => setDraft({ ...draft, kind })}
                           >
-                            {kindLabel(kind)}
+                            {t(`kind.${kind}`)}
                           </DropdownMenuCheckboxItem>
                         ))}
                       </DropdownMenuContent>
@@ -197,9 +202,9 @@ export function MemoryDrawer({ memory, onClose, onSave, onDelete, error }: Memor
                   </div>
 
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-caption font-medium">Importance</span>
+                    <span className="text-caption font-medium">{t('drawer.importance')}</span>
                     <ImportanceSlider
-                      label="Importance"
+                      label={t('drawer.importance')}
                       value={draft.stars}
                       onChange={(stars) => setDraft({ ...draft, stars })}
                     />
@@ -211,31 +216,32 @@ export function MemoryDrawer({ memory, onClose, onSave, onDelete, error }: Memor
                     <p className="selectable whitespace-pre-wrap break-words text-body text-fg-primary">
                       {sanitizeMemoryText(record.content)}
                     </p>
+                    <MemoryScore memory={record} />
                     <dl className="flex flex-col gap-2 border-t border-border-default pt-3 text-caption">
-                      <Field label="Kind">
+                      <Field label={t('drawer.kind')}>
                         <KindBadge kind={record.kind} />
                       </Field>
-                      <Field label="Importance">
+                      <Field label={t('drawer.importance')}>
                         <ImportanceStars value={toStars(record.importance)} />
                       </Field>
-                      <Field label="Created">
+                      <Field label={t('drawer.created')}>
                         <span title={absoluteTime(record.created_at)}>
                           {relativeTime(record.created_at)}
                         </span>
                       </Field>
-                      <Field label="Last used">
+                      <Field label={t('drawer.lastUsed')}>
                         <span title={absoluteTime(record.last_used_at)}>
                           {record.last_used_at ? relativeTime(record.last_used_at) : '—'}
                         </span>
                       </Field>
-                      <Field label="Source">
+                      <Field label={t('drawer.source')}>
                         <span className="ltr-island text-caption">{record.source || '—'}</span>
                       </Field>
-                      <Field label="Used">
+                      <Field label={t('drawer.used')}>
                         <span className="tabular">{record.use_count}×</span>
                       </Field>
                       {record.tags.length > 0 && (
-                        <Field label="Tags">
+                        <Field label={t('drawer.tags')}>
                           <span className="flex flex-wrap gap-1">
                             {record.tags.map((tag) => (
                               <span
@@ -264,7 +270,7 @@ export function MemoryDrawer({ memory, onClose, onSave, onDelete, error }: Memor
                     onClick={() => void save()}
                   >
                     <Save aria-hidden />
-                    {saving ? 'Saving…' : 'Save'}
+                    {saving ? t('drawer.saving') : t('drawer.save')}
                   </Button>
                   <Button
                     variant="secondary"
@@ -275,14 +281,14 @@ export function MemoryDrawer({ memory, onClose, onSave, onDelete, error }: Memor
                       else setEditing(false);
                     }}
                   >
-                    Cancel
+                    {t('drawer.cancel')}
                   </Button>
                 </>
               ) : (
                 record && (
                   <>
                     <Button variant="primary" size="sm" onClick={() => setEditing(true)}>
-                      Edit
+                      {t('drawer.edit')}
                     </Button>
                     <Button
                       variant="danger-outline"
@@ -291,7 +297,7 @@ export function MemoryDrawer({ memory, onClose, onSave, onDelete, error }: Memor
                       onClick={() => setConfirmDelete(true)}
                     >
                       <Trash2 aria-hidden />
-                      Delete
+                      {t('drawer.delete')}
                     </Button>
                   </>
                 )
@@ -304,9 +310,9 @@ export function MemoryDrawer({ memory, onClose, onSave, onDelete, error }: Memor
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="Delete this memory?"
-        description="It is archived rather than erased, but it will no longer be recalled."
-        confirmLabel="Delete"
+        title={t('drawer.deleteTitle')}
+        description={t('drawer.deleteDescription')}
+        confirmLabel={t('drawer.delete')}
         onConfirm={() => {
           if (record) void onDelete(record);
         }}
@@ -315,9 +321,9 @@ export function MemoryDrawer({ memory, onClose, onSave, onDelete, error }: Memor
       <ConfirmDialog
         open={confirmDiscard}
         onOpenChange={setConfirmDiscard}
-        title="Discard unsaved changes?"
-        description="Your edits to this memory have not been saved yet."
-        confirmLabel="Discard"
+        title={t('drawer.discardTitle')}
+        description={t('drawer.discardDescription')}
+        confirmLabel={t('drawer.discard')}
         onConfirm={() => {
           setDraft(pristine);
           setEditing(false);

@@ -57,7 +57,11 @@ The desktop app (`apps/desktop/`) is a Tauri 2 + React application localised
 into eight languages. It builds successfully and communicates with the Python
 kernel through a framed JSON-RPC sidecar. Its product surfaces include
 conversation panes, projects, a Jalali-aware scheduler, memory and skills,
-data science, providers, connectivity, provenance, and settings.
+data science, providers, connectivity, provenance, and settings. The shell
+ships Light, Warm, and Dark themes, four accents, comfortable/dense modes,
+persistent 80–150% zoom, Persian RTL, and reduced motion. Routes and locales
+load on demand; transcripts and other long operational lists stay bounded from
+100 rows onward.
 
 ### Windows
 
@@ -105,8 +109,10 @@ Build or run the full native UI using the scripts that exist in
 ```bash
 cd apps/desktop
 npm install
-npm run tauri dev       # native development app
-npm run tauri build     # host-platform installer artifacts
+npm run tauri dev          # native development app
+npm run tauri build        # host-platform installer artifacts
+npm run accessibility:check
+npm run build && npm run performance:check  # emits JSON; see docs/handoff/ci-perf-check.patch
 ```
 
 ## Telegram pairing

@@ -90,11 +90,11 @@ export function paneLeaf(pane: PaneState): PaneLeaf {
   return { kind: 'pane', pane };
 }
 
-function newScreen(index = 1): ScreenState {
+function newScreen(): ScreenState {
   const pane = createPane();
   return {
     id: layoutId('screen'),
-    name: `Screen ${index}`,
+    name: '',
     root: paneLeaf(pane),
     activePaneId: pane.id,
     maximizedPaneId: null,
@@ -194,7 +194,7 @@ export const useLayoutStore = create<LayoutState>()(
       },
 
       addScreen: (name) => {
-        const screen = newScreen(get().screens.length + 1);
+        const screen = newScreen();
         if (name?.trim()) screen.name = name.trim();
         set((state) => ({ screens: [...state.screens, screen], activeScreenId: screen.id }));
         return screen.id;

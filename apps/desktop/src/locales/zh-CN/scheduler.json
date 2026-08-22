@@ -20,6 +20,7 @@
   "previewCron": "Cron",
   "previewNext": "下次运行",
   "previewJalali": "波斯历",
+  "previewRuns": "Next three run dates",
   "previewInvalid": "暂未理解 — 请继续输入。",
   "enable": "启用",
   "disable": "暂停",
@@ -43,9 +44,12 @@
   "statusError": "错误",
   "statusDenied": "批准被拒",
   "approvalsTitle": "等待批准",
+  "approvalWaitingReason": "Blocked by the fail-closed {{risk}}-risk gate until you decide.",
   "approvalsEmpty": "没有正在等待批准的调度运行。",
   "approve": "批准",
   "deny": "拒绝",
   "loadError": "无法加载调度。",
+  "loading": "Loading schedules…",
+  "retry": "Retry",
   "created": "调度已创建。"
 }

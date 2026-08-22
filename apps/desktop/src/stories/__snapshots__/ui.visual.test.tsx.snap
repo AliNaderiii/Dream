@@ -1,0 +1,563 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Rooya component visual contracts > badge-accent 1`] = `
+<span
+  class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold bg-accent-soft text-accent-text"
+>
+  Status
+</span>
+`;
+
+exports[`Rooya component visual contracts > badge-danger 1`] = `
+<span
+  class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold bg-danger-bg text-danger-fg"
+>
+  Status
+</span>
+`;
+
+exports[`Rooya component visual contracts > badge-info 1`] = `
+<span
+  class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold bg-info-bg text-info-fg"
+>
+  Status
+</span>
+`;
+
+exports[`Rooya component visual contracts > badge-neutral 1`] = `
+<span
+  class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold bg-surface-2 text-fg-secondary"
+>
+  Status
+</span>
+`;
+
+exports[`Rooya component visual contracts > badge-success 1`] = `
+<span
+  class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold bg-success-bg text-success-fg"
+>
+  Status
+</span>
+`;
+
+exports[`Rooya component visual contracts > badge-warning 1`] = `
+<span
+  class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold bg-warning-bg text-warning-fg"
+>
+  Status
+</span>
+`;
+
+exports[`Rooya component visual contracts > button-danger-outline-lg 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium border border-danger-fg transition-[background-color,transform] duration-fast ease-standard hover:bg-danger-bg active:scale-[0.98] control-lg text-body-lg [&_svg]:size-5 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > button-danger-outline-md 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium border border-danger-fg transition-[background-color,transform] duration-fast ease-standard hover:bg-danger-bg active:scale-[0.98] control-md text-body [&_svg]:size-4 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > button-danger-outline-sm 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium border border-danger-fg transition-[background-color,transform] duration-fast ease-standard hover:bg-danger-bg active:scale-[0.98] control-sm text-caption [&_svg]:size-4 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > button-destructive-lg 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium bg-danger-fg shadow-e1 transition-[filter,transform] duration-fast ease-standard hover:brightness-90 active:scale-[0.98] control-lg text-body-lg [&_svg]:size-5 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > button-destructive-md 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium bg-danger-fg shadow-e1 transition-[filter,transform] duration-fast ease-standard hover:brightness-90 active:scale-[0.98] control-md text-body [&_svg]:size-4 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > button-destructive-sm 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium bg-danger-fg shadow-e1 transition-[filter,transform] duration-fast ease-standard hover:brightness-90 active:scale-[0.98] control-sm text-caption [&_svg]:size-4 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > button-ghost-lg 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-[background-color,color,transform] duration-fast ease-standard hover:bg-surface-2 hover:text-fg-primary active:scale-[0.98] control-lg text-body-lg [&_svg]:size-5 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > button-ghost-md 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-[background-color,color,transform] duration-fast ease-standard hover:bg-surface-2 hover:text-fg-primary active:scale-[0.98] control-md text-body [&_svg]:size-4 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > button-ghost-sm 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-[background-color,color,transform] duration-fast ease-standard hover:bg-surface-2 hover:text-fg-primary active:scale-[0.98] control-sm text-caption [&_svg]:size-4 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > button-primary-lg 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium bg-accent shadow-e1 transition-[background-color,transform,opacity] duration-fast ease-standard hover:bg-accent-hover active:scale-[0.98] control-lg text-body-lg [&_svg]:size-5 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > button-primary-md 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium bg-accent shadow-e1 transition-[background-color,transform,opacity] duration-fast ease-standard hover:bg-accent-hover active:scale-[0.98] control-md text-body [&_svg]:size-4 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > button-primary-sm 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium bg-accent shadow-e1 transition-[background-color,transform,opacity] duration-fast ease-standard hover:bg-accent-hover active:scale-[0.98] control-sm text-caption [&_svg]:size-4 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > button-secondary-lg 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium border border-border-default bg-surface transition-[background-color,border-color,transform] duration-fast ease-standard hover:border-border-strong hover:bg-surface-2 active:scale-[0.98] control-lg text-body-lg [&_svg]:size-5 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > button-secondary-md 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium border border-border-default bg-surface transition-[background-color,border-color,transform] duration-fast ease-standard hover:border-border-strong hover:bg-surface-2 active:scale-[0.98] control-md text-body [&_svg]:size-4 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > button-secondary-sm 1`] = `
+<button
+  class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium border border-border-default bg-surface transition-[background-color,border-color,transform] duration-fast ease-standard hover:border-border-strong hover:bg-surface-2 active:scale-[0.98] control-sm text-caption [&_svg]:size-4 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+>
+  <span
+    class="contents"
+  >
+    Action
+  </span>
+</button>
+`;
+
+exports[`Rooya component visual contracts > card-raised 1`] = `
+<section
+  class="rounded-xl border border-border-default bg-surface-raised shadow-e1"
+>
+  <header
+    class="flex flex-col gap-1 px-5 pt-5"
+  >
+    <h3
+      class="font-semibold text-fg-primary"
+    >
+      Workspace
+    </h3>
+  </header>
+  <div
+    class="px-5 py-4"
+  >
+    Local-first content
+  </div>
+</section>
+`;
+
+exports[`Rooya component visual contracts > input-default 1`] = `
+<div
+  class="flex min-w-0 flex-col gap-1 text-caption font-medium"
+>
+  <label
+    for="_r_0_"
+  >
+    Name
+  </label>
+  <span
+    class="relative flex items-center"
+  >
+    <input
+      aria-describedby="_r_0_-message"
+      class="focus-control selectable control-md w-full rounded-md border border-border-default bg-surface text-fg-primary placeholder:text-fg-muted"
+      id="_r_0_"
+      placeholder="Research"
+    />
+  </span>
+  <span
+    class="text-fg-muted"
+    id="_r_0_-message"
+  >
+    Stored locally
+  </span>
+</div>
+`;
+
+exports[`Rooya component visual contracts > input-error 1`] = `
+<div
+  class="flex min-w-0 flex-col gap-1 text-caption font-medium"
+>
+  <label
+    for="_r_1_"
+  >
+    Name
+  </label>
+  <span
+    class="relative flex items-center"
+  >
+    <input
+      aria-describedby="_r_1_-message"
+      aria-invalid="true"
+      class="focus-control selectable control-md w-full rounded-md border bg-surface text-fg-primary placeholder:text-fg-muted border-danger-fg pe-9"
+      id="_r_1_"
+      readonly=""
+      value="?"
+    />
+    <svg
+      aria-hidden="true"
+      class="lucide lucide-circle-alert pointer-events-none absolute end-3 size-4 text-danger-fg"
+      fill="none"
+      height="24"
+      stroke="currentColor"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      viewBox="0 0 24 24"
+      width="24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+      />
+      <line
+        x1="12"
+        x2="12"
+        y1="8"
+        y2="12"
+      />
+      <line
+        x1="12"
+        x2="12.01"
+        y1="16"
+        y2="16"
+      />
+    </svg>
+  </span>
+  <span
+    class="text-danger-fg"
+    id="_r_1_-message"
+  >
+    Use a descriptive name
+  </span>
+</div>
+`;
+
+exports[`Rooya component visual contracts > skeleton-line 1`] = `
+<div
+  aria-hidden="true"
+  class="skeleton-shape min-h-3 rounded-md h-4 w-32"
+/>
+`;
+
+exports[`Rooya component visual contracts > switch-off 1`] = `
+<span
+  class="inline-flex items-center gap-3"
+>
+  <button
+    aria-checked="false"
+    aria-label="Offline"
+    class="relative h-5 w-9 shrink-0 rounded-full border border-border-strong transition-colors duration-fast disabled:opacity-50 bg-sunken"
+    role="switch"
+    type="button"
+  >
+    <span
+      aria-hidden="true"
+      class="absolute start-0.5 top-0.5 size-3.5 rounded-full bg-surface-raised shadow-e1 transition-transform duration-fast ease-standard"
+    />
+  </button>
+  <span
+    class="flex flex-col text-start"
+  >
+    <span
+      class="text-body font-medium text-fg-primary"
+    >
+      Offline
+    </span>
+  </span>
+</span>
+`;
+
+exports[`Rooya component visual contracts > switch-on 1`] = `
+<span
+  class="inline-flex items-center gap-3"
+>
+  <button
+    aria-checked="true"
+    aria-label="Offline"
+    class="relative h-5 w-9 shrink-0 rounded-full border border-border-strong transition-colors duration-fast disabled:opacity-50 bg-accent"
+    role="switch"
+    type="button"
+  >
+    <span
+      aria-hidden="true"
+      class="absolute start-0.5 top-0.5 size-3.5 rounded-full bg-surface-raised shadow-e1 transition-transform duration-fast ease-standard translate-x-4 rtl:-translate-x-4"
+    />
+  </button>
+  <span
+    class="flex flex-col text-start"
+  >
+    <span
+      class="text-body font-medium text-fg-primary"
+    >
+      Offline
+    </span>
+  </span>
+</span>
+`;
+
+exports[`Rooya component visual contracts > tabs-pill 1`] = `
+<div
+  class="min-w-0"
+>
+  <div
+    aria-label="Settings"
+    class="flex items-center gap-1 rounded-lg bg-surface-2 p-1"
+    role="tablist"
+  >
+    <button
+      aria-controls="_r_3_-a-panel"
+      aria-selected="true"
+      class="relative control-sm font-medium transition-[background-color,color] duration-fast disabled:pointer-events-none disabled:opacity-50 rounded-md bg-surface text-fg-primary shadow-e1"
+      id="_r_3_-a-tab"
+      role="tab"
+      tabindex="0"
+      type="button"
+    >
+      General
+    </button>
+    <button
+      aria-controls="_r_3_-b-panel"
+      aria-selected="false"
+      class="relative control-sm font-medium text-fg-secondary transition-[background-color,color] duration-fast disabled:pointer-events-none disabled:opacity-50 rounded-md"
+      id="_r_3_-b-tab"
+      role="tab"
+      tabindex="-1"
+      type="button"
+    >
+      Advanced
+    </button>
+  </div>
+  <div
+    aria-labelledby="_r_3_-a-tab"
+    class="motion-enter py-3 outline-none"
+    id="_r_3_-a-panel"
+    role="tabpanel"
+    tabindex="0"
+  >
+    General content
+  </div>
+</div>
+`;
+
+exports[`Rooya component visual contracts > tabs-underline 1`] = `
+<div
+  class="min-w-0"
+>
+  <div
+    aria-label="Views"
+    class="flex items-center gap-1 border-b border-border-default"
+    role="tablist"
+  >
+    <button
+      aria-controls="_r_2_-a-panel"
+      aria-selected="true"
+      class="relative control-sm font-medium transition-[background-color,color] duration-fast disabled:pointer-events-none disabled:opacity-50 rounded-t-md after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:origin-center after:rounded-full after:bg-accent after:transition-transform after:duration-normal text-accent-text after:scale-x-100"
+      id="_r_2_-a-tab"
+      role="tab"
+      tabindex="0"
+      type="button"
+    >
+      List
+    </button>
+    <button
+      aria-controls="_r_2_-b-panel"
+      aria-selected="false"
+      class="relative control-sm font-medium text-fg-secondary transition-[background-color,color] duration-fast disabled:pointer-events-none disabled:opacity-50 rounded-t-md after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:origin-center after:scale-x-0 after:rounded-full after:bg-accent after:transition-transform after:duration-normal"
+      id="_r_2_-b-tab"
+      role="tab"
+      tabindex="-1"
+      type="button"
+    >
+      Timeline
+    </button>
+  </div>
+  <div
+    aria-labelledby="_r_2_-a-tab"
+    class="motion-enter py-3 outline-none"
+    id="_r_2_-a-panel"
+    role="tabpanel"
+    tabindex="0"
+  >
+    List content
+  </div>
+</div>
+`;
+
+exports[`Rooya component visual contracts > toast-success 1`] = `
+<div
+  aria-label="Notifications"
+  class="pointer-events-none fixed bottom-8 end-4 z-70 flex w-[min(24rem,calc(100%-2rem))] flex-col gap-2 !static"
+>
+  <section
+    class="motion-enter pointer-events-auto flex items-start gap-3 rounded-xl border border-border-default bg-overlay p-3 shadow-e2"
+    role="status"
+  >
+    <svg
+      aria-hidden="true"
+      class="lucide lucide-circle-check mt-0.5 size-4 shrink-0 text-success-fg"
+      fill="none"
+      height="24"
+      stroke="currentColor"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      viewBox="0 0 24 24"
+      width="24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+      />
+      <path
+        d="m9 12 2 2 4-4"
+      />
+    </svg>
+    <div
+      class="min-w-0 flex-1"
+    >
+      <h3
+        class="text-body font-semibold"
+      >
+        Saved
+      </h3>
+    </div>
+    <button
+      aria-label="Dismiss"
+      class="relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium text-fg-secondary transition-[background-color,color,transform] duration-fast ease-standard hover:bg-surface-2 hover:text-fg-primary active:scale-[0.98] size-(--control-height-sm) [&_svg]:size-4 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+    >
+      <span
+        class="contents"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-x"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M18 6 6 18"
+          />
+          <path
+            d="m6 6 12 12"
+          />
+        </svg>
+      </span>
+    </button>
+  </section>
+</div>
+`;

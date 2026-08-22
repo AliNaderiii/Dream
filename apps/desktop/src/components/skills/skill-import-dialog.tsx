@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dialog';
 import { renderSkillText, validateSkillContent, type ParsedSkill } from '@/lib/bridge/skills';
 import type { SkillInstallResult } from '@/lib/bridge/types';
+import { useTranslation } from '@/lib/i18n';
 
 /** What the dialog asks the route to do once the user confirms. */
 export interface SkillImportRequest {
@@ -50,6 +51,7 @@ export function SkillImportDialog({
   onInstall,
   onInstalled,
 }: SkillImportDialogProps) {
+  const { t } = useTranslation('skills');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [content, setContent] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
@@ -76,7 +78,11 @@ export function SkillImportDialog({
 
   const validate = (text: string) => {
     const result = validateSkillContent(text);
-    setErrors(result.errors);
+    setErrors(
+      result.issues.map((issue) =>
+        t(`validation.${issue.code}`, issue.sizeKb ? { size: issue.sizeKb } : {}),
+      ),
+    );
     setParsed(result.parsed ?? null);
     if (result.ok) setStep('preview');
     return result.ok;
@@ -102,7 +108,7 @@ export function SkillImportDialog({
       onInstalled();
       close();
     } catch (err) {
-      setServerError(err instanceof Error ? err.message : 'The skill could not be installed.');
+      setServerError(err instanceof Error ? err.message : t('importDialog.installError'));
     } finally {
       setBusy(false);
     }
@@ -118,10 +124,11 @@ export function SkillImportDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Import a skill</DialogTitle>
+          <DialogTitle>{t('importSkill')}</DialogTitle>
           <DialogDescription>
-            Choose a <span className="ltr-island">.dream-skill.txt</span> file or paste its
-            contents. Skills are validated before they are installed.
+            {t('importDialog.descriptionBefore')}{' '}
+            <span className="ltr-island">.dream-skill.txt</span>{' '}
+            {t('importDialog.descriptionAfter')}
           </DialogDescription>
         </DialogHeader>
 
@@ -157,20 +164,20 @@ export function SkillImportDialog({
                 />
                 <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
                   <FileUp aria-hidden />
-                  Choose file…
+                  {t('importDialog.chooseFile')}
                 </Button>
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="skill-paste" className="text-caption font-medium">
-                  Or paste the skill
+                  {t('importDialog.pasteLabel')}
                 </label>
                 <textarea
                   id="skill-paste"
                   rows={10}
                   value={content}
                   onChange={(event) => setContent(event.target.value)}
-                  placeholder={'name: weekly report\ndescription: …\nsteps:\n- first step'}
+                  placeholder={t('importDialog.pastePlaceholder')}
                   className="selectable ltr-island min-h-44 w-full resize-y rounded-md border border-border-default bg-canvas p-2.5 text-code text-fg-primary"
                 />
               </div>
@@ -181,11 +188,11 @@ export function SkillImportDialog({
             <div className="flex flex-col gap-3">
               <dl className="flex flex-col gap-1 text-caption">
                 <div className="flex gap-2">
-                  <dt className="text-fg-muted">Name</dt>
+                  <dt className="text-fg-muted">{t('importDialog.name')}</dt>
                   <dd className="font-medium">{parsed.name}</dd>
                 </div>
                 <div className="flex gap-2">
-                  <dt className="text-fg-muted">Steps</dt>
+                  <dt className="text-fg-muted">{t('importDialog.steps')}</dt>
                   <dd className="tabular">{parsed.steps.length}</dd>
                 </div>
               </dl>
@@ -196,12 +203,12 @@ export function SkillImportDialog({
           {step === 'conflict' && (
             <div className="flex flex-col gap-3">
               <p className="text-body text-fg-secondary">
-                A skill named <strong>{parsed?.name}</strong> already exists. Overwrite it, install
-                under a different name, or cancel.
+                {t('importDialog.conflictBefore')} <strong>{parsed?.name}</strong>{' '}
+                {t('importDialog.conflictAfter')}
               </p>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="skill-rename" className="text-caption font-medium">
-                  New name
+                  {t('importDialog.newName')}
                 </label>
                 <input
                   id="skill-rename"
@@ -216,23 +223,23 @@ export function SkillImportDialog({
 
         <DialogFooter>
           <Button variant="secondary" onClick={close} disabled={busy}>
-            Cancel
+            {t('importDialog.cancel')}
           </Button>
 
           {step === 'source' && (
             <Button variant="primary" disabled={!content.trim()} onClick={() => validate(content)}>
-              Validate
+              {t('importDialog.validate')}
             </Button>
           )}
 
           {step === 'preview' && (
             <>
               <Button variant="secondary" onClick={() => setStep('source')} disabled={busy}>
-                Back
+                {t('importDialog.back')}
               </Button>
               <Button variant="primary" disabled={busy} onClick={() => void install(false)}>
                 <Upload aria-hidden />
-                {busy ? 'Installing…' : 'Install'}
+                {busy ? t('importDialog.installing') : t('importDialog.install')}
               </Button>
             </>
           )}
@@ -244,10 +251,10 @@ export function SkillImportDialog({
                 disabled={busy || !renameTo.trim()}
                 onClick={() => void install(false, renameTo.trim())}
               >
-                Install as new name
+                {t('importDialog.installAsNew')}
               </Button>
               <Button variant="destructive" disabled={busy} onClick={() => void install(true)}>
-                Overwrite
+                {t('importDialog.overwrite')}
               </Button>
             </>
           )}

@@ -57,10 +57,10 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
   frontend tested green; Rust written pending CI compile. See `docs/STATUS.md` (P-02).
 
 ## Phase 2 — Conversation & Memory (Prompt P-02)
-- [ ] 2.1 Conversation view: streaming, tool-call cards, approval dialog
-- [ ] 2.2 Session manager (list, search, date groups)
-- [ ] 2.3 Memory explorer + timeline; reminders
-- [ ] 2.4 Skills manager
+- [x] 2.1 Conversation view: streaming, tool-call cards, approval dialog
+- [x] 2.2 Session manager (list, search, date groups)
+- [ ] 2.3 Memory explorer + timeline; reminders — explorer/timeline complete; reminder authoring remains
+- [x] 2.4 Skills manager
 
 ### 2.5 Subagent system (Prompt P-06)
 - [x] 2.5.1 Architecture of record → `docs/architecture/subagents.md` (Gate G1)
@@ -75,7 +75,7 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 - [x] 2.5.6 Pipeline chaining — each stage's result becomes the next's context (Gate G5)
 - [x] 2.5.7 RPC: `subagent.spawn|pipeline|list|get|status|cancel|pause|resume|logs`
   with log streaming and cancel under 2 s (Gate G6)
-- [ ] 2.5.8 Subagent dashboard UI: status badges, progress bars, detail view,
+- [x] 2.5.8 Subagent dashboard UI: status badges, progress bars, detail view,
   live log, cancel/pause/resume, spawn dialog, pipeline builder (Gate G6)
 
 ### 2.6 Scheduler (Prompt P-06)

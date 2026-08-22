@@ -3,6 +3,7 @@
   "installed": "설치된 스킬",
   "loadedCount": "{{count}}개의 스킬 로드됨",
   "failedLoad": "스킬을 불러오지 못했습니다.",
+  "retry": "Retry",
   "failedLoadDetail": "스킬을 불러오지 못했습니다.",
   "failedToggle": "스킬을 업데이트하지 못했습니다.",
   "editAria": "{{name}} 편집",
@@ -28,5 +29,40 @@
   "failedSave": "이 스킬을 저장하지 못했습니다.",
   "failedDelete": "이 스킬을 삭제하지 못했습니다.",
   "failedExport": "이 스킬을 내보내지 못했습니다.",
-  "failedExportMany": "선택한 스킬을 내보내지 못했습니다."
+  "failedExportMany": "선택한 스킬을 내보내지 못했습니다.",
+  "validation": {
+    "empty": "The skill file is empty.",
+    "tooLarge": "Skill is {{size}} KB — the limit is 100 KB.",
+    "traversal": "Skill must not contain “..” path segments.",
+    "absolutePath": "Skill must not contain absolute file paths.",
+    "systemImport": "Skill must not contain import statements for system modules.",
+    "shape": "Skill must define name:, description: and at least one step under steps:."
+  },
+  "card": {
+    "selectExport": "Select {{name}} for export",
+    "stepCount_one": "1 step",
+    "stepCount_other": "{{count}} steps",
+    "enable": "Enable {{name}}",
+    "disable": "Disable {{name}}"
+  },
+  "importDialog": {
+    "descriptionBefore": "Choose a",
+    "descriptionAfter": "file or paste its contents. Skills are validated before they are installed.",
+    "installError": "The skill could not be installed.",
+    "chooseFile": "Choose file…",
+    "pasteLabel": "Or paste the skill",
+    "pastePlaceholder": "name: weekly report\ndescription: …\nsteps:\n- first step",
+    "name": "Name",
+    "steps": "Steps",
+    "conflictBefore": "A skill named",
+    "conflictAfter": "already exists. Overwrite it, install under a different name, or cancel.",
+    "newName": "New name",
+    "cancel": "Cancel",
+    "validate": "Validate",
+    "back": "Back",
+    "installing": "Installing…",
+    "install": "Install",
+    "installAsNew": "Install as new name",
+    "overwrite": "Overwrite"
+  }
 }

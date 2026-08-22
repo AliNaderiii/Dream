@@ -49,7 +49,7 @@ export function DashboardRoute() {
         size="lg"
         className="self-start"
         onClick={() => {
-          const session = createSession();
+          const session = createSession(t('sessions.untitled'));
           void navigate(`/chat/${session.id}`);
         }}
       >

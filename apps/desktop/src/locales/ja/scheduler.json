@@ -20,6 +20,7 @@
   "previewCron": "Cron",
   "previewNext": "次回実行",
   "previewJalali": "ペルシア暦",
+  "previewRuns": "Next three run dates",
   "previewInvalid": "まだ理解できません — 入力を続けてください。",
   "enable": "有効化",
   "disable": "一時停止",
@@ -43,9 +44,12 @@
   "statusError": "エラー",
   "statusDenied": "承認拒否",
   "approvalsTitle": "承認待ち",
+  "approvalWaitingReason": "Blocked by the fail-closed {{risk}}-risk gate until you decide.",
   "approvalsEmpty": "承認待ちのスケジュール実行はありません。",
   "approve": "承認",
   "deny": "拒否",
   "loadError": "スケジュールを読み込めませんでした。",
+  "loading": "Loading schedules…",
+  "retry": "Retry",
   "created": "スケジュールを作成しました。"
 }

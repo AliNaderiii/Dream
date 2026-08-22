@@ -11,6 +11,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import type { ComponentProps } from 'react';
 
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/utils/cn';
 
 export const Dialog = DialogPrimitive.Root;
@@ -24,7 +25,7 @@ export function DialogOverlay({
 }: ComponentProps<typeof DialogPrimitive.Overlay>) {
   return (
     <DialogPrimitive.Overlay
-      className={cn('fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px]', className)}
+      className={cn('motion-enter fixed inset-0 z-50 bg-black/50', className)}
       {...props}
     />
   );
@@ -37,12 +38,13 @@ export interface DialogContentProps extends ComponentProps<typeof DialogPrimitiv
 
 /** Centred modal surface. */
 export function DialogContent({ className, children, hideClose, ...props }: DialogContentProps) {
+  const { t } = useTranslation('common');
   return (
     <DialogPrimitive.Portal>
       <DialogOverlay />
       <DialogPrimitive.Content
         className={cn(
-          'fixed start-1/2 top-1/2 z-50 flex max-h-[85vh] w-[min(40rem,92vw)] -translate-x-1/2 -translate-y-1/2 flex-col',
+          'motion-enter fixed start-1/2 top-1/2 z-50 flex max-h-[85vh] w-[min(var(--overlay-md),92vw)] -translate-x-1/2 -translate-y-1/2 flex-col',
           'overflow-hidden rounded-xl border border-border-default bg-overlay shadow-e3 rtl:translate-x-1/2',
           className,
         )}
@@ -52,7 +54,7 @@ export function DialogContent({ className, children, hideClose, ...props }: Dial
         {!hideClose && (
           <DialogPrimitive.Close
             className="absolute end-3 top-3 rounded-sm p-1 text-fg-muted transition-colors duration-fast hover:bg-surface-2 hover:text-fg-primary"
-            aria-label="Close"
+            aria-label={t('generic.close')}
           >
             <X className="size-4" aria-hidden />
           </DialogPrimitive.Close>

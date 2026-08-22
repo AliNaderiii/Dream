@@ -3,11 +3,14 @@
 /** Lifecycle of the Dream agent. Mirrors `state::AgentStatus` in Rust. */
 export type AgentStatus = 'idle' | 'running' | 'paused' | 'error' | 'offline';
 
-/** UI colour theme. `system` follows the OS preference. */
-export type ThemeMode = 'light' | 'dark' | 'system';
+/** Resolved visual themes. Warm is intentionally user-selected, never inferred. */
+export type ResolvedTheme = 'light' | 'warm' | 'dark';
 
-/** Resolved theme actually applied to the DOM (never `system`). */
-export type ResolvedTheme = 'light' | 'dark';
+/** UI colour theme. `system` follows the OS light/dark preference. */
+export type ThemeMode = ResolvedTheme | 'system';
+
+/** User-selectable accent families, mapped through semantic tokens. */
+export type Accent = 'violet' | 'ocean' | 'forest' | 'ember';
 
 /** Writing direction. Persian/Arabic render right-to-left. */
 export type Direction = 'ltr' | 'rtl';
@@ -15,8 +18,11 @@ export type Direction = 'ltr' | 'rtl';
 /** UI language. Only Persian renders right-to-left. */
 export type Locale = 'en' | 'fa' | 'zh-CN' | 'ja' | 'es' | 'de' | 'fr' | 'ko';
 
-/** Layout density. Compact multiplies component padding by 0.75. */
-export type Density = 'comfortable' | 'compact';
+/** Layout density. Dense compacts control and row tokens without shrinking type. */
+export type Density = 'comfortable' | 'dense';
+
+/** Display digits without changing normalized values in the data layer. */
+export type NumeralStyle = 'latin' | 'persian';
 
 /** Snapshot of Rust-side app state. Mirrors `state::AppStateSnapshot`. */
 export interface AppStateSnapshot {

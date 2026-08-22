@@ -34,6 +34,7 @@ export const LANGUAGES: ReadonlyArray<{ code: Locale; flag: string; nameKey: str
 ];
 
 let initialised = false;
+const loadedLocales = new Set<string>();
 
 /**
  * The locale to start the app with.
@@ -64,12 +65,35 @@ function isSupportedLocale(value: string): value is Locale {
   return (SUPPORTED_LOCALES as readonly string[]).includes(value);
 }
 
+/** Load a locale from bundled Tauri assets once, then register every namespace. */
+export async function ensureLocale(locale: Locale): Promise<void> {
+  if (loadedLocales.has(locale) || i18n.hasResourceBundle(locale, 'common')) {
+    loadedLocales.add(locale);
+    return;
+  }
+  const resources = await loadResources([locale]);
+  const namespaces = resources[locale] ?? {};
+  Object.entries(namespaces).forEach(([namespace, bundle]) => {
+    i18n.addResourceBundle(locale, namespace, bundle, true, true);
+  });
+  loadedLocales.add(locale);
+}
+
 /** Initialise the singleton i18next instance with the given starting locale. */
 export async function initI18n(locale?: Locale): Promise<typeof i18n> {
   if (!initialised) {
+    const initialLocale = locale ?? resolveInitialLocale();
+    const startupLocales =
+      import.meta.env.MODE === 'test'
+        ? SUPPORTED_LOCALES
+        : initialLocale === 'en'
+          ? ['en']
+          : ['en', initialLocale];
+    const resources = await loadResources(startupLocales);
+    startupLocales.forEach((loadedLocale) => loadedLocales.add(loadedLocale));
     await i18n.use(initReactI18next).init({
-      resources: loadResources(),
-      lng: locale ?? resolveInitialLocale(),
+      resources,
+      lng: initialLocale,
       fallbackLng: 'en',
       supportedLngs: SUPPORTED_LOCALES,
       // Missing keys render the key itself (never a raw English value), so a
@@ -92,7 +116,18 @@ export async function initI18n(locale?: Locale): Promise<typeof i18n> {
 export function useLocaleSync(): void {
   const locale = useAppStore((s) => s.locale);
   useEffect(() => {
-    void i18n.changeLanguage(locale);
+    if (i18n.resolvedLanguage === locale) return;
+    if (i18n.hasResourceBundle(locale, 'common')) {
+      void i18n.changeLanguage(locale);
+      return;
+    }
+    let current = true;
+    void ensureLocale(locale).then(() => {
+      if (current) return i18n.changeLanguage(locale);
+    });
+    return () => {
+      current = false;
+    };
   }, [locale]);
 }
 

@@ -20,6 +20,7 @@
   "previewCron": "Cron",
   "previewNext": "다음 실행",
   "previewJalali": "잘랄리력",
+  "previewRuns": "Next three run dates",
   "previewInvalid": "아직 이해하지 못했습니다 — 계속 입력하세요.",
   "enable": "활성화",
   "disable": "일시 중지",
@@ -43,9 +44,12 @@
   "statusError": "오류",
   "statusDenied": "승인 거부됨",
   "approvalsTitle": "승인 대기 중",
+  "approvalWaitingReason": "Blocked by the fail-closed {{risk}}-risk gate until you decide.",
   "approvalsEmpty": "승인을 기다리는 예약 실행이 없습니다.",
   "approve": "승인",
   "deny": "거부",
   "loadError": "예약을 불러올 수 없습니다.",
+  "loading": "Loading schedules…",
+  "retry": "Retry",
   "created": "예약이 생성되었습니다."
 }

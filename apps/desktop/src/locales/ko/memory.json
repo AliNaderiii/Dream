@@ -11,5 +11,83 @@
   "failedLoad": "기억을 불러오지 못했습니다.",
   "failedLoadMore": "더 많은 기억을 불러오지 못했습니다.",
   "failedSave": "이 기억을 저장하지 못했습니다.",
-  "failedDelete": "이 기억을 삭제하지 못했습니다."
+  "failedDelete": "이 기억을 삭제하지 못했습니다.",
+  "retry": "Retry",
+  "resultsLabel": "Memory results",
+  "archived": "Archived",
+  "kind": {
+    "semantic": "Semantic",
+    "episodic": "Episodic",
+    "procedural": "Procedural"
+  },
+  "toolbar": {
+    "all": "All",
+    "search": "Search memories…",
+    "sortBy": "Sort by",
+    "sort": {
+      "relevance": "Relevance",
+      "date_newest": "Newest first",
+      "date_oldest": "Oldest first",
+      "importance": "Importance"
+    },
+    "view": "View",
+    "list": "List",
+    "timeline": "Timeline",
+    "filterKind": "Filter by kind",
+    "from": "From",
+    "to": "To",
+    "createdFrom": "Created from",
+    "createdTo": "Created to",
+    "minImportance": "Minimum importance"
+  },
+  "timeline": {
+    "jumpDate": "Jump to date",
+    "jumpTo": "Jump to",
+    "zoom": "Timeline zoom",
+    "day": "Day",
+    "week": "Week",
+    "month": "Month",
+    "noMatch": "No memories match these filters."
+  },
+  "score": {
+    "title": "Retrieval score",
+    "label": "Memory score: {{score}}%",
+    "notRanked": "Not ranked",
+    "unavailable": "Unavailable",
+    "factorLabel": "{{factor}} score factor",
+    "factor": {
+      "relevance": "Relevance",
+      "recency": "Recency",
+      "importance": "Importance",
+      "usage": "Usage"
+    },
+    "formula": "55% relevance + 20% recency + 15% importance + 10% usage",
+    "relevanceUnavailable": "Relevance is available only when this memory came from a ranked recall."
+  },
+  "drawer": {
+    "newTitle": "New memory",
+    "detailTitle": "Memory detail",
+    "close": "Close memory detail",
+    "content": "Content",
+    "size": "{{used}} of 50 KB",
+    "kind": "Kind",
+    "importance": "Importance",
+    "created": "Created",
+    "lastUsed": "Last used",
+    "source": "Source",
+    "used": "Used",
+    "tags": "Tags",
+    "saving": "Saving…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteTitle": "Delete this memory?",
+    "deleteDescription": "It is archived rather than erased, but it will no longer be recalled.",
+    "discardTitle": "Discard unsaved changes?",
+    "discardDescription": "Your edits to this memory have not been saved yet.",
+    "discard": "Discard",
+    "validationEmpty": "Content must not be empty.",
+    "validationSize": "{{used}} exceeds the 50 KB limit."
+  }
 }

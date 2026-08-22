@@ -25,9 +25,29 @@
     "groupToday": "Aujourd’hui",
     "groupWeek": "Cette semaine",
     "groupMonth": "Ce mois-ci",
-    "groupOlder": "Plus ancien"
+    "groupOlder": "Plus ancien",
+    "untitled": "New session",
+    "actions": "Actions for {{title}}",
+    "rename": "Rename",
+    "delete": "Delete",
+    "renameTitle": "Rename session",
+    "renameDescription": "Choose a concise name for this conversation.",
+    "name": "Session name",
+    "deleteTitle": "Delete session?",
+    "deleteDescription": "“{{title}}” and its local conversation history will be removed.",
+    "loading": "Loading sessions…",
+    "retry": "Retry",
+    "loadError": "Could not load sessions.",
+    "createError": "Could not create the session.",
+    "renameError": "Could not rename the session.",
+    "deleteError": "Could not delete the session."
   },
   "conversation": "Conversation",
+  "bridgeOffline": {
+    "short": "Dream engine offline",
+    "description": "The Dream engine is offline. Changes are paused until it reconnects.",
+    "retry": "Reconnect"
+  },
   "status": {
     "idle": "Inactif",
     "running": "En cours",
@@ -62,7 +82,30 @@
     "description": "Rechercher et exécuter n’importe quelle commande Dream.",
     "searchPlaceholder": "Saisir une commande…",
     "searchAria": "Rechercher des commandes",
-    "empty": "Aucune commande correspondante"
+    "empty": "Aucune commande correspondante",
+    "open": "Open command palette",
+    "newSession": "New session",
+    "toggleSidebar": "Toggle sidebar",
+    "toggleTheme": "Toggle light and dark theme",
+    "newWindow": "Open a new window",
+    "openDestination": "Open {{destination}}",
+    "setTheme": "Use {{value}} theme",
+    "setAccent": "Use {{value}} accent",
+    "setDensity": "Use {{value}} density",
+    "setZoom": "Set UI zoom to {{value}}%",
+    "switchLanguage": "Switch language to {{value}}",
+    "hintNavigate": "↑↓ Navigate",
+    "hintClose": "Esc",
+    "hintRun": "↵ Run",
+    "count": "{{count}} commands",
+    "categories": {
+      "actions": "Actions",
+      "navigation": "Navigation",
+      "sessions": "Sessions",
+      "tools": "Tools & workbenches",
+      "appearance": "Appearance",
+      "language": "Language"
+    }
   },
   "confirm": {
     "confirm": "Confirmer",

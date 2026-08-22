@@ -20,6 +20,7 @@
   "previewCron": "Cron",
   "previewNext": "Next run",
   "previewJalali": "Jalali",
+  "previewRuns": "Next three run dates",
   "previewInvalid": "Not understood yet — keep typing.",
   "enable": "Enable",
   "disable": "Pause",
@@ -43,9 +44,12 @@
   "statusError": "error",
   "statusDenied": "approval denied",
   "approvalsTitle": "Waiting for approval",
+  "approvalWaitingReason": "Blocked by the fail-closed {{risk}}-risk gate until you decide.",
   "approvalsEmpty": "No scheduled runs are waiting for approval.",
   "approve": "Approve",
   "deny": "Deny",
   "loadError": "Could not load schedules.",
+  "loading": "Loading schedules…",
+  "retry": "Retry",
   "created": "Schedule created."
 }
