@@ -181,9 +181,21 @@ const en = {
     tabs: { general: 'General', mcp: 'MCP Servers', acp: 'ACP Interoperability' },
     appearance: 'Appearance',
     theme: 'Theme',
-    themeDesc: 'Follows your system setting unless overridden.',
+    themeDesc: 'Choose a calm palette or follow your system.',
+    themeOptions: { light: 'Light', warm: 'Warm', dark: 'Dark', system: 'System' },
+    accent: 'Accent',
+    accentDesc: 'Applied consistently to actions, focus, and selection.',
+    accentOptions: { violet: 'Violet', ocean: 'Ocean', forest: 'Forest', ember: 'Ember' },
     density: 'Density',
-    densityDesc: 'Compact reduces component padding by 25%.',
+    densityDesc: 'Dense fits more rows without shrinking text.',
+    densityOptions: { comfortable: 'Comfortable', dense: 'Dense' },
+    zoom: 'UI zoom',
+    zoomDesc: 'Scale the complete interface from 80% to 150%.',
+    reduceMotion: 'Reduce motion',
+    reduceMotionDesc: 'Use instant state changes and static loading indicators.',
+    numerals: 'Display numerals',
+    numeralsDesc: 'Display preference only; stored data stays normalized.',
+    numeralOptions: { latin: '0123', persian: '۰۱۲۳' },
     language: 'Language',
     languageDesc: 'Persian switches the whole shell to right-to-left.',
     window: 'Window',
@@ -631,9 +643,21 @@ const fa = {
     tabs: { general: 'عمومی', mcp: 'سرورهای MCP', acp: 'همکاری ACP' },
     appearance: 'ظاهر',
     theme: 'پوسته',
-    themeDesc: 'از تنظیم سامانه پیروی می‌کند مگر اینکه تغییرش دهید.',
+    themeDesc: 'یک پالت آرام انتخاب کنید یا از تنظیم سامانه پیروی کنید.',
+    themeOptions: { light: 'روشن', warm: 'گرم', dark: 'تیره', system: 'سامانه' },
+    accent: 'رنگ تأکیدی',
+    accentDesc: 'برای کنش‌ها، فوکوس و انتخاب به‌صورت یکپارچه اعمال می‌شود.',
+    accentOptions: { violet: 'بنفش', ocean: 'اقیانوسی', forest: 'جنگلی', ember: 'کهربایی' },
     density: 'تراکم',
-    densityDesc: 'حالت فشرده فاصلهٔ اجزا را ۲۵٪ کم می‌کند.',
+    densityDesc: 'حالت متراکم بدون کوچک‌کردن متن، ردیف‌های بیشتری نشان می‌دهد.',
+    densityOptions: { comfortable: 'راحت', dense: 'متراکم' },
+    zoom: 'بزرگ‌نمایی رابط',
+    zoomDesc: 'کل رابط را از ۸۰٪ تا ۱۵۰٪ مقیاس دهید.',
+    reduceMotion: 'کاهش حرکت',
+    reduceMotionDesc: 'تغییر حالت آنی و نشانگرهای بارگذاری ثابت استفاده می‌شوند.',
+    numerals: 'نمایش رقم‌ها',
+    numeralsDesc: 'فقط ترجیح نمایشی است؛ دادهٔ ذخیره‌شده نرمال می‌ماند.',
+    numeralOptions: { latin: '0123', persian: '۰۱۲۳' },
     language: 'زبان',
     languageDesc: 'فارسی کل پوسته را راست‌به‌چپ می‌کند.',
     window: 'پنجره',
@@ -3616,23 +3640,54 @@ const ko = {
   },
 };
 
-const locales = { en, fa, 'zh-CN': zhCN, ja, es, de, fr, ko };
+const localeSources = { en, fa, 'zh-CN': zhCN, ja, es, de, fr, ko };
+const missingTranslations = [];
 
+/** Fill a locale from English while recording every untranslated leaf. */
+function withEnglishFallback(source, fallback, lang, prefix = '') {
+  return Object.fromEntries(
+    Object.entries(fallback).map(([key, fallbackValue]) => {
+      const path = `${prefix}${key}`;
+      const sourceValue = source?.[key];
+      if (fallbackValue && typeof fallbackValue === 'object') {
+        return [
+          key,
+          withEnglishFallback(
+            sourceValue && typeof sourceValue === 'object' ? sourceValue : {},
+            fallbackValue,
+            lang,
+            `${path}.`,
+          ),
+        ];
+      }
+      if (sourceValue === undefined) {
+        missingTranslations.push({ lang, key: path });
+        return [key, fallbackValue];
+      }
+      return [key, sourceValue];
+    }),
+  );
+}
+
+const locales = Object.fromEntries(
+  Object.entries(localeSources).map(([lang, tree]) => [
+    lang,
+    lang === 'en' ? tree : withEnglishFallback(tree, en, lang),
+  ]),
+);
 const NAMESPACES = Object.keys(en);
 
 for (const [lang, tree] of Object.entries(locales)) {
   for (const ns of NAMESPACES) {
     const value = tree[ns];
-    if (!value) {
-      throw new Error(`Locale ${lang} is missing namespace ${ns}`);
-    }
+    if (!value) throw new Error(`Locale ${lang} is missing namespace ${ns}`);
     const dir = resolve(ROOT, lang);
     mkdirSync(dir, { recursive: true });
     writeFileSync(resolve(dir, `${ns}.json`), JSON.stringify(value, null, 2) + '\n');
   }
 }
 
-// Coverage check: every language must carry exactly the English key set.
+// Coverage check: generated files always carry exactly the English key set.
 const flatten = (obj, prefix = '') =>
   Object.entries(obj).flatMap(([k, v]) =>
     v && typeof v === 'object' ? flatten(v, `${prefix}${k}.`) : [`${prefix}${k}`],
@@ -3644,12 +3699,21 @@ for (const [lang, tree] of Object.entries(locales)) {
   const missing = enKeys.filter((k) => !langKeys.includes(k));
   const extra = langKeys.filter((k) => !enKeys.includes(k));
   if (missing.length || extra.length) {
-    throw new Error(
-      `Locale ${lang} key drift — missing ${missing.length}, extra ${extra.length} (missing: ${missing.slice(0, 5).join(', ')})`,
-    );
+    throw new Error(`Locale ${lang} key drift — missing ${missing.length}, extra ${extra.length}`);
   }
 }
 
+const report = [
+  '# TODO i18n',
+  '',
+  'Generated by `apps/desktop/scripts/generate-locales.mjs`.',
+  'These keys currently use the explicit English fallback; English and Persian are complete.',
+  '',
+  ...missingTranslations.map(({ lang, key }) => `- [ ] \`${lang}\` — \`${key}\``),
+  '',
+].join('\n');
+writeFileSync(resolve(ROOT, 'TODO-i18n.md'), report);
+
 console.log(
-  `Generated ${NAMESPACES.length} namespaces × ${Object.keys(locales).length} languages (${enKeys.length} keys).`,
+  `Generated ${NAMESPACES.length} namespaces × ${Object.keys(locales).length} languages (${enKeys.length} keys; ${missingTranslations.length} English fallbacks).`,
 );

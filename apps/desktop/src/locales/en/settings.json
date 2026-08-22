@@ -8,9 +8,37 @@
   },
   "appearance": "Appearance",
   "theme": "Theme",
-  "themeDesc": "Follows your system setting unless overridden.",
+  "themeDesc": "Choose a calm palette or follow your system.",
+  "themeOptions": {
+    "light": "Light",
+    "warm": "Warm",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "accent": "Accent",
+  "accentDesc": "Applied consistently to actions, focus, and selection.",
+  "accentOptions": {
+    "violet": "Violet",
+    "ocean": "Ocean",
+    "forest": "Forest",
+    "ember": "Ember"
+  },
   "density": "Density",
-  "densityDesc": "Compact reduces component padding by 25%.",
+  "densityDesc": "Dense fits more rows without shrinking text.",
+  "densityOptions": {
+    "comfortable": "Comfortable",
+    "dense": "Dense"
+  },
+  "zoom": "UI zoom",
+  "zoomDesc": "Scale the complete interface from 80% to 150%.",
+  "reduceMotion": "Reduce motion",
+  "reduceMotionDesc": "Use instant state changes and static loading indicators.",
+  "numerals": "Display numerals",
+  "numeralsDesc": "Display preference only; stored data stays normalized.",
+  "numeralOptions": {
+    "latin": "0123",
+    "persian": "۰۱۲۳"
+  },
   "language": "Language",
   "languageDesc": "Persian switches the whole shell to right-to-left.",
   "window": "Window",

@@ -1,94 +1,253 @@
-/* Dream Design System — "Rooya" v1.0
- * CSS custom properties export. Drop into Tailwind v4 via @theme, or use directly.
- * Themes: [data-theme="light"] / [data-theme="dark"]  ·  Direction: dir="ltr" / dir="rtl"
+/* Dream “Rooya” design tokens v2.0 — canonical runtime export.
+ * Source: dream.tokens.json. Product code imports this file directly.
+ * Theme: data-theme=light|warm|dark · Accent: data-accent=violet|ocean|forest|ember.
  */
 
 :root {
-  /* ---- primitives ---- */
-  --n-50:#F8F8FA; --n-100:#F1F1F4; --n-200:#E4E4E9; --n-300:#CFCFD8; --n-400:#A2A2B0;
-  --n-500:#77778A; --n-600:#5B5B70; --n-700:#474759; --n-800:#333342; --n-900:#212129; --n-950:#141419;
-  --p-50:#F1EFFE; --p-100:#E4E0FD; --p-200:#CCC5FB; --p-300:#ADA1F7; --p-400:#8F82F0;
-  --p-500:#7263E8; --p-600:#5D4DD3; --p-700:#4C3EB2; --p-800:#3D3390; --p-900:#2F2870; --p-950:#1D1946;
-  --suc-100:#D8F3E2; --suc-400:#4BBA7D; --suc-600:#22824F; --suc-700:#1C6A41; --suc-900:#123F27;
-  --war-100:#FDEBCF; --war-400:#E89B2C; --war-600:#A36305; --war-700:#814E08; --war-900:#4B2F0C;
-  --dan-100:#FDE3E3; --dan-400:#EA6B6B; --dan-600:#C22B2B; --dan-700:#A02222; --dan-900:#621919;
-  --inf-100:#DBEAFE; --inf-400:#60A5FA; --inf-600:#2563EB; --inf-700:#1D4ED8; --inf-900:#1E3A8A;
-  --chart-1:#0072B2; --chart-2:#E69F00; --chart-3:#009E73; --chart-4:#CC79A7;
-  --chart-5:#56B4E9; --chart-6:#D55E00; --chart-7:#F0E442; --chart-8:#999999;
-
-  /* ---- spacing (4px base) ---- */
-  --sp-05:2px; --sp-1:4px; --sp-15:6px; --sp-2:8px; --sp-3:12px; --sp-4:16px;
-  --sp-5:20px; --sp-6:24px; --sp-8:32px; --sp-10:40px; --sp-12:48px; --sp-16:64px;
-  --density-scale:1; /* compact mode sets 0.75 */
-
-  /* ---- radius ---- */
-  --r-xs:4px; --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:16px; --r-full:9999px;
-
-  /* ---- type ---- */
-  --font-latin:"Inter","Vazirmatn",system-ui,sans-serif;
-  --font-persian:"Vazirmatn","Inter",system-ui,sans-serif;
-  --font-mono:"JetBrains Mono",ui-monospace,monospace;
-  --fs-display:30px; --lh-display:38px;
-  --fs-h1:24px; --lh-h1:32px;  --fs-h2:20px; --lh-h2:28px;  --fs-h3:16px; --lh-h3:24px;
-  --fs-body:14px; --lh-body:22px; --lh-body-fa:24px;
-  --fs-body-lg:16px; --lh-body-lg:26px; --lh-body-lg-fa:28px;
-  --fs-caption:12px; --lh-caption:18px;  --fs-micro:11px; --lh-micro:16px;
-  --fs-code:13px; --lh-code:20px;
-
-  /* ---- motion ---- */
-  --dur-fast:120ms; --dur-base:180ms; --dur-slow:260ms; --dur-slower:320ms;
-  --ease-standard:cubic-bezier(.2,0,0,1);
-  --ease-enter:cubic-bezier(.05,.7,.1,1);
-  --ease-exit:cubic-bezier(.3,0,.8,.15);
-
-  /* ---- layout ---- */
-  --rail-w:48px; --sidebar-w:260px; --statusbar-h:24px; --pane-min-w:320px;
-}
-
-[data-theme="light"] {
   color-scheme: light;
-  --bg-canvas:var(--n-50); --bg-surface:#FFFFFF; --bg-surface2:var(--n-100);
-  --bg-sunken:var(--n-200); --bg-overlay:#FFFFFF;
-  --fg-primary:var(--n-900); --fg-secondary:var(--n-600); --fg-muted:#6E6E80; --fg-inverse:#FFFFFF;
-  --accent-solid:var(--p-600); --accent-text:var(--p-600); --accent-soft:var(--p-100);
-  --border-default:var(--n-200); --border-strong:var(--n-300);
-  --focus-ring:var(--p-500);
-  --success-fg:var(--suc-700); --success-bg:var(--suc-100);
-  --warning-fg:var(--war-700); --warning-bg:var(--war-100);
-  --danger-fg:var(--dan-700);  --danger-bg:var(--dan-100);
-  --info-fg:var(--inf-700);    --info-bg:var(--inf-100);
-  --shadow-e1:0 1px 2px rgba(20,20,25,.06),0 1px 3px rgba(20,20,25,.10);
-  --shadow-e2:0 4px 12px rgba(20,20,25,.10),0 2px 4px rgba(20,20,25,.08);
-  --shadow-e3:0 12px 32px rgba(20,20,25,.16),0 4px 8px rgba(20,20,25,.08);
+
+  /* Typography */
+  --ds-font-latin: 'Inter Variable', Inter, system-ui, -apple-system, sans-serif;
+  --ds-font-persian: 'Vazirmatn Variable', Vazirmatn, Tahoma, sans-serif;
+  --ds-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+  --ds-font-ui: var(--ds-font-latin);
+  --ds-type-micro: 0.6875rem;
+  --ds-type-caption: 0.75rem;
+  --ds-type-body: 0.875rem;
+  --ds-type-body-lg: 1rem;
+  --ds-type-h3: 1rem;
+  --ds-type-h2: 1.25rem;
+  --ds-type-h1: 1.5rem;
+  --ds-type-display: 1.875rem;
+  --ds-leading-micro: 1.45;
+  --ds-leading-caption: 1.5;
+  --ds-leading-body: 1.57;
+  --ds-leading-body-fa: 1.72;
+  --ds-leading-body-lg: 1.625;
+  --ds-leading-body-lg-fa: 1.75;
+  --ds-leading-heading: 1.3;
+
+  /* Spacing and density — dimensions stay in rem so UI zoom is lossless. */
+  --space-0: 0rem;
+  --space-0-5: 0.125rem;
+  --space-1: 0.25rem;
+  --space-1-5: 0.375rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --density-factor: 1;
+  --control-height-sm: calc(1.75rem * var(--density-factor));
+  --control-height-md: calc(2rem * var(--density-factor));
+  --control-height-lg: calc(2.5rem * var(--density-factor));
+  --control-pad-inline-sm: calc(0.625rem * var(--density-factor));
+  --control-pad-inline-md: calc(0.75rem * var(--density-factor));
+  --control-pad-inline-lg: calc(1rem * var(--density-factor));
+  --row-block: calc(0.5rem * var(--density-factor));
+
+  /* Shape */
+  --ds-radius-xs: 0.25rem;
+  --ds-radius-sm: 0.375rem;
+  --ds-radius-md: 0.5rem;
+  --ds-radius-lg: 0.75rem;
+  --ds-radius-xl: 1rem;
+  --ds-radius-2xl: 1.25rem;
+  --ds-radius-full: 624.9375rem;
+
+  /* Motion */
+  --ds-duration-instant: 0ms;
+  --ds-duration-micro: 120ms;
+  --ds-duration-standard: 220ms;
+  --ds-duration-expressive: 340ms;
+  --ds-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ds-ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ds-ease-enter: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ds-ease-exit: cubic-bezier(0.3, 0, 0.8, 0.15);
+
+  /* Layering */
+  --z-base: 0;
+  --z-sticky: 20;
+  --z-banner: 30;
+  --z-popover: 50;
+  --z-modal: 60;
+  --z-toast: 70;
+
+  /* Shell geometry */
+  --ds-shell-rail: 3rem;
+  --ds-shell-sidebar: 16.25rem;
+  --ds-shell-statusbar: 1.5rem;
+  --ds-shell-titlebar: 2.375rem;
+  --content-readable: 48rem;
+  --overlay-sm: 28rem;
+  --overlay-md: 36rem;
+  --overlay-lg: 44rem;
+
+  /* Light theme is also the no-JS fallback. */
+  --ds-surface-canvas: #f7f8fa;
+  --ds-surface-base: #ffffff;
+  --ds-surface-raised: #ffffff;
+  --ds-surface-subtle: #eef1f5;
+  --ds-surface-sunken: #eef1f5;
+  --ds-surface-overlay: #ffffff;
+  --ds-text-primary: #1b1f2a;
+  --ds-text-secondary: #4e5969;
+  --ds-text-muted: #667085;
+  --ds-text-inverse: #ffffff;
+  --ds-border-subtle: #dde2ea;
+  --ds-border-strong: #c4cbd6;
+  --ds-success-fg: #176b4a;
+  --ds-success-bg: #e1f6ed;
+  --ds-warning-fg: #815000;
+  --ds-warning-bg: #fff0d5;
+  --ds-danger-fg: #a12a38;
+  --ds-danger-bg: #fce8ea;
+  --ds-info-fg: #125cad;
+  --ds-info-bg: #e5f1ff;
+  --ds-elevation-raised: 0 0.0625rem 0.1875rem rgb(16 24 40 / 0.07);
+  --ds-elevation-overlay: 0 0.5rem 1.5rem -0.25rem rgb(16 24 40 / 0.1);
+  --ds-elevation-modal: 0 1.25rem 3rem -0.5rem rgb(16 24 40 / 0.16);
+
+  /* Violet is the default accent. */
+  --ds-accent-solid: #5b4bc4;
+  --ds-accent-hover: #493ba5;
+  --ds-accent-soft: #ece9ff;
+  --ds-accent-text: #493ba5;
+  --ds-accent-fg: #ffffff;
+  --ds-focus-ring: #5b4bc4;
 }
 
-[data-theme="dark"] {
+[data-theme='light'] {
+  color-scheme: light;
+}
+
+[data-theme='warm'] {
+  color-scheme: light;
+  --ds-surface-canvas: #f8f5ef;
+  --ds-surface-base: #fffcf7;
+  --ds-surface-raised: #ffffff;
+  --ds-surface-subtle: #f1ece3;
+  --ds-surface-sunken: #eee7db;
+  --ds-surface-overlay: #fffcf7;
+  --ds-text-primary: #29251f;
+  --ds-text-secondary: #5f574b;
+  --ds-text-muted: #6d6357;
+  --ds-text-inverse: #ffffff;
+  --ds-border-subtle: #ded5c7;
+  --ds-border-strong: #c8bba8;
+  --ds-success-fg: #176b4a;
+  --ds-success-bg: #e4f3e9;
+  --ds-warning-fg: #795000;
+  --ds-warning-bg: #f8eacb;
+  --ds-danger-fg: #992e38;
+  --ds-danger-bg: #f7e5e5;
+  --ds-info-fg: #17599d;
+  --ds-info-bg: #e4eef8;
+  --ds-elevation-raised: 0 0.0625rem 0.1875rem rgb(58 45 28 / 0.07);
+  --ds-elevation-overlay: 0 0.5rem 1.5rem -0.25rem rgb(58 45 28 / 0.12);
+  --ds-elevation-modal: 0 1.25rem 3rem -0.5rem rgb(58 45 28 / 0.18);
+}
+
+[data-theme='dark'] {
   color-scheme: dark;
-  --bg-canvas:#111116; --bg-surface:var(--n-950); --bg-surface2:#1B1B22;
-  --bg-sunken:#0C0C10; --bg-overlay:#20202A;
-  --fg-primary:#ECECF1; --fg-secondary:var(--n-400); --fg-muted:#8A8A9A; --fg-inverse:#141419;
-  --accent-solid:var(--p-400); --accent-text:var(--p-300); --accent-soft:rgba(47,40,112,.4);
-  --border-default:#2A2A35; --border-strong:#3A3A48;
-  --focus-ring:var(--p-300);
-  --success-fg:var(--suc-400); --success-bg:rgba(18,63,39,.4);
-  --warning-fg:var(--war-400); --warning-bg:rgba(75,47,12,.4);
-  --danger-fg:var(--dan-400);  --danger-bg:rgba(98,25,25,.4);
-  --info-fg:var(--inf-400);    --info-bg:rgba(30,58,138,.4);
-  --shadow-e1:none;
-  --shadow-e2:0 4px 16px rgba(0,0,0,.45);
-  --shadow-e3:0 12px 40px rgba(0,0,0,.6);
+  --ds-surface-canvas: #0d1117;
+  --ds-surface-base: #131923;
+  --ds-surface-raised: #19212d;
+  --ds-surface-subtle: #1c2532;
+  --ds-surface-sunken: #090d12;
+  --ds-surface-overlay: #202a38;
+  --ds-text-primary: #f0f4fa;
+  --ds-text-secondary: #b2bdcc;
+  --ds-text-muted: #8e9aad;
+  --ds-text-inverse: #171228;
+  --ds-border-subtle: #2a3544;
+  --ds-border-strong: #46546a;
+  --ds-success-fg: #64d5a7;
+  --ds-success-bg: #12382d;
+  --ds-warning-fg: #f2bd5d;
+  --ds-warning-bg: #3d2e13;
+  --ds-danger-fg: #ff8a98;
+  --ds-danger-bg: #431e27;
+  --ds-info-fg: #79b8ff;
+  --ds-info-bg: #183451;
+  --ds-elevation-raised: 0 0.125rem 0.5rem -0.125rem rgb(0 0 0 / 0.22);
+  --ds-elevation-overlay: 0 0.75rem 2rem -0.375rem rgb(0 0 0 / 0.44);
+  --ds-elevation-modal: 0 1.5rem 3.5rem -0.5rem rgb(0 0 0 / 0.56);
+  --ds-accent-solid: #a99af5;
+  --ds-accent-hover: #c8beff;
+  --ds-accent-soft: #241d52;
+  --ds-accent-text: #c8beff;
+  --ds-accent-fg: #171228;
+  --ds-focus-ring: #a99af5;
 }
 
-/* Direction-aware base */
-[dir="rtl"] { font-family: var(--font-persian); }
-[dir="ltr"] { font-family: var(--font-latin); }
+/* Accent sets are independent of theme. Dark values use a low-luminance foreground. */
+[data-theme='light'][data-accent='ocean'],
+[data-theme='warm'][data-accent='ocean'] {
+  --ds-accent-solid: #0566c2;
+  --ds-accent-hover: #0457a6;
+  --ds-accent-soft: #e0f0ff;
+  --ds-accent-text: #0566c2;
+  --ds-accent-fg: #ffffff;
+  --ds-focus-ring: #0566c2;
+}
+[data-theme='dark'][data-accent='ocean'] {
+  --ds-accent-solid: #71b7ff;
+  --ds-accent-hover: #9bcaff;
+  --ds-accent-soft: #082e52;
+  --ds-accent-text: #71b7ff;
+  --ds-accent-fg: #07192a;
+  --ds-focus-ring: #71b7ff;
+}
+[data-theme='light'][data-accent='forest'],
+[data-theme='warm'][data-accent='forest'] {
+  --ds-accent-solid: #087a5b;
+  --ds-accent-hover: #06684d;
+  --ds-accent-soft: #ddf7ec;
+  --ds-accent-text: #087a5b;
+  --ds-accent-fg: #ffffff;
+  --ds-focus-ring: #087a5b;
+}
+[data-theme='dark'][data-accent='forest'] {
+  --ds-accent-solid: #56d6ac;
+  --ds-accent-hover: #7ae2c0;
+  --ds-accent-soft: #093d31;
+  --ds-accent-text: #56d6ac;
+  --ds-accent-fg: #071d16;
+  --ds-focus-ring: #56d6ac;
+}
+[data-theme='light'][data-accent='ember'],
+[data-theme='warm'][data-accent='ember'] {
+  --ds-accent-solid: #a6401d;
+  --ds-accent-hover: #8d3517;
+  --ds-accent-soft: #ffe9de;
+  --ds-accent-text: #a6401d;
+  --ds-accent-fg: #ffffff;
+  --ds-focus-ring: #a6401d;
+}
+[data-theme='dark'][data-accent='ember'] {
+  --ds-accent-solid: #ff9a72;
+  --ds-accent-hover: #ffb296;
+  --ds-accent-soft: #57230f;
+  --ds-accent-text: #ff9a72;
+  --ds-accent-fg: #271008;
+  --ds-focus-ring: #ff9a72;
+}
 
-/* LTR islands inside RTL (code, URLs, keys, paths, latency) */
-.ltr-island { direction: ltr; unicode-bidi: isolate; text-align: start; font-family: var(--font-mono); }
+[data-density='dense'] {
+  --density-factor: 0.82;
+}
 
-/* Focus contract — never remove */
-:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--r-xs); }
+[dir='rtl'] {
+  --ds-font-ui: var(--ds-font-persian);
+}
 
-@media (prefers-reduced-motion: reduce) {
-  :root { --dur-fast:0ms; --dur-base:0ms; --dur-slow:0ms; --dur-slower:0ms; }
+[data-reduce-motion='true'] {
+  --ds-duration-micro: 0ms;
+  --ds-duration-standard: 0ms;
+  --ds-duration-expressive: 0ms;
 }

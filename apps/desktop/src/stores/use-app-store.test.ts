@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, useAppStore } from '@/stores/use-app-store';
+import {
+  MAX_UI_ZOOM,
+  migrateAppState,
+  MIN_UI_ZOOM,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+  useAppStore,
+} from '@/stores/use-app-store';
 
 const initial = useAppStore.getState();
 
@@ -39,6 +46,31 @@ describe('useAppStore', () => {
     useAppStore.setState({ resolvedTheme: 'dark' });
     useAppStore.getState().toggleTheme();
     expect(useAppStore.getState().theme).toBe('light');
+  });
+
+  it('clamps zoom and persists the complete appearance model', () => {
+    useAppStore.getState().setZoom(12);
+    expect(useAppStore.getState().zoom).toBe(MIN_UI_ZOOM);
+    useAppStore.getState().setZoom(999);
+    expect(useAppStore.getState().zoom).toBe(MAX_UI_ZOOM);
+
+    useAppStore.getState().setTheme('warm');
+    useAppStore.getState().setAccent('ocean');
+    useAppStore.getState().setDensity('dense');
+    useAppStore.getState().setReduceMotion(true);
+    expect(useAppStore.getState()).toMatchObject({
+      theme: 'warm',
+      accent: 'ocean',
+      density: 'dense',
+      reduceMotion: true,
+    });
+  });
+
+  it('migrates legacy compact density without trusting invalid zoom', () => {
+    expect(migrateAppState({ density: 'compact', zoom: 200 })).toMatchObject({
+      density: 'dense',
+      zoom: MAX_UI_ZOOM,
+    });
   });
 
   it('tracks agent status and pending approvals', () => {

@@ -12,8 +12,8 @@ import { LANGUAGES, useTranslation } from '@/lib/i18n';
 import { getBridgeClient } from '@/lib/bridge/client';
 import type { ACPAgentDto, MCPServerDto, MCPToolDto } from '@/lib/bridge/types';
 import { dialogApi, windowApi } from '@/lib/tauri';
-import { useAppStore } from '@/stores/use-app-store';
-import type { Density, ThemeMode } from '@/types';
+import { MAX_UI_ZOOM, MIN_UI_ZOOM, useAppStore } from '@/stores/use-app-store';
+import type { Accent, Density, NumeralStyle, ThemeMode } from '@/types';
 
 /** A labelled settings row. */
 function Row({
@@ -36,8 +36,10 @@ function Row({
   );
 }
 
-const THEMES: ThemeMode[] = ['light', 'dark', 'system'];
-const DENSITIES: Density[] = ['comfortable', 'compact'];
+const THEMES: ThemeMode[] = ['light', 'warm', 'dark', 'system'];
+const ACCENTS: Accent[] = ['violet', 'ocean', 'forest', 'ember'];
+const DENSITIES: Density[] = ['comfortable', 'dense'];
+const NUMERAL_STYLES: NumeralStyle[] = ['latin', 'persian'];
 
 export function SettingsRoute() {
   const { t } = useTranslation('settings');
@@ -48,6 +50,14 @@ export function SettingsRoute() {
   const setTheme = useAppStore((s) => s.setTheme);
   const density = useAppStore((s) => s.density);
   const setDensity = useAppStore((s) => s.setDensity);
+  const accent = useAppStore((s) => s.accent);
+  const setAccent = useAppStore((s) => s.setAccent);
+  const zoom = useAppStore((s) => s.zoom);
+  const setZoom = useAppStore((s) => s.setZoom);
+  const reduceMotion = useAppStore((s) => s.reduceMotion);
+  const setReduceMotion = useAppStore((s) => s.setReduceMotion);
+  const numerals = useAppStore((s) => s.numerals);
+  const setNumerals = useAppStore((s) => s.setNumerals);
   const locale = useAppStore((s) => s.locale);
   const setLocale = useAppStore((s) => s.setLocale);
   const workspaceRoot = useAppStore((s) => s.workspaceRoot);
@@ -232,15 +242,32 @@ export function SettingsRoute() {
               <h2 className="pb-2 text-h2 font-semibold text-fg-primary">{t('appearance')}</h2>
 
               <Row label={t('theme')} description={t('themeDesc')}>
-                <div className="flex gap-1">
+                <div className="flex flex-wrap justify-end gap-1">
                   {THEMES.map((option) => (
                     <Button
                       key={option}
                       size="sm"
                       variant={theme === option ? 'primary' : 'secondary'}
+                      aria-pressed={theme === option}
                       onClick={() => setTheme(option)}
                     >
-                      {option}
+                      {t(`themeOptions.${option}`)}
+                    </Button>
+                  ))}
+                </div>
+              </Row>
+
+              <Row label={t('accent')} description={t('accentDesc')}>
+                <div className="flex flex-wrap justify-end gap-1">
+                  {ACCENTS.map((option) => (
+                    <Button
+                      key={option}
+                      size="sm"
+                      variant={accent === option ? 'primary' : 'secondary'}
+                      aria-pressed={accent === option}
+                      onClick={() => setAccent(option)}
+                    >
+                      {t(`accentOptions.${option}`)}
                     </Button>
                   ))}
                 </div>
@@ -253,9 +280,53 @@ export function SettingsRoute() {
                       key={option}
                       size="sm"
                       variant={density === option ? 'primary' : 'secondary'}
+                      aria-pressed={density === option}
                       onClick={() => setDensity(option)}
                     >
-                      {option}
+                      {t(`densityOptions.${option}`)}
+                    </Button>
+                  ))}
+                </div>
+              </Row>
+
+              <Row label={t('zoom')} description={t('zoomDesc')}>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min={MIN_UI_ZOOM}
+                    max={MAX_UI_ZOOM}
+                    step={5}
+                    value={zoom}
+                    aria-label={t('zoom')}
+                    onChange={(event) => setZoom(Number(event.target.value))}
+                    className="w-28 accent-accent"
+                  />
+                  <output className="ltr-island tabular w-10 text-end text-caption">{zoom}%</output>
+                </div>
+              </Row>
+
+              <Row label={t('reduceMotion')} description={t('reduceMotionDesc')}>
+                <Button
+                  size="sm"
+                  variant={reduceMotion ? 'primary' : 'secondary'}
+                  aria-pressed={reduceMotion}
+                  onClick={() => setReduceMotion(!reduceMotion)}
+                >
+                  {reduceMotion ? tc('generic.on') : tc('generic.off')}
+                </Button>
+              </Row>
+
+              <Row label={t('numerals')} description={t('numeralsDesc')}>
+                <div className="flex gap-1">
+                  {NUMERAL_STYLES.map((option) => (
+                    <Button
+                      key={option}
+                      size="sm"
+                      variant={numerals === option ? 'primary' : 'secondary'}
+                      aria-pressed={numerals === option}
+                      onClick={() => setNumerals(option)}
+                    >
+                      {t(`numeralOptions.${option}`)}
                     </Button>
                   ))}
                 </div>

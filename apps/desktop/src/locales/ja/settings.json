@@ -9,8 +9,36 @@
   "appearance": "外観",
   "theme": "テーマ",
   "themeDesc": "上書きしない限りシステム設定に従います。",
+  "themeOptions": {
+    "light": "Light",
+    "warm": "Warm",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "accent": "Accent",
+  "accentDesc": "Applied consistently to actions, focus, and selection.",
+  "accentOptions": {
+    "violet": "Violet",
+    "ocean": "Ocean",
+    "forest": "Forest",
+    "ember": "Ember"
+  },
   "density": "密度",
   "densityDesc": "コンパクトはコンポーネントの余白を 25% 減らします。",
+  "densityOptions": {
+    "comfortable": "Comfortable",
+    "dense": "Dense"
+  },
+  "zoom": "UI zoom",
+  "zoomDesc": "Scale the complete interface from 80% to 150%.",
+  "reduceMotion": "Reduce motion",
+  "reduceMotionDesc": "Use instant state changes and static loading indicators.",
+  "numerals": "Display numerals",
+  "numeralsDesc": "Display preference only; stored data stays normalized.",
+  "numeralOptions": {
+    "latin": "0123",
+    "persian": "۰۱۲۳"
+  },
   "language": "言語",
   "languageDesc": "ペルシャ語にするとシェル全体が右から左になります。",
   "window": "ウィンドウ",
