@@ -6,7 +6,7 @@
 > **Prompt P-02, Item 1.2.1–1.2.8** (Protocol Design) and gate **G1**.
 
 - **Status:** Stable
-- **Protocol version:** `1.0`
+- **Protocol version:** `1.1`
 - **Transport:** one process (the Python *sidecar*) speaking newline-delimited
   JSON over its **stdin** (frontend → sidecar) and **stdout** (sidecar →
   frontend). **stderr** is reserved for human-readable logs and must never carry
@@ -780,3 +780,14 @@ All approval dialog copy is bilingual (English + Persian) and generated via
 The composer `<textarea>` uses `dir="auto"` so Persian input is right-aligned.
 Card and dialog layout use CSS logical properties (`start`/`end`) exclusively —
 no hard-coded `left`/`right`.
+
+
+### 3.x Additions in 1.1
+
+`conversation.compact` takes `{session_id}` and returns the compaction event.
+`nudge.status` takes `{session_id}`. `memory2.snapshot|status` accept optional
+`{target}`; `memory2.add` takes `{target,text}`, `memory2.replace` takes
+`{target,old,new}`, and `memory2.remove` takes `{target,old}`. Targets are
+`memory` and `user`. `search.sessions.query` takes `{query}`;
+`search.sessions.snippet_rules|status|rebuild` take `{}`. All parameters are
+validated at the sidecar boundary and failures are JSON-RPC errors.

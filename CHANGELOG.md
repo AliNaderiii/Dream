@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Conversation context accounting, deterministic offline compaction, `/compress`,
+  and an optional once-per-session durable-memory nudge.
+- Bridge endpoints for dual bounded memory stores, session-search status/query,
+  explicit compaction, and nudge status.
+
 ## [0.3.2] - 2026-08-21
 
 ### Fixed
