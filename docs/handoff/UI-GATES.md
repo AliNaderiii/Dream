@@ -703,3 +703,57 @@ diff_check=PASS
 ## Gate E decision
 
 **Stage E: GREEN.** App bundle, entry gzip, palette, route, streaming task, retained memory, runtime health, transcript virtualization, contrast, axe, reduced motion, full desktop/Python suites, static checks, locale integrity, Ladle, CI artifact wiring, test-edit audit, and protected boundaries pass.
+
+---
+
+# Gate F — design handoff and close-out
+
+## Required documents
+
+```text
+$ test -f docs/design/visual-language.md \
+    -a -f docs/design/figma-handoff.md \
+    -a -f docs/design/accessibility-audit-v2.md \
+    -a -f docs/handoff/UI-E.md \
+    -a -f docs/handoff/UI-F.md && echo 'stage_f_documents=PASS'
+stage_f_documents=PASS
+```
+
+- `visual-language.md` records calm/precise/trustworthy direction, three-theme rationale, motion philosophy, and explicit restraint.
+- `figma-handoff.md` records exact Tokens Studio import/export steps, 12 ordered sets, 12 theme combinations, ownership, and token proposal rules.
+- `accessibility-audit-v2.md` compares prototype/pre-Stage-E findings with implemented contrast, keyboard, ARIA, RTL, reduced-motion, axe, and virtualization evidence, while retaining honest native assistive-technology follow-ups.
+- `UI-F.md` contains the source-rendered screenshot/reference manifest and Definition-of-Done map.
+
+## Truthful product records
+
+`MASTER_CHECKLIST.md` marks conversation, session manager, skills, and subagent dashboard complete. The combined memory/reminder item stays open because reminder authoring is absent. The combined scheduler-edit item stays open because a full existing-schedule edit flow is absent. `CHANGELOG.md` and the README describe only shipped desktop behavior and executable commands.
+
+## Screenshot/reference policy
+
+No binary design asset was added. The reproducible references are the token-driven Phase-0 prototype, Ladle primitive and theme matrices, committed DOM snapshots, and route/state fixtures listed in `UI-F.md`.
+
+## Orchestrator-level diff review
+
+```text
+branch=arena/01a02863-dream
+protocol_changes=0
+protected_paths=dream/,tests/ unchanged
+telemetry_or_analytics_added=0
+raw_component_hex_or_px_added=0
+diff_check=PASS
+```
+
+Review findings:
+
+- all seven Stage E/F specialist scopes reached their focused and full gates;
+- every changed existing assertion is documented in `UI-E.md`; no test was skipped or weakened;
+- `bridge.test.ts` remains unchanged from accepted Gate D;
+- pane and variable-list regression churn moved into pure tested models;
+- route skeletons have three structural states and use no hardcoded user-facing text;
+- token JSON and runtime CSS agree;
+- locale trees and Persian fallback count are unchanged and green;
+- production code adds no network call, runtime dependency, telemetry, analytics, protocol, kernel, metering, or ledger change.
+
+## Gate F decision
+
+**Stage F: GREEN.** Design, Tokens Studio, accessibility, screenshot/reference, checklist, changelog, README, cumulative evidence, and orchestrator review deliverables are complete. Gates A–F are closed on the Arena-fixed branch; native screen-reader/forced-colors checks remain explicitly documented release-environment verification rather than being falsely claimed by jsdom.
