@@ -14,7 +14,7 @@ Seven specialist roles remained active until their focused gates passed; the orc
 3. **Runtime budget specialist** — executable palette, route, streaming-task, heap-growth, bundle, cold-start, rejection, and event-loop-yield guards with JSON output.
 4. **Accessibility specialist** — all-five-surface axe coverage, required meter semantics, reduced-motion coverage, and assistive-technology limitation review.
 5. **Token and contrast specialist** — canonical JSON/CSS round trip, Light muted adjustment, and a dedicated ≥5.0 validator floor across four accents.
-6. **CI and localization specialist** — performance artifact wiring, exact eight-locale loader behavior, `fa=0`, and isolated Python timing guidance.
+6. **CI and localization specialist** — executable performance artifact wiring plus an owner-applicable workflow patch, exact eight-locale loader behavior, `fa=0`, and isolated Python timing guidance.
 7. **Regression and handoff specialist** — assertion-strength audit, TypeScript/ESLint/Prettier/build/Ladle/Python gates, protected-path verification, and final diff review.
 
 No role changed `dream/`, Python `tests/`, the framed JSON-RPC protocol, kernel behavior, metering, or ledger logic.
@@ -120,7 +120,7 @@ No test was skipped. No timeout/cancellation assertion changed.
 
 ## Performance JSON and CI artifact
 
-`apps/desktop/scripts/perf-check.ts` launches the representative runtime tests, extracts their explicit measurements, validates the production bundle, measures retained heap with `--expose-gc`, writes `performance-results.json`, and emits the same report as JSON. The generated report is ignored locally and uploaded by Desktop CI as `desktop-performance-${{ github.sha }}`.
+`apps/desktop/scripts/perf-check.ts` launches the representative runtime tests, extracts their explicit measurements, validates the production bundle, measures retained heap with `--expose-gc`, writes `performance-results.json`, and emits the same report as JSON. The generated report is ignored locally. GitHub rejected workflow-file updates from the Arena App because it lacks `workflows` permission, so [`ci-perf-check.patch`](./ci-perf-check.patch) carries the owner-applied Desktop CI steps that build, run the guard, and upload `performance-results.json` as `desktop-performance-${{ github.sha }}`. The executable harness and package scripts land in this branch; only the workflow edit is deferred.
 
 ```json
 {

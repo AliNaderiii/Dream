@@ -112,7 +112,7 @@ npm install
 npm run tauri dev          # native development app
 npm run tauri build        # host-platform installer artifacts
 npm run accessibility:check
-npm run build && npm run performance:check  # emits CI-uploaded JSON budgets
+npm run build && npm run performance:check  # emits JSON; see docs/handoff/ci-perf-check.patch
 ```
 
 ## Telegram pairing

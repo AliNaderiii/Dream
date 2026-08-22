@@ -586,7 +586,7 @@ $ npm run performance:check
 }
 ```
 
-`apps/desktop/scripts/perf-check.ts` emits and writes this JSON. Desktop CI builds the app, runs the guard, and uploads `apps/desktop/performance-results.json` as `desktop-performance-${{ github.sha }}`.
+`apps/desktop/scripts/perf-check.ts` emits and writes this JSON. The Arena GitHub App cannot update workflow files, so [`ci-perf-check.patch`](./ci-perf-check.patch) carries the owner-applied Desktop CI steps that build the app, run the guard, and upload `apps/desktop/performance-results.json` as `desktop-performance-${{ github.sha }}`. The harness lands here; workflow application is explicitly deferred to an owner.
 
 ## Variable-height transcript virtualization
 
@@ -702,7 +702,7 @@ diff_check=PASS
 
 ## Gate E decision
 
-**Stage E: GREEN.** App bundle, entry gzip, palette, route, streaming task, retained memory, runtime health, transcript virtualization, contrast, axe, reduced motion, full desktop/Python suites, static checks, locale integrity, Ladle, CI artifact wiring, test-edit audit, and protected boundaries pass.
+**Stage E: GREEN.** App bundle, entry gzip, palette, route, streaming task, retained memory, runtime health, transcript virtualization, contrast, axe, reduced motion, full desktop/Python suites, static checks, locale integrity, Ladle, executable artifact harness, owner-applicable CI patch, test-edit audit, and protected boundaries pass.
 
 ---
 
@@ -715,7 +715,8 @@ $ test -f docs/design/visual-language.md \
     -a -f docs/design/figma-handoff.md \
     -a -f docs/design/accessibility-audit-v2.md \
     -a -f docs/handoff/UI-E.md \
-    -a -f docs/handoff/UI-F.md && echo 'stage_f_documents=PASS'
+    -a -f docs/handoff/UI-F.md \
+    -a -f docs/handoff/ci-perf-check.patch && echo 'stage_f_documents=PASS'
 stage_f_documents=PASS
 ```
 
@@ -723,6 +724,7 @@ stage_f_documents=PASS
 - `figma-handoff.md` records exact Tokens Studio import/export steps, 12 ordered sets, 12 theme combinations, ownership, and token proposal rules.
 - `accessibility-audit-v2.md` compares prototype/pre-Stage-E findings with implemented contrast, keyboard, ARIA, RTL, reduced-motion, axe, and virtualization evidence, while retaining honest native assistive-technology follow-ups.
 - `UI-F.md` contains the source-rendered screenshot/reference manifest and Definition-of-Done map.
+- `ci-perf-check.patch` contains the exact deferred workflow diff for owner application; the Arena App cannot write either workflow file.
 
 ## Truthful product records
 
@@ -752,8 +754,9 @@ Review findings:
 - route skeletons have three structural states and use no hardcoded user-facing text;
 - token JSON and runtime CSS agree;
 - locale trees and Persian fallback count are unchanged and green;
-- production code adds no network call, runtime dependency, telemetry, analytics, protocol, kernel, metering, or ledger change.
+- production code adds no network call, runtime dependency, telemetry, analytics, protocol, kernel, metering, or ledger change;
+- R5-1 Path B is active: direct pushes failed first on `.github/workflows/ci.yml` and then on `.github/workflows/desktop-ci.yml` because the Arena App lacks `workflows` permission. Both workflows remain at the accepted remote base, and `ci-perf-check.patch` preserves their exact intended diff for owner application.
 
 ## Gate F decision
 
-**Stage F: GREEN.** Design, Tokens Studio, accessibility, screenshot/reference, checklist, changelog, README, cumulative evidence, and orchestrator review deliverables are complete. Gates A–F are closed on the Arena-fixed branch; native screen-reader/forced-colors checks remain explicitly documented release-environment verification rather than being falsely claimed by jsdom.
+**Stage F: GREEN.** Design, Tokens Studio, accessibility, screenshot/reference, checklist, changelog, README, cumulative evidence, owner-applied CI patch, and orchestrator review deliverables are complete. Gates A–F are closed on the Arena-fixed branch; native screen-reader/forced-colors checks and owner workflow patch application remain explicitly documented release-environment verification rather than being falsely claimed by jsdom or the restricted GitHub App.

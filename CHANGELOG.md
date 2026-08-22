@@ -144,10 +144,11 @@ Prompt P-11 — Internationalisation, Documentation, Security Audit & Release.
   Light muted text now measures 5.47:1 on canvas in every accent. Persian has
   zero English fallbacks for the completed UI stages.
 - **Desktop UI — performance and accessibility gates.** Route, locale, pane,
-  and vendor splitting keep every production chunk below 500kB. Desktop CI
-  uploads a JSON report guarding command-palette open, route changes,
+  and vendor splitting keep every production chunk below 500kB. The desktop
+  harness emits a JSON report guarding command-palette open, route changes,
   streaming long tasks, 500-message memory growth, and unhandled rejections;
-  axe coverage runs on all five operational workspaces.
+  an owner-applied workflow patch adds CI upload, while axe coverage runs on
+  all five operational workspaces.
 - **S00 — Commercial kernel (`dream/commerce.py`).** Seven plans — `local`
   (unlimited, free, no ledger file), `guest` (free, 20 turns/day), `daily`,
   `individual_monthly`, `individual_yearly`, `team`, and `company` — all in

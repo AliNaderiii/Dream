@@ -11,6 +11,7 @@
 - [`../design/accessibility-audit-v2.md`](../design/accessibility-audit-v2.md) — implementation audit with before/after contrast, keyboard, ARIA, RTL, reduced-motion, virtualization, five-surface axe, and honest manual native-screen-reader follow-ups.
 - [`UI-E.md`](./UI-E.md) — Stage E implementation, test-edit audit, budgets, warning triage, and handoff evidence.
 - [`UI-GATES.md`](./UI-GATES.md) — cumulative exact Gate A–F command evidence.
+- [`ci-perf-check.patch`](./ci-perf-check.patch) — owner-applied workflow update for performance/accessibility execution and JSON artifact upload; required because the Arena GitHub App cannot write workflow files.
 
 The design package remains code- and token-based. No binary design artifact was introduced.
 
@@ -45,7 +46,7 @@ Reviewers can run `npm run storybook` for the reference catalog or `npm run dev`
 | Every chunk <500kB; entry <250kB gzip                      | Vite build + perf report                      | Complete                                           |
 | Light muted ≥5:1; other normal text ≥4.5:1                 | 108-check token validator                     | Complete                                           |
 | Persian fallback count zero                                | locale gate                                   | Complete                                           |
-| Perf report in CI                                          | Desktop CI artifact step                      | Complete                                           |
+| Perf report in CI                                          | Owner-applied `ci-perf-check.patch`           | Patch complete; owner workflow apply required      |
 | axe clean on all five surfaces                             | accessibility gate                            | Complete                                           |
 | Reduced motion on required surfaces                        | OS/manual and six-surface source-policy tests | Complete                                           |
 | No telemetry, network analytics, or protocol change        | diff review and protected-path check          | Complete                                           |
@@ -60,7 +61,7 @@ Reviewers can run `npm run storybook` for the reference catalog or `npm run dev`
 
 ## Architecture boundary
 
-The Stage E/F patch changes desktop UI, design/handoff docs, and CI only. It consumes protocol v3.16. It does not change the Python kernel, bridge protocol, metering, ledger logic, or Python tests.
+The Stage E/F branch changes desktop UI and design/handoff docs and carries the deferred CI workflow diff as `ci-perf-check.patch`. It consumes protocol v3.16. It does not change the Python kernel, bridge protocol, metering, ledger logic, Python tests, or the checked-in workflows, which require owner application.
 
 ## Gate decision
 
