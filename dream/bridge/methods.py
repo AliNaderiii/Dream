@@ -638,6 +638,17 @@ class BridgeMethods:
             "skill.enable": self.skill_enable,
             "skill.disable": self.skill_disable,
             "skill.export": self.skill_export,
+            "skills.list": self.skill_list,
+            "skills.view": self.skill_get,
+            "skills.save": self.skill_install,
+            "skills.edit": self.skill_install,
+            "skills.delete": self.skill_delete,
+            "skills.versions": self.skills_versions,
+            "skills.use_log": self.skills_use_log,
+            "skills.propose": self.skills_propose,
+            "skills.apply_proposal": self.skills_apply_proposal,
+            "skills.discard_proposal": self.skills_discard_proposal,
+            "skills.learn_status": self.skills_learn_status,
             "tool.list": self.tool_list,
             "tool.execute": self.tool_execute,
             "approval.request": self.approval_request,
@@ -1451,6 +1462,57 @@ class BridgeMethods:
         if not deleted:
             raise invalid_params(f"no active memory with id {memory_id}")
         return {"deleted": True, "memory_id": memory_id}
+
+    def skills_versions(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        name = params.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise invalid_params("name must be a non-empty string")
+        from dream.skills.store import get_ledger
+        with get_ledger() as ledger:
+            return {"versions": [item.__dict__ for item in ledger.versions(name)]}
+
+    def skills_use_log(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        name = params.get("name")
+        if name is not None and not isinstance(name, str):
+            raise invalid_params("name must be a string")
+        from dream.skills.store import get_ledger
+        with get_ledger() as ledger:
+            return {"uses": [item.__dict__ for item in ledger.uses(name)]}
+
+    def skills_propose(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        message = params.get("message")
+        if not isinstance(message, str) or not message.strip():
+            raise invalid_params("message must be a non-empty string")
+        from dream.skills.propose import maybe_propose
+        proposal = maybe_propose(message, [], demo=False)
+        return {"proposal": proposal.__dict__ if proposal else None}
+
+    def skills_apply_proposal(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        proposal_id = params.get("proposal_id")
+        if not isinstance(proposal_id, str):
+            raise invalid_params("proposal_id must be a string")
+        from dream.skills.propose import apply_proposal
+        try:
+            return apply_proposal(proposal_id)
+        except ValueError as exc:
+            raise invalid_params(str(exc)) from exc
+
+    def skills_discard_proposal(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        proposal_id = params.get("proposal_id")
+        if not isinstance(proposal_id, str):
+            raise invalid_params("proposal_id must be a string")
+        from dream.skills.propose import discard_proposal
+        return {"discarded": discard_proposal(proposal_id)}
+
+    def skills_learn_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        del params
+        from dream.skills.learn import _network_on
+        return {"available": True, "network_enabled": _network_on()}
 
     # ------------------------------------------------------------------ #
     # skill.*
