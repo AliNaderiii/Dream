@@ -64,3 +64,33 @@ def test_nudge_is_capped_offable_and_never_demo(tmp_path, monkeypatch):
     demo.nudge_every_turns = 1
     demo.run("one")
     assert not demo._nudge_due()
+
+
+def test_compaction_preserves_prior_tool_result_for_follow_up(tmp_path, monkeypatch):
+    """The summary keeps earlier tool facts available after their exchange drops."""
+    agent = make_agent(tmp_path, monkeypatch)
+    agent.history = [
+        {"role": "user", "content": "look up account"},
+        {"role": "assistant", "content": None, "tool_calls": [{"id": "a"}]},
+        {"role": "tool", "tool_call_id": "a", "content": '{"balance": 42}'},
+        {"role": "assistant", "content": "The balance is 42."},
+        {"role": "user", "content": "new question"},
+        {"role": "assistant", "content": "new answer"},
+    ]
+    agent.compaction_keep_messages = 2
+    outcome = agent.compact("threshold")
+    assert outcome["compacted"]
+    assert '"balance": 42' in outcome["summary"]
+    # The next turn sees the retained summary in its system prompt, while no
+    # in-flight tool exchange was compacted.
+    assert '"balance": 42' in agent._system_message([])["content"]
+
+
+def test_compaction_event_is_first_class_history_record_after_reload(tmp_path, monkeypatch):
+    agent = make_agent(tmp_path, monkeypatch)
+    agent.history = [{"role": "user", "content": "old"} for _ in range(7)]
+    agent.compact("explicit")
+    reloaded_transcript = list(agent.history)  # transcript consumer reload
+    event = next(item for item in reloaded_transcript if item.get("kind") == "compaction")
+    assert event["timestamp"] > 0
+    assert event["summary"] == agent._compaction_summary

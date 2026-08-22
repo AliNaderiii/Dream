@@ -40,9 +40,15 @@ def deterministic_summary(dropped: list[dict[str, Any]], reason: str) -> str:
     """Return a byte-stable bilingual summary header for offline transports."""
     roles = ",".join(str(item.get("role", "event")) for item in dropped)
     chars = sum(len(str(item.get("content") or "")) for item in dropped)
+    # Tool outputs are facts in the conversational record. Keep a bounded,
+    # deterministic copy so a later reference remains answerable after its
+    # exchange has left the active window.
+    tool_results = [str(item.get("content") or "")[:512] for item in dropped if item.get("role") == "tool"]  # noqa: E501
+    preserved = " | ".join(tool_results)
+    suffix = f" preserved_tool_results={preserved!r}." if preserved else ""
     return (
         "[Context compacted / \u0641\u0634\u0631\u062f\u0647\u200c\u0633\u0627\u0632\u06cc \u0634\u062f] "  # noqa: E501
-        f"reason={reason}; dropped_messages={len(dropped)}; dropped_chars={chars}; roles={roles}."
+        f"reason={reason}; dropped_messages={len(dropped)}; dropped_chars={chars}; roles={roles}.{suffix}"  # noqa: E501
     )
 
 
