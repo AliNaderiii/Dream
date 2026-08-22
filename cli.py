@@ -621,6 +621,15 @@ def dispatch_command(
     elif command == "/exit":
         return False
     else:
+        from dream import skills as skills_module
+
+        stack = skills_module.parse_slash_stack(text)
+        if stack.invoked:
+            turn = dream.run(text)
+            if not quiet:
+                report_turn_activity(turn)
+            output(turn.reply)
+            return True
         suggestion = _closest_command(command)
         hint = f" Did you mean {suggestion}?" if suggestion else ""
         output(f"Unknown command: {command}.{hint} Type /help to see available commands.")

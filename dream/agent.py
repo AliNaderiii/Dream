@@ -42,7 +42,7 @@ from dream.reminders import (
     parse_persian_date,
     prompt_reminders,
 )
-from dream.skills import SkillPromptProvider
+from dream.skills import SkillPromptProvider, apply_slash_invocation, render_skill_catalog
 from dream.tools import REGISTRY, execute, openai_schemas, tool
 
 # Sampling temperatures. Conversation gets 0.3: calm but not robotic. The
@@ -1143,6 +1143,10 @@ class Dream:
         )
         if skills_block:
             prompt += skills_block
+        # Stage C catalog: name + description only, own budget, never a body.
+        catalog_block, _ = render_skill_catalog()
+        if catalog_block:
+            prompt += catalog_block
         # The frozen bounded-store snapshots (MEM Stage A) ride with the
         # system prompt as a constant per-session block, after the usage
         # sentences and before the per-turn reminder/recalled-memory sections.
@@ -1171,6 +1175,18 @@ class Dream:
         self._merged.clear()
         if self.store is not None:
             self.store.log("user", message)
+        # Slash stacking (CLI + bridge chat path): leading skill tokens load
+        # bodies into the *user* turn, never into the system prompt.
+        model_message, slash_stack = apply_slash_invocation(message)
+        if slash_stack.invoked:
+            try:
+                from dream.skills.store import get_ledger
+
+                with get_ledger() as ledger:
+                    for skill in slash_stack.skills:
+                        ledger.log_use(skill.name, "invoked", duration_ms=0.0, source="slash")
+            except Exception:
+                pass
         memories = self.manager.recall(message, limit=8, reinforce=True)
         memory_block, injected_memories = self._memory_block(memories)
         reminder_block, _ = self._reminder_block(
@@ -1178,7 +1194,7 @@ class Dream:
             message,
             self.memory_block_char_limit - len(memory_block),
         )
-        self.history.append({"role": "user", "content": message})
+        self.history.append({"role": "user", "content": model_message})
         calls_made: list[dict[str, Any]] = []
         reply = "I could not produce an answer."
 

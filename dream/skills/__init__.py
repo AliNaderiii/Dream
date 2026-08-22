@@ -65,9 +65,17 @@ __all__ = [
     "SKILLS_USAGE",
     "SkillPromptProvider",
     "save_skill",
+    "save_skill_md",
     "score_skills",
     "unsaved_skill_claim",
     "validate_name",
+    "view_skill",
+    "edit_skill",
+    "delete_skill",
+    "render_skill_catalog",
+    "parse_slash_stack",
+    "apply_slash_invocation",
+    "authoring_templates",
 ]
 
 SKILLS_DIR_NAME = "skills"
@@ -173,12 +181,21 @@ _FORBIDDEN_NAME_CHARS = re.compile(r'[/\\:*?"<>|\x00-\x1f]')
 
 @dataclass(frozen=True, slots=True)
 class Skill:
-    """One parsed skill file: what it is called, when it applies, its steps."""
+    """One parsed skill file: what it is called, when it applies, its steps.
+
+    ``body`` / ``slash`` / ``kind`` are Stage C additions with defaults so
+    every existing ``Skill(name, description, steps, filename)`` call site
+    keeps working.  ``kind`` is ``legacy`` for ``.txt`` and ``skill_md``
+    for a v2 directory.
+    """
 
     name: str
     description: str
     steps: tuple[str, ...]
     filename: str
+    body: str = ""
+    slash: str = ""
+    kind: str = "legacy"
 
 
 @dataclass(frozen=True, slots=True)
@@ -367,47 +384,26 @@ def save_skill(name: str, description: str, steps: Any) -> str:
     path = tools._safe_path(f"{SKILLS_DIR_NAME}/{cleaned}{SKILL_SUFFIX}")
     directory = _skills_dir()
     directory.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        render_skill_text(cleaned, description, cleaned_steps), encoding="utf-8"
-    )
+    text = render_skill_text(cleaned, description, cleaned_steps)
+    path.write_text(text, encoding="utf-8")
+    _after_write(cleaned, text, kind="legacy")
     return f"{SKILLS_DIR_NAME}/{cleaned}{SKILL_SUFFIX}"
 
 
 def load_skills() -> tuple[list[Skill], list[SkillProblem]]:
-    """Read every skill file fresh from the workspace; never raise.
+    """Read every skill file; never raise.
 
-    Each ``.txt`` file is parsed on its own: one malformed, unreadable, or
-    oversized file becomes a :class:`SkillProblem` and every other skill
-    still loads. Files without the skill suffix are not skills at all and
-    are ignored rather than reported.
+    Stage C upgraded the scan in place: ``.txt`` files still load, and
+    ``<name>/SKILL.md`` directories load beside them.  The scan is cached
+    and bounded; a hand edit still takes effect because the cache keys on
+    directory signatures (mtime + size) and writers mark it dirty.  One
+    malformed file is a :class:`SkillProblem`; every other skill still
+    loads.
     """
-    skills: list[Skill] = []
-    problems: list[SkillProblem] = []
-    directory = _skills_dir()
-    if not directory.is_dir():
-        return skills, problems
-    for path in sorted(directory.glob(f"*{SKILL_SUFFIX}")):
-        relative = f"{SKILLS_DIR_NAME}/{path.name}"
-        try:
-            raw = path.read_bytes()
-        except OSError as exc:
-            problems.append(SkillProblem(relative, f"unreadable: {exc}"))
-            continue
-        if len(raw) > MAX_SKILL_FILE_BYTES:
-            problems.append(SkillProblem(relative, "file is too large to be a skill"))
-            continue
-        try:
-            text = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            problems.append(SkillProblem(relative, "file is not valid UTF-8"))
-            continue
-        try:
-            name, description, steps = parse_skill_text(text)
-        except ValueError as exc:
-            problems.append(SkillProblem(relative, str(exc)))
-            continue
-        skills.append(Skill(name, description, tuple(steps), relative))
-    return skills, problems
+    from dream.skills.registry import load_skills_cached
+
+    skills, problems = load_skills_cached()
+    return list(skills), list(problems)
 
 
 def _content_stems(text: str) -> set[str]:
@@ -1095,3 +1091,154 @@ class SkillPromptProvider(MemoryProvider):
 
     def shutdown(self) -> None:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Stage C: v2 writes, view, catalog, slash — same package, not a second runtime.
+# ---------------------------------------------------------------------------
+
+# Gloss: «مهارتی با این نام پیدا نشد یا فایل خراب است.»
+_ERR_VIEW_FA = (
+    "\u0645\u0647\u0627\u0631\u062a\u06cc \u0628\u0627 \u0627\u06cc\u0646 "
+    "\u0646\u0627\u0645 \u067e\u06cc\u062f\u0627 \u0646\u0634\u062f \u06cc\u0627 "
+    "\u0641\u0627\u06cc\u0644 \u062e\u0631\u0627\u0628 \u0627\u0633\u062a."
+)
+_ERR_VIEW_EN = " No skill with that name is installed, or the file is corrupt."
+
+# Gloss: «مهارتی با این نام از قبل هست؛ بازنویسی خودکار انجام نمی‌شود. با edit_skill نسخهٔ تازه بساز.»
+_ERR_EXISTS_FA = (
+    "\u0645\u0647\u0627\u0631\u062a\u06cc \u0628\u0627 \u0627\u06cc\u0646 \u0646\u0627\u0645 "
+    "\u0627\u0632 \u0642\u0628\u0644 \u0647\u0633\u062a\u061b \u0628\u0627\u0632\u0646\u0648"
+    "\u06cc\u0633\u06cc "
+    "\u062e\u0648\u062f\u06a9\u0627\u0631 \u0627\u0646\u062c\u0627\u0645 \u0646\u0645\u06cc\u200c"
+    "\u0634\u0648\u062f. "
+    "\u0628\u0627 edit_skill \u0646\u0633\u062e\u0647\u0654 \u062a\u0627\u0632\u0647 \u0628\u0633"
+    "\u0627\u0632."
+)
+_ERR_EXISTS_EN = (
+    " A skill with that name already exists; nothing was overwritten."
+    " Use edit_skill to record a new version."
+)
+
+
+def _after_write(name: str, content: str, kind: str) -> None:
+    """Version the write and invalidate the registry cache."""
+    from dream.skills.registry import mark_skills_dirty
+    from dream.skills.store import get_ledger
+
+    mark_skills_dirty()
+    with get_ledger() as ledger:
+        ledger.record_version(name, content, kind=kind)
+
+
+def save_skill_md(name: str, description: str, body: str, *, replace: bool = False) -> str:
+    """Write a v2 ``skills/<name>/SKILL.md``. Never silently overwrites.
+
+    ``replace=False`` (the default) refuses when the file already exists.
+    ``replace=True`` is the approved edit path: the current file is replaced
+    and the previous bytes stay in the version ledger.
+    """
+    from dream.skills.format import render_skill_md, validate_skill_name
+
+    cleaned = validate_skill_name(name)
+    # Reuse the workspace-escape checks on the folder name.
+    validate_name(cleaned)
+    text = render_skill_md(cleaned, description, body)
+    relative = f"{SKILLS_DIR_NAME}/{cleaned}/SKILL.md"
+    path = tools._safe_path(relative)
+    if path.exists() and not replace:
+        raise ValueError(_ERR_EXISTS_FA + _ERR_EXISTS_EN)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    _after_write(cleaned, text, kind="skill_md")
+    return relative
+
+
+def view_skill(name: str) -> dict[str, Any]:
+    """Return one skill's body on demand. Missing/corrupt → bilingual error."""
+    from dream.skills.registry import find_by_name
+    from dream.skills.store import get_ledger
+
+    started = __import__("time").monotonic()
+    skill = find_by_name(name)
+    with get_ledger() as ledger:
+        if skill is None:
+            ledger.log_use(name, "error", duration_ms=0.0, source="skill_view")
+            raise ValueError(_ERR_VIEW_FA + _ERR_VIEW_EN)
+        elapsed = (__import__("time").monotonic() - started) * 1000.0
+        ledger.log_use(skill.name, "success", duration_ms=elapsed, source="skill_view")
+    return {
+        "name": skill.name,
+        "description": skill.description,
+        "body": skill.body,
+        "steps": list(skill.steps),
+        "filename": skill.filename,
+        "kind": skill.kind,
+        "slash": skill.slash,
+    }
+
+
+def edit_skill(name: str, description: str, body: str) -> dict[str, Any]:
+    """Replace a v2 skill's current file, recording a new version.
+
+    A missing skill is created (first version).  A legacy ``.txt`` skill is
+    not silently converted; that would be an automatic overwrite of format.
+    """
+    from dream.skills.registry import find_by_name
+
+    existing = find_by_name(name)
+    if existing is not None and existing.kind == "legacy":
+        # Preserve the v1 writer: correction of a .txt skill stays save_skill.
+        raise ValueError(
+            _ERR_EXISTS_FA + _ERR_EXISTS_EN + " Legacy .txt skills are edited with save_skill."
+        )
+    filename = save_skill_md(name, description, body, replace=True)
+    return {"filename": filename, "status": "updated" if existing else "created"}
+
+
+def delete_skill(name: str) -> dict[str, Any]:
+    """Remove the current skill file. Version history is kept."""
+    import shutil
+
+    from dream.skills.registry import find_by_name, mark_skills_dirty
+    from dream.skills.store import get_ledger
+
+    skill = find_by_name(name)
+    if skill is None:
+        raise ValueError(_ERR_VIEW_FA + _ERR_VIEW_EN)
+    path = tools._safe_path(skill.filename)
+    if skill.kind == "skill_md":
+        shutil.rmtree(path.parent)
+    elif path.is_file():
+        path.unlink()
+    mark_skills_dirty()
+    with get_ledger() as ledger:
+        ledger.log_use(skill.name, "deleted", duration_ms=0.0, source="delete_skill")
+    return {"deleted": True, "filename": skill.filename, "name": skill.name}
+
+
+def render_skill_catalog(budget_chars: int | None = None) -> tuple[str, list[Any]]:
+    """Name + description catalog for the system prompt. Never includes bodies."""
+    from dream.skills.registry import SKILL_CATALOG_BUDGET_CHARS
+    from dream.skills.registry import render_skill_catalog as _render
+
+    budget = SKILL_CATALOG_BUDGET_CHARS if budget_chars is None else budget_chars
+    return _render(budget)
+
+
+def parse_slash_stack(message: str):
+    from dream.skills.slash import parse_slash_stack as _parse
+
+    return _parse(message)
+
+
+def apply_slash_invocation(message: str):
+    from dream.skills.slash import apply_slash_invocation as _apply
+
+    return _apply(message)
+
+
+def authoring_templates() -> dict[str, str]:
+    from dream.skills.format import authoring_templates as _templates
+
+    return _templates()

@@ -357,3 +357,113 @@ against the 50 ms budget, cold and warm; existing suites untouched and green.
 
 PR-1 (Stages A+B) evidence is complete; Stage C (skills v2 runtime) may begin
 on PR-2's branch after owner review.
+
+---
+
+# Gate C — Skills v2 runtime (in-place)
+
+Implementation: [`MEM-C.md`](./MEM-C.md) · Files: `dream/skills/format.py`,
+`registry.py`, `store.py`, `slash.py` (new), `dream/skills/__init__.py`,
+`dream/tools.py`, `dream/agent.py`, `cli.py`, `tests/test_skills_v2.py` (23).
+**No existing test was edited; no bridge protocol or desktop file changed.**
+
+## Step 0 — this session, before Stage C code
+
+```text
+$ git log --oneline -1
+c664d54 feat(memory): kernel memory loop — bounded stores + FTS5 session search (MEM Stages A+B)
+
+$ .venv/bin/python -m pytest -q
+1852 passed, 11 skipped in 78.29s (0:01:18)
+```
+
+Matches the required 1852 / 11 baseline. Desktop tree vs `c664d54` is 0 lines
+(Stage C does not touch `apps/desktop` or `.github`).
+
+## C.1 — Token-cost (body absent until skill_view; catalog budget at 50)
+
+```text
+$ .venv/bin/python -m pytest tests/test_skills_v2.py::test_body_absent_from_system_prompt_until_skill_view tests/test_skills_v2.py::test_catalog_stays_within_budget_with_fifty_skills -q
+2 passed in 0.28s
+
+catalog_skills 50
+catalog_chars 2425 budget 8000
+body_in_catalog False
+system_chars 4922
+body_in_system False
+```
+
+Pinned: distinctive body marker is in no system prompt and in no catalog
+line; 50 installed skills contribute 2,425 characters against the 8,000
+budget; `skill_view` returns the body.
+
+## C.2 — Slash stacking (path-like args and the 5-cap)
+
+```text
+$ .venv/bin/python -m pytest tests/test_skills_v2.py::test_path_like_argument_is_not_swallowed tests/test_skills_v2.py::test_five_skill_stack_with_trailing_instruction tests/test_skills_v2.py::test_cli_and_agent_share_the_same_slash_parser -q
+3 passed
+```
+
+`/ocr-and-documents /tmp/scan.pdf extract the tables` loads one skill; the
+path is the argument. A 5-skill stack keeps the trailing instruction; a
+sixth slash stays in the remainder.
+
+## C.3 — Write-approval denial fails closed
+
+```text
+$ .venv/bin/python -m pytest tests/test_skills_v2.py::test_write_approval_denial_fails_closed -q
+1 passed
+```
+
+`ApprovalPolicy(always_ask={"guarded","dangerous"}, ask=False)` blocks
+`save_skill`; the workspace gains no skill file.
+
+## C.4 — Invalid SKILL.md is per-skill; registry stays up
+
+```text
+$ .venv/bin/python -m pytest tests/test_skills_v2.py::test_invalid_skill_md_does_not_drop_the_rest_of_the_registry tests/test_skills_v2.py::test_description_over_sixty_chars_is_a_bilingual_per_skill_error -q
+2 passed
+```
+
+A broken neighbour is a bilingual `SkillProblem`; the valid skill still
+loads. Description > 60 characters is refused with both languages.
+
+## C.5 — Version / use-log, no auto-overwrite
+
+```text
+$ .venv/bin/python -m pytest tests/test_skills_v2.py::test_versions_append_and_never_overwrite tests/test_skills_v2.py::test_save_skill_md_refuses_to_clobber_without_replace tests/test_skills_v2.py::test_use_log_records_view_and_slash -q
+3 passed
+```
+
+Edits append version 2; identical content is a no-op; `save_skill_md`
+without `replace` leaves the file byte-identical. Slash and `skill_view`
+write use-log rows.
+
+## C.6 — Full suites, RF-4, static, desktop 0-diff
+
+```text
+$ .venv/bin/python -m pytest tests/test_skills_v2.py -q
+23 passed in 0.35s
+
+$ .venv/bin/python -m ruff check .
+All checks passed!
+
+$ .venv/bin/python -m pytest -q
+1875 passed, 11 skipped in 83.94s (0:01:23)
+
+$ git diff --stat c664d54 -- apps/desktop .github | wc -l
+0
+```
+
+1852 + 23 new = 1875 passed / 11 skipped. Existing tests unmodified.
+`pyproject.toml` unchanged (stdlib only). Machine gates
+`test_m16_escaping` / `test_m16_conditional_assertions` green.
+
+## Gate C decision
+
+**GREEN.** In-place v2: SKILL.md + v1 `.txt` side by side, progressive
+disclosure (catalog name+description only; bodies via `skill_view` or slash
+user-turn), Hermes stacking with path-safe parse, guarded writes fail
+closed on denial, append-only version/use ledger under `DREAM_SKILLS_DB`.
+
+Stage D (`/learn` and autonomous proposals) may begin on the same PR.
