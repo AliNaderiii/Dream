@@ -60,6 +60,7 @@ from dream.mcp import (
     MCPServerManager,
 )
 from dream.memory import KINDS, Memory, MemoryStore, normalize_fa
+from dream.memory_stores import TARGET_MEMORY, TARGET_USER, BoundedMemory
 from dream.model_providers import (
     PROVIDER_CATALOG,
     AnthropicBackend,
@@ -75,6 +76,7 @@ from dream.provenance import (
     ReproducibilityExporter,
 )
 from dream.scheduler import Schedule, run_to_dict, schedule_to_dict
+from dream.session_search import SessionSearchIndex
 from dream.skills import SKILL_SUFFIX, parse_skill_text
 from dream.skills.data_science import (
     DataScienceError,
@@ -452,6 +454,10 @@ class BridgeMethods:
     ) -> None:
         self.store = store or MemoryStore(os.environ.get("DREAM_DB", "data/dream.db"))
         self.sessions: dict[str, SessionState] = {}
+        self.bounded = BoundedMemory(os.environ.get("DREAM_BOUNDED_DB", "data/dream-bounded.db"))
+        self.session_index = SessionSearchIndex(
+            os.environ.get("DREAM_SESSION_INDEX_DB", "data/dream-session-index.db")
+        )
         self.approvals: dict[str, ApprovalState] = {}
         #: Child agents live in their own asyncio Tasks with their own stores;
         #: the manager owns that isolation (see ``docs/architecture/subagents.md``).
@@ -595,6 +601,17 @@ class BridgeMethods:
             "session.configure": self.session_configure,
             "conversation.send": self.conversation_send,
             "conversation.stop": self.conversation_stop,
+            "conversation.compact": self.conversation_compact,
+            "nudge.status": self.nudge_status,
+            "memory2.snapshot": self.memory2_snapshot,
+            "memory2.add": self.memory2_add,
+            "memory2.replace": self.memory2_replace,
+            "memory2.remove": self.memory2_remove,
+            "memory2.status": self.memory2_status,
+            "search.sessions.query": self.search_sessions_query,
+            "search.sessions.snippet_rules": self.search_sessions_snippet_rules,
+            "search.sessions.status": self.search_sessions_status,
+            "search.sessions.rebuild": self.search_sessions_rebuild,
             "provider.catalog": self.provider_catalog,
             "provider.list": self.provider_list,
             "provider.get": self.provider_get,
@@ -892,6 +909,81 @@ class BridgeMethods:
     # ------------------------------------------------------------------ #
     # conversation.*
     # ------------------------------------------------------------------ #
+
+    def _memory2_target(self, params: dict[str, Any]) -> Any:
+        target = params.get("target")
+        if target not in {TARGET_MEMORY, TARGET_USER}:
+            raise invalid_params("target must be agent_notes or user_profile")
+        return self.bounded.notes if target == TARGET_MEMORY else self.bounded.profile
+
+    @staticmethod
+    def _bounded_dict(snapshot: Any) -> dict[str, Any]:
+        return {"target": snapshot.target, "header": snapshot.header, "used_chars": snapshot.used_chars,  # noqa: E501
+                "capacity": snapshot.capacity, "entries": list(snapshot.entries)}
+
+    def memory2_snapshot(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        if "target" in params:
+            return self._bounded_dict(self._memory2_target(params).snapshot())
+        return {key: self._bounded_dict(value) for key, value in self.bounded.snapshots().items()}
+
+    def memory2_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.memory2_snapshot(params)
+
+    def memory2_add(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        text = params.get("text")
+        if not isinstance(text, str):
+            raise invalid_params("text must be a string")
+        return self._bounded_dict(self._memory2_target(params).add(text))
+
+    def memory2_replace(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        old, new = params.get("old"), params.get("new")
+        if not isinstance(old, str) or not isinstance(new, str):
+            raise invalid_params("old and new must be strings")
+        return self._bounded_dict(self._memory2_target(params).replace(old, new))
+
+    def memory2_remove(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        old = params.get("old")
+        if not isinstance(old, str):
+            raise invalid_params("old must be a string")
+        return self._bounded_dict(self._memory2_target(params).remove(old))
+
+    def conversation_compact(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        session_id = params.get("session_id")
+        if not isinstance(session_id, str) or session_id not in self.sessions:
+            raise invalid_params("known session_id is required")
+        return self.sessions[session_id].dream.compact("explicit")
+
+    def nudge_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        session_id = params.get("session_id")
+        if not isinstance(session_id, str) or session_id not in self.sessions:
+            raise invalid_params("known session_id is required")
+        agent = self.sessions[session_id].dream
+        return {"enabled": agent.nudges_enabled, "sent": agent._nudge_sent, "due": agent._nudge_due()}  # noqa: E501
+
+    def search_sessions_query(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        params = params or {}
+        query = params.get("query")
+        if not isinstance(query, str):
+            raise invalid_params("query must be a string")
+        return {"results": [hit.__dict__ for hit in self.session_index.search(query)]}
+
+    def search_sessions_snippet_rules(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        del params
+        return {"normalized": True, "highlight": "original word boundaries", "max_width_chars": 110}
+
+    def search_sessions_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        del params
+        return {"healthy": True, "documents": self.session_index.doc_count()}
+
+    def search_sessions_rebuild(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        del params
+        return {"rebuilt": self.session_index.rebuild()}
 
     async def conversation_send(self, params: dict[str, Any] | None = None) -> Stream:
         """Run a turn, streaming the reply token-by-token, returning the full Turn."""
