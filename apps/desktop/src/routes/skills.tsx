@@ -10,10 +10,18 @@
 import { Download, Package, Save, Trash2, Upload, Wrench } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { BridgeOfflineBanner } from '@/components/shared/bridge-offline-banner';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
+import { VirtualList } from '@/components/shared/virtual-list';
 import { SkillCard } from '@/components/skills/skill-card';
 import { SkillCode } from '@/components/skills/skill-code';
+import {
+  selectedSkillAfterSave,
+  sortSkills,
+  validationMessageDescriptor,
+  withSkillEnabled,
+} from '@/components/skills/skills-model';
 import {
   SkillImportDialog,
   type SkillImportRequest,
@@ -33,6 +41,7 @@ import {
   setSkillEnabled,
   validateSkillContent,
 } from '@/lib/bridge/skills';
+import type { RequestOptions } from '@/lib/bridge/client';
 import type { BridgeSkillDetail, BridgeSkillEx, BridgeSkillProblem } from '@/lib/bridge/types';
 import { absoluteDate } from '@/utils/time';
 
@@ -58,67 +67,71 @@ export function SkillsRoute() {
   const [importOpen, setImportOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const refresh = useCallback(async () => {
-    setError(null);
-    try {
-      const result = await listSkills(client);
-      setSkills(result.skills);
-      setProblems(result.problems);
-      setStatus(t('loadedCount', { count: result.skills.length }));
-      return result.skills;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('failedLoad'));
-      return [];
-    }
-  }, [client, t]);
+  const refresh = useCallback(
+    async (options?: RequestOptions) => {
+      setError(null);
+      try {
+        const result = await listSkills(client, options);
+        setSkills(result.skills);
+        setProblems(result.problems);
+        setStatus(t('loadedCount', { count: result.skills.length }));
+        return result.skills;
+      } catch (err) {
+        if (!options?.signal?.aborted) {
+          setError(err instanceof Error ? err.message : t('failedLoad'));
+        }
+        return [];
+      }
+    },
+    [client, t],
+  );
 
   useEffect(() => {
+    const controller = new AbortController();
     const load = async () => {
       setLoading(true);
       try {
-        await refresh();
+        await refresh({ signal: controller.signal });
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
     void load();
+    return () => controller.abort();
   }, [refresh]);
 
   // Load the full file whenever the selection changes.
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     const load = async () => {
       if (!selectedName) {
         setDetail(null);
         return;
       }
       try {
-        const match = await getSkill(client, selectedName);
-        if (cancelled) return;
+        const match = await getSkill(client, selectedName, { signal: controller.signal });
         setDetail(match);
         setDraft(match?.content ?? '');
         setEditing(false);
         setSaveError(null);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : t('failedLoadDetail'));
+        if (!controller.signal.aborted) {
+          setError(err instanceof Error ? err.message : t('failedLoadDetail'));
+        }
       }
     };
     void load();
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [client, selectedName, t]);
 
   /** Optimistic toggle: flip locally, roll back if the bridge refuses. */
   const toggleEnabled = async (skill: BridgeSkillEx, enabled: boolean) => {
-    setSkills((prev) => prev.map((s) => (s.name === skill.name ? { ...s, enabled } : s)));
+    setSkills((previous) => withSkillEnabled(previous, skill.name, enabled));
     setStatus(`${skill.name} ${enabled ? t('enabled') : t('disabled')}`);
     try {
       await setSkillEnabled(client, skill.name, enabled);
     } catch (err) {
-      setSkills((prev) =>
-        prev.map((s) => (s.name === skill.name ? { ...s, enabled: !enabled } : s)),
-      );
+      setSkills((previous) => withSkillEnabled(previous, skill.name, !enabled));
       setError(err instanceof Error ? err.message : t('failedToggle'));
     }
   };
@@ -141,7 +154,14 @@ export function SkillsRoute() {
   const handleSave = async () => {
     const validation = validateSkillContent(draft);
     if (!validation.ok) {
-      setSaveError(validation.errors.join(' '));
+      setSaveError(
+        validation.issues
+          .map((issue) => {
+            const message = validationMessageDescriptor(issue);
+            return t(message.key, message.options);
+          })
+          .join(' '),
+      );
       return;
     }
     setSaving(true);
@@ -149,8 +169,7 @@ export function SkillsRoute() {
     try {
       await installSkill(client, draft, { overwrite: true });
       const updated = await refresh();
-      const stillThere = updated.find((s) => s.name === validation.parsed?.name);
-      setSelectedName(stillThere?.name ?? selectedName);
+      setSelectedName(selectedSkillAfterSave(updated, validation.parsed?.name, selectedName));
       setEditing(false);
       setStatus(`${validation.parsed?.name ?? tc('nav.skills')} ${t('saved')}`);
     } catch (err) {
@@ -195,7 +214,7 @@ export function SkillsRoute() {
     }
   };
 
-  const sorted = useMemo(() => [...skills].sort((a, b) => a.name.localeCompare(b.name)), [skills]);
+  const sorted = useMemo(() => sortSkills(skills), [skills]);
 
   return (
     <section aria-label={t('title')} className="flex h-full min-h-0">
@@ -223,18 +242,30 @@ export function SkillsRoute() {
           {status}
         </p>
 
+        <BridgeOfflineBanner compact />
+
         {error && (
-          <p
+          <div
             role="alert"
-            className="border-b border-danger-fg bg-danger-bg px-3 py-2 text-caption text-danger-fg"
+            className="flex items-center gap-2 border-b border-danger-fg bg-danger-bg px-3 py-2 text-caption text-danger-fg"
           >
-            {error}
-          </p>
+            <span className="min-w-0 flex-1">{error}</span>
+            <Button size="sm" variant="secondary" onClick={() => void refresh()}>
+              {t('retry')}
+            </Button>
+          </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="flex min-h-0 flex-1 flex-col p-3">
           {loading ? (
-            <p className="p-6 text-center text-body text-fg-muted">{t('loading')}</p>
+            <div role="status" aria-label={t('loading')} className="flex flex-col gap-2">
+              {Array.from({ length: 5 }, (_, index) => (
+                <div
+                  key={index}
+                  className="h-28 animate-pulse rounded-lg bg-surface-2 motion-reduce:animate-none"
+                />
+              ))}
+            </div>
           ) : sorted.length === 0 ? (
             <EmptyState
               icon={Wrench}
@@ -243,9 +274,14 @@ export function SkillsRoute() {
               action={{ label: t('importSkill'), onClick: () => setImportOpen(true) }}
             />
           ) : (
-            <ul className="flex flex-col gap-2">
-              {sorted.map((skill) => (
-                <li key={skill.filename}>
+            <VirtualList
+              items={sorted}
+              getKey={(skill) => skill.filename}
+              estimateSize={116}
+              ariaLabel={t('installed')}
+              className="flex-1"
+              renderItem={(skill) => (
+                <div className="h-full pb-2">
                   <SkillCard
                     skill={skill}
                     selected={selectedName === skill.name}
@@ -257,9 +293,9 @@ export function SkillsRoute() {
                     onToggleEnabled={(next, enabled) => void toggleEnabled(next, enabled)}
                     onToggleChecked={toggleChecked}
                   />
-                </li>
-              ))}
-            </ul>
+                </div>
+              )}
+            />
           )}
 
           {problems.length > 0 && (

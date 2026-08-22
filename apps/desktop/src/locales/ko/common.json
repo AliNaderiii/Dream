@@ -25,9 +25,29 @@
     "groupToday": "오늘",
     "groupWeek": "이번 주",
     "groupMonth": "이번 달",
-    "groupOlder": "이전"
+    "groupOlder": "이전",
+    "untitled": "New session",
+    "actions": "Actions for {{title}}",
+    "rename": "Rename",
+    "delete": "Delete",
+    "renameTitle": "Rename session",
+    "renameDescription": "Choose a concise name for this conversation.",
+    "name": "Session name",
+    "deleteTitle": "Delete session?",
+    "deleteDescription": "“{{title}}” and its local conversation history will be removed.",
+    "loading": "Loading sessions…",
+    "retry": "Retry",
+    "loadError": "Could not load sessions.",
+    "createError": "Could not create the session.",
+    "renameError": "Could not rename the session.",
+    "deleteError": "Could not delete the session."
   },
   "conversation": "대화",
+  "bridgeOffline": {
+    "short": "Dream engine offline",
+    "description": "The Dream engine is offline. Changes are paused until it reconnects.",
+    "retry": "Reconnect"
+  },
   "status": {
     "idle": "대기 중",
     "running": "실행 중",

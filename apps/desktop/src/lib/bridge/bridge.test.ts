@@ -1,8 +1,46 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BridgeClient, EchoBridgeTransport, tokenise } from '@/lib/bridge/client';
+import type { BridgeTransport } from '@/lib/bridge/client';
 import { BridgeRpcError, toBridgeError } from '@/lib/bridge/errors';
 import { RPC_ERROR } from '@/lib/bridge/types';
+import type { RpcId, RpcParams, StreamChunk } from '@/lib/bridge/types';
+
+class HangingTransport implements BridgeTransport {
+  readonly kind = 'echo' as const;
+  request<T>(): Promise<T> {
+    return new Promise<T>(() => undefined);
+  }
+  onState(): () => void {
+    return () => undefined;
+  }
+  reconnect(): void {}
+}
+
+class LateChunkTransport implements BridgeTransport {
+  readonly kind = 'echo' as const;
+  private onChunk?: (chunk: StreamChunk) => void;
+
+  request<T>(
+    _id: RpcId,
+    _method: string,
+    _params: RpcParams,
+    onChunk?: (chunk: StreamChunk) => void,
+  ): Promise<T> {
+    this.onChunk = onChunk;
+    return new Promise<T>(() => undefined);
+  }
+
+  emit(chunk: StreamChunk) {
+    this.onChunk?.(chunk);
+  }
+
+  onState(): () => void {
+    return () => undefined;
+  }
+
+  reconnect(): void {}
+}
 
 describe('tokenise', () => {
   it('splits on word boundaries and rejoins exactly', () => {
@@ -127,6 +165,52 @@ describe('BridgeClient', () => {
     await expect(client.call('bogus.method')).rejects.toBeInstanceOf(BridgeRpcError);
     expect(errors).toHaveLength(1);
     expect(errors[0].code).toBe(RPC_ERROR.METHOD_NOT_FOUND);
+  });
+
+  it('bounds every call with a caller-adjustable timeout', async () => {
+    const bounded = new BridgeClient(new HangingTransport());
+    await expect(bounded.call('slow.method', {}, { timeoutMs: 5 })).rejects.toMatchObject({
+      message: 'slow.method timed out after 5ms',
+    });
+  });
+
+  it('cancels a bounded call through AbortSignal', async () => {
+    const bounded = new BridgeClient(new HangingTransport());
+    const controller = new AbortController();
+    const pending = bounded.call('cancel.method', {}, { signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ message: 'cancel.method was cancelled' });
+  });
+
+  it('bounds streams independently from calls', async () => {
+    const bounded = new BridgeClient(new HangingTransport());
+    await expect(bounded.stream('slow.stream', {}, { timeoutMs: 5 })).rejects.toMatchObject({
+      message: 'slow.stream timed out after 5ms',
+    });
+  });
+
+  it('cancels a stream and suppresses chunks that arrive after settlement', async () => {
+    const transport = new LateChunkTransport();
+    const bounded = new BridgeClient(transport);
+    const controller = new AbortController();
+    const chunks: string[] = [];
+    const events: string[] = [];
+    bounded.on((event) => {
+      if (event.type === 'chunk') events.push(event.chunk.token);
+    });
+    const pending = bounded.stream(
+      'cancel.stream',
+      {},
+      {
+        signal: controller.signal,
+        onChunk: (chunk) => chunks.push(chunk.token),
+      },
+    );
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ message: 'cancel.stream was cancelled' });
+    transport.emit({ id: 'late', token: 'ignored' });
+    expect(chunks).toEqual([]);
+    expect(events).toEqual([]);
   });
 
   it('starts ready on the echo transport', () => {

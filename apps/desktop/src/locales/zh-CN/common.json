@@ -25,9 +25,29 @@
     "groupToday": "今天",
     "groupWeek": "本周",
     "groupMonth": "本月",
-    "groupOlder": "更早"
+    "groupOlder": "更早",
+    "untitled": "New session",
+    "actions": "Actions for {{title}}",
+    "rename": "Rename",
+    "delete": "Delete",
+    "renameTitle": "Rename session",
+    "renameDescription": "Choose a concise name for this conversation.",
+    "name": "Session name",
+    "deleteTitle": "Delete session?",
+    "deleteDescription": "“{{title}}” and its local conversation history will be removed.",
+    "loading": "Loading sessions…",
+    "retry": "Retry",
+    "loadError": "Could not load sessions.",
+    "createError": "Could not create the session.",
+    "renameError": "Could not rename the session.",
+    "deleteError": "Could not delete the session."
   },
   "conversation": "对话",
+  "bridgeOffline": {
+    "short": "Dream engine offline",
+    "description": "The Dream engine is offline. Changes are paused until it reconnects.",
+    "retry": "Reconnect"
+  },
   "status": {
     "idle": "空闲",
     "running": "运行中",

@@ -18,6 +18,7 @@ interface SessionState {
   /** Creates a session, makes it active, and returns it. */
   createSession: (title?: string) => Session;
   setActiveSession: (id: string | null) => void;
+  mergeSessions: (sessions: Session[]) => void;
   renameSession: (id: string, title: string) => void;
   deleteSession: (id: string) => void;
   setSearchQuery: (query: string) => void;
@@ -40,7 +41,8 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     const now = Date.now();
     const session: Session = {
       id: sessionId(),
-      title: title ?? 'New session',
+      // Presentation layers supply the locale-specific untitled label.
+      title: title ?? '',
       createdAt: now,
       updatedAt: now,
       messageCount: 0,
@@ -53,6 +55,15 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   },
 
   setActiveSession: (activeSessionId) => set({ activeSessionId }),
+
+  mergeSessions: (incoming) =>
+    set((state) => {
+      const byId = new Map(incoming.map((session) => [session.id, session]));
+      state.sessions.forEach((session) => {
+        if (!byId.has(session.id)) byId.set(session.id, session);
+      });
+      return { sessions: [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt) };
+    }),
 
   renameSession: (id, title) =>
     set((state) => ({

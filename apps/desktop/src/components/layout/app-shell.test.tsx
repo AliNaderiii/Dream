@@ -117,7 +117,7 @@ describe('app shell', () => {
     await user.click(within(sidebar).getByRole('button', { name: 'New session' }));
 
     expect(useSessionStore.getState().sessions).toHaveLength(1);
-    expect(screen.getByRole('heading', { name: 'Conversation' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Conversation' })).toBeInTheDocument();
   });
 
   it('opens the local command palette within the perceived-interaction budget', () => {

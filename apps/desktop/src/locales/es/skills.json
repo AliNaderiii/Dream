@@ -3,6 +3,7 @@
   "installed": "Habilidades instaladas",
   "loadedCount": "{{count}} habilidades cargadas",
   "failedLoad": "No se pudieron cargar las habilidades.",
+  "retry": "Retry",
   "failedLoadDetail": "No se pudo cargar la habilidad.",
   "failedToggle": "No se pudo actualizar la habilidad.",
   "editAria": "Editar {{name}}",
@@ -28,5 +29,40 @@
   "failedSave": "No se pudo guardar esta habilidad.",
   "failedDelete": "No se pudo eliminar esta habilidad.",
   "failedExport": "No se pudo exportar esta habilidad.",
-  "failedExportMany": "No se pudieron exportar las habilidades seleccionadas."
+  "failedExportMany": "No se pudieron exportar las habilidades seleccionadas.",
+  "validation": {
+    "empty": "The skill file is empty.",
+    "tooLarge": "Skill is {{size}} KB — the limit is 100 KB.",
+    "traversal": "Skill must not contain “..” path segments.",
+    "absolutePath": "Skill must not contain absolute file paths.",
+    "systemImport": "Skill must not contain import statements for system modules.",
+    "shape": "Skill must define name:, description: and at least one step under steps:."
+  },
+  "card": {
+    "selectExport": "Select {{name}} for export",
+    "stepCount_one": "1 step",
+    "stepCount_other": "{{count}} steps",
+    "enable": "Enable {{name}}",
+    "disable": "Disable {{name}}"
+  },
+  "importDialog": {
+    "descriptionBefore": "Choose a",
+    "descriptionAfter": "file or paste its contents. Skills are validated before they are installed.",
+    "installError": "The skill could not be installed.",
+    "chooseFile": "Choose file…",
+    "pasteLabel": "Or paste the skill",
+    "pastePlaceholder": "name: weekly report\ndescription: …\nsteps:\n- first step",
+    "name": "Name",
+    "steps": "Steps",
+    "conflictBefore": "A skill named",
+    "conflictAfter": "already exists. Overwrite it, install under a different name, or cancel.",
+    "newName": "New name",
+    "cancel": "Cancel",
+    "validate": "Validate",
+    "back": "Back",
+    "installing": "Installing…",
+    "install": "Install",
+    "installAsNew": "Install as new name",
+    "overwrite": "Overwrite"
+  }
 }

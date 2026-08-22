@@ -20,6 +20,7 @@
   "previewCron": "کرون",
   "previewNext": "اجرای بعدی",
   "previewJalali": "جلالی",
+  "previewRuns": "سه اجرای بعدی",
   "previewInvalid": "هنوز قابل تشخیص نیست — ادامه دهید.",
   "enable": "فعال‌سازی",
   "disable": "توقف موقت",
@@ -43,9 +44,12 @@
   "statusError": "خطا",
   "statusDenied": "تأیید نشد",
   "approvalsTitle": "در انتظار تأیید",
+  "approvalWaitingReason": "تا تصمیم شما، دروازهٔ ایمنِ ریسک {{risk}} جلوی اجرا را گرفته است.",
   "approvalsEmpty": "هیچ اجرای زمان‌بندی‌شده‌ای در انتظار تأیید نیست.",
   "approve": "تأیید",
   "deny": "رد",
   "loadError": "بارگیری زمان‌بندی‌ها ممکن نشد.",
+  "loading": "در حال بارگیری زمان‌بندی‌ها…",
+  "retry": "تلاش دوباره",
   "created": "زمان‌بندی ایجاد شد."
 }

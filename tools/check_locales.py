@@ -13,6 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 LOCALE_ROOT = REPO_ROOT / "apps" / "desktop" / "src" / "locales"
 EXPECTED_LOCALES = ("en", "fa", "zh-CN", "ja", "es", "de", "fr", "ko")
 PLACEHOLDER = re.compile(r"{{\s*([\w.-]+)\s*}}")
+FALLBACK_LINE = re.compile(r"^- \[ \] `([^`]+)` — `([^`]+)`$")
 
 
 def structure(value: Any, prefix: str = "") -> dict[str, str]:
@@ -94,10 +95,29 @@ def main() -> None:
                         f"expected={sorted(expected)}, received={sorted(received)}"
                     )
 
+    fallback_report = LOCALE_ROOT / "TODO-i18n.md"
+    if not fallback_report.exists():
+        fail("missing generated TODO-i18n.md fallback report")
+    fallback_counts = {locale: 0 for locale in EXPECTED_LOCALES if locale != "en"}
+    for line in fallback_report.read_text(encoding="utf-8").splitlines():
+        match = FALLBACK_LINE.match(line)
+        if match:
+            locale = match.group(1)
+            if locale not in fallback_counts:
+                fail(f"fallback report references unexpected locale {locale}")
+            fallback_counts[locale] += 1
+    if fallback_counts["fa"] != 0:
+        fail(f"Persian must have zero English fallbacks, found {fallback_counts['fa']}")
+
     print(
         "Locale integrity: PASS — "
         f"{len(EXPECTED_LOCALES)} locales × {len(namespaces)} namespaces; "
         f"{len(english_leaves)} leaves and identical key/type/placeholder trees."
+    )
+    print(
+        "English fallback counts: "
+        + ", ".join(f"{locale}={fallback_counts[locale]}" for locale in fallback_counts)
+        + "; fa gate=PASS"
     )
 
 

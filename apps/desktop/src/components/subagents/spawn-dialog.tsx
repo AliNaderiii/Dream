@@ -13,6 +13,7 @@ import { useId, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { RpcParams } from '@/lib/bridge/types';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/utils/cn';
 
 /** Sidecar defaults, mirrored from `dream/subagents.py`. */
@@ -93,6 +94,7 @@ interface SpawnDialogProps {
  * and every open starts from a clean single-stage draft with no reset effect.
  */
 function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogProps, 'open'>) {
+  const { t } = useTranslation('subagents');
   const [stages, setStages] = useState<StageDraft[]>(() => [emptyStage()]);
   const [pipelineName, setPipelineName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -119,7 +121,7 @@ function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogPr
   const submit = async () => {
     const filled = stages.filter((s) => s.prompt.trim());
     if (filled.length === 0) {
-      setError('Give the subagent something to do.');
+      setError(t('spawnTaskRequired'));
       return;
     }
     setBusy(true);
@@ -142,14 +144,14 @@ function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogPr
       <header className="flex items-center justify-between border-b border-border-default px-4 py-3">
         <div>
           <Dialog.Title id={titleId} className="text-h3 font-semibold">
-            {isPipeline ? 'New pipeline' : 'New subagent'}
+            {isPipeline ? t('newPipeline') : t('newSubagent')}
           </Dialog.Title>
           <Dialog.Description className="text-caption text-fg-secondary">
-            Runs in isolation with its own memory and only the tools you grant.
+            {t('spawnDescription')}
           </Dialog.Description>
         </div>
         <Dialog.Close asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="Close">
+          <Button variant="ghost" size="icon-sm" aria-label={t('close')}>
             <X aria-hidden />
           </Button>
         </Dialog.Close>
@@ -157,12 +159,12 @@ function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogPr
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
         {isPipeline && (
-          <Field label="Pipeline name" hint="Each stage receives the previous stage's result.">
+          <Field label={t('pipelineName')} hint={t('pipelineHint')}>
             <input
               className={fieldClass}
               value={pipelineName}
               onChange={(e) => setPipelineName(e.target.value)}
-              placeholder="Research and summarise"
+              placeholder={t('pipelinePlaceholder')}
             />
           </Field>
         )}
@@ -174,14 +176,14 @@ function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogPr
           >
             <header className="flex items-center justify-between gap-2">
               <h3 className="text-body font-semibold">
-                {isPipeline ? `Stage ${index + 1}` : 'Configuration'}
+                {isPipeline ? t('stage', { number: index + 1 }) : t('configuration')}
               </h3>
               {isPipeline && (
                 <div className="flex items-center gap-1">
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={`Move stage ${index + 1} up`}
+                    aria-label={t('moveStageUp', { number: index + 1 })}
                     disabled={index === 0}
                     onClick={() => move(index, -1)}
                   >
@@ -190,7 +192,7 @@ function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogPr
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={`Move stage ${index + 1} down`}
+                    aria-label={t('moveStageDown', { number: index + 1 })}
                     disabled={index === stages.length - 1}
                     onClick={() => move(index, 1)}
                   >
@@ -199,7 +201,7 @@ function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogPr
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={`Remove stage ${index + 1}`}
+                    aria-label={t('removeStage', { number: index + 1 })}
                     onClick={() => setStages((prev) => prev.filter((s) => s.key !== stage.key))}
                   >
                     <Trash2 aria-hidden />
@@ -209,44 +211,44 @@ function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogPr
             </header>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Name">
+              <Field label={t('name')}>
                 <input
                   className={fieldClass}
                   value={stage.name}
                   onChange={(e) => patch(stage.key, { name: e.target.value })}
-                  placeholder="Researcher"
+                  placeholder={t('namePlaceholder')}
                 />
               </Field>
-              <Field label="Model">
+              <Field label={t('model')}>
                 <input
                   className={cn(fieldClass, 'text-fg-muted')}
-                  value="echo (local)"
+                  value={t('localModel')}
                   readOnly
                   aria-readonly
                 />
               </Field>
             </div>
 
-            <Field label="Task">
+            <Field label={t('task')}>
               <textarea
                 className={cn(fieldClass, 'min-h-16 resize-y')}
                 value={stage.prompt}
                 onChange={(e) => patch(stage.key, { prompt: e.target.value })}
-                placeholder="Summarise the meeting notes in five bullets."
+                placeholder={t('taskPlaceholder')}
               />
             </Field>
 
-            <Field label="System prompt" hint="Optional. Shapes how the child behaves.">
+            <Field label={t('systemPrompt')} hint={t('systemPromptHint')}>
               <textarea
                 className={cn(fieldClass, 'min-h-12 resize-y')}
                 value={stage.system_prompt}
                 onChange={(e) => patch(stage.key, { system_prompt: e.target.value })}
-                placeholder="You are terse and precise."
+                placeholder={t('systemPromptPlaceholder')}
               />
             </Field>
 
             <fieldset className="flex flex-col gap-1.5">
-              <legend className="text-caption font-medium text-fg-secondary">Tools</legend>
+              <legend className="text-caption font-medium text-fg-secondary">{t('tools')}</legend>
               <div className="flex flex-wrap gap-1.5">
                 {availableTools.map((tool) => {
                   const granted = stage.tools.includes(tool);
@@ -275,12 +277,12 @@ function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogPr
                 })}
               </div>
               <span className="text-micro text-fg-muted">
-                {stage.tools.length} granted — the child can use nothing else.
+                {t('toolsGranted', { count: stage.tools.length })}
               </span>
             </fieldset>
 
             <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Max turns">
+              <Field label={t('maxTurns')}>
                 <input
                   type="number"
                   min={1}
@@ -293,7 +295,7 @@ function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogPr
                   }
                 />
               </Field>
-              <Field label="Max tokens">
+              <Field label={t('maxTokens')}>
                 <input
                   type="number"
                   min={1}
@@ -306,7 +308,7 @@ function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogPr
                   }
                 />
               </Field>
-              <Field label="Max seconds">
+              <Field label={t('maxSeconds')}>
                 <input
                   type="number"
                   min={1}
@@ -329,7 +331,7 @@ function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogPr
           onClick={() => setStages((prev) => [...prev, emptyStage()])}
         >
           <Plus aria-hidden />
-          Add stage
+          {t('addStage')}
         </Button>
 
         {error && (
@@ -340,13 +342,17 @@ function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogPr
       </div>
 
       <footer className="flex items-center justify-between gap-3 border-t border-border-default px-4 py-3">
-        <Badge variant="neutral">{isPipeline ? `${stages.length} stages` : '1 subagent'}</Badge>
+        <Badge variant="neutral">
+          {isPipeline
+            ? t('stageCount', { count: stages.length })
+            : t('subagentCount', { count: 1 })}
+        </Badge>
         <div className="flex gap-2">
           <Dialog.Close asChild>
-            <Button variant="ghost">Cancel</Button>
+            <Button variant="ghost">{t('cancel')}</Button>
           </Dialog.Close>
           <Button variant="primary" disabled={busy} onClick={() => void submit()}>
-            {busy ? 'Starting…' : isPipeline ? 'Run pipeline' : 'Spawn'}
+            {busy ? t('starting') : isPipeline ? t('runPipeline') : t('spawnAction')}
           </Button>
         </div>
       </footer>

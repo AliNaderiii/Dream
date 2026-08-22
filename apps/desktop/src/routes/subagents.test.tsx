@@ -2,8 +2,40 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { resetBridgeClient } from '@/lib/bridge/client';
+import {
+  EchoBridgeTransport,
+  getBridgeClient,
+  resetBridgeClient,
+  type BridgeTransport,
+} from '@/lib/bridge/client';
+import type { BridgeConnectionState, RpcId, RpcParams, StreamChunk } from '@/lib/bridge/types';
 import { SubagentsRoute } from '@/routes/subagents';
+
+class SubagentStateTransport implements BridgeTransport {
+  readonly kind = 'echo' as const;
+  private readonly echo = new EchoBridgeTransport();
+  listCalls = 0;
+  failListOnce = false;
+  hangList = false;
+
+  request<T>(id: RpcId, method: string, params: RpcParams, onChunk?: (chunk: StreamChunk) => void) {
+    if (method === 'subagent.list') {
+      this.listCalls += 1;
+      if (this.hangList) return new Promise<T>(() => {});
+      if (this.failListOnce) {
+        this.failListOnce = false;
+        return Promise.reject(new Error('subagent monitor unavailable'));
+      }
+    }
+    return this.echo.request<T>(id, method, params, onChunk);
+  }
+
+  onState(_handler: (state: BridgeConnectionState) => void) {
+    return () => {};
+  }
+
+  reconnect() {}
+}
 
 /** Spawns one child through the dialog and waits for it to appear in the list. */
 async function spawnOne(user: ReturnType<typeof userEvent.setup>, task: string, name: string) {
@@ -126,5 +158,28 @@ describe('SubagentsRoute', () => {
     await waitFor(() => {
       expect(screen.getByRole('region', { name: 'Subagent Keeper' })).toBeInTheDocument();
     });
+  });
+
+  it('renders a multi-panel loading skeleton and cancels it on unmount', () => {
+    const transport = new SubagentStateTransport();
+    transport.hangList = true;
+    getBridgeClient().setTransport(transport);
+    const { container, unmount } = render(<SubagentsRoute />);
+    expect(screen.getByRole('status', { name: 'Loading subagents…' })).toBeInTheDocument();
+    expect(container.querySelectorAll('.animate-pulse')).toHaveLength(6);
+    unmount();
+    expect(screen.queryByRole('status', { name: 'Loading subagents…' })).not.toBeInTheDocument();
+  });
+
+  it('retries a failed roster bridge request', async () => {
+    const user = userEvent.setup();
+    const transport = new SubagentStateTransport();
+    transport.failListOnce = true;
+    getBridgeClient().setTransport(transport);
+    render(<SubagentsRoute />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('subagent monitor unavailable');
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('No subagents yet')).toBeInTheDocument();
+    expect(transport.listCalls).toBe(2);
   });
 });

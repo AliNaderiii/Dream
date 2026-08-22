@@ -8,7 +8,7 @@
  * input never leaves the renderer, but the server remains the authority.
  */
 
-import type { BridgeClient } from './client';
+import type { BridgeClient, RequestOptions } from './client';
 import type {
   BridgeMemory,
   MemoryCountResult,
@@ -92,17 +92,22 @@ function compact(params: Record<string, unknown>): Record<string, unknown> {
 export function listMemories(
   client: BridgeClient,
   params: MemoryListParams = {},
+  options?: RequestOptions,
 ): Promise<MemoryListResult> {
   const { cursor, ...rest } = params;
   return client.call<MemoryListResult>(
     'memory.list',
     compact({ ...rest, cursor: cursor ? Number(cursor) : undefined }),
+    options,
   );
 }
 
 /** Per-kind counts for the filter tabs. */
-export function countMemories(client: BridgeClient): Promise<MemoryCountResult> {
-  return client.call<MemoryCountResult>('memory.count', {});
+export function countMemories(
+  client: BridgeClient,
+  options?: RequestOptions,
+): Promise<MemoryCountResult> {
+  return client.call<MemoryCountResult>('memory.count', {}, options);
 }
 
 /** Relevance search across the store. */
@@ -110,13 +115,18 @@ export function searchMemories(
   client: BridgeClient,
   query: string,
   limit = 20,
+  options?: RequestOptions,
 ): Promise<MemorySearchResult> {
-  return client.call<MemorySearchResult>('memory.search', { query, limit });
+  return client.call<MemorySearchResult>('memory.search', { query, limit }, options);
 }
 
 /** Fetch a single memory, or `null` when it is gone. */
-export function getMemory(client: BridgeClient, memoryId: number): Promise<BridgeMemory | null> {
-  return client.call<BridgeMemory | null>('memory.get', { memory_id: memoryId });
+export function getMemory(
+  client: BridgeClient,
+  memoryId: number,
+  options?: RequestOptions,
+): Promise<BridgeMemory | null> {
+  return client.call<BridgeMemory | null>('memory.get', { memory_id: memoryId }, options);
 }
 
 /** Fields accepted when creating a memory. Importance is in stars (0–10). */
@@ -132,6 +142,7 @@ export interface CreateMemoryInput {
 export async function createMemory(
   client: BridgeClient,
   input: CreateMemoryInput,
+  options?: RequestOptions,
 ): Promise<MemoryMutationResult> {
   const problem = validateMemoryContent(input.content);
   if (problem) throw new Error(problem);
@@ -144,6 +155,7 @@ export async function createMemory(
       tags: input.tags,
       source: input.source ?? 'desktop',
     }),
+    options,
   );
 }
 
@@ -160,6 +172,7 @@ export async function updateMemory(
   client: BridgeClient,
   memoryId: number,
   input: UpdateMemoryInput,
+  options?: RequestOptions,
 ): Promise<MemoryMutationResult> {
   if (input.content !== undefined) {
     const problem = validateMemoryContent(input.content);
@@ -174,6 +187,7 @@ export async function updateMemory(
       importance: input.stars === undefined ? undefined : toImportance(input.stars),
       tags: input.tags,
     }),
+    options,
   );
 }
 
@@ -182,6 +196,7 @@ export function deleteMemory(
   client: BridgeClient,
   memoryId: number,
   hard = false,
+  options?: RequestOptions,
 ): Promise<MemoryDeleteResult> {
-  return client.call<MemoryDeleteResult>('memory.delete', { memory_id: memoryId, hard });
+  return client.call<MemoryDeleteResult>('memory.delete', { memory_id: memoryId, hard }, options);
 }

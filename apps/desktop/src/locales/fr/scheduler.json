@@ -20,6 +20,7 @@
   "previewCron": "Cron",
   "previewNext": "Prochaine exécution",
   "previewJalali": "Jalali",
+  "previewRuns": "Next three run dates",
   "previewInvalid": "Pas encore compris — continuez à saisir.",
   "enable": "Activer",
   "disable": "Mettre en pause",
@@ -43,9 +44,12 @@
   "statusError": "erreur",
   "statusDenied": "approbation refusée",
   "approvalsTitle": "En attente d’approbation",
+  "approvalWaitingReason": "Blocked by the fail-closed {{risk}}-risk gate until you decide.",
   "approvalsEmpty": "Aucune exécution planifiée n’attend d’approbation.",
   "approve": "Approuver",
   "deny": "Refuser",
   "loadError": "Impossible de charger les planifications.",
+  "loading": "Loading schedules…",
+  "retry": "Retry",
   "created": "Planification créée."
 }

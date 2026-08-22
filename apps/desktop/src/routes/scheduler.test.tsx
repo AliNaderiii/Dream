@@ -4,16 +4,54 @@
  * history, and the fail-closed approval behaviour for dangerous runs.
  */
 
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { resetBridgeClient } from '@/lib/bridge/client';
+import {
+  EchoBridgeTransport,
+  getBridgeClient,
+  resetBridgeClient,
+  type BridgeTransport,
+} from '@/lib/bridge/client';
+import type { BridgeConnectionState, RpcId, RpcParams, StreamChunk } from '@/lib/bridge/types';
 import { SchedulerRoute } from '@/routes/scheduler';
 
 /** Persian (extended Arabic-Indic) digits — the Jalali calendar renders them. */
 const PERSIAN_DIGITS = /[\u06F0-\u06F9]/;
+
+class SchedulerStateTransport implements BridgeTransport {
+  readonly kind = 'echo' as const;
+  private readonly echo = new EchoBridgeTransport();
+  listCalls = 0;
+  previewCalls = 0;
+  failListOnce = false;
+  hangList = false;
+  hangFirstPreview = false;
+
+  request<T>(id: RpcId, method: string, params: RpcParams, onChunk?: (chunk: StreamChunk) => void) {
+    if (method === 'schedule.list') {
+      this.listCalls += 1;
+      if (this.hangList) return new Promise<T>(() => {});
+      if (this.failListOnce) {
+        this.failListOnce = false;
+        return Promise.reject(new Error('scheduler unavailable'));
+      }
+    }
+    if (method === 'schedule.preview') {
+      this.previewCalls += 1;
+      if (this.hangFirstPreview && this.previewCalls === 1) return new Promise<T>(() => {});
+    }
+    return this.echo.request<T>(id, method, params, onChunk);
+  }
+
+  onState(_handler: (state: BridgeConnectionState) => void) {
+    return () => {};
+  }
+
+  reconnect() {}
+}
 
 function renderRoute() {
   return render(
@@ -46,8 +84,11 @@ describe('SchedulerRoute (S06)', () => {
     // Live preview: human reading, cron, and the Jalali next run.
     await screen.findByText('every day at 9:00 AM');
     expect(screen.getByText(/0 9 \* \* \*/)).toBeInTheDocument();
-    const jalaliPreview = await screen.findByTestId('preview-jalali');
-    expect(jalaliPreview.textContent).toMatch(PERSIAN_DIGITS);
+    const nextRuns = screen.getByRole('list', { name: 'Next three run dates' });
+    expect(within(nextRuns).getAllByRole('listitem')).toHaveLength(3);
+    const jalaliPreviews = await screen.findAllByTestId('preview-jalali');
+    expect(jalaliPreviews).toHaveLength(3);
+    jalaliPreviews.forEach((preview) => expect(preview.textContent).toMatch(PERSIAN_DIGITS));
 
     await user.click(screen.getByRole('button', { name: 'Create schedule' }));
 
@@ -135,5 +176,43 @@ describe('SchedulerRoute (S06)', () => {
     await waitFor(() => {
       expect(screen.queryByRole('heading', { level: 3, name: 'Doomed' })).toBeNull();
     });
+  });
+
+  it('renders three schedule-card skeletons while loading', () => {
+    const transport = new SchedulerStateTransport();
+    transport.hangList = true;
+    getBridgeClient().setTransport(transport);
+    const { container, unmount } = renderRoute();
+    expect(screen.getByRole('status', { name: 'Loading schedules…' })).toBeInTheDocument();
+    expect(container.querySelectorAll('.animate-pulse')).toHaveLength(3);
+    unmount();
+  });
+
+  it('retries a failed schedule bridge request', async () => {
+    const user = userEvent.setup();
+    const transport = new SchedulerStateTransport();
+    transport.failListOnce = true;
+    getBridgeClient().setTransport(transport);
+    renderRoute();
+    expect(await screen.findByRole('alert')).toHaveTextContent('scheduler unavailable');
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('No scheduled tasks')).toBeInTheDocument();
+    expect(transport.listCalls).toBe(2);
+  });
+
+  it('cancels a superseded preview without leaving a dangling preview spinner', async () => {
+    const user = userEvent.setup();
+    const transport = new SchedulerStateTransport();
+    transport.hangFirstPreview = true;
+    getBridgeClient().setTransport(transport);
+    renderRoute();
+    await user.click(await screen.findByRole('button', { name: 'New schedule' }));
+    const rhythm = screen.getByLabelText('When');
+    await user.type(rhythm, 'every day');
+    await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
+    await user.type(rhythm, ' at 9 AM');
+    expect(await screen.findByText('every day at 9:00 AM')).toBeInTheDocument();
+    expect(screen.queryByText('…')).not.toBeInTheDocument();
+    expect(transport.previewCalls).toBe(2);
   });
 });

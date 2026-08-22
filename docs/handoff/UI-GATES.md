@@ -435,3 +435,92 @@ No Python kernel, JSON-RPC protocol, metering, or ledger file changed.
 ## Gate decision
 
 **Stages A, B, and C: GREEN.** All mandatory red flags have executable resolutions; token/theme, component, shell, command, streaming, directionality, approval, localization, build, TypeScript, lint, formatting, Vitest, and Python gates pass. Stage D may begin only after this note and `UI-C.md` are committed and the PR is opened from the Arena-fixed branch.
+
+---
+
+# Gate D — operational workspaces
+
+Full implementation and RF-4 assertion rationale: [`UI-D.md`](./UI-D.md).
+
+## Lifecycle and bounded rendering
+
+All five surfaces have executable empty, loading (at least three skeletons), actionable retry, and bridge-dead/reconnect coverage. Pending work is renderer-timeout/AbortSignal bounded. Memory and scheduler test superseded requests; sessions, skills, and subagents test unmount cancellation and spinner removal.
+
+```text
+$ npm run test -- --run src/lib/bridge/bridge.test.ts src/components/layout/sidebar.test.tsx src/routes/stage-d-offline.test.tsx src/routes/memory.test.tsx src/components/memory/memory-model.test.ts src/components/memory/memory-score.test.tsx src/routes/skills.test.tsx src/components/skills/skills-model.test.ts src/routes/subagents.test.tsx src/components/subagents/subagent-log-tail.test.tsx src/routes/scheduler.test.tsx src/components/scheduler/schedule-history.test.tsx
+session_fixture_rows=1000 mounted_rows=26
+memory_fixture_rows=1000 mounted_rows=8
+skills_fixture_rows=1000 mounted_rows=10
+subagent_log_rows=1000 mounted_rows=5
+scheduler_history_rows=1000 mounted_rows=26
+Test Files  12 passed (12)
+Tests       82 passed (82)
+```
+
+The memory explainability widget pins `0.55 × relevance + 0.20 × recency + 0.15 × importance + 0.10 × usage`, four accessible meters, weighted total, unavailable relevance, and Persian RTL labels. Skills and memory unstable logic is extracted into pure, unit-tested models. The subagent route exposes status/limits, pause/resume/cancel RPC wiring, virtualized tailing, and proposer/critic/judge council with winner strip. Scheduler coverage pins English and Persian input, cron, exactly three Gregorian/Jalali rows, virtualized history, and fail-closed approval denial reasons.
+
+## Final desktop suite
+
+```text
+$ npm run test
+command_palette_open_ms=54.521 budget_ms=100
+session_fixture_rows=1000 mounted_rows=26
+memory_fixture_rows=1000 mounted_rows=8
+skills_fixture_rows=1000 mounted_rows=10
+subagent_log_rows=1000 mounted_rows=5
+scheduler_history_rows=1000 mounted_rows=26
+Test Files  62 passed (62)
+Tests       484 passed (484)
+```
+
+## Static, token, locale, and build gates
+
+```text
+$ npm run typecheck
+> tsc --noEmit
+# exit 0
+
+$ npm run lint
+✖ 14 problems (0 errors, 14 warnings)
+
+$ npm run format:check
+All matched files use Prettier code style!
+
+$ npm run tokens:check
+Tokens Studio schema-compatible import: PASS — 12 sets, 208 tokens, 12 themes.
+Contrast gate: PASS — 108 AA checks.
+
+$ npm run locales:check
+Locale integrity: PASS — 8 locales × 14 namespaces; 655 leaves and identical key/type/placeholder trees.
+English fallback counts: fa=0, zh-CN=267, ja=267, es=267, de=267, fr=267, ko=267; fa gate=PASS
+
+$ npm run build
+✓ 2039 modules transformed.
+✓ built in 5.25s
+
+$ npm run storybook:build
+✓ 1998 modules transformed.
+✓ built in 13.21s
+✓ Meta.json successfully created.
+Ladle finished the production build in 14s producing 1.53 MiB of assets.
+```
+
+Vite's >500kB advisory remains visible and its threshold is unchanged. Stage E owns route splitting/lazy panes.
+
+## Python and protected paths
+
+```text
+$ .venv/bin/pytest -q
+1748 passed, 11 skipped in 59.86s
+
+$ git diff --stat -- dream/ tests/
+# no output
+protected_paths=dream/,tests/ unchanged
+
+$ git diff --check
+diff_check=PASS
+```
+
+## Gate decision
+
+**Stage D: GREEN.** Session manager, memory explorer, skills manager, subagent dashboard, scheduler UI, cancellation/timeout behavior, lifecycle states, virtualization, bilingual/RTL semantics, regression suites, and protected-path boundaries pass. Stage E may proceed from the Arena-fixed branch `arena/01a02863-dream`.

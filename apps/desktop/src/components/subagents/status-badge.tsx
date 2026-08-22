@@ -19,10 +19,11 @@ import type { LucideIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { BadgeProps } from '@/components/ui/badge';
 import type { SubAgentStatus } from '@/lib/bridge/types';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/utils/cn';
 
 interface StatusMeta {
-  label: string;
+  labelKey: string;
   icon: LucideIcon;
   variant: NonNullable<BadgeProps['variant']>;
   /** Fill colour for the progress bar in this state. */
@@ -31,13 +32,29 @@ interface StatusMeta {
 }
 
 export const SUBAGENT_STATUS_META: Record<SubAgentStatus, StatusMeta> = {
-  idle: { label: 'Idle', icon: CircleDashed, variant: 'neutral', bar: 'bg-fg-muted' },
-  running: { label: 'Running', icon: Loader2, variant: 'info', bar: 'bg-info-fg', spin: true },
-  paused: { label: 'Paused', icon: PauseCircle, variant: 'warning', bar: 'bg-warning-fg' },
-  completed: { label: 'Completed', icon: CheckCircle2, variant: 'success', bar: 'bg-success-fg' },
-  failed: { label: 'Failed', icon: XCircle, variant: 'danger', bar: 'bg-danger-fg' },
-  cancelled: { label: 'Cancelled', icon: Ban, variant: 'neutral', bar: 'bg-fg-muted' },
-  timeout: { label: 'Limit hit', icon: TimerOff, variant: 'warning', bar: 'bg-warning-fg' },
+  idle: { labelKey: 'status.idle', icon: CircleDashed, variant: 'neutral', bar: 'bg-fg-muted' },
+  running: {
+    labelKey: 'status.running',
+    icon: Loader2,
+    variant: 'info',
+    bar: 'bg-info-fg',
+    spin: true,
+  },
+  paused: {
+    labelKey: 'status.paused',
+    icon: PauseCircle,
+    variant: 'warning',
+    bar: 'bg-warning-fg',
+  },
+  completed: {
+    labelKey: 'status.completed',
+    icon: CheckCircle2,
+    variant: 'success',
+    bar: 'bg-success-fg',
+  },
+  failed: { labelKey: 'status.failed', icon: XCircle, variant: 'danger', bar: 'bg-danger-fg' },
+  cancelled: { labelKey: 'status.cancelled', icon: Ban, variant: 'neutral', bar: 'bg-fg-muted' },
+  timeout: { labelKey: 'status.timeout', icon: TimerOff, variant: 'warning', bar: 'bg-warning-fg' },
 };
 
 /** Colour-coded lifecycle badge. */
@@ -48,12 +65,16 @@ export function SubagentStatusBadge({
   status: SubAgentStatus;
   className?: string;
 }) {
+  const { t } = useTranslation('subagents');
   const meta = SUBAGENT_STATUS_META[status];
   const Icon = meta.icon;
   return (
     <Badge variant={meta.variant} className={className}>
-      <Icon className={cn('size-3', meta.spin && 'animate-spin')} aria-hidden />
-      {meta?.label}
+      <Icon
+        className={cn('size-3', meta.spin && 'animate-spin motion-reduce:animate-none')}
+        aria-hidden
+      />
+      {t(meta.labelKey)}
     </Badge>
   );
 }

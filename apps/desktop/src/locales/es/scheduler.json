@@ -20,6 +20,7 @@
   "previewCron": "Cron",
   "previewNext": "Próxima ejecución",
   "previewJalali": "Jalali",
+  "previewRuns": "Next three run dates",
   "previewInvalid": "Aún no se entiende — sigue escribiendo.",
   "enable": "Activar",
   "disable": "Pausar",
@@ -43,9 +44,12 @@
   "statusError": "error",
   "statusDenied": "aprobación denegada",
   "approvalsTitle": "Esperando aprobación",
+  "approvalWaitingReason": "Blocked by the fail-closed {{risk}}-risk gate until you decide.",
   "approvalsEmpty": "No hay ejecuciones programadas esperando aprobación.",
   "approve": "Aprobar",
   "deny": "Denegar",
   "loadError": "No se pudieron cargar las programaciones.",
+  "loading": "Loading schedules…",
+  "retry": "Retry",
   "created": "Programación creada."
 }

@@ -3,6 +3,7 @@
   "installed": "مهارت‌های نصب‌شده",
   "loadedCount": "{{count}} مهارت بارگذاری شد",
   "failedLoad": "بارگذاری مهارت‌ها ناموفق بود.",
+  "retry": "تلاش دوباره",
   "failedLoadDetail": "بارگذاری مهارت ناموفق بود.",
   "failedToggle": "به‌روزرسانی مهارت ممکن نشد.",
   "editAria": "ویرایش {{name}}",
@@ -28,5 +29,40 @@
   "failedSave": "ذخیرهٔ این مهارت ممکن نشد.",
   "failedDelete": "حذف این مهارت ممکن نشد.",
   "failedExport": "خروجی این مهارت ممکن نشد.",
-  "failedExportMany": "خروجی مهارت‌های انتخاب‌شده ممکن نشد."
+  "failedExportMany": "خروجی مهارت‌های انتخاب‌شده ممکن نشد.",
+  "validation": {
+    "empty": "پروندهٔ مهارت خالی است.",
+    "tooLarge": "اندازهٔ مهارت {{size}} کیلوبایت است — سقف ۱۰۰ کیلوبایت است.",
+    "traversal": "مهارت نباید شامل بخش مسیر «..» باشد.",
+    "absolutePath": "مهارت نباید شامل مسیر مطلق پرونده باشد.",
+    "systemImport": "مهارت نباید دستور واردکردن پیمانه‌های سیستمی داشته باشد.",
+    "shape": "مهارت باید نام، توضیح و دست‌کم یک گام زیر بخش steps: داشته باشد."
+  },
+  "card": {
+    "selectExport": "انتخاب {{name}} برای صدور",
+    "stepCount_one": "۱ گام",
+    "stepCount_other": "{{count}} گام",
+    "enable": "فعال‌سازی {{name}}",
+    "disable": "غیرفعال‌سازی {{name}}"
+  },
+  "importDialog": {
+    "descriptionBefore": "یک پروندهٔ",
+    "descriptionAfter": "انتخاب کنید یا محتوای آن را بچسبانید. مهارت‌ها پیش از نصب اعتبارسنجی می‌شوند.",
+    "installError": "نصب مهارت ممکن نشد.",
+    "chooseFile": "انتخاب پرونده…",
+    "pasteLabel": "یا مهارت را اینجا بچسبانید",
+    "pastePlaceholder": "name: گزارش هفتگی\ndescription: …\nsteps:\n- گام نخست",
+    "name": "نام",
+    "steps": "گام‌ها",
+    "conflictBefore": "مهارتی با نام",
+    "conflictAfter": "از پیش وجود دارد. آن را بازنویسی کنید، با نام دیگری نصب کنید یا لغو کنید.",
+    "newName": "نام جدید",
+    "cancel": "لغو",
+    "validate": "اعتبارسنجی",
+    "back": "بازگشت",
+    "installing": "در حال نصب…",
+    "install": "نصب",
+    "installAsNew": "نصب با نام جدید",
+    "overwrite": "بازنویسی"
+  }
 }

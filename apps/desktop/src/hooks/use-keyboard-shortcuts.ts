@@ -108,7 +108,7 @@ export function useKeyboardShortcuts(): CommandItem[] {
     };
 
     const create = () => {
-      const session = createSession();
+      const session = createSession(t('sessions.untitled'));
       void navigate(`/chat/${session.id}`);
     };
 

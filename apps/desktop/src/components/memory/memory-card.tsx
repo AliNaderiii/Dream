@@ -10,7 +10,9 @@ import { Archive } from 'lucide-react';
 
 import { KindBadge } from '@/components/memory/kind-badge';
 import { ImportanceStars } from '@/components/memory/importance-stars';
+import { MemoryScore } from '@/components/memory/memory-score';
 import { sanitizeMemoryText, toStars } from '@/lib/bridge/memory';
+import { useTranslation } from '@/lib/i18n';
 import type { BridgeMemory } from '@/lib/bridge/types';
 import { cn } from '@/utils/cn';
 import { relativeTime } from '@/utils/time';
@@ -22,6 +24,7 @@ interface MemoryCardProps {
 }
 
 export function MemoryCard({ memory, selected, onSelect }: MemoryCardProps) {
+  const { t } = useTranslation('memory');
   return (
     <button
       type="button"
@@ -39,7 +42,7 @@ export function MemoryCard({ memory, selected, onSelect }: MemoryCardProps) {
         {memory.archived && (
           <span className="inline-flex items-center gap-1 text-micro text-fg-muted">
             <Archive className="size-3" aria-hidden />
-            Archived
+            {t('archived')}
           </span>
         )}
         <span className="ms-auto shrink-0 text-micro text-fg-muted">
@@ -62,6 +65,7 @@ export function MemoryCard({ memory, selected, onSelect }: MemoryCardProps) {
           </span>
         ))}
       </div>
+      <MemoryScore memory={memory} compact />
     </button>
   );
 }

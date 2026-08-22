@@ -117,7 +117,7 @@ export function TopBar({ title }: TopBarProps) {
             size="icon-sm"
             aria-label={t('topbar.newSession')}
             onClick={() => {
-              const session = createSession();
+              const session = createSession(t('sessions.untitled'));
               void navigate(`/chat/${session.id}`);
             }}
           >

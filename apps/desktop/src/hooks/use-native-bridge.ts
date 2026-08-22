@@ -8,6 +8,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { useTranslation } from '@/lib/i18n';
 import { appApi, events, listen, notificationApi } from '@/lib/tauri';
 import { useAppStore } from '@/stores/use-app-store';
 import { useSessionStore } from '@/stores/use-session-store';
@@ -21,6 +22,7 @@ const PERMISSION_KEY = 'dream.notifications.requested';
  * Subscribes to native events. Mount once, at the app root.
  */
 export function useNativeBridge(): void {
+  const { t } = useTranslation('common');
   const navigate = useNavigate();
   const setAgentStatus = useAppStore((s) => s.setAgentStatus);
   const setPendingApprovals = useAppStore((s) => s.setPendingApprovals);
@@ -68,7 +70,7 @@ export function useNativeBridge(): void {
     const unlisteners: Array<() => void> = [];
 
     void listen(events.trayNewSession, () => {
-      const session = createSession();
+      const session = createSession(t('sessions.untitled'));
       void navigate(`/chat/${session.id}`);
     }).then((un) => unlisteners.push(un));
 
@@ -77,5 +79,5 @@ export function useNativeBridge(): void {
     }).then((un) => unlisteners.push(un));
 
     return () => unlisteners.forEach((un) => un());
-  }, [navigate, createSession, toggleCommandPalette]);
+  }, [navigate, createSession, t, toggleCommandPalette]);
 }

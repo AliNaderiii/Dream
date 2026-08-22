@@ -25,9 +25,29 @@
     "groupToday": "امروز",
     "groupWeek": "این هفته",
     "groupMonth": "این ماه",
-    "groupOlder": "قدیمی‌تر"
+    "groupOlder": "قدیمی‌تر",
+    "untitled": "نشست جدید",
+    "actions": "اقدام‌های {{title}}",
+    "rename": "تغییر نام",
+    "delete": "حذف",
+    "renameTitle": "تغییر نام نشست",
+    "renameDescription": "نامی کوتاه برای این گفتگو انتخاب کنید.",
+    "name": "نام نشست",
+    "deleteTitle": "نشست حذف شود؟",
+    "deleteDescription": "«{{title}}» و تاریخچهٔ گفتگوی محلی آن حذف خواهند شد.",
+    "loading": "در حال بارگذاری نشست‌ها…",
+    "retry": "تلاش دوباره",
+    "loadError": "بارگذاری نشست‌ها ممکن نشد.",
+    "createError": "ایجاد نشست ممکن نشد.",
+    "renameError": "تغییر نام نشست ممکن نشد.",
+    "deleteError": "حذف نشست ممکن نشد."
   },
   "conversation": "گفتگو",
+  "bridgeOffline": {
+    "short": "موتور Dream آفلاین است",
+    "description": "موتور Dream آفلاین است. تغییرات تا اتصال دوباره متوقف می‌شوند.",
+    "retry": "اتصال دوباره"
+  },
   "status": {
     "idle": "آماده",
     "running": "در حال اجرا",
