@@ -152,7 +152,18 @@ All matched files use Prettier code style!
 ✖ 11 problems (0 errors, 11 warnings)
 ```
 
-The final clean `git status` evidence is recorded in the PR after the Stage C evidence commit (a status cannot be clean while this note itself is still uncommitted).
+Clean-tree evidence immediately after the Stage C evidence commit:
+
+```text
+$ git status --short
+# no output
+PASS: working tree clean
+
+$ git log -3 --oneline
+4155015 feat(desktop): complete shell and interaction overhaul
+00f2bc9 feat(desktop): rebuild semantic component library
+6dcf2d1 feat(desktop): establish Rooya 2 theme foundation
+```
 
 ## Part 2 — Gate evidence
 
