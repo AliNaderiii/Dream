@@ -1200,9 +1200,14 @@ class Dream:
             prompt += "\n\n" + self._compaction_summary
         if self._nudge_due():
             prompt += (
-                "\n\nMemory nudge / \u06cc\u0627\u062f\u0622\u0648\u0631\u06cc \u062d\u0627\u0641\u0638\u0647: "
+                "\n\nMemory nudge / "
+                "\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc "
+                "\u062d\u0627\u0641\u0638\u0647: "
                 "Persist only durable preferences or facts through the bounded memory tools; "
-                "\u0641\u0642\u0637 \u062f\u0627\u0646\u0633\u062a\u0647\u200c\u0647\u0627\u06cc \u0645\u0627\u0646\u062f\u06af\u0627\u0631 \u0631\u0627 \u0630\u062e\u06cc\u0631\u0647 \u06a9\u0646."
+                "\u0641\u0642\u0637 "
+                "\u062f\u0627\u0646\u0633\u062a\u0647\u200c\u0647\u0627\u06cc "
+                "\u0645\u0627\u0646\u062f\u06af\u0627\u0631 \u0631\u0627 "
+                "\u0630\u062e\u06cc\u0631\u0647 \u06a9\u0646."
             )
         if memory_block is None:
             memory_block, _ = self._memory_block(memories)
