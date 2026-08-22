@@ -30,6 +30,6 @@
     "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "vite.config.ts", "eslint.config.js"],
+  "include": ["src", ".ladle/**/*.tsx", "vite.config.ts", "eslint.config.js"],
   "exclude": ["src-tauri", "dist", "node_modules"]
 }
