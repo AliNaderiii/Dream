@@ -177,4 +177,15 @@ describe('app shell', () => {
 
     expect(screen.getByRole('heading', { level: 2, name: 'Appearance' })).toBeInTheDocument();
   });
+
+  it('opens conversation search with the mod+p shortcut', async () => {
+    const user = userEvent.setup();
+    renderApp('/');
+
+    await user.keyboard('{Meta>}p{/Meta}');
+
+    expect(await screen.findByRole('dialog', { name: 'Conversation search' })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toBeInTheDocument();
+    expect(useAppStore.getState().sessionSearchOpen).toBe(true);
+  });
 });

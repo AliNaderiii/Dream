@@ -26,6 +26,7 @@ import { EchoProjectsRuntime } from './echo-projects';
 import { EchoScheduleRuntime, EchoSubagentRuntime } from './echo-subagents';
 import type { EchoDataRuntime } from './echo-data';
 import type { EchoMemory2Runtime } from './echo-memory2';
+import type { EchoSearchRuntime } from './echo-search';
 import type { EchoSkills2Runtime } from './echo-skills2';
 import { BridgeRpcError, toBridgeError } from './errors';
 import {
@@ -181,6 +182,7 @@ function echoFamilyOf(method: string): string | null {
   if (method.startsWith('data.') || method.startsWith('notebook.')) return 'data';
   if (method.startsWith('memory2.')) return 'memory2';
   if (method.startsWith('skills.')) return 'skills2';
+  if (method.startsWith('search.sessions.')) return 'search';
   return null;
 }
 
@@ -504,6 +506,8 @@ export class EchoBridgeTransport implements BridgeTransport {
       new (await import('./echo-memory2')).EchoMemory2Runtime(),
     skills2: async (): Promise<EchoSkills2Runtime> =>
       new (await import('./echo-skills2')).EchoSkills2Runtime(),
+    search: async (): Promise<EchoSearchRuntime> =>
+      new (await import('./echo-search')).EchoSearchRuntime(),
   };
 
   private async runtimeFor(family: string): Promise<EchoFamilyRuntime> {

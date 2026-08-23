@@ -37,6 +37,8 @@ interface AppState {
   sidebarCollapsed: boolean;
   sidebarWidth: number;
   commandPaletteOpen: boolean;
+  /** MEM Stage F: the Ctrl/Cmd+P conversation-search dialog. */
+  sessionSearchOpen: boolean;
 
   /* agent (mirrored from Rust) */
   agentStatus: AgentStatus;
@@ -59,6 +61,8 @@ interface AppState {
   setSidebarWidth: (width: number) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   toggleCommandPalette: () => void;
+  setSessionSearchOpen: (open: boolean) => void;
+  toggleSessionSearch: () => void;
   setAgentStatus: (status: AgentStatus) => void;
   setPendingApprovals: (count: number) => void;
   setWorkspaceRoot: (path: string | null) => void;
@@ -125,6 +129,8 @@ export const useAppStore = create<AppState>()(
       sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
       commandPaletteOpen: false,
 
+      sessionSearchOpen: false,
+
       agentStatus: 'idle',
       pendingApprovals: 0,
       workspaceRoot: null,
@@ -153,6 +159,8 @@ export const useAppStore = create<AppState>()(
       setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
       toggleCommandPalette: () =>
         set((state) => ({ commandPaletteOpen: !state.commandPaletteOpen })),
+      setSessionSearchOpen: (sessionSearchOpen) => set({ sessionSearchOpen }),
+      toggleSessionSearch: () => set((state) => ({ sessionSearchOpen: !state.sessionSearchOpen })),
 
       setAgentStatus: (agentStatus) => set({ agentStatus }),
       setPendingApprovals: (pendingApprovals) => set({ pendingApprovals }),

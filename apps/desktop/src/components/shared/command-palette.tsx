@@ -2,27 +2,83 @@
 
 import * as Dialog from '@radix-ui/react-dialog';
 import { Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { searchCommands } from '@/components/shared/command-search';
 import type { CommandItem } from '@/hooks/use-keyboard-shortcuts';
+import { getBridgeClient } from '@/lib/bridge/client';
 import { useTranslation } from '@/lib/i18n';
 import { useAppStore } from '@/stores/use-app-store';
 import { cn } from '@/utils/cn';
 import { formatShortcut } from '@/utils/platform';
 
-interface CommandPaletteProps {
-  commands: CommandItem[];
+interface PaletteHit {
+  session_id: string;
+  title: string;
+  snippet: string;
 }
 
-export function CommandPalette({ commands }: CommandPaletteProps) {
+interface CommandPaletteProps {
+  commands: CommandItem[];
+  /**
+   * MEM Stage F: opens a conversation hit from the search index. Injected by
+   * the shell — the palette itself never navigates (its tests render outside
+   * a Router). Absent → the Conversations group stays hidden.
+   */
+  onOpenSession?: (sessionId: string) => void;
+}
+
+export function CommandPalette({ commands, onOpenSession }: CommandPaletteProps) {
   const { t } = useTranslation('common');
+  const { t: tSearch } = useTranslation('search');
   const open = useAppStore((state) => state.commandPaletteOpen);
   const setOpen = useAppStore((state) => state.setCommandPaletteOpen);
   const [query, setQuery] = useState('');
   const [highlighted, setHighlighted] = useState(0);
+  const [hits, setHits] = useState<PaletteHit[]>([]);
+  const [indexRefusal, setIndexRefusal] = useState<string | null>(null);
+  const hitGeneration = useRef(0);
 
   const results = useMemo(() => searchCommands(commands, query), [commands, query]);
+
+  // Conversation hits from the search index, under their own group. The
+  // lookup is debounced and cancellable; a refusal is shown, not dropped.
+  useEffect(() => {
+    if (!open || !onOpenSession || !query.trim()) {
+      const clear = () => {
+        setHits([]);
+        setIndexRefusal(null);
+      };
+      // Deferred: no setState runs synchronously in the effect body.
+      void Promise.resolve().then(clear);
+      return;
+    }
+    const trimmed = query.trim();
+    const generation = ++hitGeneration.current;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      getBridgeClient()
+        .call<{ results: PaletteHit[] }>(
+          'search.sessions.query',
+          { query: trimmed },
+          { timeoutMs: 10_000, signal: controller.signal },
+        )
+        .then((out) => {
+          if (controller.signal.aborted || generation !== hitGeneration.current) return;
+          setHits(out.results);
+          setIndexRefusal(null);
+        })
+        .catch((err: unknown) => {
+          if (controller.signal.aborted || generation !== hitGeneration.current) return;
+          setHits([]);
+          setIndexRefusal(err instanceof Error ? err.message : String(err));
+        });
+    }, 200);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [onOpenSession, open, query]);
   const activeIndex = Math.min(highlighted, Math.max(results.length - 1, 0));
   const listId = 'dream-command-results';
   const activeId = results[activeIndex] ? `dream-command-${activeIndex}` : undefined;
@@ -149,6 +205,41 @@ export function CommandPalette({ commands }: CommandPaletteProps) {
               })
             )}
           </div>
+          {onOpenSession && (hits.length > 0 || indexRefusal) && (
+            <div className="border-t border-border-default p-2">
+              <p className="px-3 pb-1 pt-2 text-micro font-semibold text-fg-muted">
+                {tSearch('sessionsGroup')}
+              </p>
+              {indexRefusal ? (
+                <p
+                  role="alert"
+                  dir="auto"
+                  className="px-3 py-2 text-caption text-danger-fg bidi-isolate"
+                >
+                  {indexRefusal}
+                </p>
+              ) : (
+                hits.map((hit) => (
+                  <button
+                    key={hit.session_id}
+                    type="button"
+                    onClick={() => {
+                      onOpenSession(hit.session_id);
+                      setOpen(false);
+                    }}
+                    className="flex w-full flex-col rounded-lg px-3 py-2 text-start transition-colors duration-fast hover:bg-surface-2 motion-reduce:transition-none"
+                  >
+                    <span className="truncate text-body text-fg-primary bidi-isolate" dir="auto">
+                      {hit.title}
+                    </span>
+                    <span className="truncate text-micro text-fg-muted bidi-isolate" dir="auto">
+                      {hit.snippet}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
           <footer className="flex items-center gap-3 border-t border-border-default bg-surface-2 px-4 py-2 text-micro text-fg-muted">
             <span>{t('command.hintNavigate')}</span>
             <span>{t('command.hintRun')}</span>

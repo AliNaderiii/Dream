@@ -82,11 +82,13 @@ const ZOOM_STOPS = [80, 100, 125, 150];
 export function useKeyboardShortcuts(): CommandItem[] {
   const { t } = useTranslation('common');
   const { t: ts } = useTranslation('settings');
+  const { t: tSearch } = useTranslation('search');
   const navigate = useNavigate();
   const sessions = useSessionStore((state) => state.sessions);
   const createSession = useSessionStore((state) => state.createSession);
   const setActiveSession = useSessionStore((state) => state.setActiveSession);
   const toggleCommandPalette = useAppStore((state) => state.toggleCommandPalette);
+  const toggleSessionSearch = useAppStore((state) => state.toggleSessionSearch);
   const toggleSidebar = useAppStore((state) => state.toggleSidebar);
   const toggleTheme = useAppStore((state) => state.toggleTheme);
   const setTheme = useAppStore((state) => state.setTheme);
@@ -119,6 +121,14 @@ export function useKeyboardShortcuts(): CommandItem[] {
         description: t('command.open'),
         category: categories.actions,
         run: toggleCommandPalette,
+        allowInInput: true,
+      },
+      {
+        id: 'search.sessions',
+        keys: ['mod', 'p'],
+        description: tSearch('openCommand'),
+        category: categories.actions,
+        run: toggleSessionSearch,
         allowInInput: true,
       },
       {
@@ -233,8 +243,10 @@ export function useKeyboardShortcuts(): CommandItem[] {
     setZoom,
     t,
     toggleCommandPalette,
+    toggleSessionSearch,
     toggleSidebar,
     toggleTheme,
+    tSearch,
     ts,
   ]);
 

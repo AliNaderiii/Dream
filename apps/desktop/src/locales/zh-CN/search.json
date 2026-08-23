@@ -1,0 +1,23 @@
+{
+  "title": "Conversation search",
+  "description": "Search every past conversation by keyword.",
+  "placeholder": "Search conversations…",
+  "inputAria": "Search conversations",
+  "resultsLabel": "Conversation results",
+  "prompt": "Ctrl/⌘+P opens this search.",
+  "searching": "Searching…",
+  "empty": "No conversations match.",
+  "failed": "Search failed.",
+  "matchedInTitle": "Title match",
+  "hintNavigate": "Enter opens the selected conversation.",
+  "count": "{{rows}} results",
+  "openCommand": "Search conversations",
+  "sessionsGroup": "Conversations",
+  "status": {
+    "checking": "Checking the index…",
+    "healthy": "Index healthy — {{count}} conversations",
+    "unhealthy": "Index unhealthy",
+    "rebuild": "Rebuild index",
+    "rebuilding": "Rebuilding…"
+  }
+}

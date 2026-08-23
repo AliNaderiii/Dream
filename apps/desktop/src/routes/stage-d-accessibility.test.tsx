@@ -9,6 +9,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { resetBridgeClient } from '@/lib/bridge/client';
 import { MemoryRoute } from '@/routes/memory';
 import { SchedulerRoute } from '@/routes/scheduler';
+import { SessionSearch } from '@/components/search/session-search';
 import { SkillsRoute } from '@/routes/skills';
 import { SubagentsRoute } from '@/routes/subagents';
 import { useAppStore } from '@/stores/use-app-store';
@@ -117,5 +118,18 @@ describe('Stage D surface accessibility', () => {
     );
     await screen.findByText('No scheduled tasks');
     await expectNoViolations(container, 'scheduler');
+  });
+
+  it('has no axe violations in the session search dialog', async () => {
+    useAppStore.setState({ sessionSearchOpen: true });
+    render(
+      <SurfaceFrame title="Session search audit">
+        <SessionSearch onOpenSession={() => {}} />
+      </SurfaceFrame>,
+    );
+    // The dialog renders through a portal: audit the live document.
+    await screen.findByRole('dialog', { name: 'Conversation search' });
+    await screen.findByText(/Index healthy/i);
+    await expectNoViolations(document.body, 'session-search');
   });
 });
