@@ -26,6 +26,7 @@ import { EchoProjectsRuntime } from './echo-projects';
 import { EchoScheduleRuntime, EchoSubagentRuntime } from './echo-subagents';
 import type { EchoDataRuntime } from './echo-data';
 import type { EchoMemory2Runtime } from './echo-memory2';
+import type { EchoSkills2Runtime } from './echo-skills2';
 import { BridgeRpcError, toBridgeError } from './errors';
 import {
   normalizeBridgeState,
@@ -155,10 +156,31 @@ export interface EchoFamilyRuntime {
   handle(method: string, params: RpcParams): unknown;
 }
 
+/**
+ * The wire names the skills-v2 echo runtime owns, plus the alias spellings
+ * the kernel registers for them (`skills.edit` answers as `skills.save`).
+ * Kept local to this module so `echo-skills2` stays a lazy import — the
+ * legacy `skill.*` names below in the switch are untouched.
+ */
+const SKILLS_V2_ALIASES: Readonly<Record<string, string>> = {
+  'skills.versions': 'skills.versions',
+  'skills.use_log': 'skills.use_log',
+  'skills.propose': 'skills.propose',
+  'skills.proposals': 'skills.proposals',
+  'skills.apply_proposal': 'skills.apply_proposal',
+  'skills.discard_proposal': 'skills.discard_proposal',
+  'skills.learn_status': 'skills.learn_status',
+  'skills.learn_classify': 'skills.learn_classify',
+  'skills.references': 'skills.references',
+  'skills.save': 'skills.save',
+  'skills.edit': 'skills.save',
+};
+
 /** Maps a wire method to its lazy echo family, when it has one. */
 function echoFamilyOf(method: string): string | null {
   if (method.startsWith('data.') || method.startsWith('notebook.')) return 'data';
   if (method.startsWith('memory2.')) return 'memory2';
+  if (method.startsWith('skills.')) return 'skills2';
   return null;
 }
 
@@ -480,6 +502,8 @@ export class EchoBridgeTransport implements BridgeTransport {
     data: async (): Promise<EchoDataRuntime> => new (await import('./echo-data')).EchoDataRuntime(),
     memory2: async (): Promise<EchoMemory2Runtime> =>
       new (await import('./echo-memory2')).EchoMemory2Runtime(),
+    skills2: async (): Promise<EchoSkills2Runtime> =>
+      new (await import('./echo-skills2')).EchoSkills2Runtime(),
   };
 
   private async runtimeFor(family: string): Promise<EchoFamilyRuntime> {
@@ -532,7 +556,8 @@ export class EchoBridgeTransport implements BridgeTransport {
     const family = echoFamilyOf(method);
     if (family) {
       const runtime = await this.runtimeFor(family);
-      if (runtime.handles(method)) return runtime.handle(method, params);
+      const canonical = family === 'skills2' ? (SKILLS_V2_ALIASES[method] ?? method) : method;
+      if (runtime.handles(canonical)) return runtime.handle(canonical, params);
     }
     switch (method) {
       case 'session.create': {

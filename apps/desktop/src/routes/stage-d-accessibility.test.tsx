@@ -87,6 +87,18 @@ describe('Stage D surface accessibility', () => {
     await expectNoViolations(container, 'skills');
   });
 
+  it('has no axe violations in the skills learning workspace', async () => {
+    const { container } = render(
+      <SurfaceFrame title="Skills learning audit">
+        <SkillsRoute />
+      </SurfaceFrame>,
+    );
+    await screen.findByText('weekly report');
+    fireEvent.click(screen.getByRole('tab', { name: 'Learning workspace' }));
+    await screen.findByText('weekly-report');
+    await expectNoViolations(container, 'skills-learning');
+  });
+
   it('has no axe violations in the subagent dashboard', async () => {
     const { container } = render(
       <SurfaceFrame title="Subagent dashboard audit">

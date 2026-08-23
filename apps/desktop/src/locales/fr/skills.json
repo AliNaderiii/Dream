@@ -1,5 +1,70 @@
 {
   "title": "Gestionnaire de compétences",
+  "v2": {
+    "tab": "Learning workspace",
+    "loading": "Loading the learning workspace…",
+    "failedLoad": "Failed to load the learning workspace.",
+    "detailTitle": "Skill detail"
+  },
+  "stats": {
+    "title": "Run statistics",
+    "empty": "No skill runs recorded yet",
+    "emptyDesc": "Counts appear the first time a skill is invoked.",
+    "runs": "runs",
+    "failures": "failures",
+    "median": "median"
+  },
+  "inbox": {
+    "title": "Approval inbox",
+    "count": "{{rows}} pending",
+    "empty": "Nothing waiting for review.",
+    "approveAria": "Approve {{name}}",
+    "discardAria": "Discard {{name}}",
+    "approved": "Approved {{name}} — {{status}}.",
+    "discarded": "Discarded {{name}}; nothing was written."
+  },
+  "learn": {
+    "open": "Learn a skill…",
+    "title": "Learn a skill",
+    "description": "Turn a file, folder, the conversation or pasted notes into a skill; run and failure counts, version history and reference notes live here.",
+    "sourceLabel": "Source",
+    "placeholder": "Paste notes, a path, a folder, a URL, or just “conversation”…",
+    "kinds": "Kinds: path, corpus, conversation, notes, url.",
+    "offlineWarning": "This URL will be refused until network tools are enabled.",
+    "networkOff": "Network tools are off — a URL source will be refused up front.",
+    "check": "Classify",
+    "checking": "Classifying…",
+    "cancel": "Cancel",
+    "failed": "The source could not be classified.",
+    "resolved": "Resolves to skill: {{name}}",
+    "chars": "{{count}} characters",
+    "clipped": "clipped at the source limit",
+    "merges": "merges into the existing “{{name}}”",
+    "kind": {
+      "path": "path",
+      "corpus": "folder corpus",
+      "conversation": "conversation",
+      "notes": "pasted notes",
+      "url": "web page",
+      "unknown": "unknown"
+    }
+  },
+  "diff": {
+    "compare": "Compare versions",
+    "versionPair": "Version pair",
+    "label": "Version {{version}}",
+    "needTwo": "This skill has only one saved version — nothing to compare yet.",
+    "change": {
+      "added": "added",
+      "removed": "removed",
+      "same": "unchanged"
+    }
+  },
+  "references": {
+    "title": "References",
+    "empty": "No reference notes in this skill folder.",
+    "bytes": "{{bytes}} bytes"
+  },
   "installed": "Compétences installées",
   "loadedCount": "{{count}} compétences chargées",
   "failedLoad": "Impossible de charger les compétences.",

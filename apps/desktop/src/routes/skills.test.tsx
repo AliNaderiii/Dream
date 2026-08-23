@@ -215,4 +215,20 @@ describe('SkillsRoute', () => {
     expect(await screen.findByText('weekly report')).toBeInTheDocument();
     expect(transport.listCalls).toBe(2);
   });
+
+  it('switches to the learning workspace tab and back', async () => {
+    const user = userEvent.setup();
+    const transport = new SkillsStateTransport();
+    getBridgeClient().setTransport(transport);
+    render(<SkillsRoute />);
+    expect(await screen.findByText('weekly report')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Learning workspace' }));
+    expect(await screen.findByRole('region', { name: 'Learning workspace' })).toBeInTheDocument();
+    expect(await screen.findByText('weekly-report')).toBeInTheDocument();
+    expect(screen.queryByText('weekly report')).toBeNull();
+
+    await user.click(screen.getByRole('tab', { name: 'Skills manager' }));
+    expect(await screen.findByText('weekly report')).toBeInTheDocument();
+  });
 });
