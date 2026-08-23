@@ -259,3 +259,39 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 - [x] 6.2 Active connections list
 - [x] 6.3 QR code for easy mobile connection
 - [x] **Gate** — Settings render, token management works, connections visible, QR code
+
+
+## MP-02 — Durable memory, skills and search (MEM Stages A–F)
+
+- [x] **Stage A — bounded stores** (kernel `dream/memory_stores.py`): dual
+      character-bounded stores, frozen snapshot injection, overflow refused
+      never truncated — **Gate A**: 1810 / 11 Python.
+- [x] **Stage B — session index** (kernel `dream/session_search.py`): FTS5
+      external-content index, pre-normalised Persian, snippets from the
+      original text — **Gate B**: 1852 / 11 Python.
+- [x] **Stage C — skills v2 runtime** (`dream/skills/store.py` +
+      registry): append-only version + use ledger, `skills/<name>/SKILL.md`
+      folders — **Gate C**: 1875 / 11 Python.
+- [x] **Stage D — learn loop** (`dream/skills/learn.py` + `propose.py`):
+      `/learn` classification, offline URL refusal, opt-in proposals —
+      **Gate D**: 1886 / 11 Python.
+- [x] **Stage E — compaction + nudges** (`dream/compaction.py` + agent):
+      turn-boundary compaction, `/compress`, once-per-session nudge —
+      **Gate E**: 1893 / 11 Python.
+- [x] **Stage F — desktop surfaces, bridge error paths, close-out**
+      (PR #79): bounded-stores tab, skills learning workspace, Ctrl/⌘+P
+      conversation search, visible transcript compaction, 52 bridge
+      error-path tests, docs — **Gate F**: 1945 / 11 Python, 609 desktop,
+      entry 62.05 kB gzip, 9 axe surfaces clean, fa=0.
+
+PR trail: #75 (A+B) · #76 (C+D) · #77 (E) · #78 (CI hotfix) · #79 (F).
+
+### Known limitations (truthful, by design)
+
+- Compaction rows show only the events the open transcript has observed;
+  there is no bridge method that replays historical compaction events
+  after a restart.
+- Skill proposals live in the kernel process and do not survive a
+  restart, by design — nothing is written to disk until one is approved.
+- `skills.references` reads a v2 skill folder; legacy single-file skills
+  report an empty reference list rather than an error.

@@ -660,3 +660,215 @@ All checks passed!
 **GREEN.** Accounting is local, deterministic on echo, bounded at dispatch,
 and records first-class transcript events. Tool output integrity is retained,
 while nudges remain prompt-only, rate-capped, disableable, and absent in demo.
+
+
+---
+
+# Gate F — desktop surfaces, bridge error paths, close-out
+
+## F.0 — Baseline
+
+Rebuild started from `main` at `9ecda7b` (post #78). Verified before any
+code was written:
+
+```text
+$ .venv/bin/python -m pytest -q
+1893 passed, 11 skipped in 84.51s
+
+$ npm test   (apps/desktop)
+Test Files  69 passed (69)
+     Tests  505 passed (505)
+```
+
+All other baseline gates matched §1.4 (ruff clean, typecheck clean,
+lint 0 errors / 11 pre-existing warnings, format clean, entry chunk
+63.22 kB gzip, performance `pass: true`, 5 axe surfaces 0 violations,
+tokens 108 AA PASS, 14 namespaces / 655 leaves / fa=0).
+
+## F.1 — The four surfaces
+
+Per-commit desktop deltas (full battery green before each push):
+
+| Commit | Surface | Desktop tests | Δ |
+| --- | --- | --- | --- |
+| `32143d0` | bounded stores panel (`bounded-stores.test.tsx` 22 + route tab + axe) | 505 → 529 | +24 |
+| `8d92fec` | skills learning workspace (`skills-v2.test.tsx` 28 + route tab + axe) | 529 → 559 | +30 |
+| `75c0ffb` | session search (`session-search.test.tsx` 27 + ⌘P shortcut + axe) | 559 → 588 | +29 |
+| `db921ce` | transcript compaction (`compaction-bar.test.tsx` 20 + axe) | 588 → 609 | +21 |
+
+The locale gate held at every commit (fa=0 throughout); the final tree is
+15 namespaces × 8 languages, 760 leaves.
+
+Pinned laws, per surface (named by test):
+
+- **Bounded stores** — `renders the kernel header format byte-for-byte`
+  (`[67% — 1,474/2,200 chars]`, en-US grouping under Persian),
+  `counts the separator between entries, exactly as the store does`,
+  `never writes without an approval, and applies the write once allowed`,
+  `renders a refused write verbatim and leaves the entries untouched`,
+  `keeps the frozen snapshot immutable across later writes`,
+  `keeps the DOM bounded for a 1,000-entry store`.
+- **Skills workspace** — `counts any outcome that is not exactly ok as a
+  failure`, `orders skills busiest first, breaking ties by name`,
+  `refuses a URL source while the network is off, in both languages`,
+  `writes a proposal only on an explicit approve`,
+  `resolves pasted notes to a skill name before committing`,
+  `says so when a skill has only one saved version`.
+- **Session search** — `treats an unbalanced marker as plain text rather
+  than blanking the snippet`, `never emits markup — the segments are text
+  only`, `highlights the Persian spelling for an Arabic-spelled query`,
+  `refuses every read while the index is corrupt, and recovers on rebuild`,
+  `reports an empty result set without claiming a failure (no role="alert")`.
+- **Compaction** — `reports tokens saved and never goes negative`,
+  `ignores a payload that did not actually compact`,
+  `is hidden when nudges are switched off, even if one is due`,
+  `is hidden when the state is unknown`,
+  `records a row with the before/after cost and what was preserved`,
+  `works against the echo transport end to end`.
+
+## F.1.5 — Cross-cutting
+
+Virtualization fixtures (1000-row stores, mounted rows):
+
+```text
+bounded_fixture_rows=1000 mounted_rows=17
+skills_v2_fixture_rows=1000 mounted_rows=18
+search_fixture_rows=1000 mounted_rows=12
+```
+
+Axe surfaces (9, all clean):
+
+```text
+axe_surface=sessions violations=0
+axe_surface=memory violations=0
+axe_surface=memory-bounded violations=0
+axe_surface=skills violations=0
+axe_surface=skills-learning violations=0
+axe_surface=subagents violations=0
+axe_surface=scheduler violations=0
+axe_surface=session-search violations=0
+axe_surface=compaction violations=0
+```
+
+Chunk table (largest first; entry ≤ 63.22 kB gzip baseline):
+
+```text
+react-vendor   255.94 kB   (249.94 KiB — under the 500 KiB budget)
+index (entry)  203.87 kB   gzip 62.05 kB   ✓ below the 63.22 baseline
+ui-vendor       76.66 kB
+data.dataset    74.16 kB   (echo-data now a lazy family chunk)
+index.css       62.83 kB
+i18n-vendor     49.67 kB
+```
+
+Every new surface and every echo runtime (including the pre-existing
+`EchoDataRuntime`) is lazily imported — that conversion is what keeps the
+entry below baseline while four surfaces were added.
+
+## F.2 — The error-path suite
+
+`tests/test_bridge_mem_error_paths.py` — 29 test functions, 52 collected
+with `pytest.mark.parametrize`; full run 1893 → 1945. Groups: `memory2.*`
+(unknown target ×5, non-string payload ×5, five wire keys, refusal leaves
+the store untouched), `conversation.compact`/`nudge.status` (bad session
+ids ×6, exact `{enabled, sent, due}` shape), `search.sessions.*`
+(non-string query ×4, no-tokens fails closed, status/rules shape, rebuild
+count), `skills.*` boundary errors, `skills.learn_classify` refusals
+(including the offline-URL refusal asserting اینترنتی with
+`_network_on` monkeypatched off), `skills.references` empty-list rules,
+and `test_every_mem_family_payload_is_json_serialisable` — the wire-shape
+regression over non-empty rows of every family.
+
+## F.3 — Docs
+
+`CHANGELOG.md` (user-facing Added/Fixed), `docs/CONFIGURATION.md` (two
+wrong rows corrected: `DREAM_SKILLS_DB` defaults to
+`data/dream-skills.db`; `DREAM_SKILL_PROPOSALS` is a boolean opt-in flag,
+not a store path), `README.md` (the four surfaces in "Desktop
+conversations and work"), `MASTER_CHECKLIST.md` (MP-02 section with the
+known-limitations block), this file.
+
+## F.4 — The full battery (at the docs state)
+
+```text
+$ .venv/bin/python -m pytest -q
+1945 passed, 11 skipped in 79.89s
+$ .venv/bin/ruff check .
+All checks passed!
+$ .venv/bin/python tools/check_suite_count.py
+Suite count check passed: 1948 tests collected (minimum required: 652).
+$ .venv/bin/python tools/check_locales.py
+Locale integrity: PASS — 8 locales × 15 namespaces; 760 leaves and identical key/type/placeholder trees.
+English fallback counts: fa=0, zh-CN=372, ja=372, es=372, de=372, fr=372, ko=372; fa gate=PASS
+
+apps/desktop:
+$ npm run typecheck        → clean, exit 0
+$ npm run lint             → 11 problems (0 errors, 11 warnings)
+$ npm run format:check     → All matched files use Prettier code style!
+$ npm test
+Test Files  73 passed (73)
+     Tests  609 passed (609)
+$ npm run build            → entry 203.87 kB │ gzip: 62.05 kB (≤ 63.22 baseline)
+                             largest chunk 249.94 KiB (< 500 kB)
+$ npm run performance:check → "pass": true
+  paletteOpenMs 51.508 (budget 100) · routeChangeMs 159.344 (300)
+  coldDashboardRenderMs 362.955 (2000) · streamingLongestTaskMs 0.164 (50)
+  mounted500MessageRows 11 (60) · unhandledPromiseRejections 0
+$ npm run accessibility:check → 9 surfaces violations=0
+  reduced_motion_os=PASS  reduced_motion_manual=PASS
+$ npm run tokens:check     → Contrast gate: PASS — 108 AA checks.
+```
+
+The 11 eslint warnings are the pre-existing `react-refresh/only-export-components`
+set; 0 errors is the gate.
+
+## Gate F decision
+
+**GREEN.** All six commits land with the messages in §2.1; every gate in
+§4.6 is green on the PR's own battery; check_commit.py passes on every
+commit; fa=0 held at every commit; the entry chunk stayed below the
+63.22 kB baseline throughout.
+
+
+---
+
+# MP-02 — mission close-out
+
+Per-stage totals, each taken from that stage's own section above:
+
+| Stage | Python (full run) | Δ | Desktop |
+| --- | --- | --- | --- |
+| Baseline | 1748 / 11 | — | 505 |
+| A bounded stores | 1810 / 11 | +62 | 505 |
+| B session index | 1852 / 11 | +42 | 505 |
+| C skills v2 runtime | 1875 / 11 | +23 | 505 |
+| D learn loop | 1886 / 11 | +11 | 505 |
+| E compaction + nudges | 1893 / 11 | +7 | 505 |
+| Hotfix #78 | 1893 / 11 | 0 | 505 |
+| F | 1945 / 11 | +52 | 609 (+104) |
+
+Benchmark recap: §4.6 / F.4 above — pytest 1945/11, suite 1948, ruff
+clean, locales 15 namespaces / 760 leaves / fa=0, desktop 609 tests,
+entry 62.05 kB gzip (≤ 63.22), largest chunk 249.94 KiB, performance
+`pass: true`, 9 axe surfaces 0 violations, tokens 108 AA PASS.
+
+The seven invariants, held end to end:
+
+1. **Nothing is written without consent** — every bounded write, proposal
+   apply and learn commit goes through an explicit approval.
+2. **A refused write changes nothing** — refusals render verbatim next to
+   an untouched store.
+3. **The session prompt is frozen** — `memory2.status` answers the
+   snapshot frozen at session start, and the panel says so.
+4. **Fail closed, out loud** — a corrupt index refuses reads and offers a
+   rebuild; an offline URL is refused before a turn starts.
+5. **Persian is first class** — matching normalised (Arabic-spelled
+   queries find Farsi-spelled transcripts), display never re-spelled.
+6. **The protocol is append-only** — versions and use rows are only ever
+   appended; the wire carries `asdict` payloads everywhere.
+7. **Offline-first, zero new deps, no telemetry, no workflow edits** —
+   stdlib-only kernel additions, lazy in-house echo runtimes, `.github/`
+   untouched.
+
+PR trail: #75 (A+B), #76 (C+D), #77 (E), #78 (CI hotfix), #79 (this
+rebuild: desktop surfaces, bridge error paths, close-out).

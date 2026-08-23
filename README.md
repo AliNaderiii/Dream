@@ -103,6 +103,21 @@ offline by default. The dashboard first-run card offers Aval AI as the
 recommended hosted path, and the chat composer has a small opt-in Council
 review button that never starts a council from plain Send.
 
+MEM Stage F adds four durable-memory surfaces. The memory explorer's
+bounded-stores tab shows the two fixed-size stores that ride with every
+system prompt — a live `[67% — 1,474/2,200 chars]` capacity meter, an
+approval on every edit, and a notice that the prompt was frozen at session
+start. The skills learning workspace sits beside the classic manager: run
+and failure counts, a version diff, `references/` notes, an approval inbox,
+and a `/learn` panel that classifies a file, folder, conversation or pasted
+notes — refusing a web source up front while network tools are off. Press
+Ctrl/⌘+P to search every past conversation: Persian matching is
+spelling-insensitive (an Arabic-spelled query finds a Farsi-spelled
+transcript) and the hit is highlighted in the spelling you used; a damaged
+index says so and offers a rebuild. And every compaction leaves a visible
+transcript row — before/after cost, share reclaimed, messages preserved
+verbatim, and what the summary kept.
+
 Build or run the full native UI using the scripts that exist in
 `apps/desktop/package.json`:
 
