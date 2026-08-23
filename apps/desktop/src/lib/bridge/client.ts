@@ -20,11 +20,12 @@ import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen } from '@/lib/tauri';
 import { isTauri } from '@/utils/platform';
 
-import { EchoDataRuntime } from './echo-data';
 import { EchoCommerceRuntime } from './echo-commerce';
 import { EchoGatewayRuntime, requireGatewayPlatform } from './echo-gateway';
 import { EchoProjectsRuntime } from './echo-projects';
 import { EchoScheduleRuntime, EchoSubagentRuntime } from './echo-subagents';
+import type { EchoDataRuntime } from './echo-data';
+import type { EchoMemory2Runtime } from './echo-memory2';
 import { BridgeRpcError, toBridgeError } from './errors';
 import {
   normalizeBridgeState,
@@ -142,6 +143,24 @@ export class TauriBridgeTransport implements BridgeTransport {
 // --------------------------------------------------------------------------- //
 // Echo transport — browser/test fallback (no sidecar).
 // --------------------------------------------------------------------------- //
+
+/**
+ * A family runtime answers a whole wire prefix (e.g. `memory2.*`) locally.
+ * Runtimes are imported lazily — one dynamic import per family, cached — so
+ * their code never lands in the entry chunk. `handles`/`handle` mirror the
+ * shape `EchoDataRuntime` already exposes.
+ */
+export interface EchoFamilyRuntime {
+  handles(method: string): boolean;
+  handle(method: string, params: RpcParams): unknown;
+}
+
+/** Maps a wire method to its lazy echo family, when it has one. */
+function echoFamilyOf(method: string): string | null {
+  if (method.startsWith('data.') || method.startsWith('notebook.')) return 'data';
+  if (method.startsWith('memory2.')) return 'memory2';
+  return null;
+}
 
 /** Splits text into token-sized fragments, mirroring `dream.bridge.tokenise`. */
 export function tokenise(text: string, maxChars = 12): string[] {
@@ -454,8 +473,26 @@ export class EchoBridgeTransport implements BridgeTransport {
   // Projects may only group sessions the echo transport actually knows.
   private projects = new EchoProjectsRuntime((sessionId) => this.sessions.has(sessionId));
   private gateway = new EchoGatewayRuntime();
-  private data = new EchoDataRuntime();
   private commerce = new EchoCommerceRuntime();
+  /** Lazy family runtimes, one dynamic import per family, cached on first use. */
+  private familyRuntimes = new Map<string, EchoFamilyRuntime>();
+  private readonly familyLoaders: Readonly<Record<string, () => Promise<EchoFamilyRuntime>>> = {
+    data: async (): Promise<EchoDataRuntime> => new (await import('./echo-data')).EchoDataRuntime(),
+    memory2: async (): Promise<EchoMemory2Runtime> =>
+      new (await import('./echo-memory2')).EchoMemory2Runtime(),
+  };
+
+  private async runtimeFor(family: string): Promise<EchoFamilyRuntime> {
+    const cached = this.familyRuntimes.get(family);
+    if (cached) return cached;
+    const loader = this.familyLoaders[family];
+    if (!loader) {
+      throw new BridgeRpcError({ code: -32602, message: `unknown echo family ${family}` });
+    }
+    const runtime = await loader();
+    this.familyRuntimes.set(family, runtime);
+    return runtime;
+  }
 
   /** Stops any simulated subagent still ticking (vitest teardown). */
   dispose(): void {
@@ -489,9 +526,13 @@ export class EchoBridgeTransport implements BridgeTransport {
     params: RpcParams,
     onChunk?: (chunk: StreamChunk) => void,
   ): Promise<unknown> {
-    // P-09: data science workbench + notebooks live in their own runtime.
-    if (this.data.handles(method)) {
-      return this.data.handle(method, params);
+    // Family runtimes (data.*, memory2.*, …) are loaded on first use so their
+    // code stays out of the entry chunk; the inline switch below keeps the
+    // small, always-needed methods dependency-free.
+    const family = echoFamilyOf(method);
+    if (family) {
+      const runtime = await this.runtimeFor(family);
+      if (runtime.handles(method)) return runtime.handle(method, params);
     }
     switch (method) {
       case 'session.create': {

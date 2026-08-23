@@ -1,5 +1,5 @@
 import axe from 'axe-core';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -63,6 +63,18 @@ describe('Stage D surface accessibility', () => {
     );
     await screen.findByText(/Dream stores memories as semantic/);
     await expectNoViolations(container, 'memory');
+  });
+
+  it('has no axe violations in the memory bounded stores panel', async () => {
+    const { container } = render(
+      <SurfaceFrame title="Bounded stores audit">
+        <MemoryRoute />
+      </SurfaceFrame>,
+    );
+    await screen.findByText(/Dream stores memories as semantic/);
+    fireEvent.click(screen.getByRole('tab', { name: 'Bounded stores' }));
+    await screen.findByText(/frozen at session start/i);
+    await expectNoViolations(container, 'memory-bounded');
   });
 
   it('has no axe violations in the skills manager', async () => {
