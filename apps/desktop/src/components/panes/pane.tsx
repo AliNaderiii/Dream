@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DragEvent, FormEvent, KeyboardEvent, MouseEvent } from 'react';
 
 import { ApprovalDialog } from '@/components/chat/approval-dialog';
+import { CompactionBar } from '@/components/chat/compaction-bar';
 import { resolveApprovalOnBridge } from '@/components/chat/approval-policy';
 import { CouncilButton } from '@/components/chat/council-button';
 import { VirtualMessageList } from '@/components/chat/virtual-message-list';
@@ -519,6 +520,8 @@ function PaneChat({ pane }: { pane: PaneState }) {
       {transcript?.pendingApproval && (
         <ApprovalDialog approval={transcript.pendingApproval} onDecision={handleApprovalDecision} />
       )}
+
+      <CompactionBar sessionId={pane.sessionId} />
 
       <VirtualMessageList
         items={chatItems}

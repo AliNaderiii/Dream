@@ -629,6 +629,37 @@ export class EchoBridgeTransport implements BridgeTransport {
       }
       case 'conversation.stop':
         return { stopped: true };
+      case 'conversation.compact': {
+        // Deterministic Stage F echo: the first compact frees real budget,
+        // later ones find nothing eligible — exactly the kernel's shapes.
+        const compactedSession = this.sessions.get(params['session_id'] as string);
+        if (!compactedSession) {
+          throw new BridgeRpcError({ code: -32602, message: 'known session_id is required' });
+        }
+        compactedSession.message_count = 1;
+        if ((compactedSession as EchoSession & { compactedOnce?: boolean }).compactedOnce) {
+          return { compacted: false, before_tokens: 900, after_tokens: 900 };
+        }
+        (compactedSession as EchoSession & { compactedOnce?: boolean }).compactedOnce = true;
+        return {
+          compacted: true,
+          kind: 'compaction',
+          timestamp: Date.now() / 1000,
+          reason: 'explicit',
+          before_tokens: 2400,
+          after_tokens: 900,
+          preserved_messages: 4,
+          summary:
+            '[Context compacted / \u0641\u0634\u0631\u062f\u0647\u200c\u0633\u0627\u0632\u06cc \u0634\u062f] reason=explicit; dropped_messages=2; dropped_chars=6000; roles=user,assistant.',
+        };
+      }
+      case 'nudge.status': {
+        const nudgedSession = this.sessions.get(params['session_id'] as string);
+        if (!nudgedSession) {
+          throw new BridgeRpcError({ code: -32602, message: 'known session_id is required' });
+        }
+        return { enabled: true, sent: false, due: nudgedSession.message_count >= 2 };
+      }
       case 'provider.catalog':
         return { catalog: BROWSER_PROVIDER_CATALOG };
       case 'provider.list':

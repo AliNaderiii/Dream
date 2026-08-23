@@ -10,6 +10,7 @@ import { resetBridgeClient } from '@/lib/bridge/client';
 import { MemoryRoute } from '@/routes/memory';
 import { SchedulerRoute } from '@/routes/scheduler';
 import { SessionSearch } from '@/components/search/session-search';
+import { CompactionBar } from '@/components/chat/compaction-bar';
 import { SkillsRoute } from '@/routes/skills';
 import { SubagentsRoute } from '@/routes/subagents';
 import { useAppStore } from '@/stores/use-app-store';
@@ -131,5 +132,15 @@ describe('Stage D surface accessibility', () => {
     await screen.findByRole('dialog', { name: 'Conversation search' });
     await screen.findByText(/Index healthy/i);
     await expectNoViolations(document.body, 'session-search');
+  });
+
+  it('has no axe violations in the compaction bar', async () => {
+    const { container } = render(
+      <SurfaceFrame title="Compaction audit">
+        <CompactionBar sessionId="sess-audit" />
+      </SurfaceFrame>,
+    );
+    await screen.findByRole('button', { name: 'Compress' });
+    await expectNoViolations(container, 'compaction');
   });
 });

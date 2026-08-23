@@ -1,4 +1,20 @@
 {
+  "compaction": {
+    "title": "Context compaction",
+    "compress": "Compress",
+    "compressing": "Compressing…",
+    "nothingToCompact": "Nothing eligible for compaction.",
+    "failed": "Compaction failed.",
+    "nudgeDue": "Memory nudge due",
+    "rowsLabel": "Compaction events",
+    "row": "{{before}} → {{after}} tokens ({{percent}}% reclaimed)",
+    "preserved": "{{messages}} messages preserved verbatim",
+    "saved": "{{tokens}} tokens freed",
+    "reason": {
+      "explicit": "Explicit (/compress)",
+      "threshold": "Threshold reached"
+    }
+  },
   "inputPlaceholder": "메시지 작성…",
   "send": "보내기",
   "empty": "대화 시작",
