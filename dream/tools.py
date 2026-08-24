@@ -27,6 +27,8 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from zoneinfo import ZoneInfo
 
 from dream.memory import normalize_fa
+from dream.security.blocklist import scan as _floor_scan
+from dream.security.engine import SHELL_COMMAND_TOOLS as _FLOOR_COMMAND_TOOLS
 
 __all__ = [
     "REGISTRY",
@@ -817,6 +819,19 @@ def execute(
             _failure_payload("unknown_tool", f"Tool call failed: unknown tool: {name}"),
             ensure_ascii=False,
         )
+    # L3 security floor: evaluated BEFORE the approval check and impossible
+    # to override with ``approved=True`` — a blocklisted command never runs,
+    # no matter who called or what flag they carry.
+    if name in _FLOOR_COMMAND_TOOLS:
+        floor_match = _floor_scan(str(arguments.get("command", "")))
+        if floor_match is not None:
+            return json.dumps(
+                _failure_payload(
+                    "security_floor_blocked",
+                    f"Tool call failed: {floor_match.refusal}",
+                ),
+                ensure_ascii=False,
+            )
     if registered.risk == "dangerous" and not approved:
         return json.dumps(
             _failure_payload(

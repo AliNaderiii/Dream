@@ -93,7 +93,13 @@ from dream.subagents import (
     subagent_to_dict,
 )
 
-from .errors import APPROVAL_REQUIRED, RESOURCE_EXHAUSTED, BridgeError, invalid_params
+from .errors import (
+    APPROVAL_REQUIRED,
+    INTERNAL_ERROR,
+    RESOURCE_EXHAUSTED,
+    BridgeError,
+    invalid_params,
+)
 from .streams import Chunk, Stream, stream_text, tokenise
 
 logger = logging.getLogger(__name__)
@@ -428,6 +434,11 @@ class ApprovalState:
     #: ``None`` until a human answers. ``schedule.approve`` sets it, and the
     #: scheduler's gate waits on it.
     decision: bool | None = None
+    #: SEC Stage B: the L3 floor refused this call at request time. Such an
+    #: approval is recorded for the audit trail but can never resolve to an
+    #: execution — neither ``allowed=True`` nor any flag overrides the floor.
+    floor_blocked: bool = False
+    floor_reason: str = ""
 
 
 class BridgeMethods:
@@ -656,6 +667,8 @@ class BridgeMethods:
             "tool.execute": self.tool_execute,
             "approval.request": self.approval_request,
             "approval.resolve": self.approval_resolve,
+            "security.status": self.security_status,
+            "security.history": self.security_history,
             "subagent.spawn": self.subagent_spawn,
             "subagent.pipeline": self.subagent_pipeline,
             "subagent.list": self.subagent_list,
@@ -821,10 +834,14 @@ class BridgeMethods:
         )
 
     def _new_dream(
-        self, provider: str | None, model: str | None = None, reasoning_effort: Any = 0.0
+        self,
+        provider: str | None,
+        model: str | None = None,
+        reasoning_effort: Any = 0.0,
+        context: str = "interactive",
     ) -> Dream:
         backend = self._backend_for(provider, model, reasoning_effort)
-        return Dream(self.store, backend, ApprovalPolicy())
+        return Dream(self.store, backend, ApprovalPolicy(context=context))
 
     def session_create(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
@@ -1792,6 +1809,14 @@ class BridgeMethods:
         if not isinstance(arguments, dict):
             raise invalid_params("arguments must be an object")
 
+        # L3 security floor: refuses before any approval flow starts, and the
+        # ``approved`` flag cannot override it (SEC Stage B).
+        from dream.security.engine import default_engine
+
+        refusal = default_engine().floor_check(name, arguments)
+        if refusal is not None:
+            return {"blocked": True, "reason": refusal, "floor_blocked": True}
+
         # Dangerous tools require an explicit, resolved approval.
         if registered.risk == "dangerous" and not bool(params.get("approved")):
             approval = self._register_approval(name, arguments, registered.risk)
@@ -1834,11 +1859,23 @@ class BridgeMethods:
         registered = REGISTRY.get(name)
         risk = registered.risk if registered else "dangerous"
         approval = self._register_approval(name, arguments, risk)
-        return {
+        reply: dict[str, Any] = {
             "approval_id": approval.id,
             "risk": approval.risk,
             "summary": approval.summary,
         }
+        # SEC Stage B: the floor verdict is computed at request time. A
+        # floor-blocked request is recorded for the audit trail but is never
+        # presented as approvable, and it can never resolve to an execution.
+        from dream.security.engine import default_engine
+
+        refusal = default_engine().floor_check(name, arguments)
+        if refusal is not None:
+            approval.floor_blocked = True
+            approval.floor_reason = refusal
+            reply["floor_blocked"] = True
+            reply["floor_reason"] = refusal
+        return reply
 
     def approval_resolve(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
@@ -1854,6 +1891,17 @@ class BridgeMethods:
                 raise invalid_params(f"approval {approval_id!r} already resolved")
             approval.resolved = True
             name, arguments = approval.name, approval.arguments
+            floor_blocked, floor_reason = approval.floor_blocked, approval.floor_reason
+
+        # The L3 floor is non-overridable: a floor-blocked approval resolves
+        # to a refusal no matter which way the human answers (SEC Stage B).
+        if floor_blocked:
+            self.provenance.record(
+                event_type="approval_floor_blocked",
+                agent_id="bridge",
+                payload={"approval_id": approval_id, "tool_name": name, "allowed": allowed},
+            )
+            return {"blocked": True, "reason": floor_reason, "approval_id": approval_id}
 
         # Provenance: record approval event
         self.provenance.record(
@@ -2236,12 +2284,16 @@ class BridgeMethods:
             await self._daemon.stop()
 
     async def _run_schedule(self, schedule: Schedule) -> str:
-        """Execute a schedule's prompt, reusing its session or creating one."""
+        """Execute a schedule's prompt, reusing its session or creating one.
+
+        Runs with no human present: a fresh dream gets the ``cron`` context,
+        whose default gate denies dangerous tools (SEC Stage B, G-06).
+        """
         session = self.sessions.get(schedule.session_id or "")
         if session is not None:
             dream = session.dream
         else:
-            dream = self._new_dream(self._default_provider)
+            dream = self._new_dream(self._default_provider, context="cron")
         turn = await asyncio.to_thread(dream.run, schedule.prompt)
         if session is not None:
             session.message_count += 1
@@ -3765,11 +3817,51 @@ class BridgeMethods:
                     "summary": approval.summary,
                     "resolved": approval.resolved,
                     "decision": approval.decision,
+                    "floor_blocked": approval.floor_blocked,
                 }
                 for approval in self.approvals.values()
                 if include_resolved or not approval.resolved
             ]
         return {"approvals": approvals}
+
+    # ------------------------------------------------------------------ #
+    # security.* — engine state and the durable approval trail (SEC B)
+    # ------------------------------------------------------------------ #
+
+    def security_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Engine mode, autonomous-context gates, and floor state.
+
+        Read-only; powers the persistent off-mode indicator and the Stage F
+        Security Center surface.
+        """
+        del params
+        from dream.security.engine import default_engine
+
+        return default_engine().status()
+
+    def security_history(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Newest-first approval events; boundary-validated, capped, fail-closed."""
+        from dream.security.engine import default_engine
+        from dream.security.history import ApprovalStoreError
+
+        params = params or {}
+        limit = params.get("limit", 200)
+        offset = params.get("offset", 0)
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+            raise invalid_params("limit must be a positive integer")
+        if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
+            raise invalid_params("offset must be a non-negative integer")
+        engine = default_engine()
+        if engine.history is None:
+            raise BridgeError(
+                INTERNAL_ERROR,
+                "approval history is unreadable; refusing to list it until rebuilt",
+            )
+        try:
+            rows = engine.history.entries(limit=limit, offset=offset)
+        except ApprovalStoreError as exc:
+            raise BridgeError(INTERNAL_ERROR, str(exc)) from None
+        return {"entries": rows, "count": len(rows)}
 
 
 #: English display names for the commercial plans (S05). Persian names come

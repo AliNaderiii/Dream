@@ -35,8 +35,13 @@ def test_safe_and_guarded_tools_auto_approve() -> None:
 
 
 def test_dangerous_tool_denied_without_approver() -> None:
+    # RF-4 (SEC Stage B): the fixture was "rm -rf /" before the L3 floor
+    # existed; that command is now (correctly) refused by the floor before
+    # any approval logic, so this tier test uses a non-floor command to keep
+    # asserting exactly its original property: dangerous tier + no approver
+    # configured -> denial naming the missing approver.
     policy = ApprovalPolicy()
-    allowed, reason = policy.allows("run_shell", {"command": "rm -rf /"})
+    allowed, reason = policy.allows("run_shell", {"command": "echo needs approval"})
     assert not allowed
     assert "no approver" in reason
 
