@@ -114,3 +114,44 @@ class RateLimiter:
                 continue
             by_platform.setdefault(platform, {})[user_id] = count
         return {"limits": dict(self._limits), "default": self._default, "active": by_platform}
+
+
+class ApprovalAttemptLimiter:
+    """Per-user throttle on dangerous-tool approval attempts (SEC E, G-02).
+
+    Message rate limiting caps how much a user can talk; this caps how many
+    times a user (or an injection steering them) can reach for dangerous
+    tools. The window and bookkeeping mirror :class:`RateLimiter` so the
+    two gates behave identically under load.
+    """
+
+    def __init__(self, per_minute: int = 10) -> None:
+        if per_minute < 1:
+            raise ValueError("per_minute must be at least 1")
+        self._limit = int(per_minute)
+        self._buckets: dict[tuple[str, str, int], int] = {}
+
+    def allow(self, platform: str, user_id: str, now: float | None = None) -> bool:
+        """Record one approval attempt; False once the budget is spent."""
+        stamp = time.time() if now is None else now
+        minute = int(stamp // 60)
+        stale = [key for key in self._buckets if key[2] != minute]
+        for key in stale:
+            del self._buckets[key]
+        bucket = (platform, user_id, minute)
+        used = self._buckets.get(bucket, 0) + 1
+        self._buckets[bucket] = used
+        return used <= self._limit
+
+    def limiter_for(self, platform: str, user_id: str) -> Any:
+        """A policy-shaped callable: ``(tool_name, arguments) -> bool``."""
+        return lambda _name, _arguments: self.allow(platform, user_id)
+
+    def to_dict(self) -> dict[str, Any]:
+        by_user: dict[str, dict[str, int]] = {}
+        minute = int(time.time() // 60)
+        for (platform, user_id, stamp_minute), count in self._buckets.items():
+            if stamp_minute != minute:
+                continue
+            by_user.setdefault(platform, {})[user_id] = count
+        return {"limit": self._limit, "active": by_user}

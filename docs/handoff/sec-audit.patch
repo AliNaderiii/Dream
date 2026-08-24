@@ -1,0 +1,14 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 623921b..800597e 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -43,6 +43,9 @@ jobs:
+ 
+       - name: Suite size
+         run: python tools/check_suite_count.py
++
++      - name: Security audit
++        run: python tools/security_audit.py
+       # Keep pytest isolated from frontend/Rust builds in this job. Telegram
+       # timing assertions are sensitive to CPU contention and can flake when a
+       # developer runs a concurrent build; each CI job has its own runner.

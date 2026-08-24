@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Per-user permissions for linked identities (SEC Stage E).** Each
+  linked chat identity carries a scope — chat only, safe tools, guarded
+  tools, or full admin — enforced on every turn and manageable over the
+  bridge (`gateway.set_user_scope`). Repeated dangerous-tool attempts are
+  throttled per user, and gateway token checks are now constant-time.
+- **Stronger isolation.** Scheduled (cron) dreams run without dangerous
+  tools at all; subagent and council grant chains are pinned to minimal
+  grants; unknown session ids are refused before dispatch; schedule
+  storage is immune to traversal and injection shapes.
 - **Hostile text is scanned before it reaches the model (SEC Stage D).**
   Files, web pages, MCP payloads, skill bodies, /learn sources, search
   snippets, and recalled memories pass an injection scanner: hidden

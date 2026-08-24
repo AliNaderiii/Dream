@@ -536,6 +536,23 @@ class ApprovalPolicy:
     security: Any = None
     """SecurityEngine to evaluate dangerous calls; ``None`` uses the
     process-wide default engine."""
+    scope: str = "admin"
+    """SEC Stage E (G-01): the linked user's permission scope —
+    ``chat_only | safe_tools | guarded_tools | admin``. Tools above the
+    scope's ceiling are refused; the floor still precedes the gate."""
+    attempt_limiter: Callable[[str, dict[str, Any]], bool] | None = None
+    """SEC Stage E (G-02): optional per-user approval-attempt throttle.
+    Called for dangerous tools that passed floor and scope; ``False``
+    refuses with a rate-limit denial."""
+
+    #: The risk ceiling each scope may reach (G-01). Class-level constant —
+    #: not a dataclass field.
+    _SCOPE_CEILING = {
+        "chat_only": frozenset(),
+        "safe_tools": frozenset({"safe"}),
+        "guarded_tools": frozenset({"safe", "guarded"}),
+        "admin": frozenset({"safe", "guarded", "dangerous"}),
+    }
 
     def allows(self, tool_name: str, arguments: dict[str, Any]) -> tuple[bool, str]:
         from dream.security.engine import default_engine
@@ -545,7 +562,22 @@ class ApprovalPolicy:
             return False, "unknown tool"
         risk = registered.risk
         engine = self.security if self.security is not None else default_engine()
+        ceiling = self._SCOPE_CEILING.get(self.scope, frozenset())
         if risk == "dangerous":
+            # Contract: the L3 floor precedes EVERY approval-layer gate —
+            # scope, throttles, contexts and modes alike.
+            refusal = engine.floor_check(tool_name, arguments)
+            if refusal is not None:
+                return False, refusal
+            if "dangerous" not in ceiling:
+                return (
+                    False,
+                    f"dangerous tool denied: scope {self.scope!r} does not allow it",
+                )
+            if self.attempt_limiter is not None and not self.attempt_limiter(
+                tool_name, arguments
+            ):
+                return False, "dangerous tool denied: too many approval attempts"
             if risk in self.always_ask or self.context != "interactive":
                 # Floor -> autonomous-context gate -> mode, in that order,
                 # all inside the engine; nothing below can override the floor.
@@ -553,12 +585,9 @@ class ApprovalPolicy:
                     tool_name, arguments, context=self.context, ask=self.ask
                 )
                 return decision.allowed, decision.reason
-            # Dangerous configured to auto-approve (a ``--yolo``-style grant):
-            # the floor still trips first, and its verdict is final.
-            refusal = engine.floor_check(tool_name, arguments)
-            if refusal is not None:
-                return False, refusal
             return True, "dangerous tool auto-approved"
+        if risk not in ceiling:
+            return False, f"{risk} tool denied: scope {self.scope!r} does not allow it"
         if risk in self.always_ask:
             if self.ask is None:
                 return False, f"{risk} tool denied: no approver configured"

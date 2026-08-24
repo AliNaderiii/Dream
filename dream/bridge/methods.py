@@ -672,6 +672,8 @@ class BridgeMethods:
             "approval.resolve": self.approval_resolve,
             "security.status": self.security_status,
             "security.history": self.security_history,
+            "security.blocklist": self.security_blocklist,
+            "security.injection_quarantine": self.security_injection_quarantine,
             "subagent.spawn": self.subagent_spawn,
             "subagent.pipeline": self.subagent_pipeline,
             "subagent.list": self.subagent_list,
@@ -700,6 +702,7 @@ class BridgeMethods:
             "gateway.logs": self.gateway_logs,
             "gateway.link_code": self.gateway_link_code,
             "gateway.linked_users": self.gateway_linked_users,
+            "gateway.set_user_scope": self.gateway_set_user_scope,
             "gateway.unlink_user": self.gateway_unlink_user,
             "gateway.platforms": self.gateway_platforms,
             "health.check": self.health_check,
@@ -844,7 +847,23 @@ class BridgeMethods:
         context: str = "interactive",
     ) -> Dream:
         backend = self._backend_for(provider, model, reasoning_effort)
-        return Dream(self.store, backend, ApprovalPolicy(context=context))
+        if context in ("cron", "single_query"):
+            # SEC Stage E (G-20): autonomous dreams run with a degraded
+            # grant set — dangerous tools are absent from the dispatch
+            # table entirely, so they read as ``unknown tool`` and are
+            # refused before any approval logic. The cron/single-query
+            # context gate inside the engine remains the second layer.
+            from dream.tools import REGISTRY
+
+            restricted = {
+                name: registered
+                for name, registered in REGISTRY.items()
+                if registered.risk != "dangerous"
+            }
+            policy = ApprovalPolicy(registry=restricted, context=context)
+        else:
+            policy = ApprovalPolicy(context=context)
+        return Dream(self.store, backend, policy)
 
     def session_create(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
@@ -2477,6 +2496,29 @@ class BridgeMethods:
             raise invalid_params("platform must be a non-empty string")
         return self._ensure_gateway().link_code(platform)
 
+    def gateway_set_user_scope(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """SEC Stage E (G-01): set one linked user's permission scope.
+
+        Append-only protocol: the method is new; existing wire shapes are
+        untouched. Boundary-validated before the gateway is asked anything.
+        """
+        from dream.connectivity.auth import USER_SCOPES
+
+        params = params or {}
+        platform = params.get("platform")
+        user_id = params.get("user_id")
+        scope = params.get("scope")
+        if not isinstance(platform, str) or not platform.strip():
+            raise invalid_params("platform must be a non-empty string")
+        if not isinstance(user_id, str) or not user_id.strip():
+            raise invalid_params("user_id must be a non-empty string")
+        if not isinstance(scope, str) or scope not in USER_SCOPES:
+            raise invalid_params(f"scope must be one of {list(USER_SCOPES)}")
+        result = self._ensure_gateway().set_user_scope(platform, user_id, scope)
+        if not result.get("updated"):
+            raise invalid_params(f"no linked user {user_id!r} on platform {platform!r}")
+        return result
+
     def gateway_linked_users(
         self, params: dict[str, Any] | None = None
     ) -> dict[str, Any]:
@@ -3852,12 +3894,29 @@ class BridgeMethods:
         """Engine mode, autonomous-context gates, and floor state.
 
         Read-only; powers the persistent off-mode indicator and the Stage F
-        Security Center surface.
+        Security Center surface. SEC Stage F: also reports the injection
+        scanner mode and quarantine depth.
         """
         del params
-        from dream.security.engine import default_engine
+        import os
 
-        return default_engine().status()
+        from dream.security.engine import default_engine
+        from dream.security.injection import (
+            DEFAULT_MODE,
+            INJECTION_MODE_ENV,
+            list_quarantined,
+        )
+        from dream.security.injection import (
+            MODES as INJECTION_MODES,
+        )
+
+        status = dict(default_engine().status())
+        injection_mode = os.environ.get(INJECTION_MODE_ENV, "").strip().lower()
+        if injection_mode not in INJECTION_MODES:
+            injection_mode = DEFAULT_MODE
+        status["injection_mode"] = injection_mode
+        status["injection_quarantine_count"] = len(list_quarantined())
+        return status
 
     def security_history(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Newest-first approval events; boundary-validated, capped, fail-closed."""
@@ -3881,6 +3940,32 @@ class BridgeMethods:
             rows = engine.history.entries(limit=limit, offset=offset)
         except ApprovalStoreError as exc:
             raise BridgeError(INTERNAL_ERROR, str(exc)) from None
+        return {"entries": rows, "count": len(rows)}
+
+    def security_blocklist(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """SEC Stage F: the L3 floor's rules for the read-only viewer."""
+        del params
+        from dream.security.blocklist import RULES
+
+        rules = [
+            {
+                "rule_id": rule.rule_id,
+                "rule_class": rule.rule_class,
+                "name_en": rule.name_en,
+                "name_fa": rule.name_fa,
+            }
+            for rule in RULES
+        ]
+        return {"rules": rules, "count": len(rules), "overridable": False}
+
+    def security_injection_quarantine(
+        self, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """SEC Stage F: quarantined injection originals (metadata list)."""
+        del params
+        from dream.security.injection import list_quarantined
+
+        rows = list_quarantined()
         return {"entries": rows, "count": len(rows)}
 
 
