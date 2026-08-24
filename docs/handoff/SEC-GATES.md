@@ -152,3 +152,185 @@ gates green, desktop and workflows untouched.
 25-gap register fully assigned; baseline and re-run suites identical to the
 required numbers. Stage B (L3 hardline blocklist + L2 approval engine v2)
 may begin.
+
+---
+
+# Gate B — floor & engine (L3 blocklist + L2 approval engine v2)
+
+Implementation: [`SEC-B.md`](./SEC-B.md) · Commits `87b1675` (kernel),
+`cc9ad32` (wiring), `0c42c33` (desktop indicators), plus this docs state.
+Files: `dream/security/{__init__,blocklist,assessor,history,engine}.py`,
+`tests/security/` (7 suites, 250 cases), wiring edits in `dream/tools.py`,
+`dream/agent.py`, `dream/bridge/methods.py`, desktop
+`src/components/security/` + `security.json` × 8 locales. **One existing
+test fixture changed, with RF-4 justification in SEC-B.md; no other
+existing test was edited.**
+
+## B.1 — Red-team corpus: no bypass (incl. Windows + obfuscation)
+
+```text
+$ .venv/bin/python -m pytest tests/security/ -q
+222 passed in 1.22s          # kernel suites (blocklist ×3, assessor, engine,
+                             # history, property centerpiece) — pre-wiring
+$ .venv/bin/python -m pytest tests/security/ -q   # after wiring commit
+250 passed                   # + 28 cross-surface integration cases
+```
+
+Corpus composition (pinned): 45 POSIX block + 14 benign; 36 Windows block +
+11 benign (rd/rmdir/del/erase, `format X:`, `reg delete` hive roots,
+`Remove-Item`/`rm`/`ri` recursive incl. unquoted space paths, `iex`/
+`Invoke-Expression` payloads); 33 obfuscation block + 3 benign (quoting,
+backslash escapes, case, flag order, `$HOME`/`~`/`%USERPROFILE%`/
+`%HOMEDRIVE%%HOMEPATH%`/`%SystemRoot%`/`%WINDIR%`/`$env:*`, `..`
+normalization incl. `/tmp/..` and `c:\windows\..\`, zero-width and bidi
+insertion, full-width NFKC homoglyphs, Cyrillic lookalikes, `bash -c`
+unwrap, `;`/`&&` without spaces); property centerpiece
+`test_blocklist_precedes_approval` sweeping every mode × context × approver
+× cron-policy combination plus a seeded shuffle, asserting the refusal
+always comes from `stage == "floor"` and lands in the history.
+
+## B.2 — Assessor discipline: strict schema, hard timeout, offline rules
+
+```text
+$ .venv/bin/python -m pytest tests/security/test_sec_assessor.py -q
+19 passed
+```
+
+Pinned laws (selected): 10 schema-violation shapes deny
+(`schema_violation`); hanging fake backend (`time.sleep(30)`) with
+`timeout=0.3` denies in < 5 s with `source == "model_timeout"` and a
+bilingual reason; backend exceptions and `KeyboardInterrupt` deny
+(`model_error`); `model_call=None` → pattern rules only (no network in any
+test); curated verbs classify low/medium/high, floor-matching commands
+classify catastrophic, unknown verbs fail toward the human (medium →
+prompt); `git push --force` high / `git status` low.
+
+## B.3 — The contract: floor precedes approval on every surface
+
+```text
+$ .venv/bin/python -m pytest tests/security/test_sec_property.py tests/security/test_sec_integration.py -q
+32 passed
+```
+
+- `test_blocklist_precedes_approval` (engine): every floor corpus command
+  under every mode/context/approver/cron-policy combination denies at
+  `stage == "floor"`.
+- `test_blocklist_precedes_approval_across_surfaces` (integration): the
+  same sweep through `ApprovalPolicy.allows` **and** `tools.execute`
+  (`approved=True`), across 12 floor commands × 3 modes × 3 contexts ×
+  3 approvers × 2 surfaces.
+- Yolo bypass attempts: `policy.auto_approve.add("dangerous")` still hits
+  the floor; `off`-mode engine still floors; `approved=True` through
+  `execute()` and bridge `tool.execute` still floors; bridge
+  `approval_resolve(allowed=true)` on a floor-blocked request still
+  returns `blocked: true`.
+- Non-floor dangerous commands still reach the approval logic (manual
+  legacy reasons byte-identical: `no approver configured` / `denied by
+  approver` / `dangerous tool approved`).
+
+## B.4 — Modes, contexts, history
+
+```text
+$ .venv/bin/python -m pytest tests/security/test_sec_engine.py tests/security/test_sec_history.py -q
+29 passed
+```
+
+Pinned laws (selected): `SecurityEngine("off")` raises without
+`off_opt_in=True`; env `DREAM_SECURITY_MODE=off` without
+`DREAM_SECURITY_OFF_OPT_IN=1` falls back to `manual`; cron and
+single-query contexts deny by default even in `off` mode and with a
+yes-approver, bilingual reason; `cron_mode="auto"` runs only after the
+floor; history is newest-first, paginated, env-overridable
+(`DREAM_APPROVAL_DB`), survives reopen, fails closed on corruption with a
+bilingual error and byte-identical file, and the module source contains no
+`UPDATE`/`DELETE FROM`/`DROP TABLE` (append-only pinned).
+
+## B.5 — RF-4, machine gates, full suites
+
+```text
+$ git diff --stat 8e4dc9e..cc9ad32 -- tests/ | tail -2
+ tests/test_security_tool_risk.py | 7 +-      # one fixture, justified in SEC-B.md
+ (+ 8 new files under tests/security/, insertions only otherwise)
+
+$ .venv/bin/python -m pytest -q
+2195 passed, 11 skipped in 89.85s (0:01:29)
+
+$ .venv/bin/ruff check .
+All checks passed!
+
+$ .venv/bin/python tools/check_suite_count.py
+Suite count check passed: 2198 tests collected (minimum required: 652).
+
+$ .venv/bin/python -m pytest tests/test_m16_escaping.py tests/test_m16_conditional_assertions.py -q
+8 passed in 16.96s
+
+$ python cli.py --demo | tail -2
+5. Approval gate:
+   {"blocked": true, "reason": "dangerous tool denied: no approver configured"}
+
+$ .venv/bin/python tools/check_locales.py
+Locale integrity: PASS — 8 locales × 16 namespaces; 763 leaves and identical key/type/placeholder trees.
+English fallback counts: fa=0, …; fa gate=PASS
+```
+
+1945 pre-existing + 250 new = 2195 passed / 11 skipped. The m16 escaping
+gate passes and a raw source scan finds zero unescaped Persian characters
+in `dream/security/*.py` (all `\u06xx` escapes). Demo output is
+byte-identical to the Stage-A baseline — the default path is unchanged.
+
+## B.6 — Desktop battery (off-mode indicators)
+
+```text
+$ npm run typecheck        # exit 0
+$ npm run lint
+✖ 11 problems (0 errors, 11 warnings)   # pre-existing set
+$ npm run format:check
+All matched files use Prettier code style!
+$ npm test
+ Test Files  75 passed (75)
+      Tests  617 passed (617)            # 609 + 8 new security surface tests
+$ npm run build
+dist/assets/index-Csp5t9kN.js            205.48 kB │ gzip: 62.49 kB
+# entry ≤ 63.22 kB baseline ✓; banner ships in its own lazy chunk
+# (security-*.js 0.22–0.29 kB gzip); chip adds ~0.4 kB to the entry
+$ npm run performance:check   → "pass": true
+$ npm run accessibility:check → Test Files 3 passed (3) / Tests 13 passed (13)
+$ npm run tokens:check
+Tokens Studio schema-compatible import: PASS — 12 sets, 208 tokens, 12 themes.
+Contrast gate: PASS — 108 AA checks.
+```
+
+## B.7 — Worktree verification per commit (isolation)
+
+```text
+$ git worktree add /tmp/wt-b1 87b1675 && pytest tests/security/ \
+    tests/test_security_tool_risk.py tests/test_m16_escaping.py -q
+234 passed in 18.11s                     # + ruff clean
+
+$ git worktree add /tmp/wt-b2 cc9ad32 && pytest tests/security/test_sec_integration.py \
+    tests/test_security_tool_risk.py tests/test_bridge_methods.py \
+    tests/test_tool_visibility.py tests/test_subagents.py tests/test_council.py -q
+168 passed in 15.43s
+
+$ git worktree add /tmp/wt-b3 0c42c33 && ln -s …/node_modules …
+$ npx tsc --noEmit                       # exit 0
+$ npx vitest run src/components/security
+ Test Files  2 passed (2) / Tests  8 passed (8)
+```
+
+`python tools/check_commit.py` passed on `87b1675`, `cc9ad32`, `0c42c33`
+(identity + trailer + AI-word rules; the platform-injected trailer on the
+first attempt was rebuilt via the commit-tree method before push).
+
+## Gate B decision
+
+**GREEN.** The floor trips before any approval logic on every execution
+surface and cannot be overridden by `off`, cron approve/auto modes,
+yolo-style grants, `approved=True`, private registries, or yes-approvers
+(property-proven); the assessor is strict, hard-timed and fail-closed with
+offline pattern rules; modes and autonomous contexts behave as specified with
+persistent off-mode indicators; the approval trail is durable and
+append-only; 250 adversarial cases green; every pre-existing suite
+unmodified and green (one justified fixture change); desktop battery green
+with the entry under baseline. Stage C (L4 file safety + L6 credential
+hygiene) may begin.

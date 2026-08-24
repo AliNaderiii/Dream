@@ -274,8 +274,8 @@ restore, never delete silently.
 | Layer | Present today (verified files) | Gap IDs | Stage · SA |
 | --- | --- | --- | --- |
 | L1 authorization | `connectivity/auth.py`, `ratelimit.py`, `gateway.py`, `gateway_server.py` | G-01…G-03 | E · SA-1 RAMPART |
-| L2 approval engine v2 | `tools.py` tiers, `agent.py:ApprovalPolicy` | G-04…G-07 | B · SA-2 SENTRY |
-| L3 blocklist floor | — (none) | G-08 | B · SA-2 SENTRY |
+| L2 approval engine v2 | `tools.py` tiers, `agent.py:ApprovalPolicy`, **`security/engine.py` + `security/assessor.py` + `security/history.py` (Stage B, closed)** | ~~G-04…G-07~~ closed at B | B · SA-2 SENTRY |
+| L3 blocklist floor | **`security/blocklist.py` (Stage B, closed)** | ~~G-08~~ closed at B | B · SA-2 SENTRY |
 | L4 file-write safety | `tools.py:_safe_path`, skills name validation | G-09…G-11 | C · SA-3 VAULT |
 | L5 injection scanning | — (adjacent: caps, catalog bodies, boundary types) | G-12, G-13 | D · SA-4 HORIZON |
 | L6 credential hygiene | partial redactors; **env leak confirmed** `mcp/transport.py:69` | G-14…G-17 | C · SA-3 VAULT |
@@ -285,6 +285,24 @@ restore, never delete silently.
 Quality and transparency across all layers: SA-5 PROOF (Stage E/F:
 `tests/security/` 200+ cases, `tools/security_audit.py`) and SA-6
 WATCHTOWER (Stage F: Security Center, SECURITY.md matrix).
+
+**Stage B close (2026-08-24).** G-04…G-08 are closed. The floor lives in
+`dream/security/blocklist.py` (8 data-driven rules; normalization folds
+quoting, escapes, variable/tilde expansion, `..` traversal, zero-width/bidi
+controls, full-width and Cyrillic homoglyphs, and reuses the shared Persian
+normalizer). It runs before any approval logic at every choke point:
+`ApprovalPolicy.allows`, `tools.execute`, and the bridge
+(`tool.execute` / `approval.request` / `approval.resolve`). The engine
+(`security/engine.py`) orders floor → context → mode; `manual` is the
+default and reproduces pre-SEC behaviour exactly; `off` exists only behind
+an explicit opt-in and carries persistent red banner + status-bar chip
+(`apps/desktop/src/components/security/`); cron/single-query contexts
+default to deny. The assessor (`security/assessor.py`) answers a strict
+`{level, reason}` JSON schema under a hard timeout — timeout, error, or any
+schema deviation denies. The approval trail is append-only SQLite under
+`DREAM_APPROVAL_DB` (`security/history.py`), fail-closed on corruption.
+Evidence: 250 tests in `tests/security/` incl. the
+`blocklist_precedes_approval` property; SEC-GATES.md Gate B.
 
 ## 7. Out of scope / accepted risks (recorded, not ignored)
 
