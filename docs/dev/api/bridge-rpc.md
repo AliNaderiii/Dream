@@ -53,3 +53,9 @@ Domain errors map to standard codes (`INVALID_PARAMS -32602`, `NOT_FOUND
 `dream/bridge/methods.py` holds `BridgeMethods`, whose methods are registered
 by prefix. `docs/bridge/protocol.md` §9 maps each method to its implementation
 and the DTO types in `apps/desktop/src/lib/bridge/types.ts`.
+
+## P0 extension seam
+
+Domain RPC clients can use `createDomainBridgeClient` from
+`src/lib/bridge/extension-client.ts`. Server methods are declared through the
+package-local bridge extension contract; no generated client registry is needed.

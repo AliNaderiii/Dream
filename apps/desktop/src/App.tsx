@@ -4,6 +4,7 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { AppShell } from '@/components/layout/app-shell';
+import { registeredRoutes } from '@/lib/route-registry';
 
 // Workspaces are code-split so the shell paints before their chunks load.
 // Each lazy route resolves the named export to a default export for React.lazy.
@@ -38,6 +39,12 @@ const SchedulerRoute = lazy(() =>
 const SubagentsRoute = lazy(() =>
   import('@/routes/subagents').then((m) => ({ default: m.SubagentsRoute })),
 );
+
+// P0 SEAM: feature route components remain lazy while their metadata is discovered.
+const ExtensionRoutes = registeredRoutes.map((route) => ({
+  ...route,
+  Component: lazy(route.elementLoader),
+}));
 
 /** Lightweight fallback shown while a lazy chunk is still loading. */
 function RouteFallback() {
@@ -170,6 +177,17 @@ export default function App() {
             </Suspense>
           }
         />
+        {ExtensionRoutes.map(({ path, Component }) => (
+          <Route
+            key={path}
+            path={path.slice(1)}
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <Component />
+              </Suspense>
+            }
+          />
+        ))}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
