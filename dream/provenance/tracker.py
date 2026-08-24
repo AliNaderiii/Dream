@@ -103,9 +103,16 @@ class ProvenanceTracker:
         duration_ms: int | None = None,
         timestamp: str | None = None,
     ) -> ProvenanceRecord:
-        """Append a new tamper-evident record to the provenance chain."""
+        """Append a new tamper-evident record to the provenance chain.
+
+        SEC Stage C (G-17): payloads are value-scanned before sealing, so a
+        secret inside a tool argument or result never lands in the trail.
+        """
+        from dream.security.secrets import redact_structure
+
         if isinstance(model_snapshot, dict):
             model_snapshot = ModelSnapshot.from_dict(model_snapshot)
+        payload = redact_structure(payload or {})
 
         rec_id = f"prov_{uuid.uuid4().hex}"
         ts = timestamp or datetime.now(timezone.utc).isoformat()

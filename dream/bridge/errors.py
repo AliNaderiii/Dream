@@ -94,7 +94,14 @@ def invalid_params(message: str, **data: Any) -> BridgeError:
 
 
 def _redact(text: str) -> str:
-    """Strip bearer tokens and obvious credential markers from *text*."""
+    """Strip bearer tokens and obvious credential markers from *text*.
+
+    SEC Stage C (G-17): the value-scan pass runs first, so key-shaped
+    strings are replaced even when no ``key=`` marker precedes them.
+    """
+    from dream.security.secrets import redact_text
+
+    text = redact_text(text)
     text = _BEARER_RE.sub("Bearer ***", text)
     if any(marker in text.lower() for marker in _SECRET_MARKERS):
         # Coarse but safe: collapse any ``key=...`` / ``"key":"..."`` value.

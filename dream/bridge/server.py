@@ -418,6 +418,11 @@ def run_stdio(argv: list[str] | None = None) -> int:
         stream=sys.stderr,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # SEC Stage C (G-17): every bridge log line is value-scanned before it
+    # reaches stderr — a key must never ride the wire or the logs.
+    from dream.security.secrets import install_redaction_filter
+
+    install_redaction_filter("dream")
     try:
         asyncio.run(serve_forever())
     except KeyboardInterrupt:
