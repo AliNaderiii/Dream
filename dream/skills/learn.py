@@ -281,6 +281,9 @@ def install_skill_bundle(
             rel = f"skills/{cleaned}/references/{safe}.md"
             path = tools._safe_path(rel)
             path.parent.mkdir(parents=True, exist_ok=True)
+            from dream.security.pathsafety import check_write_path
+
+            check_write_path(path)  # L4: uniform sensitive-path denial
             path.write_text(ref_body.strip() + "\n", encoding="utf-8")
             written.append(rel)
         mark_skills_dirty()

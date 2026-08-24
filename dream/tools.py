@@ -550,7 +550,12 @@ def write_note(filename: str, content: str) -> str:
     :param filename: Relative path of the note to write.
     :param content: Exact text to store in the note.
     """
+    from dream.security.pathsafety import check_write_path
+
     path = _safe_path(filename)
+    # L4 second layer (SEC Stage C): even inside the workspace, sensitive
+    # paths (credentials, stores, system dirs) are never writable.
+    check_write_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return f"wrote {path.relative_to(WORKSPACE_ROOT)}"
