@@ -13,13 +13,17 @@ from __future__ import annotations
 import re
 import unicodedata
 
-__all__ = ["DEFAULT_VISIBLE_LIMIT", "sanitize_model_visible"]
+__all__ = ["DEFAULT_VISIBLE_LIMIT", "sanitize_model_visible", "strip_invisible"]
 
 #: Characters that carry no displayable meaning and exist in descriptions
-#: only to hide directives from a human reviewer.
+#: only to hide directives from a human reviewer. NOTE: U+200C (ZWNJ) is
+#: deliberately NOT listed — it is first-class Persian orthography
+#: (``می‌خواهم``, ``دستورالعمل‌ها``) and flagging it would break every
+#: legitimate Persian text. Directional MARKS (LRM/RLM) are likewise kept:
+#: mixed-direction text uses them honestly; only overrides/isolates go.
 _INVISIBLE_RE = re.compile(
     "["
-    "\u200b\u200c\u200d\u200e\u200f\u2060\u2061\u2062\u2063\u2064\ufeff"
+    "\u200b\u200d\u2060\u2061\u2062\u2063\u2064\ufeff"
     "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069\u00ad"
     "\u206a\u206b\u206c\u206d\u206e\u206f"
     "\u180e\u034f\u061c\u1806"
@@ -39,6 +43,21 @@ DEFAULT_VISIBLE_LIMIT = 1000
 _TRUNCATION_MARKER = " \u2026[truncated]"
 
 
+def strip_invisible(text: str) -> str:
+    """Remove invisible/control characters without collapsing or capping.
+
+    This is the L5 strip layer: hidden Unicode (zero-width, bidi overrides,
+    soft hyphens, Mongolian vowel separators, tag-adjacent controls) cannot
+    carry meaning in untrusted text, so they go. Visible text, newlines, and
+    tabs survive byte-identical.
+    """
+    if not isinstance(text, str):
+        text = str(text)
+    cleaned = unicodedata.normalize("NFC", text)
+    cleaned = _INVISIBLE_RE.sub("", cleaned)
+    return _CONTROL_RE.sub(" ", cleaned)
+
+
 def sanitize_model_visible(text: str, *, limit: int = DEFAULT_VISIBLE_LIMIT) -> str:
     """Return *text* with invisible characters removed and length bounded.
 
@@ -46,11 +65,7 @@ def sanitize_model_visible(text: str, *, limit: int = DEFAULT_VISIBLE_LIMIT) -> 
     a hygiene layer, not a verdict: stripped content is not proof of
     malice, and clean-looking text is not proof of safety.
     """
-    if not isinstance(text, str):
-        text = str(text)
-    cleaned = unicodedata.normalize("NFC", text)
-    cleaned = _INVISIBLE_RE.sub("", cleaned)
-    cleaned = _CONTROL_RE.sub(" ", cleaned)
+    cleaned = strip_invisible(text)
     cleaned = _NEWLINE_RUN_RE.sub("\n\n", cleaned)
     cleaned = _SPACE_RUN_RE.sub("  ", cleaned)
     cleaned = cleaned.strip()
