@@ -2,18 +2,18 @@
 
 P0 lets a feature ship as new files only.
 
-1. Add `dream/bridge/methods_<domain>.py` with the `HANDLERS` contract in [the bridge extension contract](../../bridge/extension-contract.md).
-2. Add `dream/<domain>/tools.py` and decorate tools with `@tool(risk=...)`.
-3. Add `apps/desktop/src/routes/<domain>.tsx`. Export a default component plus `route` metadata:
+1. Add `dream/bridge/methods_<domain>.py` with the `HANDLERS` contract in [the bridge extension contract](../../bridge/extension-contract.md). Built-in RPC names are quarantined and refused; there is no `OVERRIDE` escape hatch.
+2. Optionally add `dream/<domain>/tools.py` and decorate tools with `@tool(risk=...)`. A missing `tools.py` is normal and silent.
+3. Add `apps/desktop/src/routes/<domain>.tsx` (where `<domain>` matches `[a-z][a-z0-9_]*`) with a **default export** page component. It is lazy-loaded and defaults to path `/<domain>`, label `nav.<domain>`, and group `workspace`.
+4. For custom route metadata only, add the tiny sibling `apps/desktop/src/routes/<domain>.route.ts`:
 
-```tsx
-export const route = { label: 'nav.hello', path: '/hello', group: 'workspace' };
-export default function HelloRoute() { return <h2>Hello</h2>; }
+```ts
+export const route = { path: '/hello', label: 'nav.hello', group: 'workspace' };
 ```
 
-The route component remains code-split; its declarative metadata is discovered by `route-registry.ts`. `registeredNav` and `shellSlots.main` are available to future shell consumers.
+The activity rail automatically consumes `registeredNav`; do not edit the rail, `App.tsx`, or `methods.py`.
 
-4. Add `apps/desktop/src/lib/bridge/<domain>.ts` and optionally `echo-<domain>.ts`; use `createDomainBridgeClient` from `extension-client.ts` for bounded typed request/stream calls and normalized errors.
-5. Add `apps/desktop/src/locales/<lang>/<domain>.json`. Locale resources and `registeredNamespaces` are glob-discovered.
+5. Add `apps/desktop/src/lib/bridge/<domain>.ts` and optionally `echo-<domain>.ts`; use `createDomainBridgeClient` from `extension-client.ts` for bounded typed request/stream calls and normalized errors.
+6. Add `apps/desktop/src/locales/<lang>/<domain>.json`. Locale resources and `registeredNamespaces` are glob-discovered.
 
-Do not edit `methods.py`, `App.tsx`, `client.ts`, existing routes, or locale registries. Run the focused tests plus Python and desktop quality gates before handoff.
+Run focused tests plus the Python and desktop quality gates before handoff.

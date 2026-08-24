@@ -798,7 +798,7 @@ class BridgeMethods:
             # approval.list — the pending-approval queue (S06)
             "approval.list": self.approval_list,
         }
-        return {**extensions.Registry.merged_handlers(), **builtin_handlers}
+        return {**extensions.Registry.publish(builtin_handlers), **builtin_handlers}
 
     # ------------------------------------------------------------------ #
     # session.*

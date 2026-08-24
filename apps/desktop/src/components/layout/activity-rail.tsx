@@ -17,11 +17,12 @@ import {
   Sparkles,
   Wrench,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import type { ComponentType } from 'react';
 import { NavLink } from 'react-router-dom';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useTranslation } from '@/lib/i18n';
+import { registeredNav } from '@/lib/route-registry';
 import { useAppStore } from '@/stores/use-app-store';
 import { cn } from '@/utils/cn';
 import { formatShortcut } from '@/utils/platform';
@@ -30,7 +31,7 @@ import { formatShortcut } from '@/utils/platform';
 interface RailItem {
   to: string;
   labelKey: string;
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
   shortcut?: readonly string[];
   /** Match child routes as active (e.g. `/chat/:id`). */
   end?: boolean;
@@ -47,6 +48,15 @@ const PRIMARY_ITEMS: RailItem[] = [
   { to: '/data', labelKey: 'nav.data', icon: BarChart3 },
   { to: '/connectivity', labelKey: 'nav.connectivity', icon: Radio, shortcut: ['mod', '5'] },
 ];
+
+// P0 SEAM: new domain pages automatically join primary navigation.
+const P0_EXTENSION_ITEMS: RailItem[] = registeredNav
+  .filter((route) => !PRIMARY_ITEMS.some((item) => item.to === route.path))
+  .map((route) => ({
+    to: route.path,
+    labelKey: route.label,
+    icon: route.icon ?? Sparkles,
+  }));
 
 const FOOTER_ITEMS: RailItem[] = [
   { to: '/providers', labelKey: 'nav.providers', icon: Sparkles },
@@ -105,7 +115,7 @@ export function ActivityRail() {
       className="flex w-12 shrink-0 flex-col items-center justify-between border-e border-border-default bg-surface py-2"
     >
       <div className="flex flex-col items-center gap-1">
-        {PRIMARY_ITEMS.map((item) => (
+        {[...PRIMARY_ITEMS, ...P0_EXTENSION_ITEMS].map((item) => (
           <RailLink key={item.to} item={item} />
         ))}
       </div>

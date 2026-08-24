@@ -1,6 +1,6 @@
 /** Typed helpers for add-only domain bridge clients. */
 
-import { bridge } from './client';
+import { getBridgeClient } from './client';
 import { toBridgeError, type BridgeRpcError } from './errors';
 import type { RpcParams, StreamChunk } from './types';
 
@@ -21,9 +21,13 @@ export function createDomainBridgeClient(domain: string) {
     return `${domain}.${name}`;
   };
   return {
-    async request<T>(name: string, params: RpcParams = {}, options: ExtensionRequestOptions = {}): Promise<T> {
+    async request<T>(
+      name: string,
+      params: RpcParams = {},
+      options: ExtensionRequestOptions = {},
+    ): Promise<T> {
       try {
-        return await bridge.call<T>(method(name), params, options);
+        return await getBridgeClient().call<T>(method(name), params, options);
       } catch (error) {
         throw toBridgeError(error);
       }
@@ -35,7 +39,7 @@ export function createDomainBridgeClient(domain: string) {
       options: ExtensionRequestOptions = {},
     ): Promise<T> {
       try {
-        return await bridge.stream<T>(method(name), params, { ...options, onChunk });
+        return await getBridgeClient().stream<T>(method(name), params, { ...options, onChunk });
       } catch (error) {
         throw toBridgeError(error);
       }

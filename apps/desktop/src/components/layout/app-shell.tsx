@@ -23,6 +23,7 @@ import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useNativeBridge } from '@/hooks/use-native-bridge';
 import { useTheme } from '@/hooks/use-theme';
 import { useLocaleSync, useTranslation } from '@/lib/i18n';
+import { registeredRoutes } from '@/lib/route-registry';
 
 // The off-mode security banner is always mounted but lives in its own chunk;
 // it renders nothing unless the engine reports approvals off.
@@ -58,9 +59,13 @@ export function AppShell() {
   const shortcuts = useKeyboardShortcuts();
   const { isDragging } = useFileDrop();
 
+  // P0 SEAM: extension route labels are i18n keys just like built-in nav labels.
+  const extensionLabel = registeredRoutes.find((route) => route.path === location.pathname)?.label;
   const title = chatMatch
     ? t('conversation')
-    : t(`nav.${NAV_SLUG[location.pathname] ?? 'dashboard'}`);
+    : extensionLabel
+      ? t(extensionLabel)
+      : t(`nav.${NAV_SLUG[location.pathname] ?? 'dashboard'}`);
 
   return (
     <TooltipProvider>

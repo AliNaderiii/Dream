@@ -9,9 +9,17 @@ const namespaceName = /^[a-z][a-z0-9_-]*$/;
  * listed namespace for each requested locale without a hand-maintained list.
  */
 export const registeredNamespaces: readonly string[] = Object.freeze(
-  [...new Set(
-    Object.keys(localeModules)
-      .map((path) => path.split('/').at(-1)?.replace(/\.json$/, '') ?? '')
-      .filter((name) => namespaceName.test(name)),
-  )].sort(),
+  [
+    ...new Set(
+      Object.keys(localeModules)
+        .map(
+          (path) =>
+            path
+              .split('/')
+              .at(-1)
+              ?.replace(/\.json$/, '') ?? '',
+        )
+        .filter((name) => namespaceName.test(name)),
+    ),
+  ].sort(),
 );

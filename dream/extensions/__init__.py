@@ -37,7 +37,9 @@ def discover_tools() -> None:
         _discovered = True  # protects import cycles and concurrent startup
         package = importlib.import_module("dream")
         roots = [Path(path).resolve() for path in package.__path__]
-        candidates = sorted(pkgutil.iter_modules(package.__path__, "dream."), key=lambda item: item.name)
+        candidates = sorted(
+            pkgutil.iter_modules(package.__path__, "dream."), key=lambda item: item.name
+        )
         for info in candidates:
             domain = info.name.rsplit(".", 1)[-1]
             if not info.ispkg or not _DOMAIN.fullmatch(domain):
@@ -45,14 +47,21 @@ def discover_tools() -> None:
             module_name = f"dream.{domain}.tools"
             try:
                 spec = importlib.util.find_spec(module_name)
-                origin = Path(spec.origin).resolve() if spec and spec.origin else None
-                if origin is None or not any(origin.is_relative_to(root) for root in roots):
-                    raise ValueError("module is outside dream")
+                # A domain without a tools module is the normal case.
+                if spec is None:
+                    continue
+                if spec.origin is None:
+                    _record(module_name, "tools module has no importable file origin")
+                    continue
+                origin = Path(spec.origin).resolve()
+                if not any(origin.is_relative_to(root) for root in roots):
+                    _record(module_name, "tools module is outside dream")
+                    continue
                 importlib.import_module(module_name)
             except ModuleNotFoundError as exc:
-                # A domain without tools is normal; a missing dependency from a
-                # tools module is not, and must remain visible as a quarantine.
-                if exc.name == module_name:
+                # Missing tools (or a missing immediate package) is normal. A
+                # missing dependency *inside* an existing tools.py is not.
+                if exc.name in {module_name, f"dream.{domain}"}:
                     continue
                 _record(module_name, str(exc))
             except Exception as exc:  # no extension is allowed to break startup
