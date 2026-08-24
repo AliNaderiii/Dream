@@ -38,3 +38,9 @@ the new behaviour and its safety boundary, and a short summary of verification
 commands. Explain any user-visible migration or configuration change. Avoid
 mixing formatting-only changes with runtime behaviour unless formatting is the
 purpose of the pull request.
+
+## Parallel domain extensions
+
+New domains should use the P0 extension seams instead of modifying central
+registries. See [the parallel-domain guide](docs/dev/how-to/add-a-domain-the-parallel-way.md)
+and keep extensions package-local, deterministic, and fail-closed.

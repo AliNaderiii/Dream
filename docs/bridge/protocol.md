@@ -791,3 +791,10 @@ no hard-coded `left`/`right`.
 `memory` and `user`. `search.sessions.query` takes `{query}`;
 `search.sessions.snippet_rules|status|rebuild` take `{}`. All parameters are
 validated at the sidecar boundary and failures are JSON-RPC errors.
+
+## Extension discovery (P0 seam)
+
+Bridge method modules follow the additive `dream/bridge/methods_<domain>.py`
+contract documented in [extension-contract.md](extension-contract.md). Discovery
+is package-local, deterministic, build-once, and fail-closed: a bad extension is
+quarantined and cannot affect built-in RPC methods.

@@ -93,6 +93,7 @@ from dream.subagents import (
     subagent_to_dict,
 )
 
+from . import extensions  # P0 SEAM: safe auto-discovered bridge extensions
 from .errors import (
     APPROVAL_REQUIRED,
     INTERNAL_ERROR,
@@ -606,7 +607,8 @@ class BridgeMethods:
     # -- handler table ---------------------------------------------------- #
 
     def _build_handler_table(self) -> dict[str, Callable[..., Any]]:
-        return {
+        # P0 SEAM: built-ins retain precedence over quarantinable extensions.
+        builtin_handlers = {
             "session.create": self.session_create,
             "session.list": self.session_list,
             "session.get": self.session_get,
@@ -796,6 +798,7 @@ class BridgeMethods:
             # approval.list — the pending-approval queue (S06)
             "approval.list": self.approval_list,
         }
+        return {**extensions.Registry.merged_handlers(), **builtin_handlers}
 
     # ------------------------------------------------------------------ #
     # session.*
