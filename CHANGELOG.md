@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **MCP servers no longer inherit your environment (SEC Stage C).** MCP
+  children receive a credential-free allowlist plus only the variables you
+  explicitly map; network-transport servers default to egress-off and
+  refuse to connect until you allow them; their tool descriptions are
+  sanitized (hidden Unicode stripped, length capped) before the model ever
+  sees them.
+- **File-write safety floor and a deletion quarantine.** Note/skill writes
+  now refuse sensitive paths (credentials, `.ssh`, system dirs, Dream's own
+  stores) on every platform, including symlink, 8.3, and UNC tricks.
+  Deleting a skill moves it into a size-capped quarantine you can restore —
+  nothing is destroyed outright.
+- **Secrets scrubbed from the trail.** Key-shaped values are redacted out
+  of the message log, provenance records, bridge errors, and log lines.
 - **Security floor for destructive commands (SEC Stage B).** A hardline,
   always-on blocklist now refuses filesystem-root wipes, disk formats, raw
   block-device writes, fork bombs, remote-piped shell installs, registry

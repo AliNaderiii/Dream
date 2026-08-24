@@ -334,3 +334,136 @@ append-only; 250 adversarial cases green; every pre-existing suite
 unmodified and green (one justified fixture change); desktop battery green
 with the entry under baseline. Stage C (L4 file safety + L6 credential
 hygiene) may begin.
+
+---
+
+# Gate C — data & files (L4 file-write safety + L6 credential hygiene)
+
+Implementation: [`SEC-C.md`](./SEC-C.md) · Commits `76f67fb` (MCP
+credential hygiene + secret value-scanning), `8c5683d` (file-write safety
+floor + deletion quarantine), plus this docs state. Files:
+`dream/security/{envfilter,textguard,secrets,pathsafety,quarantine}.py`,
+MCP wiring (`mcp/transport.py`, `mcp/models.py`), write-surface wiring
+(`tools.py`, `skills/__init__.py`, `skills/learn.py`), redaction wiring
+(`connectivity/messagelog.py`, `provenance/tracker.py`, `bridge/errors.py`,
+`bridge/server.py`), two new test suites. **No legacy test edited.**
+
+## C.1 — Malicious-MCP proof: env filtering + description sanitization
+
+```text
+$ .venv/bin/python -m pytest tests/security/test_sec_mcp_hygiene.py -q
+10 passed
+```
+
+The centerpiece launches a real malicious stdio MCP server as a child
+process with five fake credentials seeded in the parent (provider key,
+`drm_` gateway token, VCS token, cloud access key, chat bot token). The
+child is instructed to dump its whole environment. Assertions: the dump
+contains none of the five secrets (neither key names nor values); it does
+contain `PATH` and the one explicitly mapped variable; the allowlist is
+name-audited credential-free; the server's hostile `tools/list`
+descriptions (zero-width, bidi override, 3 KB padding) arrive at
+`MCPTool.from_dict` sanitized and ≤ 1 000 chars. SSE egress-off refuses
+before any wire call (a monkeypatched `urlopen` raises if reached).
+
+## C.2 — Secret value-scanning across logs, message log, provenance, errors
+
+```text
+$ .venv/bin/python -m pytest tests/security/test_sec_secrets_redaction.py -q
+7 passed
+```
+
+Pinned: eight secret shapes redact with `[REDACTED:<shape>]` markers;
+benign text survives byte-identical; `redact_structure` walks nested
+containers and copies (originals untouched); `MessageLog.add` redacts
+before the JSONL is written (verified by re-reading the file);
+`ProvenanceTracker.record` redacts payloads before sealing (verified in
+the on-disk JSONL); bridge `_map_exception` strips bare keys from error
+strings; the log filter scrubs `msg` and args; install is idempotent.
+
+## C.3 — Traversal corpus blocked (Windows + POSIX)
+
+```text
+$ .venv/bin/python -m pytest tests/security/test_sec_pathsafety.py -q
+21 passed
+```
+
+Pinned: POSIX system dirs (incl. `/etc/../etc/shadow`), home credential
+dirs, credential file names wherever they sit, Dream stores + `.dream` +
+provenance, Windows system dirs + AppData (string-checked so the rule
+holds on any host), UNC shares, 8.3 short names; refusals bilingual;
+benign workspace writes (incl. `environment-plan.md`) pass; `write_note`
+refuses a `.env` inside the workspace and a symlinked escape to
+`id_rsa` (secret byte-identical); skill writes consult the denylist while
+ordinary skills write fine.
+
+## C.4 — Quarantine: move-first deletions with restore/purge and bounds
+
+```text
+$ .venv/bin/python -m pytest tests/security/test_sec_quarantine.py -q
+11 passed
+```
+
+Pinned: delete = move (file and directory trees), metadata sidecar,
+bytes survive; restore returns byte-identical and refuses an occupied
+original (bilingual, quarantined copy untouched); purge destroys only the
+quarantined copy; missing/oversized/full refuse bilingually and never
+destroy; `delete_skill` routes through the quarantine (additive reply
+fields) and the restored skill reappears; entries list newest-first.
+
+## C.5 — Full suites, static gates, RF-4
+
+```text
+$ .venv/bin/python -m pytest -q
+2260 passed, 11 skipped in 82.07s (0:01:22)
+
+$ .venv/bin/ruff check .
+All checks passed!
+
+$ .venv/bin/python tools/check_suite_count.py
+Suite count check passed: 2263 tests collected (minimum required: 652).
+
+$ .venv/bin/python tools/check_locales.py
+Locale integrity: PASS — 8 locales × 16 namespaces; 763 leaves and identical key/type/placeholder trees.
+English fallback counts: fa=0, …; fa gate=PASS
+
+$ .venv/bin/python -m pytest tests/test_security_secrets.py -q
+1 passed          # tracked-file secret scan clean with the new files tracked
+
+$ python cli.py --demo | tail -1
+   {"blocked": true, "reason": "dangerous tool denied: no approver configured"}
+```
+
+2212 (Gate B close) + 48 new = 2260 passed / 11 skipped. Zero legacy
+tests edited (RF-4 intact); the only fixture edits were to Stage C's own
+new files (fragment-assembled secrets; `monkeypatch.setattr` instead of
+module reload — SEC-C.md §Self-fixes). Demo output byte-identical.
+
+## C.6 — Worktree verification per commit
+
+```text
+$ git worktree add /tmp/wt-c1 76f67fb && pytest tests/security/test_sec_mcp_hygiene.py \
+    tests/security/test_sec_secrets_redaction.py tests/test_mcp.py -q
+19 passed
+
+$ git worktree add /tmp/wt-c2 8c5683d && pytest tests/security/test_sec_pathsafety.py \
+    tests/security/test_sec_quarantine.py tests/test_skills_v2.py \
+    tests/test_security_workspace.py tests/test_dream.py -q
+189 passed
+```
+
+`tools/check_commit.py` passed on both commits (the first C-1 message was
+rebuilt via commit-tree after the banned-word check flagged a provider
+name in the prose).
+
+## Gate C decision
+
+**GREEN.** The confirmed MCP environment leak is closed and proven by a
+live malicious child process; model-visible MCP text is sanitized at the
+single entry point; egress defaults deny with a wire-untouched refusal;
+secret shapes are value-scanned out of the message log, provenance, error
+strings, and log records; writes hit a bilingual sensitive-path denylist on
+every write surface with a Windows + POSIX traversal corpus; deletions are
+bounded, restorable moves. 48 new cases; all pre-existing suites green and
+unmodified. Stage D (L5 injection scanning + L8 transport hardening) may
+begin.

@@ -276,9 +276,9 @@ restore, never delete silently.
 | L1 authorization | `connectivity/auth.py`, `ratelimit.py`, `gateway.py`, `gateway_server.py` | G-01…G-03 | E · SA-1 RAMPART |
 | L2 approval engine v2 | `tools.py` tiers, `agent.py:ApprovalPolicy`, **`security/engine.py` + `security/assessor.py` + `security/history.py` (Stage B, closed)** | ~~G-04…G-07~~ closed at B | B · SA-2 SENTRY |
 | L3 blocklist floor | **`security/blocklist.py` (Stage B, closed)** | ~~G-08~~ closed at B | B · SA-2 SENTRY |
-| L4 file-write safety | `tools.py:_safe_path`, skills name validation | G-09…G-11 | C · SA-3 VAULT |
-| L5 injection scanning | — (adjacent: caps, catalog bodies, boundary types) | G-12, G-13 | D · SA-4 HORIZON |
-| L6 credential hygiene | partial redactors; **env leak confirmed** `mcp/transport.py:69` | G-14…G-17 | C · SA-3 VAULT |
+| L4 file-write safety | `tools.py:_safe_path`, skills name validation, **`security/pathsafety.py` denylist + `security/quarantine.py` (Stage C, closed)** | ~~G-09…G-11~~ closed at C | C · SA-3 VAULT |
+| L5 injection scanning | — (adjacent: caps, catalog bodies, boundary types; **C-layer hygiene in `security/textguard.py`**) | G-12, G-13 | D · SA-4 HORIZON |
+| L6 credential hygiene | **`security/envfilter.py`, `security/textguard.py`, `security/secrets.py` (Stage C, closed — the `mcp/transport.py:69` leak is fixed)** | ~~G-14…G-17~~ closed at C | C · SA-3 VAULT |
 | L7 isolation | `subagents.py` grants, `INSTANCE_BOUND_TOOL_NAMES` | G-18…G-21 | E · SA-1 RAMPART |
 | L8 transport | `bridge/server.py` limits, `bridge/methods.py` validation, gateway headers | G-22…G-25 | D · SA-4 HORIZON |
 
