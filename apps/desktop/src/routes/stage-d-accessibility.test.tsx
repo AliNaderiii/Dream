@@ -1,5 +1,5 @@
 import axe from 'axe-core';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -9,6 +9,8 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { resetBridgeClient } from '@/lib/bridge/client';
 import { MemoryRoute } from '@/routes/memory';
 import { SchedulerRoute } from '@/routes/scheduler';
+import { SessionSearch } from '@/components/search/session-search';
+import { CompactionBar } from '@/components/chat/compaction-bar';
 import { SkillsRoute } from '@/routes/skills';
 import { SubagentsRoute } from '@/routes/subagents';
 import { useAppStore } from '@/stores/use-app-store';
@@ -65,6 +67,18 @@ describe('Stage D surface accessibility', () => {
     await expectNoViolations(container, 'memory');
   });
 
+  it('has no axe violations in the memory bounded stores panel', async () => {
+    const { container } = render(
+      <SurfaceFrame title="Bounded stores audit">
+        <MemoryRoute />
+      </SurfaceFrame>,
+    );
+    await screen.findByText(/Dream stores memories as semantic/);
+    fireEvent.click(screen.getByRole('tab', { name: 'Bounded stores' }));
+    await screen.findByText(/frozen at session start/i);
+    await expectNoViolations(container, 'memory-bounded');
+  });
+
   it('has no axe violations in the skills manager', async () => {
     const { container } = render(
       <SurfaceFrame title="Skills manager audit">
@@ -73,6 +87,18 @@ describe('Stage D surface accessibility', () => {
     );
     await screen.findByText('weekly report');
     await expectNoViolations(container, 'skills');
+  });
+
+  it('has no axe violations in the skills learning workspace', async () => {
+    const { container } = render(
+      <SurfaceFrame title="Skills learning audit">
+        <SkillsRoute />
+      </SurfaceFrame>,
+    );
+    await screen.findByText('weekly report');
+    fireEvent.click(screen.getByRole('tab', { name: 'Learning workspace' }));
+    await screen.findByText('weekly-report');
+    await expectNoViolations(container, 'skills-learning');
   });
 
   it('has no axe violations in the subagent dashboard', async () => {
@@ -93,5 +119,28 @@ describe('Stage D surface accessibility', () => {
     );
     await screen.findByText('No scheduled tasks');
     await expectNoViolations(container, 'scheduler');
+  });
+
+  it('has no axe violations in the session search dialog', async () => {
+    useAppStore.setState({ sessionSearchOpen: true });
+    render(
+      <SurfaceFrame title="Session search audit">
+        <SessionSearch onOpenSession={() => {}} />
+      </SurfaceFrame>,
+    );
+    // The dialog renders through a portal: audit the live document.
+    await screen.findByRole('dialog', { name: 'Conversation search' });
+    await screen.findByText(/Index healthy/i);
+    await expectNoViolations(document.body, 'session-search');
+  });
+
+  it('has no axe violations in the compaction bar', async () => {
+    const { container } = render(
+      <SurfaceFrame title="Compaction audit">
+        <CompactionBar sessionId="sess-audit" />
+      </SurfaceFrame>,
+    );
+    await screen.findByRole('button', { name: 'Compress' });
+    await expectNoViolations(container, 'compaction');
   });
 });

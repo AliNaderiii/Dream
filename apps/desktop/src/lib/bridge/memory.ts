@@ -201,6 +201,45 @@ export function deleteMemory(
   return client.call<MemoryDeleteResult>('memory.delete', { memory_id: memoryId, hard }, options);
 }
 
+/**
+ * Bounded-store capacity accounting, mirroring `dream.memory_stores`.
+ *
+ * The kernel renders the header as `[{percent}% — {used:,}/{capacity:,} chars]`
+ * with plain-locale digit grouping, and it is quoted verbatim inside the system
+ * prompt — so the desktop must reproduce it byte-for-byte, independent of the
+ * active UI locale. Persian therefore still sees `1,474/2,200`.
+ */
+export const BOUNDED_SEPARATOR = '§';
+
+/** Total rendered size: every entry plus the separators between them. */
+export function boundedUsedChars(
+  entries: readonly string[],
+  separator: string = BOUNDED_SEPARATOR,
+): number {
+  if (entries.length === 0) return 0;
+  let total = 0;
+  for (const entry of entries) total += entry.length;
+  return total + separator.length * (entries.length - 1);
+}
+
+/**
+ * Whole-percent usage, rounding the way the kernel does. A degenerate
+ * capacity of zero reports either 100 (nothing stored) or 0 — the kernel
+ * never constructs such a store, so this only guards the arithmetic.
+ */
+export function boundedPercent(used: number, capacity: number): number {
+  if (!Number.isFinite(used) || !Number.isFinite(capacity) || used < 0) return 0;
+  if (capacity <= 0) return used <= 0 ? 100 : 0;
+  const percent = Math.round((100 * used) / capacity);
+  return Math.max(0, Math.min(100, percent));
+}
+
+/** The kernel capacity header, byte-identical under every UI locale. */
+export function boundedHeader(used: number, capacity: number): string {
+  const group = (value: number): string => value.toLocaleString('en-US');
+  return `[${boundedPercent(used, capacity)}% — ${group(used)}/${group(capacity)} chars]`;
+}
+
 /** A frozen bounded-store snapshot supplied by the Stage A memory surface. */
 export interface BoundedMemorySnapshot {
   target: 'memory' | 'user';

@@ -20,11 +20,14 @@ import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen } from '@/lib/tauri';
 import { isTauri } from '@/utils/platform';
 
-import { EchoDataRuntime } from './echo-data';
 import { EchoCommerceRuntime } from './echo-commerce';
 import { EchoGatewayRuntime, requireGatewayPlatform } from './echo-gateway';
 import { EchoProjectsRuntime } from './echo-projects';
 import { EchoScheduleRuntime, EchoSubagentRuntime } from './echo-subagents';
+import type { EchoDataRuntime } from './echo-data';
+import type { EchoMemory2Runtime } from './echo-memory2';
+import type { EchoSearchRuntime } from './echo-search';
+import type { EchoSkills2Runtime } from './echo-skills2';
 import { BridgeRpcError, toBridgeError } from './errors';
 import {
   normalizeBridgeState,
@@ -142,6 +145,46 @@ export class TauriBridgeTransport implements BridgeTransport {
 // --------------------------------------------------------------------------- //
 // Echo transport — browser/test fallback (no sidecar).
 // --------------------------------------------------------------------------- //
+
+/**
+ * A family runtime answers a whole wire prefix (e.g. `memory2.*`) locally.
+ * Runtimes are imported lazily — one dynamic import per family, cached — so
+ * their code never lands in the entry chunk. `handles`/`handle` mirror the
+ * shape `EchoDataRuntime` already exposes.
+ */
+export interface EchoFamilyRuntime {
+  handles(method: string): boolean;
+  handle(method: string, params: RpcParams): unknown;
+}
+
+/**
+ * The wire names the skills-v2 echo runtime owns, plus the alias spellings
+ * the kernel registers for them (`skills.edit` answers as `skills.save`).
+ * Kept local to this module so `echo-skills2` stays a lazy import — the
+ * legacy `skill.*` names below in the switch are untouched.
+ */
+const SKILLS_V2_ALIASES: Readonly<Record<string, string>> = {
+  'skills.versions': 'skills.versions',
+  'skills.use_log': 'skills.use_log',
+  'skills.propose': 'skills.propose',
+  'skills.proposals': 'skills.proposals',
+  'skills.apply_proposal': 'skills.apply_proposal',
+  'skills.discard_proposal': 'skills.discard_proposal',
+  'skills.learn_status': 'skills.learn_status',
+  'skills.learn_classify': 'skills.learn_classify',
+  'skills.references': 'skills.references',
+  'skills.save': 'skills.save',
+  'skills.edit': 'skills.save',
+};
+
+/** Maps a wire method to its lazy echo family, when it has one. */
+function echoFamilyOf(method: string): string | null {
+  if (method.startsWith('data.') || method.startsWith('notebook.')) return 'data';
+  if (method.startsWith('memory2.')) return 'memory2';
+  if (method.startsWith('skills.')) return 'skills2';
+  if (method.startsWith('search.sessions.')) return 'search';
+  return null;
+}
 
 /** Splits text into token-sized fragments, mirroring `dream.bridge.tokenise`. */
 export function tokenise(text: string, maxChars = 12): string[] {
@@ -454,8 +497,30 @@ export class EchoBridgeTransport implements BridgeTransport {
   // Projects may only group sessions the echo transport actually knows.
   private projects = new EchoProjectsRuntime((sessionId) => this.sessions.has(sessionId));
   private gateway = new EchoGatewayRuntime();
-  private data = new EchoDataRuntime();
   private commerce = new EchoCommerceRuntime();
+  /** Lazy family runtimes, one dynamic import per family, cached on first use. */
+  private familyRuntimes = new Map<string, EchoFamilyRuntime>();
+  private readonly familyLoaders: Readonly<Record<string, () => Promise<EchoFamilyRuntime>>> = {
+    data: async (): Promise<EchoDataRuntime> => new (await import('./echo-data')).EchoDataRuntime(),
+    memory2: async (): Promise<EchoMemory2Runtime> =>
+      new (await import('./echo-memory2')).EchoMemory2Runtime(),
+    skills2: async (): Promise<EchoSkills2Runtime> =>
+      new (await import('./echo-skills2')).EchoSkills2Runtime(),
+    search: async (): Promise<EchoSearchRuntime> =>
+      new (await import('./echo-search')).EchoSearchRuntime(),
+  };
+
+  private async runtimeFor(family: string): Promise<EchoFamilyRuntime> {
+    const cached = this.familyRuntimes.get(family);
+    if (cached) return cached;
+    const loader = this.familyLoaders[family];
+    if (!loader) {
+      throw new BridgeRpcError({ code: -32602, message: `unknown echo family ${family}` });
+    }
+    const runtime = await loader();
+    this.familyRuntimes.set(family, runtime);
+    return runtime;
+  }
 
   /** Stops any simulated subagent still ticking (vitest teardown). */
   dispose(): void {
@@ -489,9 +554,14 @@ export class EchoBridgeTransport implements BridgeTransport {
     params: RpcParams,
     onChunk?: (chunk: StreamChunk) => void,
   ): Promise<unknown> {
-    // P-09: data science workbench + notebooks live in their own runtime.
-    if (this.data.handles(method)) {
-      return this.data.handle(method, params);
+    // Family runtimes (data.*, memory2.*, …) are loaded on first use so their
+    // code stays out of the entry chunk; the inline switch below keeps the
+    // small, always-needed methods dependency-free.
+    const family = echoFamilyOf(method);
+    if (family) {
+      const runtime = await this.runtimeFor(family);
+      const canonical = family === 'skills2' ? (SKILLS_V2_ALIASES[method] ?? method) : method;
+      if (runtime.handles(canonical)) return runtime.handle(canonical, params);
     }
     switch (method) {
       case 'session.create': {
@@ -559,6 +629,37 @@ export class EchoBridgeTransport implements BridgeTransport {
       }
       case 'conversation.stop':
         return { stopped: true };
+      case 'conversation.compact': {
+        // Deterministic Stage F echo: the first compact frees real budget,
+        // later ones find nothing eligible — exactly the kernel's shapes.
+        const compactedSession = this.sessions.get(params['session_id'] as string);
+        if (!compactedSession) {
+          throw new BridgeRpcError({ code: -32602, message: 'known session_id is required' });
+        }
+        compactedSession.message_count = 1;
+        if ((compactedSession as EchoSession & { compactedOnce?: boolean }).compactedOnce) {
+          return { compacted: false, before_tokens: 900, after_tokens: 900 };
+        }
+        (compactedSession as EchoSession & { compactedOnce?: boolean }).compactedOnce = true;
+        return {
+          compacted: true,
+          kind: 'compaction',
+          timestamp: Date.now() / 1000,
+          reason: 'explicit',
+          before_tokens: 2400,
+          after_tokens: 900,
+          preserved_messages: 4,
+          summary:
+            '[Context compacted / \u0641\u0634\u0631\u062f\u0647\u200c\u0633\u0627\u0632\u06cc \u0634\u062f] reason=explicit; dropped_messages=2; dropped_chars=6000; roles=user,assistant.',
+        };
+      }
+      case 'nudge.status': {
+        const nudgedSession = this.sessions.get(params['session_id'] as string);
+        if (!nudgedSession) {
+          throw new BridgeRpcError({ code: -32602, message: 'known session_id is required' });
+        }
+        return { enabled: true, sent: false, due: nudgedSession.message_count >= 2 };
+      }
       case 'provider.catalog':
         return { catalog: BROWSER_PROVIDER_CATALOG };
       case 'provider.list':

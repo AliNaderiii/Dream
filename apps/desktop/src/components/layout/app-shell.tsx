@@ -4,7 +4,7 @@
  * Mirrors automatically in RTL because every edge uses logical properties.
  */
 
-import { useLocation, useMatch } from 'react-router-dom';
+import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
 
 import { ActivityRail } from '@/components/layout/activity-rail';
@@ -14,6 +14,7 @@ import { StatusBar } from '@/components/layout/status-bar';
 import { TitleBar } from '@/components/layout/title-bar';
 import { TopBar } from '@/components/layout/top-bar';
 import { CommandPalette } from '@/components/shared/command-palette';
+import { SessionSearch } from '@/components/search/session-search';
 import { ErrorBoundary } from '@/components/shared/error-boundary';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useFileDrop } from '@/hooks/use-file-drop';
@@ -39,6 +40,7 @@ const NAV_SLUG: Record<string, string> = {
 export function AppShell() {
   const { t } = useTranslation('common');
   const location = useLocation();
+  const navigate = useNavigate();
   const chatMatch = useMatch('/chat/:sessionId');
 
   useTheme();
@@ -79,7 +81,11 @@ export function AppShell() {
         </div>
 
         <StatusBar />
-        <CommandPalette commands={shortcuts} />
+        <CommandPalette
+          commands={shortcuts}
+          onOpenSession={(sessionId) => void navigate(`/chat/${sessionId}`)}
+        />
+        <SessionSearch onOpenSession={(sessionId) => void navigate(`/chat/${sessionId}`)} />
       </div>
     </TooltipProvider>
   );

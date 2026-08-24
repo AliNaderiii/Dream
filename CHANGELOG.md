@@ -13,6 +13,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and an optional once-per-session durable-memory nudge.
 - Bridge endpoints for dual bounded memory stores, session-search status/query,
   explicit compaction, and nudge status.
+- **Dream remembers you.** The memory explorer gains a bounded-stores tab: two
+  fixed-size stores (agent notes and your profile) with a live
+  `[67% — 1,474/2,200 chars]` capacity meter, an approval on every edit, and a
+  notice that the session prompt was built from a snapshot frozen at session
+  start.
+- **Dream learns skills.** A learning workspace beside the skills manager:
+  run/failure counts per skill, version history with a side-by-side diff,
+  reference notes under `references/`, an approval inbox for proposed changes,
+  and a `/learn` panel that turns a file, folder, the conversation or pasted
+  notes into a skill — and refuses a web source up front while network tools
+  are off.
+- **Dream searches years of conversation.** Press Ctrl/⌘+P to search every
+  past session. Persian search works regardless of spelling — type a word
+  with Arabic letters and Dream finds the Farsi-spelled transcript, with the
+  match highlighted in the spelling you used. A damaged index says so and
+  offers a rebuild.
+- **Dream never overflows its context.** Every compaction leaves a visible row
+  in the transcript: before/after cost, share reclaimed, how many messages
+  were preserved verbatim and what the summary kept. `/compress` works on
+  demand, and a gentle memory nudge appears only when enabled, due, and not
+  yet sent.
+
+### Fixed
+
+- Five bridge handlers that serialised frozen `slots=True` dataclasses through
+  `__dict__` (which those dataclasses do not expose) — `search.sessions.query`,
+  `skills.versions`, `skills.use_log`, `skills.propose` and the new
+  `skills.learn_classify` — now serialise through `asdict`, pinned by a
+  JSON-serialisability regression over non-empty rows of every MEM family.
 
 ## [0.3.2] - 2026-08-21
 

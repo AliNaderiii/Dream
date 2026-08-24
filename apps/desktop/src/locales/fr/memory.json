@@ -20,6 +20,35 @@
     "episodic": "Episodic",
     "procedural": "Procedural"
   },
+  "bounded": {
+    "title": "Bounded stores",
+    "tab": "Bounded stores",
+    "description": "Two fixed-size stores ride with every system prompt: the agent’s notes and your profile. Overflow is refused, never truncated.",
+    "loading": "Loading the bounded stores…",
+    "failedLoad": "Failed to load the bounded stores.",
+    "retry": "Retry",
+    "target": {
+      "memory": "Agent notes",
+      "user": "User profile"
+    },
+    "meter": "Capacity used — {{target}}",
+    "entriesLabel": "Store entries",
+    "entryCount": "{{rows}} entries",
+    "empty": "Nothing stored yet",
+    "emptyDesc": "Approved additions appear here and ride with the next session prompt.",
+    "addLabel": "New entry",
+    "addPlaceholder": "A durable fact worth keeping…",
+    "add": "Add",
+    "editLabel": "Edit entry",
+    "editAria": "Edit entry {{index}}",
+    "removeAria": "Remove entry {{index}}",
+    "save": "Save",
+    "cancel": "Cancel",
+    "frozenTitle": "Frozen snapshot.",
+    "frozenDesc": "The session prompt was built from a snapshot frozen at session start; edits apply from the next session.",
+    "frozenChanged": "Changed since the frozen snapshot — the next session will pick this up.",
+    "writeFailed": "The write failed."
+  },
   "toolbar": {
     "all": "All",
     "search": "Search memories…",

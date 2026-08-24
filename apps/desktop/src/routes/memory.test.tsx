@@ -190,4 +190,20 @@ describe('MemoryRoute', () => {
     expect(screen.queryByRole('status', { name: 'Loading memories…' })).not.toBeInTheDocument();
     expect(transport.listCalls).toBe(2);
   });
+
+  it('switches to the bounded stores tab and back', async () => {
+    const user = userEvent.setup();
+    const transport = new MemoryStateTransport();
+    getBridgeClient().setTransport(transport);
+    render(<MemoryRoute />);
+    expect(await screen.findByText(/Dream stores memories as semantic/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Bounded stores' }));
+    expect(await screen.findByRole('region', { name: 'Bounded stores' })).toBeInTheDocument();
+    expect(await screen.findByText(/frozen at session start/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Dream stores memories as semantic/)).toBeNull();
+
+    await user.click(screen.getByRole('tab', { name: 'Memory explorer' }));
+    expect(await screen.findByText(/Dream stores memories as semantic/)).toBeInTheDocument();
+  });
 });

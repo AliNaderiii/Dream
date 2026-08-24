@@ -1,4 +1,20 @@
 {
+  "compaction": {
+    "title": "فشرده‌سازی بافتار",
+    "compress": "فشرده کن",
+    "compressing": "در حال فشرده‌سازی…",
+    "nothingToCompact": "چیزی برای فشرده‌سازی واجد شرط نیست.",
+    "failed": "فشرده‌سازی ناموفق بود.",
+    "nudgeDue": "یادآوری حافظهٔ پایدار",
+    "rowsLabel": "رویدادهای فشرده‌سازی",
+    "row": "{{before}} → {{after}} توکن ({{percent}}٪ بازیابی)",
+    "preserved": "{{messages}} پیام عیناً حفظ شد",
+    "saved": "{{tokens}} توکن آزاد شد",
+    "reason": {
+      "explicit": "دستی (/compress)",
+      "threshold": "به آستانه رسید"
+    }
+  },
   "inputPlaceholder": "پیامی بنویسید…",
   "send": "ارسال",
   "empty": "یک گفتگو را شروع کنید",

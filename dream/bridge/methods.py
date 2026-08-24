@@ -31,7 +31,7 @@ import threading
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from dream import scheduler
@@ -649,6 +649,9 @@ class BridgeMethods:
             "skills.apply_proposal": self.skills_apply_proposal,
             "skills.discard_proposal": self.skills_discard_proposal,
             "skills.learn_status": self.skills_learn_status,
+            "skills.learn_classify": self.skills_learn_classify,
+            "skills.proposals": self.skills_proposals,
+            "skills.references": self.skills_references,
             "tool.list": self.tool_list,
             "tool.execute": self.tool_execute,
             "approval.request": self.approval_request,
@@ -982,7 +985,7 @@ class BridgeMethods:
         query = params.get("query")
         if not isinstance(query, str):
             raise invalid_params("query must be a string")
-        return {"results": [hit.__dict__ for hit in self.session_index.search(query)]}
+        return {"results": [asdict(hit) for hit in self.session_index.search(query)]}
 
     def search_sessions_snippet_rules(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         del params
@@ -1470,7 +1473,7 @@ class BridgeMethods:
             raise invalid_params("name must be a non-empty string")
         from dream.skills.store import get_ledger
         with get_ledger() as ledger:
-            return {"versions": [item.__dict__ for item in ledger.versions(name)]}
+            return {"versions": [asdict(item) for item in ledger.versions(name)]}
 
     def skills_use_log(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
@@ -1479,7 +1482,7 @@ class BridgeMethods:
             raise invalid_params("name must be a string")
         from dream.skills.store import get_ledger
         with get_ledger() as ledger:
-            return {"uses": [item.__dict__ for item in ledger.uses(name)]}
+            return {"uses": [asdict(item) for item in ledger.uses(name)]}
 
     def skills_propose(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
@@ -1488,7 +1491,7 @@ class BridgeMethods:
             raise invalid_params("message must be a non-empty string")
         from dream.skills.propose import maybe_propose
         proposal = maybe_propose(message, [], demo=False)
-        return {"proposal": proposal.__dict__ if proposal else None}
+        return {"proposal": asdict(proposal) if proposal else None}
 
     def skills_apply_proposal(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
@@ -1513,6 +1516,78 @@ class BridgeMethods:
         del params
         from dream.skills.learn import _network_on
         return {"available": True, "network_enabled": _network_on()}
+
+    def skills_learn_classify(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Classify one `/learn` argument without running a turn.
+
+        The desktop asks for the classification before composing the learn
+        turn so an offline-URL or empty-source refusal happens up front. A
+        refusal stays a refusal on the wire: ``invalid_params`` with the
+        bilingual kernel message intact and the refusal kind in ``data``.
+        """
+        params = params or {}
+        argument = params.get("argument")
+        if not isinstance(argument, str):
+            raise invalid_params("argument must be a string")
+        history = params.get("history")
+        if history is not None and not isinstance(history, list):
+            raise invalid_params("history must be a list when given")
+        from dream.skills.learn import LearnError, classify_learn
+
+        try:
+            source = classify_learn(
+                argument,
+                history=[item for item in history if isinstance(item, dict)] if history else [],
+            )
+        except LearnError as exc:
+            raise invalid_params(
+                str(exc), kind=str(exc.details.get("kind", ""))
+            ) from exc
+        return {
+            "source": {
+                "kind": source.kind,
+                "topic": source.topic,
+                "text": source.text,
+                "parts": [{"name": name, "text": text} for name, text in source.parts],
+                "existing": getattr(source.existing, "name", None),
+            }
+        }
+
+    def skills_proposals(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """List the pending review queue, oldest first."""
+        del params
+        from dream.skills.propose import list_proposals
+
+        return {"proposals": [asdict(item) for item in list_proposals()]}
+
+    def skills_references(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """List the reference files of a v2 skill folder.
+
+        A legacy single-file skill owns no folder, so it answers an empty
+        list rather than an error — same for a v2 folder without (or with an
+        empty) ``references/`` directory.
+        """
+        params = params or {}
+        name = params.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise invalid_params("name must be a non-empty string")
+        from dream.skills.registry import find_by_name
+        from dream.tools import _safe_path
+
+        skill = find_by_name(name.strip())
+        if skill is None:
+            raise invalid_params(f"unknown skill {name.strip()!r}")
+        references: list[dict[str, Any]] = []
+        if getattr(skill, "kind", "legacy") == "skill_md":
+            folder = _safe_path(str(skill.filename)).parent / "references"
+            if folder.is_dir():
+                for child in sorted(folder.iterdir(), key=lambda item: item.name):
+                    if child.is_file() and child.suffix.lower() == ".md":
+                        references.append(
+                            {"name": child.stem, "bytes": child.stat().st_size}
+                        )
+        return {"references": references, "name": skill.name, "filename": skill.filename}
+
 
     # ------------------------------------------------------------------ #
     # skill.*

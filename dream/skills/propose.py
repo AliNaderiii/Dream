@@ -119,6 +119,11 @@ def get_proposal(proposal_id: str) -> SkillProposal | None:
     return _PENDING.get(proposal_id)
 
 
+def list_proposals() -> list[SkillProposal]:
+    """Pending proposals, oldest first — the review queue's display order."""
+    return sorted(_PENDING.values(), key=lambda item: item.created_at)
+
+
 def discard_proposal(proposal_id: str) -> bool:
     return _PENDING.pop(proposal_id, None) is not None
 

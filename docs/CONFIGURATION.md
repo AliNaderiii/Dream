@@ -72,13 +72,23 @@ variable and is not the default.
 | --- | --- | --- |
 | `DREAM_BOUNDED_DB` | SQLite path for bounded agent notes and user profile | `data/dream-bounded.db` |
 | `DREAM_SESSION_INDEX_DB` | SQLite FTS5 session-search index | `data/dream-session-index.db` |
-| `DREAM_SKILLS_DB` | SQLite skill-use ledger | implementation default |
-| `DREAM_SKILL_PROPOSALS` | SQLite skill-improvement proposal store | implementation default |
+| `DREAM_SKILLS_DB` | SQLite append-only skill version + use ledger | `data/dream-skills.db` |
+| `DREAM_SKILL_PROPOSALS` | Opt-in switch for skill-improvement proposals (`1`, `true`, `yes`, or `on` enables) | disabled |
 | `DREAM_CONTEXT_TOKENS` | Context window used by local compaction accounting | echo `16384`, model `8192` |
 | `DREAM_COMPACTION_THRESHOLD` | Fraction of the window that triggers boundary compaction | `0.80` |
 | `DREAM_COMPACTION_KEEP_MESSAGES` | Recent active messages protected from compaction | `4` |
 | `DREAM_MEMORY_NUDGES` | Enables prompt-only durable-memory nudge (`off`, `false`, or `0` disables) | enabled |
 | `DREAM_MEMORY_NUDGE_EVERY_TURNS` | Turns before the once-per-session nudge becomes eligible | `8` |
 
-Compaction runs only at turn boundaries. `/compress` requests it explicitly.
-Nudges are never issued in demo mode and never write data themselves.
+Compaction runs only at turn boundaries and the desktop shows a row for each
+one. `/compress` requests it explicitly. Nudges are never issued in demo mode
+and never write data themselves; with `DREAM_MEMORY_NUDGES` off the desktop
+indicator is not rendered at all.
+
+`DREAM_SKILL_PROPOSALS` gates an in-memory review queue: pending proposals are
+listed by `skills.proposals` and nothing is written to disk until one is
+approved — a restart clears the queue by design.
+
+Each of the three SQLite stores above (`DREAM_BOUNDED_DB`,
+`DREAM_SESSION_INDEX_DB`, `DREAM_SKILLS_DB`) fails closed on corruption with a
+bilingual message rather than returning partial data.
