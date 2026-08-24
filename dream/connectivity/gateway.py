@@ -91,6 +91,10 @@ class Gateway:
         self._rate = RateLimiter()
         for platform in config.all():
             self._rate.configure(platform, config.rate_limit_per_minute(platform))
+        # SEC Stage E (G-02): per-user cap on dangerous-tool approval attempts.
+        from dream.connectivity.ratelimit import ApprovalAttemptLimiter
+
+        self._approval_throttle = ApprovalAttemptLimiter()
 
         self._adapters: dict[str, PlatformAdapter] = {}
         self._status_lock = threading.RLock()
@@ -443,6 +447,13 @@ class Gateway:
         except Exception:
             pass  # typing indicators are cosmetic
         dream = self._sessions.get(platform, user_id)
+        # SEC Stage E (G-01/G-02): the turn runs under the linked user's
+        # live scope and approval-attempt budget. Applied per turn so an
+        # owner's scope change takes effect without a session reset.
+        policy = getattr(dream, "approval_policy", None)
+        if policy is not None:
+            policy.scope = self._auth.scope_of(platform, user_id)
+            policy.attempt_limiter = self._approval_throttle.limiter_for(platform, user_id)
         turn = await asyncio.to_thread(dream.run, text)
         return str(getattr(turn, "reply", "") or "")
 
@@ -469,6 +480,22 @@ class Gateway:
             "unlinked": self._auth.unlink(platform, user_id),
             "platform": platform,
             "user_id": user_id,
+        }
+
+    def set_user_scope(self, platform: str, user_id: str, scope: str) -> dict[str, Any]:
+        """SEC Stage E (G-01): change one linked user's scope (validated)."""
+        from dream.connectivity.auth import validate_scope
+
+        validate_scope(scope)
+        try:
+            user = self._auth.set_scope(platform, user_id, scope)
+        except KeyError:
+            return {"updated": False, "platform": platform, "user_id": user_id}
+        return {
+            "updated": True,
+            "platform": platform,
+            "user_id": user_id,
+            "scope": user.scope,
         }
 
     def logs(self, platform: str | None = None, limit: int | None = None) -> dict[str, Any]:

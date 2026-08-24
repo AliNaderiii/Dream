@@ -22,6 +22,21 @@ from dream.connectivity.models import LinkedUser
 LINK_CODE_TTL_SECONDS = 10 * 60
 LINK_CODE_LENGTH = 6
 
+#: SEC Stage E (G-01): permission scopes for linked identities, weakest to
+#: strongest. ``chat_only`` runs turns with no tools; ``safe_tools`` adds
+#: the safe tier; ``guarded_tools`` the guarded tier; ``admin`` keeps the
+#: pre-scope behaviour (dangerous tools go through the normal approval
+#: engine — the floor still precedes everything).
+USER_SCOPES: tuple[str, ...] = ("chat_only", "safe_tools", "guarded_tools", "admin")
+DEFAULT_SCOPE = "admin"
+
+
+def validate_scope(scope: str) -> str:
+    """Return *scope* when valid; raise ``ValueError`` naming the set."""
+    if scope not in USER_SCOPES:
+        raise ValueError(f"scope must be one of {USER_SCOPES}, got {scope!r}")
+    return scope
+
 
 @dataclass(slots=True)
 class LinkCode:
@@ -80,11 +95,15 @@ class AuthStore:
             linked[str(platform)] = {}
             for user_id, row in users.items():
                 if isinstance(row, dict):
+                    scope = str(row.get("scope", DEFAULT_SCOPE))
+                    if scope not in USER_SCOPES:
+                        scope = DEFAULT_SCOPE
                     linked[str(platform)][str(user_id)] = LinkedUser(
                         platform=str(platform),
                         user_id=str(user_id),
                         display_name=str(row.get("display_name", "")),
                         linked_at=float(row.get("linked_at", 0.0)),
+                        scope=scope,
                     )
         return linked
 
@@ -180,8 +199,11 @@ class AuthStore:
 
     # -- linked registry ------------------------------------------------- #
 
-    def link(self, platform: str, user_id: str, display_name: str = "") -> LinkedUser:
+    def link(
+        self, platform: str, user_id: str, display_name: str = "", scope: str = DEFAULT_SCOPE
+    ) -> LinkedUser:
         """Authorise one chat identity (idempotent)."""
+        scope = validate_scope(scope)
         user_id = str(user_id)
         with self._lock:
             user = self._linked.setdefault(platform, {}).get(user_id)
@@ -191,12 +213,36 @@ class AuthStore:
                     user_id=user_id,
                     display_name=display_name,
                     linked_at=self._clock(),
+                    scope=scope,
                 )
                 self._linked[platform][user_id] = user
-            elif display_name:
-                user.display_name = display_name
+            else:
+                if display_name:
+                    user.display_name = display_name
             self.save()
         return user
+
+    def set_scope(self, platform: str, user_id: str, scope: str) -> LinkedUser:
+        """Change one linked identity's scope; refuses unknown identities."""
+        scope = validate_scope(scope)
+        with self._lock:
+            user = self._linked.get(str(platform), {}).get(str(user_id))
+            if user is None:
+                raise KeyError(f"no linked user {user_id!r} on platform {platform!r}")
+            user.scope = scope
+            self.save()
+        return user
+
+    def scope_of(self, platform: str, user_id: str) -> str:
+        """The scope for one identity.
+
+        Unknown identities keep the legacy default: scopes govern LINKED
+        users (the trust ceremony); platforms the owner deliberately runs
+        with ``require_auth: false`` keep their pre-scope behaviour.
+        """
+        with self._lock:
+            user = self._linked.get(str(platform), {}).get(str(user_id))
+            return user.scope if user is not None else DEFAULT_SCOPE
 
     def unlink(self, platform: str, user_id: str) -> bool:
         """Revoke one identity's access."""

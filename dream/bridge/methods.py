@@ -700,6 +700,7 @@ class BridgeMethods:
             "gateway.logs": self.gateway_logs,
             "gateway.link_code": self.gateway_link_code,
             "gateway.linked_users": self.gateway_linked_users,
+            "gateway.set_user_scope": self.gateway_set_user_scope,
             "gateway.unlink_user": self.gateway_unlink_user,
             "gateway.platforms": self.gateway_platforms,
             "health.check": self.health_check,
@@ -2476,6 +2477,29 @@ class BridgeMethods:
         if not platform:
             raise invalid_params("platform must be a non-empty string")
         return self._ensure_gateway().link_code(platform)
+
+    def gateway_set_user_scope(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """SEC Stage E (G-01): set one linked user's permission scope.
+
+        Append-only protocol: the method is new; existing wire shapes are
+        untouched. Boundary-validated before the gateway is asked anything.
+        """
+        from dream.connectivity.auth import USER_SCOPES
+
+        params = params or {}
+        platform = params.get("platform")
+        user_id = params.get("user_id")
+        scope = params.get("scope")
+        if not isinstance(platform, str) or not platform.strip():
+            raise invalid_params("platform must be a non-empty string")
+        if not isinstance(user_id, str) or not user_id.strip():
+            raise invalid_params("user_id must be a non-empty string")
+        if not isinstance(scope, str) or scope not in USER_SCOPES:
+            raise invalid_params(f"scope must be one of {list(USER_SCOPES)}")
+        result = self._ensure_gateway().set_user_scope(platform, user_id, scope)
+        if not result.get("updated"):
+            raise invalid_params(f"no linked user {user_id!r} on platform {platform!r}")
+        return result
 
     def gateway_linked_users(
         self, params: dict[str, Any] | None = None

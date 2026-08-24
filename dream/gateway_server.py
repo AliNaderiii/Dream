@@ -110,9 +110,18 @@ class TokenManager:
         """Verify a token and return its info, or None if invalid.
 
         Optionally checks scope — a write-scoped token satisfies read
-        requirements.
+        requirements. SEC Stage E (G-03): the lookup compares every stored
+        token with ``secrets.compare_digest`` — constant time per candidate,
+        so verification cost and timing never depend on how much of a guess
+        is right.
         """
-        info = self._tokens.get(token)
+        import secrets as _secrets
+
+        info = None
+        for candidate, row in self._tokens.items():
+            if _secrets.compare_digest(str(token), candidate):
+                info = row
+                break
         if info is None:
             return None
         token_scope = TokenScope(info["scope"])

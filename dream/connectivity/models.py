@@ -93,6 +93,11 @@ class LinkedUser:
     user_id: str
     display_name: str = ""
     linked_at: float = 0.0
+    #: SEC Stage E (G-01): what this identity may do. One of
+    #: ``chat_only | safe_tools | guarded_tools | admin``. Existing users
+    #: keep ``admin`` — the pre-scope behaviour, changed only by an
+    #: explicit owner decision.
+    scope: str = "admin"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -100,6 +105,7 @@ class LinkedUser:
             "user_id": self.user_id,
             "display_name": self.display_name,
             "linked_at": self.linked_at,
+            "scope": self.scope,
         }
 
 
