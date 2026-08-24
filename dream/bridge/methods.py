@@ -845,7 +845,23 @@ class BridgeMethods:
         context: str = "interactive",
     ) -> Dream:
         backend = self._backend_for(provider, model, reasoning_effort)
-        return Dream(self.store, backend, ApprovalPolicy(context=context))
+        if context in ("cron", "single_query"):
+            # SEC Stage E (G-20): autonomous dreams run with a degraded
+            # grant set — dangerous tools are absent from the dispatch
+            # table entirely, so they read as ``unknown tool`` and are
+            # refused before any approval logic. The cron/single-query
+            # context gate inside the engine remains the second layer.
+            from dream.tools import REGISTRY
+
+            restricted = {
+                name: registered
+                for name, registered in REGISTRY.items()
+                if registered.risk != "dangerous"
+            }
+            policy = ApprovalPolicy(registry=restricted, context=context)
+        else:
+            policy = ApprovalPolicy(context=context)
+        return Dream(self.store, backend, policy)
 
     def session_create(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
