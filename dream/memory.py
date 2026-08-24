@@ -1219,6 +1219,13 @@ class MemoryStore:
                     m.use_count += 1
                     m.last_used_at = now
 
+            # L5 (SEC Stage D): recalled memories re-enter context as
+            # untrusted text; each is scanned on the way in.
+            from dream.security.injection import guard_untrusted
+
+            for memory in results:
+                memory.content = guard_untrusted(memory.content, source="memory")
+
             return results
 
     def _like_scan(self, query: str, kind_list: list[str], limit: int) -> list[int]:

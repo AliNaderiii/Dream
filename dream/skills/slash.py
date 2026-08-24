@@ -116,9 +116,13 @@ def format_loaded_skills(stack: SlashStack) -> str:
     """
     if not stack.skills:
         return ""
+    from dream.security.injection import guard_untrusted
+
     parts: list[str] = []
     for skill in stack.skills:
         body = skill.body if skill.kind == "skill_md" else skill.body
+        # L5 (SEC Stage D): slash-loaded bodies enter the user turn scanned.
+        body = guard_untrusted(body, source=f"skill:{skill.slash or skill.name}")
         parts.append(f"[{_LOADED_LABEL}: {skill.slash or skill.name}]\n{body}")
     return "\n\n".join(parts)
 

@@ -455,7 +455,10 @@ def search_web(query: str) -> str:
             return NETWORK_REFUSAL_MESSAGE
         lines = [answer] if answer else []
         lines.extend(f"- {title}: {address}" for title, address in topics)
-        return "\n".join(lines)
+        from dream.security.injection import guard_untrusted
+
+        # L5 (SEC Stage D): web extraction crosses into context only scanned.
+        return guard_untrusted("\n".join(lines), source="web:search")
     except (OSError, ValueError, UnicodeError, json.JSONDecodeError, _AddressRefused):
         return NETWORK_REFUSAL_MESSAGE
 
@@ -476,6 +479,10 @@ def read_page(address: str) -> str:
             text = text[:PAGE_TEXT_CAP]
         if not text:
             return NETWORK_REFUSAL_MESSAGE
+        from dream.security.injection import guard_untrusted
+
+        # L5 (SEC Stage D): web extraction crosses into context only scanned.
+        text = guard_untrusted(text, source=f"web:{address}")
         if response_truncated or text_truncated:
             return f"{text}\n\n[truncated at {PAGE_TEXT_CAP} characters]"
         return text
@@ -530,7 +537,11 @@ def read_note(filename: str) -> str:
 
     :param filename: Relative path of the note to read.
     """
-    return _safe_path(filename).read_text(encoding="utf-8")
+    from dream.security.injection import guard_untrusted
+
+    content = _safe_path(filename).read_text(encoding="utf-8")
+    # L5 (SEC Stage D): file contents cross into context only scanned.
+    return guard_untrusted(content, source=f"file:{filename}")
 
 
 @tool(risk="safe")

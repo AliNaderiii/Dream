@@ -199,16 +199,21 @@ def classify_learn(argument: str, *, history: list[dict[str, Any]] | None = None
 
 def compose_learn_prompt(source: LearnSource) -> str:
     """Standards-guided prompt handed to the agent as a normal turn."""
+    from dream.security.injection import guard_untrusted
+
     templates = authoring_templates()
     sections = ", ".join(TEMPLATE_SECTIONS)
     large = len(source.text) >= LARGE_SOURCE_CHARS or source.kind == "corpus"
+    # L5 (SEC Stage D): /learn material — path, URL, corpus or pasted notes —
+    # is untrusted; it crosses into the turn only scanned.
+    guarded_text = guard_untrusted(source.text, source=f"learn:{source.kind}")
     existing_block = ""
     if source.existing is not None:
         existing_block = (
             "\n\nExisting skill to merge into (do not create a duplicate):\n"
             f"name: {source.existing.name}\n"
             f"description: {source.existing.description}\n"
-            f"{source.existing.body}\n"
+            f"{guard_untrusted(source.existing.body, source='learn:existing')}\n"
         )
     kb = ""
     if large:
@@ -230,7 +235,7 @@ def compose_learn_prompt(source: LearnSource) -> str:
         f"{templates['en']}\n"
         f"{existing_block}\n"
         f"Source kind: {source.kind}\n"
-        f"Source:\n{source.text}\n"
+        f"Source:\n{guarded_text}\n"
     )
 
 

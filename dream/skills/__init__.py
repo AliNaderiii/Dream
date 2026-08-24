@@ -1173,11 +1173,16 @@ def view_skill(name: str) -> dict[str, Any]:
             raise ValueError(_ERR_VIEW_FA + _ERR_VIEW_EN)
         elapsed = (__import__("time").monotonic() - started) * 1000.0
         ledger.log_use(skill.name, "success", duration_ms=elapsed, source="skill_view")
+    from dream.security.injection import guard_untrusted
+
+    # L5 (SEC Stage D): a SKILL.md body is untrusted text; it crosses into
+    # context only scanned, with a visible warning when anything trips.
+    label = f"skill:{skill.name}"
     return {
         "name": skill.name,
-        "description": skill.description,
-        "body": skill.body,
-        "steps": list(skill.steps),
+        "description": guard_untrusted(skill.description, source=label),
+        "body": guard_untrusted(skill.body, source=label),
+        "steps": [guard_untrusted(step, source=label) for step in skill.steps],
         "filename": skill.filename,
         "kind": skill.kind,
         "slash": skill.slash,
