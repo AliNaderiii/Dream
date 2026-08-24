@@ -97,6 +97,7 @@ from .errors import (
     APPROVAL_REQUIRED,
     INTERNAL_ERROR,
     RESOURCE_EXHAUSTED,
+    TOOL_ERROR,
     BridgeError,
     invalid_params,
 )
@@ -116,10 +117,12 @@ try:  # pragma: no cover - import guard
     from dream.browser_controller import (
         BrowserController,
         BrowserSecurityError,
+        BrowserUnavailableError,
         PageContent,
     )
 except ImportError:  # pragma: no cover
     BrowserController = None  # type: ignore[assignment,misc]
+    BrowserUnavailableError = RuntimeError  # type: ignore[assignment,misc]
     BrowserSecurityError = None  # type: ignore[assignment,misc]
     PageContent = None  # type: ignore[assignment,misc]
 
@@ -943,7 +946,9 @@ class BridgeMethods:
 
     def _memory2_target(self, params: dict[str, Any]) -> Any:
         target = params.get("target")
-        if target not in {TARGET_MEMORY, TARGET_USER}:
+        # SEC Stage D (G-22): type-check before membership — an unhashable
+        # target must be a boundary refusal, not a TypeError.
+        if not isinstance(target, str) or target not in {TARGET_MEMORY, TARGET_USER}:
             raise invalid_params("target must be agent_notes or user_profile")
         return self.bounded.notes if target == TARGET_MEMORY else self.bounded.profile
 
@@ -2759,7 +2764,10 @@ class BridgeMethods:
         """Get the content of the current page."""
         del params
         bc = self._require_browser()
-        content = await bc.get_content()
+        try:
+            content = await bc.get_content()
+        except BrowserUnavailableError as exc:
+            raise BridgeError(TOOL_ERROR, str(exc)) from exc
         return {
             "url": content.url,
             "title": content.title,
@@ -2805,14 +2813,22 @@ class BridgeMethods:
         params = params or {}
         bc = self._require_browser()
         path = params.get("path")
-        screenshot_path = await bc.screenshot(path=path)
+        if path is not None and not isinstance(path, str):
+            raise invalid_params("path must be a string")
+        try:
+            screenshot_path = await bc.screenshot(path=path)
+        except BrowserUnavailableError as exc:
+            raise BridgeError(TOOL_ERROR, str(exc)) from exc
         return {"screenshot_path": str(screenshot_path)}
 
     async def browser_get_cookies(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get cookies from the current browser context."""
         del params
         bc = self._require_browser()
-        cookies = await bc.get_cookies()
+        try:
+            cookies = await bc.get_cookies()
+        except BrowserUnavailableError as exc:
+            raise BridgeError(TOOL_ERROR, str(exc)) from exc
         return {"cookies": cookies}
 
     def browser_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -2902,8 +2918,12 @@ class BridgeMethods:
         search = params.get("search")
         date_from = params.get("date_from")
         date_to = params.get("date_to")
-        limit = int(params.get("limit", 100))
-        offset = int(params.get("offset", 0))
+        # SEC Stage D (G-22): numeric bounds are validated at the boundary.
+        try:
+            limit = int(params.get("limit", 100))
+            offset = int(params.get("offset", 0))
+        except (TypeError, ValueError) as exc:
+            raise invalid_params("limit and offset must be integers") from exc
 
         records, total = self.provenance.list_records(
             agent_id=str(agent_id) if agent_id else None,

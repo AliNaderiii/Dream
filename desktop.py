@@ -1557,8 +1557,38 @@ class DreamDesktop(tk.Tk if tk is not None else object):  # type: ignore[misc]
         self.destroy()
 
 
+#: SEC Stage D (G-25): the legacy Tk window predates the bridge-era boundary
+#: discipline and is quarantined behind an explicit opt-in. The Tauri
+#: desktop (apps/desktop) is the supported surface; this file stays
+#: restorable for owners who rely on it, but it no longer starts silently.
+LEGACY_DESKTOP_FLAG_ENV = "DREAM_ENABLE_LEGACY_DESKTOP"
+
+
+def _legacy_enabled() -> bool:
+    return os.environ.get(LEGACY_DESKTOP_FLAG_ENV, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def main() -> None:
     """Entry point for ``python desktop.py``."""
+    if not _legacy_enabled():
+        print(
+            "The legacy Tk desktop window is quarantined (SEC G-25).\n"
+            "Set DREAM_ENABLE_LEGACY_DESKTOP=1 to run it anyway; the\n"
+            "supported surface is the Tauri desktop in apps/desktop.\n"
+            "\u067e\u0646\u062c\u0631\u0647\u200c\u06cc \u0642\u062f\u06cc\u0645\u06cc "
+            "\u062f\u0633\u06a9\u200c\u062a\u0627\u067e "
+            "\u0642\u0631\u0646\u0637\u06cc\u0646\u0647 \u0634\u062f\u0647 "
+            "\u0627\u0633\u062a. \u0628\u0631\u0627\u06cc \u0627\u062c\u0631\u0627 "
+            "DREAM_ENABLE_LEGACY_DESKTOP=1 \u0631\u0627 \u062a\u0646\u0638\u06cc\u0645 "
+            "\u06a9\u0646\u06cc\u062f.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
     if tk is None:
         print(_persian_error("tkinter not available"), file=sys.stderr)
         sys.exit(1)

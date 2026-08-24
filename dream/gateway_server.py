@@ -168,6 +168,87 @@ class TokenManager:
 
 
 # ---------------------------------------------------------------------------
+# Security headers + per-token rate limiting (SEC Stage D, G-23/G-24)
+# ---------------------------------------------------------------------------
+
+#: The strict Content-Security-Policy applied to every gateway response that
+#: does not set its own. Script stays same-origin; framing is denied twice
+#: (CSP frame-ancestors and X-Frame-Options) so a clickjacked phone cannot
+#: drive the gateway.
+CSP_DEFAULT = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; "
+    "font-src 'self' data:; "
+    "connect-src 'self' ws: wss:; "
+    "frame-ancestors 'none';"
+)
+
+#: Default per-token request budget per rolling minute window. A stolen
+#: token can probe, but it cannot saturate the agent.
+TOKEN_RATE_LIMIT_PER_MINUTE = 240
+
+
+def build_security_headers(*, tls_enabled: bool, existing: dict | None = None) -> dict:
+    """The gateway's security header set as a pure, stdlib-testable map.
+
+    ``existing`` lets a route-provided Content-Security-Policy win; every
+    other header is always applied. HSTS ships only over TLS, exactly when
+    it is meaningful.
+    """
+    headers = {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-XSS-Protection": "1; mode=block",
+        "Referrer-Policy": "no-referrer-when-downgrade",
+    }
+    if tls_enabled:
+        headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    current = existing or {}
+    has_csp = any(str(key).lower() == "content-security-policy" for key in current)
+    if not has_csp:
+        headers["Content-Security-Policy"] = CSP_DEFAULT
+    return headers
+
+
+class TokenRateLimiter:
+    """Fixed-minute-window counter keyed by token (SEC Stage D, G-24).
+
+    Scope enforcement decides WHAT a token may do; this limiter decides how
+    OFTEN. Limits apply per token, so one abused credential cannot starve
+    the owner's other devices.
+    """
+
+    def __init__(self, per_minute: int = TOKEN_RATE_LIMIT_PER_MINUTE) -> None:
+        if per_minute < 1:
+            raise ValueError("per_minute must be at least 1")
+        self.per_minute = int(per_minute)
+        self._buckets: dict[tuple[str, int], int] = {}
+
+    def check(self, token: str, *, now: float | None = None) -> bool:
+        """Record one request; True while inside the budget."""
+        stamp = time.time() if now is None else now
+        minute = int(stamp // 60)
+        stale = [key for key in self._buckets if key[1] != minute]
+        for key in stale:
+            del self._buckets[key]
+        key = (str(token), minute)
+        used = self._buckets.get(key, 0) + 1
+        self._buckets[key] = used
+        return used <= self.per_minute
+
+    def remaining(self, token: str, *, now: float | None = None) -> int:
+        stamp = time.time() if now is None else now
+        minute = int(stamp // 60)
+        used = self._buckets.get((str(token), minute), 0)
+        return max(0, self.per_minute - used)
+
+    def reset(self) -> None:
+        self._buckets.clear()
+
+
+# ---------------------------------------------------------------------------
 # mDNS / Bonjour discovery
 # ---------------------------------------------------------------------------
 
@@ -411,32 +492,22 @@ def create_gateway_app(
         allow_headers=["*"],
     )
 
-    # Security headers middleware.
+    # Security headers middleware (SEC Stage D, G-23: policy lives in the
+    # pure build_security_headers(), pinned by tests).
     @app.middleware("http")
     async def add_security_headers(request: Request, call_next: Any):
         response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Referrer-Policy"] = "no-referrer-when-downgrade"
-        if cfg.tls_enabled:
-            response.headers["Strict-Transport-Security"] = (
-                "max-age=31536000; includeSubDomains"
-            )
-        # CSP
-        if not response.headers.get("Content-Security-Policy"):
-            response.headers["Content-Security-Policy"] = (
-                "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-                "style-src 'self' 'unsafe-inline'; "
-                "img-src 'self' data: blob:; "
-                "font-src 'self' data:; "
-                "connect-src 'self' ws: wss:; "
-                "frame-ancestors 'none';"
-            )
+        for key, value in build_security_headers(
+            tls_enabled=cfg.tls_enabled, existing=dict(response.headers)
+        ).items():
+            response.headers[key] = value
         return response
 
     # --- Verification dependency ---
+
+    # SEC Stage D (G-24): per-token rate limiting — a stolen token can probe,
+    # never saturate.
+    rate_limiter = TokenRateLimiter()
 
     async def verify_read_token(request: Request):
         token = _extract_token(request)
@@ -445,6 +516,8 @@ def create_gateway_app(
         info = tm.verify_token(token, TokenScope.READ)
         if info is None:
             raise HTTPException(status_code=403, detail="Invalid or insufficient token")
+        if not rate_limiter.check(token):
+            raise HTTPException(status_code=429, detail="Token rate limit exceeded")
         request.state.token_scope = info["scope"]
         request.state.token_info = info
         return token
@@ -456,6 +529,8 @@ def create_gateway_app(
         info = tm.verify_token(token, TokenScope.WRITE)
         if info is None:
             raise HTTPException(status_code=403, detail="Write access required")
+        if not rate_limiter.check(token):
+            raise HTTPException(status_code=429, detail="Token rate limit exceeded")
         request.state.token_scope = info["scope"]
         request.state.token_info = info
         return token
