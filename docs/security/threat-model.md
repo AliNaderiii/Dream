@@ -273,13 +273,13 @@ restore, never delete silently.
 
 | Layer | Present today (verified files) | Gap IDs | Stage · SA |
 | --- | --- | --- | --- |
-| L1 authorization | `connectivity/auth.py`, `ratelimit.py`, `gateway.py`, `gateway_server.py` | G-01…G-03 | E · SA-1 RAMPART |
+| L1 authorization | `connectivity/auth.py`, `ratelimit.py`, `gateway.py`, `gateway_server.py`, **per-user scopes + approval throttle + constant-time tokens (Stage E, closed; Settings UI with the Stage F Security Center)** | ~~G-01…G-03~~ closed at E | E · SA-1 RAMPART |
 | L2 approval engine v2 | `tools.py` tiers, `agent.py:ApprovalPolicy`, **`security/engine.py` + `security/assessor.py` + `security/history.py` (Stage B, closed)** | ~~G-04…G-07~~ closed at B | B · SA-2 SENTRY |
 | L3 blocklist floor | **`security/blocklist.py` (Stage B, closed)** | ~~G-08~~ closed at B | B · SA-2 SENTRY |
 | L4 file-write safety | `tools.py:_safe_path`, skills name validation, **`security/pathsafety.py` denylist + `security/quarantine.py` (Stage C, closed)** | ~~G-09…G-11~~ closed at C | C · SA-3 VAULT |
 | L5 injection scanning | **`security/injection.py` detection layer over `security/textguard.py`, wired at all seven context-entry surfaces (Stage D, closed)** | ~~G-12, G-13~~ closed at D | D · SA-4 HORIZON |
 | L6 credential hygiene | **`security/envfilter.py`, `security/textguard.py`, `security/secrets.py` (Stage C, closed — the `mcp/transport.py:69` leak is fixed)** | ~~G-14…G-17~~ closed at C | C · SA-3 VAULT |
-| L7 isolation | `subagents.py` grants, `INSTANCE_BOUND_TOOL_NAMES` | G-18…G-21 | E · SA-1 RAMPART |
+| L7 isolation | `subagents.py` grants, `INSTANCE_BOUND_TOOL_NAMES`, **degraded cron grants, mechanical grant-chain sweep, fail-closed session pins, cron storage pins (Stage E, closed)** | ~~G-18…G-21~~ closed at E | E · SA-1 RAMPART |
 | L8 transport | `bridge/server.py` limits, `bridge/methods.py` validation, gateway headers, **boundary property sweep + seeded fuzzing, pure header policy, token rotation audit, per-token rate limits, legacy window quarantined (Stage D, closed)** | ~~G-22…G-25~~ closed at D | D · SA-4 HORIZON |
 
 Quality and transparency across all layers: SA-5 PROOF (Stage E/F:
@@ -326,6 +326,25 @@ both verify dependencies; **`desktop.py` is quarantined behind
 keeps the window restorable for owners who rely on it while ending silent
 starts — the Tauri desktop is the supported surface). Evidence:
 `tests/security/` grew to 403 cases; SEC-GATES.md Gate D.
+
+**Stage E close (2026-08-24).** G-01…G-03 and G-18…G-21 are closed.
+Linked identities carry a scope (`chat_only | safe_tools | guarded_tools |
+admin`; existing users keep `admin`), enforced by an `ApprovalPolicy`
+ceiling that sits AFTER the floor (the floor still precedes every gate)
+and applied live per turn by the connectivity gateway; the bridge gains
+append-only `gateway.set_user_scope` and scope-bearing `linked_users`
+rows (the Settings surface ships with the Stage F Security Center).
+Approval attempts are throttled per user (10/min default; floor/scope
+blocks spend no budget). Gateway token verification is constant-time
+(`secrets.compare_digest` per candidate). Autonomous dreams run degraded
+grant sets (dangerous tools absent outright); the subagent/council grant
+chain is pinned by a seeded 60-trial mechanical sweep; session-addressed
+bridge methods fail closed on unknown/malformed ids with 80-bit opaque
+session ids; cron storage is pinned inert against traversal and SQL
+injection shapes. Residual risk documented: platforms the owner runs with
+`require_auth: false` keep pre-scope behaviour for unlinked sessions
+(scopes govern linked identities). Evidence: `tests/security/` grew to
+464 cases; SEC-GATES.md Gate E.
 
 ## 7. Out of scope / accepted risks (recorded, not ignored)
 

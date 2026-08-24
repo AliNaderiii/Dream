@@ -592,3 +592,116 @@ and fixed); gateway header policy, token rotation, and per-token rate
 limits are pinned without new dependencies; the legacy window is
 quarantined behind an explicit flag. 88 new cases; every pre-existing
 suite green and unmodified. Stage E (L1 scopes + L7 isolation) may begin.
+
+---
+
+# Gate E — isolation & scopes (L1 authorization + L7 isolation)
+
+Implementation: [`SEC-E.md`](./SEC-E.md) · Commits `841e125` (scopes,
+throttle, constant-time tokens), `9df8ee4` (isolation), plus this docs
+state. Base: merged Stages A–D tip `d610948` (PR #80 squash-merged with
+owner approval; post-merge main CI verified green before Stage E work
+landed). **No legacy test edited.**
+
+## E.0 — Merge & realign checkpoint
+
+```text
+$ gh pr merge 80 --squash          # owner-approved
+$ git log --oneline -1 origin/main
+d610948 feat(security): eight-layer defense-in-depth — Stages A-D … (#80)
+$ gh run list --branch main        # post-merge
+CI: completed success · Desktop CI: completed success · pages: success
+```
+
+Branch realigned to `d610948` before any Stage E code.
+
+## E.1 — Scopes, throttle, constant-time tokens
+
+```text
+$ .venv/bin/python -m pytest tests/security/test_sec_scopes.py -q
+28 passed
+```
+
+Pinned: scope set fixed and ordered; link defaults to admin and persists;
+set_scope validates and refuses unknown users; unknown stored scopes fall
+back to admin; `scope_of` keeps the legacy default for unlinked sessions.
+Policy ceiling matrix (3 scopes × 3 tiers) enforced with the scope named;
+admin dangerous keeps the exact pre-scope engine path; the floor precedes
+the scope gate. Approval throttle: 10/min budget per user, per-user
+isolation, window restore, floor/scope blocks spend nothing, refusal
+reason pinned. Gateway end-to-end with a scripted tool backend: admin runs
+the guarded write, `safe_tools` refuses it naming the scope, `chat_only`
+refuses even `calculate`; repeated dangerous attempts hit the throttle on
+the third try. Bridge `gateway.set_user_scope` rejects bad platform /
+user_id / scope / unknown users at the boundary and persists the good
+case; `linked_users` rows carry scopes. Constant-time verification keeps
+every semantic and refuses near-miss prefixes.
+
+## E.2 — Isolation: grants, sessions, cron storage
+
+```text
+$ .venv/bin/python -m pytest tests/security/test_sec_grant_chain.py \
+    tests/security/test_sec_cron_storage.py -q
+33 passed
+```
+
+Pinned: default grant is dangerous-free; 60-trial seeded sweep holds all
+seven grant-chain invariants (incl. no verbatim parent instance-bound
+closures, granted dangerous still refused, global registry
+byte-identical); council stages `allow_dangerous=False` with
+dangerous-free member tables; cron/single-query dreams have no dangerous
+tools at all (`unknown tool`) with the context gate as second layer while
+interactive dreams keep the full table; every session-addressed method
+refuses unknown and wrongly-typed ids before dispatch (async handlers
+awaited as the server does); session ids are 80-bit opaque hex; tampered
+ids never resolve. Cron storage: traversal and SQL-injection shapes stay
+inert literals; the runner receives prompts verbatim with nothing
+materialised on disk; empty/unknown updates refuse.
+
+## E.3 — Full suites, static gates, RF-4
+
+```text
+$ .venv/bin/python -m pytest -q
+2409 passed, 11 skipped in 91.99s (0:01:31)
+
+$ .venv/bin/ruff check .
+All checks passed!
+
+$ .venv/bin/python tools/check_suite_count.py
+Suite count check passed: 2412 tests collected (minimum required: 652).
+
+$ .venv/bin/python tools/check_locales.py
+Locale integrity: PASS — 8 locales × 16 namespaces; 763 leaves and identical key/type/placeholder trees.
+English fallback counts: fa=0, …; fa gate=PASS
+```
+
+2348 (Gate D close, pre-merge tip) + 61 new = 2409 passed / 11 skipped.
+Zero legacy tests edited (RF-4 intact).
+
+## E.4 — Worktree verification per commit
+
+```text
+$ git worktree add /tmp/wt-e1 841e125 && pytest tests/security/test_sec_scopes.py \
+    tests/test_connectivity_gateway.py tests/test_security_gateway.py \
+    tests/test_connectivity_sessions.py -q
+55 passed
+
+$ git worktree add /tmp/wt-e2 9df8ee4 && pytest tests/security/test_sec_grant_chain.py \
+    tests/security/test_sec_cron_storage.py tests/test_subagents.py \
+    tests/test_council.py tests/test_bridge_subagent_schedule.py -q
+164 passed
+```
+
+`tools/check_commit.py` passed on `841e125` and `9df8ee4` (identity
+re-applied after a sandbox reset wiped the local git config; commits were
+rebuilt with explicit author env before push).
+
+## Gate E decision
+
+**GREEN.** Per-user scopes enforced live with the floor still preceding
+every gate; approval attempts throttled per user; token verification
+constant-time; cross-session access fails closed; grant chains pinned
+mechanically; autonomous dreams run degraded grant sets; cron storage
+inert against traversal and injection. 61 new cases; every pre-existing
+suite green and unmodified. Stage F (Security Center UI, audit tooling,
+SECURITY.md) may begin.
