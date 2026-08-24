@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Hostile text is scanned before it reaches the model (SEC Stage D).**
+  Files, web pages, MCP payloads, skill bodies, /learn sources, search
+  snippets, and recalled memories pass an injection scanner: hidden
+  Unicode is stripped, instruction-override patterns in English and
+  Persian and fake tool-call shapes raise a visible bilingual warning,
+  and the untouched original is quarantined for inspection.
+- **Hardened transport boundary.** Every bridge method rejects malformed
+  parameters before dispatch (audited by a property sweep and seeded
+  fuzzing); gateway responses carry a strict CSP/frame-denial/nosniff
+  header policy with HSTS over TLS; gateway tokens gain per-token rate
+  limits and audited rotation.
+- **Legacy window quarantined.** The old Tk desktop (`desktop.py`) no
+  longer starts without `DREAM_ENABLE_LEGACY_DESKTOP=1`; the Tauri
+  desktop is the supported surface.
 - **MCP servers no longer inherit your environment (SEC Stage C).** MCP
   children receive a credential-free allowlist plus only the variables you
   explicitly map; network-transport servers default to egress-off and

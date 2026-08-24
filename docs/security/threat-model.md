@@ -277,10 +277,10 @@ restore, never delete silently.
 | L2 approval engine v2 | `tools.py` tiers, `agent.py:ApprovalPolicy`, **`security/engine.py` + `security/assessor.py` + `security/history.py` (Stage B, closed)** | ~~G-04…G-07~~ closed at B | B · SA-2 SENTRY |
 | L3 blocklist floor | **`security/blocklist.py` (Stage B, closed)** | ~~G-08~~ closed at B | B · SA-2 SENTRY |
 | L4 file-write safety | `tools.py:_safe_path`, skills name validation, **`security/pathsafety.py` denylist + `security/quarantine.py` (Stage C, closed)** | ~~G-09…G-11~~ closed at C | C · SA-3 VAULT |
-| L5 injection scanning | — (adjacent: caps, catalog bodies, boundary types; **C-layer hygiene in `security/textguard.py`**) | G-12, G-13 | D · SA-4 HORIZON |
+| L5 injection scanning | **`security/injection.py` detection layer over `security/textguard.py`, wired at all seven context-entry surfaces (Stage D, closed)** | ~~G-12, G-13~~ closed at D | D · SA-4 HORIZON |
 | L6 credential hygiene | **`security/envfilter.py`, `security/textguard.py`, `security/secrets.py` (Stage C, closed — the `mcp/transport.py:69` leak is fixed)** | ~~G-14…G-17~~ closed at C | C · SA-3 VAULT |
 | L7 isolation | `subagents.py` grants, `INSTANCE_BOUND_TOOL_NAMES` | G-18…G-21 | E · SA-1 RAMPART |
-| L8 transport | `bridge/server.py` limits, `bridge/methods.py` validation, gateway headers | G-22…G-25 | D · SA-4 HORIZON |
+| L8 transport | `bridge/server.py` limits, `bridge/methods.py` validation, gateway headers, **boundary property sweep + seeded fuzzing, pure header policy, token rotation audit, per-token rate limits, legacy window quarantined (Stage D, closed)** | ~~G-22…G-25~~ closed at D | D · SA-4 HORIZON |
 
 Quality and transparency across all layers: SA-5 PROOF (Stage E/F:
 `tests/security/` 200+ cases, `tools/security_audit.py`) and SA-6
@@ -303,6 +303,29 @@ schema deviation denies. The approval trail is append-only SQLite under
 `DREAM_APPROVAL_DB` (`security/history.py`), fail-closed on corruption.
 Evidence: 250 tests in `tests/security/` incl. the
 `blocklist_precedes_approval` property; SEC-GATES.md Gate B.
+
+**Stage C close (2026-08-24).** G-09…G-11 and G-14…G-17 are closed
+(`security/envfilter.py`, `security/pathsafety.py`, `security/quarantine.py`,
+`security/secrets.py`; SEC-GATES.md Gate C).
+
+**Stage D close (2026-08-24).** G-12/G-13 and G-22…G-25 are closed.
+`security/injection.py` scans before context entry at every surface (file
+reads, web extraction, MCP payloads, SKILL.md bodies via `skill_view` and
+slash loads, `/learn` sources, session-search snippets, recalled memories)
+with modes `off | warn | strip` (default strip): hidden Unicode is
+stripped, EN+FA instruction overrides and smuggled tool-call shapes warn;
+findings enter context under a bilingual warning banner, originals are
+quarantined with metadata and optional provenance entries. Precision is
+pinned: U+200C (ZWNJ) is first-class Persian orthography and never trips.
+L8: the boundary property sweep + seeded fuzzing caught and fixed three
+real leaks (memory2 target typing, provenance limit parsing, browser
+state errors); gateway headers live in the pure `build_security_headers()`;
+token rotation is audited and per-token rate limits (240/min) enforce at
+both verify dependencies; **`desktop.py` is quarantined behind
+`DREAM_ENABLE_LEGACY_DESKTOP=1`** (explicit flag chosen over removal: it
+keeps the window restorable for owners who rely on it while ending silent
+starts — the Tauri desktop is the supported surface). Evidence:
+`tests/security/` grew to 403 cases; SEC-GATES.md Gate D.
 
 ## 7. Out of scope / accepted risks (recorded, not ignored)
 

@@ -467,3 +467,128 @@ every write surface with a Windows + POSIX traversal corpus; deletions are
 bounded, restorable moves. 48 new cases; all pre-existing suites green and
 unmodified. Stage D (L5 injection scanning + L8 transport hardening) may
 begin.
+
+---
+
+# Gate D — injection & transport (L5 scanning + L8 hardening)
+
+Implementation: [`SEC-D.md`](./SEC-D.md) · Commits `a1d873e` (scanner),
+`eeec5db` (surface wiring), `9a62823` (transport hardening), plus this
+docs state. Files: `dream/security/injection.py`, `textguard.py` strip
+layer, scanner wiring in `tools.py`, `mcp/client.py`, `skills/__init__.py`,
+`skills/slash.py`, `skills/learn.py`, `session_search.py`, `memory.py`;
+L8 edits in `bridge/methods.py`, `gateway_server.py`, `desktop.py`; three
+new test suites. **No legacy test edited.**
+
+## D.1 — Injection corpus stripped/flagged correctly
+
+```text
+$ .venv/bin/python -m pytest tests/security/test_sec_injection.py -q
+59 passed
+```
+
+Pinned: 11 EN override payloads + 5 FA override payloads (+ZWNJ-real
+spellings) detected; 5 hidden-Unicode shapes detected; 4 tool-call shapes
+detected; 12 benign controls pass UNTOUCHED — Persian recipe, literary,
+and religious prose included (U+200C is first-class Persian orthography
+and never trips; LRM/RLM stay honest). Modes: `off` returns payloads
+verbatim and quarantines nothing; `strip` removes hidden Unicode and
+warns; `warn` keeps it visible and flags; heuristics never auto-rewrite
+prose; invalid modes fall back to strip; garbage inputs never raise.
+Quarantine metadata carries source + finding classes with the original
+byte-identical; provenance entries append when a tracker is given; a
+broken tracker never breaks the turn.
+
+## D.2 — Every context-entry surface scans (end-to-end pipelines)
+
+```text
+$ .venv/bin/python -m pytest tests/security/test_sec_injection_surfaces.py -q
+14 passed
+```
+
+Pipelines on real objects: poisoned SKILL.md via `skill_view` and via
+slash-load (bilingual banner, quarantine populated); poisoned `/learn`
+file through `compose_learn_prompt`; poisoned note through `read_note`;
+poisoned web text through `read_page`; poisoned MCP tool payload and
+resource through `InMemoryTransport`; poisoned session snippet through a
+live `SessionSearchIndex`; poisoned memory through `MemoryStore.recall`.
+Benign twins for every surface pass byte-identical, and stored rows are
+never mutated (pinned for memory and search originals).
+
+## D.3 — Bridge boundary: reject-before-dispatch + seeded fuzzing
+
+```text
+$ .venv/bin/python -m pytest tests/security/test_sec_transport_hardening.py -q
+15 passed
+```
+
+The property sweep (every handler, sync + async, 19 garbage shapes) and
+400 seeded bounded fuzz cases (seed 20260824, MP-02-weighted) caught
+three real leaks, fixed at the boundary and re-proven: `memory2` target
+typing, `provenance.list` limit/offset parsing, browser read handlers
+mapping `BrowserUnavailableError` to `TOOL_ERROR`. Every handler result is
+JSON-serialisable (pinned). No unhandled exception escapes under fuzz.
+
+## D.4 — Gateway headers, tokens, legacy gate
+
+Same suite (D.3): pure `build_security_headers()` pinned — CSP with
+`default-src 'self'` and `frame-ancestors 'none'`, X-Frame-Options DENY,
+nosniff, HSTS only over TLS, an existing CSP respected case-insensitively.
+Token rotation: the old token dies, scope survives, unknown tokens refuse,
+read scope stays read-only after rotation. `TokenRateLimiter`: budget
+enforced per token, next-minute window restores, budgets reject < 1,
+reset works; wired into both verify dependencies with a 429. Legacy gate:
+`python desktop.py` exits 2 with a bilingual quarantine notice without
+`DREAM_ENABLE_LEGACY_DESKTOP` (subprocess-proven), and the flag parsing is
+pinned for on/off values.
+
+## D.5 — Full suites, static gates, RF-4
+
+```text
+$ .venv/bin/python -m pytest -q
+2348 passed, 11 skipped in 83.18s (0:01:23)
+
+$ .venv/bin/ruff check .
+All checks passed!
+
+$ .venv/bin/python tools/check_suite_count.py
+Suite count check passed: 2351 tests collected (minimum required: 652).
+
+$ .venv/bin/python tools/check_locales.py
+Locale integrity: PASS — 8 locales × 16 namespaces; 763 leaves and identical key/type/placeholder trees.
+English fallback counts: fa=0, …; fa gate=PASS
+```
+
+2260 (Gate C close) + 88 new = 2348 passed / 11 skipped. Zero legacy
+tests edited (RF-4 intact). Snippet performance budget holds with the
+scanner on the snippet path (full suite green incl. perf budgets).
+
+## D.6 — Worktree verification per commit
+
+```text
+$ git worktree add /tmp/wt-d1 a1d873e && pytest tests/security/test_sec_injection.py \
+    tests/security/test_sec_mcp_hygiene.py -q
+68 passed
+
+$ git worktree add /tmp/wt-d2 eeec5db && pytest tests/security/test_sec_injection_surfaces.py \
+    tests/test_skills_v2.py tests/test_session_search.py -q
+72 passed
+
+$ git worktree add /tmp/wt-d3 9a62823 && pytest tests/security/test_sec_transport_hardening.py \
+    tests/test_gateway_server.py tests/test_security_gateway.py tests/test_bridge_methods.py -q
+81 passed
+```
+
+`tools/check_commit.py` passed on `a1d873e`, `eeec5db`, `9a62823`.
+
+## Gate D decision
+
+**GREEN.** Hostile SKILL.md bodies, poisoned /learn sources, FA bidi
+payloads, and EN+FA overrides are stripped or flagged at every
+context-entry surface with bilingual warnings, quarantined originals, and
+benign Persian prose untouched; the bridge rejects malformed params
+before dispatch under property and fuzzed sweeps (three real leaks found
+and fixed); gateway header policy, token rotation, and per-token rate
+limits are pinned without new dependencies; the legacy window is
+quarantined behind an explicit flag. 88 new cases; every pre-existing
+suite green and unmodified. Stage E (L1 scopes + L7 isolation) may begin.
