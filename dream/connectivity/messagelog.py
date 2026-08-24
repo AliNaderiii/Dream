@@ -84,12 +84,18 @@ class MessageLog:
         timestamp: datetime | None = None,
         attachments: int = 0,
     ) -> MessageLogEntry:
-        """Record one inbound/outbound message (``direction``: in|out)."""
+        """Record one inbound/outbound message (``direction``: in|out).
+
+        SEC Stage C (G-17): message text is value-scanned before it touches
+        the log — a pasted key never becomes a durable record.
+        """
+        from dream.security.secrets import redact_text
+
         entry = MessageLogEntry(
             platform=str(platform),
             direction=direction,
             user_id=str(user_id),
-            text=str(text)[:MAX_LINE_TEXT],
+            text=redact_text(str(text))[:MAX_LINE_TEXT],
             timestamp=timestamp or utc_now(),
             message_id=message_id,
             attachments=int(attachments),

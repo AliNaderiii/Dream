@@ -4,6 +4,7 @@
  * Mirrors automatically in RTL because every edge uses logical properties.
  */
 
+import { lazy, Suspense } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import { Outlet } from 'react-router-dom';
 
@@ -22,6 +23,14 @@ import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useNativeBridge } from '@/hooks/use-native-bridge';
 import { useTheme } from '@/hooks/use-theme';
 import { useLocaleSync, useTranslation } from '@/lib/i18n';
+
+// The off-mode security banner is always mounted but lives in its own chunk;
+// it renders nothing unless the engine reports approvals off.
+const SecurityOffBanner = lazy(() =>
+  import('@/components/security/security-off-banner').then((m) => ({
+    default: m.SecurityOffBanner,
+  })),
+);
 
 /** Pathname → common.nav key for the top-bar title. */
 const NAV_SLUG: Record<string, string> = {
@@ -65,6 +74,9 @@ export function AppShell() {
           <main className="relative flex min-w-0 flex-1 flex-col">
             <TopBar title={title} />
             <BridgeDisconnectedBanner />
+            <Suspense fallback={null}>
+              <SecurityOffBanner />
+            </Suspense>
             <div className="min-h-0 flex-1 overflow-y-auto">
               <ErrorBoundary>
                 <Outlet />

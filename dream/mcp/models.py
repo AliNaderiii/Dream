@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from dream.security.textguard import sanitize_model_visible
+
 ServerType = Literal["stdio", "sse", "ws"]
 
 
@@ -35,9 +37,11 @@ class MCPTool:
     @classmethod
     def from_dict(cls, data: dict[str, Any], server_id: str = "", server_name: str = "") -> MCPTool:
         schema = data.get("inputSchema") or data.get("input_schema") or data.get("schema") or {}
+        # SEC Stage C (G-15): server-authored text is model-visible, so it is
+        # sanitized before anything else ever sees it.
         return cls(
-            name=str(data.get("name", "")),
-            description=str(data.get("description", "")),
+            name=sanitize_model_visible(str(data.get("name", "")), limit=200),
+            description=sanitize_model_visible(str(data.get("description", ""))),
             input_schema=schema,
             server_id=server_id or str(data.get("server_id", "")),
             server_name=server_name or str(data.get("server_name", "")),
@@ -70,8 +74,8 @@ class MCPResource:
     def from_dict(cls, data: dict[str, Any], server_id: str = "") -> MCPResource:
         return cls(
             uri=str(data.get("uri", "")),
-            name=str(data.get("name", data.get("uri", ""))),
-            description=str(data.get("description", "")),
+            name=sanitize_model_visible(str(data.get("name", data.get("uri", ""))), limit=200),
+            description=sanitize_model_visible(str(data.get("description", ""))),
             mime_type=str(data.get("mimeType", data.get("mime_type", "text/plain"))),
             server_id=server_id or str(data.get("server_id", "")),
         )
@@ -97,8 +101,8 @@ class MCPPrompt:
     @classmethod
     def from_dict(cls, data: dict[str, Any], server_id: str = "") -> MCPPrompt:
         return cls(
-            name=str(data.get("name", "")),
-            description=str(data.get("description", "")),
+            name=sanitize_model_visible(str(data.get("name", "")), limit=200),
+            description=sanitize_model_visible(str(data.get("description", ""))),
             arguments=list(data.get("arguments", [])),
             server_id=server_id or str(data.get("server_id", "")),
         )
@@ -118,6 +122,10 @@ class MCPServerConfig:
     headers: dict[str, str] = field(default_factory=dict)
     enabled: bool = True
     disabled_tools: list[str] = field(default_factory=list)
+    #: SEC Stage C (G-16): per-server egress toggle, default deny. Network
+    #: transports (sse/ws) refuse to connect while it is off; stdio children
+    #: always receive only the allowlist-filtered environment.
+    egress: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -131,6 +139,7 @@ class MCPServerConfig:
             "headers": self.headers,
             "enabled": self.enabled,
             "disabled_tools": self.disabled_tools,
+            "egress": self.egress,
         }
 
     @classmethod
@@ -146,4 +155,5 @@ class MCPServerConfig:
             headers=dict(data.get("headers", {})),
             enabled=bool(data.get("enabled", True)),
             disabled_tools=list(data.get("disabled_tools", [])),
+            egress=bool(data.get("egress", False)),
         )

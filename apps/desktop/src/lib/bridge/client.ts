@@ -564,6 +564,18 @@ export class EchoBridgeTransport implements BridgeTransport {
       if (runtime.handles(canonical)) return runtime.handle(canonical, params);
     }
     switch (method) {
+      case 'security.status':
+        // Mirror of the kernel engine's default posture (SEC Stage B): the
+        // floor is always on; approvals default to manual; off is opt-in.
+        return {
+          mode: 'manual',
+          cron_mode: 'deny',
+          single_query_mode: 'deny',
+          off_active: false,
+          floor: 'always-on',
+          history_path: null,
+          history_available: false,
+        };
       case 'session.create': {
         const sid = `echo-${++echoCounter}`;
         const now = Date.now();

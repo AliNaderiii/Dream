@@ -7,6 +7,7 @@ import { Circle, Globe, HardDrive, Languages } from 'lucide-react';
 
 import { BridgeStatusIndicator } from '@/components/bridge/bridge-status';
 import { SandboxStatusIndicator } from '@/components/sandbox/sandbox-status';
+import { SecurityStatusIndicator } from '@/components/security/security-status-indicator';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,6 +57,8 @@ export function StatusBar() {
       <BridgeStatusIndicator />
 
       <SandboxStatusIndicator />
+
+      <SecurityStatusIndicator />
 
       {activeProvider && (
         <span className="flex items-center gap-1.5">

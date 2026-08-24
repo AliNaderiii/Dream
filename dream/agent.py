@@ -513,7 +513,12 @@ def cli_approver(tool_name: str, arguments: dict[str, Any]) -> bool:
 
 @dataclass(slots=True)
 class ApprovalPolicy:
-    """Approval rules based exclusively on each registered tool's real risk."""
+    """Approval rules based exclusively on each registered tool's real risk.
+
+    Evaluation order is a contract (SEC Stage B): the L3 security floor runs
+    BEFORE any approval logic and cannot be overridden by modes, autonomous
+    contexts, approvers, or auto-approve (``--yolo``-style) grants.
+    """
 
     auto_approve: set[str] = field(default_factory=lambda: {"safe", "guarded"})
     always_ask: set[str] = field(default_factory=lambda: {"dangerous"})
@@ -525,12 +530,35 @@ class ApprovalPolicy:
     from the same mapping. Reading the global registry here would let a name
     the subagent was never granted resolve to a real risk tier.
     """
+    context: str = "interactive"
+    """Execution context for autonomous runs: ``interactive``, ``cron`` or
+    ``single_query``. Autonomous contexts deny dangerous tools by default."""
+    security: Any = None
+    """SecurityEngine to evaluate dangerous calls; ``None`` uses the
+    process-wide default engine."""
 
     def allows(self, tool_name: str, arguments: dict[str, Any]) -> tuple[bool, str]:
+        from dream.security.engine import default_engine
+
         registered = (REGISTRY if self.registry is None else self.registry).get(tool_name)
         if registered is None:
             return False, "unknown tool"
         risk = registered.risk
+        engine = self.security if self.security is not None else default_engine()
+        if risk == "dangerous":
+            if risk in self.always_ask or self.context != "interactive":
+                # Floor -> autonomous-context gate -> mode, in that order,
+                # all inside the engine; nothing below can override the floor.
+                decision = engine.evaluate_dangerous(
+                    tool_name, arguments, context=self.context, ask=self.ask
+                )
+                return decision.allowed, decision.reason
+            # Dangerous configured to auto-approve (a ``--yolo``-style grant):
+            # the floor still trips first, and its verdict is final.
+            refusal = engine.floor_check(tool_name, arguments)
+            if refusal is not None:
+                return False, refusal
+            return True, "dangerous tool auto-approved"
         if risk in self.always_ask:
             if self.ask is None:
                 return False, f"{risk} tool denied: no approver configured"

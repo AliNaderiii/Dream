@@ -285,7 +285,11 @@ def extract_snippet(
         snippet = "…" + snippet
     if end < len(words) - 1:
         snippet += "…"
-    return snippet
+    from dream.security.injection import guard_untrusted
+
+    # L5 (SEC Stage D): snippets are stored session text — untrusted recall;
+    # they cross into context only scanned.
+    return guard_untrusted(snippet, source="search")
 
 
 @dataclass(frozen=True, slots=True)

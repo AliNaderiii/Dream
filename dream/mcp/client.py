@@ -67,7 +67,11 @@ class MCPClient:
                     try:
                         return json.loads(joined)
                     except Exception:
-                        return joined
+                        from dream.security.injection import guard_untrusted
+
+                        # L5 (SEC Stage D): MCP payload text is untrusted and
+                        # crosses into context only scanned.
+                        return guard_untrusted(joined, source=f"mcp:{self.config.name}")
             return res
         return res
 
@@ -89,7 +93,10 @@ class MCPClient:
             if contents and isinstance(contents, list):
                 first = contents[0]
                 if isinstance(first, dict):
-                    return str(first.get("text") or first.get("blob") or "")
+                    text = str(first.get("text") or first.get("blob") or "")
+                    from dream.security.injection import guard_untrusted
+
+                    return guard_untrusted(text, source=f"mcp:{self.config.name}")
         return str(res)
 
     async def list_prompts(self) -> list[MCPPrompt]:

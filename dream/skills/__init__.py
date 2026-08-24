@@ -385,6 +385,9 @@ def save_skill(name: str, description: str, steps: Any) -> str:
     directory = _skills_dir()
     directory.mkdir(parents=True, exist_ok=True)
     text = render_skill_text(cleaned, description, cleaned_steps)
+    from dream.security.pathsafety import check_write_path
+
+    check_write_path(path)  # L4: sensitive paths are never skill storage
     path.write_text(text, encoding="utf-8")
     _after_write(cleaned, text, kind="legacy")
     return f"{SKILLS_DIR_NAME}/{cleaned}{SKILL_SUFFIX}"
@@ -1149,6 +1152,9 @@ def save_skill_md(name: str, description: str, body: str, *, replace: bool = Fal
     if path.exists() and not replace:
         raise ValueError(_ERR_EXISTS_FA + _ERR_EXISTS_EN)
     path.parent.mkdir(parents=True, exist_ok=True)
+    from dream.security.pathsafety import check_write_path
+
+    check_write_path(path)  # L4: sensitive paths are never skill storage
     path.write_text(text, encoding="utf-8")
     _after_write(cleaned, text, kind="skill_md")
     return relative
@@ -1167,11 +1173,16 @@ def view_skill(name: str) -> dict[str, Any]:
             raise ValueError(_ERR_VIEW_FA + _ERR_VIEW_EN)
         elapsed = (__import__("time").monotonic() - started) * 1000.0
         ledger.log_use(skill.name, "success", duration_ms=elapsed, source="skill_view")
+    from dream.security.injection import guard_untrusted
+
+    # L5 (SEC Stage D): a SKILL.md body is untrusted text; it crosses into
+    # context only scanned, with a visible warning when anything trips.
+    label = f"skill:{skill.name}"
     return {
         "name": skill.name,
-        "description": skill.description,
-        "body": skill.body,
-        "steps": list(skill.steps),
+        "description": guard_untrusted(skill.description, source=label),
+        "body": guard_untrusted(skill.body, source=label),
+        "steps": [guard_untrusted(step, source=label) for step in skill.steps],
         "filename": skill.filename,
         "kind": skill.kind,
         "slash": skill.slash,
@@ -1197,9 +1208,13 @@ def edit_skill(name: str, description: str, body: str) -> dict[str, Any]:
 
 
 def delete_skill(name: str) -> dict[str, Any]:
-    """Remove the current skill file. Version history is kept."""
-    import shutil
+    """Remove the current skill file. Version history is kept.
 
+    SEC Stage C (G-11): the removal is a move into the size-capped
+    quarantine — never an outright delete — so the owner can restore it.
+    Oversized items are refused, not destroyed.
+    """
+    from dream.security.quarantine import quarantine_delete
     from dream.skills.registry import find_by_name, mark_skills_dirty
     from dream.skills.store import get_ledger
 
@@ -1207,14 +1222,18 @@ def delete_skill(name: str) -> dict[str, Any]:
     if skill is None:
         raise ValueError(_ERR_VIEW_FA + _ERR_VIEW_EN)
     path = tools._safe_path(skill.filename)
-    if skill.kind == "skill_md":
-        shutil.rmtree(path.parent)
-    elif path.is_file():
-        path.unlink()
+    target = path.parent if skill.kind == "skill_md" else path
+    entry = quarantine_delete(target)
     mark_skills_dirty()
     with get_ledger() as ledger:
         ledger.log_use(skill.name, "deleted", duration_ms=0.0, source="delete_skill")
-    return {"deleted": True, "filename": skill.filename, "name": skill.name}
+    return {
+        "deleted": True,
+        "filename": skill.filename,
+        "name": skill.name,
+        "quarantined": True,
+        "quarantine_id": entry["id"],
+    }
 
 
 def render_skill_catalog(budget_chars: int | None = None) -> tuple[str, list[Any]]:

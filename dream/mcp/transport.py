@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -66,9 +65,12 @@ class StdioTransport(MCPTransport):
             raise MCPTransportError(f"No command specified for stdio server {self.config.name}")
 
         args = [cmd] + list(self.config.args)
-        merged_env = dict(os.environ)
-        if self.config.env:
-            merged_env.update(self.config.env)
+        # SEC Stage C (G-14): children receive a functional allowlist plus
+        # ONLY the variables the owner explicitly mapped — never the full
+        # parent environment with its provider keys and gateway tokens.
+        from dream.security.envfilter import build_child_env
+
+        merged_env = build_child_env(self.config.env)
 
         try:
             self._process = await asyncio.create_subprocess_exec(
@@ -215,6 +217,23 @@ class SSETransport(MCPTransport):
     async def connect(self) -> bool:
         if not self.config.url:
             raise MCPTransportError(f"No URL specified for SSE server {self.config.name}")
+
+        # SEC Stage C (G-16): network transports ARE egress. A server whose
+        # egress toggle is off must never be given a wire to speak on.
+        if not self.config.egress:
+            refusal_fa = (
+                "\u0627\u06cc\u0646 \u0633\u0631\u0648\u0631 MCP \u0627\u0632 "
+                "\u0627\u062a\u0635\u0627\u0644 \u0634\u0628\u06a9\u0647 "
+                "\u0627\u0633\u062a\u0641\u0627\u062f\u0647 \u0645\u06cc\u200c\u06a9\u0646\u062f "
+                "\u062f\u0631 \u062d\u0627\u0644\u06cc \u06a9\u0647 \u062e\u0631\u0648\u062c\u06cc "
+                "\u0634\u0628\u06a9\u0647 \u0622\u0646 \u063a\u06cc\u0631\u0641\u0639\u0627\u0644 "
+                "\u0627\u0633\u062a."
+            )
+            raise MCPTransportError(
+                f"MCP server {self.config.name!r} uses a network transport while its"
+                " egress toggle is off; enable egress in the server config to allow it."
+                f" / {refusal_fa}"
+            )
 
         self._connected = True
         try:

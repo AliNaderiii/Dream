@@ -1,0 +1,5 @@
+{
+  "offBannerTitle": "审批引擎已关闭",
+  "offBannerDetail": "危险命令将在无人审批的情况下执行，只有安全底线仍会拦截。请在设置中重新启用审批。",
+  "statusBarOff": "审批已关闭"
+}

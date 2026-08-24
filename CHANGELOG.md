@@ -9,6 +9,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Hostile text is scanned before it reaches the model (SEC Stage D).**
+  Files, web pages, MCP payloads, skill bodies, /learn sources, search
+  snippets, and recalled memories pass an injection scanner: hidden
+  Unicode is stripped, instruction-override patterns in English and
+  Persian and fake tool-call shapes raise a visible bilingual warning,
+  and the untouched original is quarantined for inspection.
+- **Hardened transport boundary.** Every bridge method rejects malformed
+  parameters before dispatch (audited by a property sweep and seeded
+  fuzzing); gateway responses carry a strict CSP/frame-denial/nosniff
+  header policy with HSTS over TLS; gateway tokens gain per-token rate
+  limits and audited rotation.
+- **Legacy window quarantined.** The old Tk desktop (`desktop.py`) no
+  longer starts without `DREAM_ENABLE_LEGACY_DESKTOP=1`; the Tauri
+  desktop is the supported surface.
+- **MCP servers no longer inherit your environment (SEC Stage C).** MCP
+  children receive a credential-free allowlist plus only the variables you
+  explicitly map; network-transport servers default to egress-off and
+  refuse to connect until you allow them; their tool descriptions are
+  sanitized (hidden Unicode stripped, length capped) before the model ever
+  sees them.
+- **File-write safety floor and a deletion quarantine.** Note/skill writes
+  now refuse sensitive paths (credentials, `.ssh`, system dirs, Dream's own
+  stores) on every platform, including symlink, 8.3, and UNC tricks.
+  Deleting a skill moves it into a size-capped quarantine you can restore —
+  nothing is destroyed outright.
+- **Secrets scrubbed from the trail.** Key-shaped values are redacted out
+  of the message log, provenance records, bridge errors, and log lines.
+- **Security floor for destructive commands (SEC Stage B).** A hardline,
+  always-on blocklist now refuses filesystem-root wipes, disk formats, raw
+  block-device writes, fork bombs, remote-piped shell installs, registry
+  hive deletes, and their PowerShell/Windows variants — including quoted,
+  case-shifted, variable-expanded, path-normalized, and homoglyph-obfuscated
+  forms — before any approval happens; no mode or flag can override it.
+- **Approval engine v2.** Dangerous shell commands gain an auxiliary risk
+  assessor (strict schema, hard timeout, default-deny), `smart | manual |
+  off` modes (off is an explicit opt-in with a persistent red banner and a
+  status-bar indicator), deny-by-default cron/single-query contexts, and a
+  durable, append-only approval history under `DREAM_APPROVAL_DB`.
+
 - Conversation context accounting, deterministic offline compaction, `/compress`,
   and an optional once-per-session durable-memory nudge.
 - Bridge endpoints for dual bounded memory stores, session-search status/query,

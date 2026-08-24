@@ -27,6 +27,8 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from zoneinfo import ZoneInfo
 
 from dream.memory import normalize_fa
+from dream.security.blocklist import scan as _floor_scan
+from dream.security.engine import SHELL_COMMAND_TOOLS as _FLOOR_COMMAND_TOOLS
 
 __all__ = [
     "REGISTRY",
@@ -453,7 +455,10 @@ def search_web(query: str) -> str:
             return NETWORK_REFUSAL_MESSAGE
         lines = [answer] if answer else []
         lines.extend(f"- {title}: {address}" for title, address in topics)
-        return "\n".join(lines)
+        from dream.security.injection import guard_untrusted
+
+        # L5 (SEC Stage D): web extraction crosses into context only scanned.
+        return guard_untrusted("\n".join(lines), source="web:search")
     except (OSError, ValueError, UnicodeError, json.JSONDecodeError, _AddressRefused):
         return NETWORK_REFUSAL_MESSAGE
 
@@ -474,6 +479,10 @@ def read_page(address: str) -> str:
             text = text[:PAGE_TEXT_CAP]
         if not text:
             return NETWORK_REFUSAL_MESSAGE
+        from dream.security.injection import guard_untrusted
+
+        # L5 (SEC Stage D): web extraction crosses into context only scanned.
+        text = guard_untrusted(text, source=f"web:{address}")
         if response_truncated or text_truncated:
             return f"{text}\n\n[truncated at {PAGE_TEXT_CAP} characters]"
         return text
@@ -528,7 +537,11 @@ def read_note(filename: str) -> str:
 
     :param filename: Relative path of the note to read.
     """
-    return _safe_path(filename).read_text(encoding="utf-8")
+    from dream.security.injection import guard_untrusted
+
+    content = _safe_path(filename).read_text(encoding="utf-8")
+    # L5 (SEC Stage D): file contents cross into context only scanned.
+    return guard_untrusted(content, source=f"file:{filename}")
 
 
 @tool(risk="safe")
@@ -548,7 +561,12 @@ def write_note(filename: str, content: str) -> str:
     :param filename: Relative path of the note to write.
     :param content: Exact text to store in the note.
     """
+    from dream.security.pathsafety import check_write_path
+
     path = _safe_path(filename)
+    # L4 second layer (SEC Stage C): even inside the workspace, sensitive
+    # paths (credentials, stores, system dirs) are never writable.
+    check_write_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return f"wrote {path.relative_to(WORKSPACE_ROOT)}"
@@ -817,6 +835,19 @@ def execute(
             _failure_payload("unknown_tool", f"Tool call failed: unknown tool: {name}"),
             ensure_ascii=False,
         )
+    # L3 security floor: evaluated BEFORE the approval check and impossible
+    # to override with ``approved=True`` — a blocklisted command never runs,
+    # no matter who called or what flag they carry.
+    if name in _FLOOR_COMMAND_TOOLS:
+        floor_match = _floor_scan(str(arguments.get("command", "")))
+        if floor_match is not None:
+            return json.dumps(
+                _failure_payload(
+                    "security_floor_blocked",
+                    f"Tool call failed: {floor_match.refusal}",
+                ),
+                ensure_ascii=False,
+            )
     if registered.risk == "dangerous" and not approved:
         return json.dumps(
             _failure_payload(
