@@ -1,0 +1,5 @@
+{
+  "offBannerTitle": "Approval engine is OFF",
+  "offBannerDetail": "Dangerous commands run without human approval; only the security floor still blocks them. Re-enable approvals in Settings.",
+  "statusBarOff": "Approvals off"
+}

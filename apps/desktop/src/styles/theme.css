@@ -219,6 +219,15 @@
     background-color: var(--ds-surface-subtle);
   }
 
+  /* Persistent warning for the security engine's `off` mode (SEC Stage B):
+     always visible, never dismissible, red in every theme. */
+  .security-off-banner {
+    padding: var(--space-3) var(--space-4);
+    border-block-end: 0.0625rem solid var(--color-danger-fg);
+    background-color: var(--color-danger-bg);
+    color: var(--color-danger-fg);
+  }
+
   .surface-gradient {
     background:
       radial-gradient(
