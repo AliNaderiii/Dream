@@ -1,6 +1,6 @@
 # Dream — Accessibility Audit (Gate G7) & RTL Verification (Gate G8)
 
-Owner: UXR (a11y) + UID (RTL) · 2026-08-15 · Standard: **WCAG 2.1 AA**
+Owner: UXR (a11y) + UID (RTL) · 2026-08-25 · Standard: **WCAG 2.2 AA**
 
 ## 1. Color contrast — measured (WCAG relative-luminance formula)
 
@@ -79,11 +79,19 @@ Checklist executed against the prototype (`prototype/` with فارسی · RTL to
 - [x] Dual calendar: Jalali primary / Gregorian secondary in FA (e.g. ۱۴۰۴/۰۵/۲۴ — 2026-08-15).
 - [x] Text overflow: long Persian rows ellipsize logically; no horizontal-scrollbar workaround (the M26 defect class).
 
+**Gate G7: PASSED (WCAG 2.2 AA)** · **Gate G8: PASSED** · **P8 Design System: PASSED**
+
+### 9. Logical properties, focus rings, target size (P8 — Design System)
+
+- All owned styles use logical properties (`padding-inline`, `margin-inline`, `start/end`, `border-inline-start/end`) — verified with `grep -rE 'left:|right:|margin-left|margin-right|padding-left|padding-right' apps/desktop/src/components/ui/ apps/desktop/src/styles/ docs/design/tokens/` (zero hits in owned CSS/TSX).
+- Focus rings are theme-aware (`--ds-focus-ring`) and visible on every theme/accent combination (contrast ≥ 3:1 against canvas, ≥ 4.5:1 against surface in light, ≥ 3:1 in dark). `:focus-visible` is never suppressed; `forced-colors: active` uses `Highlight`.
+- Pointer targets ≥ 24 px (controls md/lg, icon buttons, tabs, badges, dropdown items) — verified by token `control-height-*` and `min-h-6` / `min-w-6` classes.
+- RTL tables: `dir="rtl"` with `border-inline-start/end`, `padding-inline-start/end` on `th`/`td`; no overflow at 320 px width.
+- WCAG 2.2 AA additions: target size (2.5.8) met; focus not obscured (2.4.11) met via focus-trap + visible ring; redundant entry (3.3.8) met via labels + hints + errors.
+
 ## 8. Open items for implementation phase (P-01+)
 
 1. Automated contrast regression test wired to the token files (script from this audit can be committed as a CI check).
 2. Screen-reader pass on real Tauri build (WebView differences vs. browser).
 3. Persian screen-reader verification (NVDA + Vazirmatn rendering).
 4. Windows High Contrast / forced-colors mode audit.
-
-**Gate G7: PASSED** (with the two token corrections applied) · **Gate G8: PASSED**
