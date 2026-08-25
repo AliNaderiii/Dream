@@ -7,8 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.4.0] - 2026-08-25
+
+First product cut that includes the P0–P8 local-first workbench on `main`
+(research, data QA, workspace, provider hubs, security primitives,
+reliability toolkit, and design-system tokens). The Python package and the
+desktop shell are unified at **0.4.0** (they had drifted to 0.2.0 / 0.3.2).
+
 ### Added
 
+- **Extension seam (P0).** Auto-discovered `dream/bridge/methods_*.py` plus
+  the desktop `route-registry` so a new domain registers without editing the
+  giant methods table. Route collisions are refused.
+- **Deep research engine (P1) and workbench (P2).** Eleven `research.*`
+  methods (`create` through `export`) and a bilingual workbench. Statuses
+  include `IDLE`, `PLANNING`, `APPROVAL_PENDING`, `IN_PROGRESS`, `PROOFREAD`,
+  `COMPILING`, `COMPLETE`, `FAILED`, `CANCELLED`. The UI must consume stream
+  chunks `{event, cursor}` plus `research.status` — `Stream.final` is stale
+  when `follow=true`. XSS: `stripHtmlTags` then `escapeHtml`.
+- **Data QA (P3).** Eight `dataqa.*` handlers. The worker does not evaluate
+  model-authored code.
+- **Workspace and agent modes (P4).** In-place folder link (never copies);
+  `..` and symlink paths refused; `/plan` then continue; `/goal` is honest
+  about unmet work; `/stop` uses a cancellation token. Dangerous `!shell`
+  never reaches subprocess, even with `approved=True`.
+- **Provider hubs (P5).** Catalog, runtimes, health, models, route, gateway
+  toggle, and parsers as a library. Tool-call parsers are **not** wired into
+  the live chat loop.
+- **Agentic security primitives (P6).** Code-exec policy, plan policy,
+  authenticity checks, provider-gateway helpers, and an extended
+  `tools/security_audit.py`. The host never executes model code; without
+  Docker the path refuses. Call sites are **not** yet wired into
+  research / dataqa / workspace.
+- **Reliability toolkit (P7).** Cancellation, deadlines, and budgets;
+  additive stream `delay` clamp and opt-in `stall_timeout`. Not yet wired
+  into agent / research / reminders.
+- **Design-system tokens (P8).** Focus ring, table, progress, and
+  empty-state primitives on top of the existing theme.
 - **Per-user permissions for linked identities (SEC Stage E).** Each
   linked chat identity carries a scope — chat only, safe tools, guarded
   tools, or full admin — enforced on every turn and manageable over the
@@ -83,6 +118,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   demand, and a gentle memory nudge appears only when enabled, due, and not
   yet sent.
 
+### Changed
+
+- Version unified to **0.4.0** across `dream/__init__.py`, `pyproject.toml`,
+  `apps/desktop/package.json`, `apps/desktop/src-tauri/Cargo.toml`, and
+  `apps/desktop/src-tauri/tauri.conf.json`.
+- GitHub Release notes now match the Windows installer: NSIS embeds
+  CPython 3.12.10 plus a non-editable Dream kernel via `bundle-sidecar.mjs`.
+  Linux installers still need system Python.
+
 ### Fixed
 
 - Five bridge handlers that serialised frozen `slots=True` dataclasses through
@@ -90,6 +134,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `skills.versions`, `skills.use_log`, `skills.propose` and the new
   `skills.learn_classify` — now serialise through `asdict`, pinned by a
   JSON-serialisability regression over non-empty rows of every MEM family.
+
+### Known notes
+
+- The Windows installer is **unsigned** — SmartScreen is expected to warn
+  (`More info → Run anyway`). No Authenticode signature yet.
+- WebView2 may be downloaded during installation if it is missing.
+- Linux/macOS still use the system Python; the bundled runtime is Windows-only.
+- Honest residuals, not claimed as live: P5 parsers in the chat loop; P6
+  call sites in research/dataqa/workspace; P7 wiring into agent/research/
+  reminders; P1 web-search-in-loop and sequential sections.
 
 ## [0.3.2] - 2026-08-21
 

@@ -1,5 +1,28 @@
 # Status
 
+## 0.4.0 — Research, workspace, and unified release — CUT
+
+**What shipped.** Product version **0.4.0** unifies the Python package
+(`dream/__init__.py`, `pyproject.toml`) and the desktop shell
+(`package.json`, `Cargo.toml`, `tauri.conf.json`), which had drifted to
+0.2.0 / 0.3.2. The GitHub Release tag `v0.4.0` builds installers from
+this `main` (P0–P8 already merged through #91).
+
+**Windows NSIS** embeds CPython 3.12.10 plus a non-editable Dream kernel
+via `apps/desktop/scripts/bundle-sidecar.mjs`. Linux artefacts remain the
+UI shell and need system Python. The installer is unsigned (SmartScreen
+warns). WebView2 may download during install.
+
+**Honest residuals.** P5 parsers are not in the live chat loop. P6 L9
+primitives are not wired into research/dataqa/workspace. P7 reliability
+is not wired into agent/research/reminders. P1 web-search-in-loop and
+section parallelism remain later work.
+
+**What is next.** Owner installs `Dream_0.4.0_x64-setup.exe` from the
+GitHub Release. P9 (token gateway + headless CLI) and P10 (Space) wait
+for an explicit ask.
+
+
 ## P-11 — Internationalisation, Documentation, Security Audit & Release — SHIPPED
 
 **What shipped.** The polish phase: Dream is now a shippable, localised,

@@ -9,8 +9,11 @@ name: Desktop Release
 #   the expected, supported path — SmartScreen will warn on first run.
 # - Updater signatures are optional: when TAURI_SIGNING_PRIVATE_KEY is absent
 #   the job still succeeds and simply skips updater artifacts.
-# - The installer ships the UI shell only; the Python kernel must be installed
-#   separately (Python 3.10+ with `pip install -e .` from the repository).
+# - Windows NSIS runs `scripts/bundle-sidecar.mjs` at `tauri build` time and
+#   embeds CPython 3.12.10 plus a non-editable Dream install, so a Release
+#   download can start the sidecar with no local Python.
+# - Linux artefacts are the UI shell only; the sidecar uses system Python
+#   3.10+ with Dream installed (`pip install -e .` from the repository).
 #
 # macOS is intentionally excluded — it requires an Apple Developer ID
 # ($99/year) plus a Tauri-side signing config (release.apple.conf.json). To
@@ -137,14 +140,16 @@ jobs:
           releaseBody: |
             Dream desktop ${{ github.ref_name }}, built from main.
 
-            **Windows (`-setup.exe`)** and Linux installers are attached below.
+            **Windows (`-setup.exe`)** embeds a CPython 3.12 runtime plus the
+            Dream kernel — no separate `pip install` and no local Python are
+            required on Windows. Linux installers are the UI shell and still
+            need system Python 3.10+ with Dream installed.
 
-            - The installer is the UI shell only: it does **not** bundle Python.
-              Install Python 3.10+ and Dream first (`pip install -e .` from the
-              repository root), then launch the app.
-            - The Windows installer is **unsigned** — SmartScreen may warn. That
-              is expected.
+            - The Windows installer is **unsigned** — SmartScreen may warn.
+              Choose More info → Run anyway. That is expected.
             - WebView2 may be downloaded during installation if it is missing.
+            - Ollama is optional for a real local model; without it the router
+              may fall through to echo.
             - First-run path without an installer: clone the repository, install
               Ollama, double-click `run.bat` (see `docs/user/quick-start.md`).
           releaseDraft: false
@@ -187,6 +192,51 @@ jobs:
             apps/desktop/src-tauri/target/**/release/bundle/**/*.AppImage
             apps/desktop/src-tauri/target/**/release/bundle/**/*-setup.exe
             apps/desktop/src-tauri/target/**/release/bundle/**/*.sig
+
+      - name: Attach SHA-256 checksums
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          python - <<'PY'
+          import hashlib
+          import pathlib
+          import sys
+
+          root = pathlib.Path("apps/desktop/src-tauri/target")
+          if not root.exists():
+              print("No target directory — nothing to checksum")
+              sys.exit(0)
+          names = []
+          for path in sorted(root.rglob("*")):
+              if not path.is_file():
+                  continue
+              name = path.name
+              if name.endswith("-setup.exe") or path.suffix in {
+                  ".deb",
+                  ".rpm",
+                  ".AppImage",
+                  ".dmg",
+              }:
+                  names.append(path)
+          if not names:
+              print("No artefacts to checksum on this runner")
+              sys.exit(0)
+          lines = []
+          for path in names:
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              line = f"{digest}  {path.name}"
+              lines.append(line)
+              print(line)
+          pathlib.Path("SHA256SUMS.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+          if [ -f SHA256SUMS.txt ]; then
+            dest="SHA256SUMS-${{ matrix.target }}.txt"
+            mv SHA256SUMS.txt "$dest"
+            gh release upload "$tag" "$dest" --clobber
+          fi
 
       - name: Verify release assets
         if: startsWith(github.ref, 'refs/tags/')
