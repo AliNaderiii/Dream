@@ -72,6 +72,15 @@ Motion explains cause, location, or continuity. It does not decorate waiting.
 - No unbounded transcript, session, scheduler-history, or log DOM after 100 rows.
 - No telemetry or analytics in the interaction layer.
 
+## Design-system verification (P8)
+
+- Logical properties only (`padding-inline`, `margin-inline`, `start/end`, `border-inline-start/end`) — no physical `left/right` in owned CSS.
+- Theme-aware focus ring (`--ds-focus-ring`) visible in all 12 theme/accent combos; never suppressed.
+- Pointer targets ≥ 24 px; dense mode retains 24 px minimum.
+- RTL tables usable at 320 px width; `unicode-bidi: isolate` for mixed content.
+- WCAG 2.2 AA documented (contrast, target size, focus not obscured, redundant entry).
+- Motion only `transform`/`opacity`; fully disabled under `prefers-reduced-motion` and `[data-reduce-motion='true']`.
+
 ## Review questions
 
 A new UI proposal should answer yes to all of these:
