@@ -1,12 +1,34 @@
-import { describe, expect, it } from 'vitest';
+﻿import { describe, expect, it } from 'vitest';
 
 import { registeredNav, registeredRoutes, shellSlots } from './route-registry';
 
+const PRE_P0_PATHS = new Set([
+  '/',
+  '/chat',
+  '/memory',
+  '/skills',
+  '/projects',
+  '/scheduler',
+  '/subagents',
+  '/provenance',
+  '/data',
+  '/connectivity',
+  '/providers',
+  '/settings',
+]);
+
 describe('route registry seam', () => {
-  it('does not register any pre-P0 route on the current tree', () => {
-    expect(registeredRoutes).toEqual([]);
-    expect(registeredNav).toEqual([]);
-    expect(shellSlots.main).toEqual([]);
+  it('does not register any pre-P0 reserved path', () => {
+    for (const route of registeredRoutes) {
+      expect(PRE_P0_PATHS.has(route.path)).toBe(false);
+    }
+  });
+
+  it('registers the dataqa route', () => {
+    const dataqa = registeredRoutes.find((r) => r.path === '/dataqa');
+    expect(dataqa).toBeDefined();
+    expect(dataqa?.label).toBe('Data Q&A');
+    expect(dataqa?.group).toBe('workspace');
   });
 
   it('publishes only unique safe extension paths', () => {
