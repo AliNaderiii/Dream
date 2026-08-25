@@ -33,9 +33,10 @@ describe('route registry seam', () => {
 
   it('publishes only unique safe extension paths', () => {
     const safePath = /^\/[a-z][a-z0-9_-]*(?:\/[a-z0-9_:-]+)*$/;
-    expect(new Set(registeredRoutes.map((route) => route.path)).size).toBe(registeredRoutes.length);
-    expect(registeredRoutes.every((route) => safePath.test(route.path))).toBe(true);
-    expect(registeredRoutes.map((route) => route.path)).not.toContain('/dashboard');
-    expect(registeredRoutes.map((route) => route.path)).not.toContain('/chat');
+    const paths = registeredRoutes.map((route) => route.path);
+    expect(new Set(paths).size).toBe(paths.length);
+    expect(paths.every((path) => safePath.test(path))).toBe(true);
+    expect(paths).not.toContain('/dashboard');
+    expect(paths).not.toContain('/chat');
   });
 });
