@@ -108,3 +108,68 @@ origin is permitted.
 Final smoke: `ruff check .` clean · `bandit` 0 high · `pytest` 1498 passed ·
 `tsc --noEmit` clean · `eslint` 0 errors · `prettier --check` clean ·
 `vitest run` 294 passed.
+
+---
+
+# Addendum — P6: the agentic layer (L9)
+
+**Date:** 2026-08-25 · **Base:** `70b49cb` (P0+P1+P2+P3+P4+P5 merged) ·
+**Scope:** the surfaces P1 (research), P3 (data Q&A), P4 (workspace and
+agent modes) and P5 (provider hubs) added, plus the reusable primitives
+they need. Threat model: `docs/security/threat-model.md` v2.0 §4 L9.
+Command evidence: `docs/handoff/P6-GATES.md`.
+
+## A1. What changed
+
+Five new modules under `dream/security/`, all additive, none rewriting an
+existing layer:
+
+| Module | Control | Refusal posture |
+| --- | --- | --- |
+| `agentcode.py` | Sandbox-only execution of model-generated code | No Docker ⇒ refuse. Never a host fallback. |
+| `codegrounding.py` | Data-as-data framing for code generation | Instruction-lookalike cell ⇒ refuse, never sanitise-and-run. |
+| `planpolicy.py` | Digest-bound plan approval, degraded autonomous grants | Unapproved / mutated / unclassified ⇒ refuse. |
+| `authenticity.py` | Run fingerprints, artifact seals, claim grounding | Ungrounded number ⇒ refuse to publish. |
+| `providergateway.py` | Per-tool least-privilege tokens, bounded probes | Unconfigured endpoint ⇒ refuse. No credential on a probe. |
+
+`tools/security_audit.py` gained an L9 battery; `dream/security/__init__.py`
+gained additive exports. Nothing else in `dream/` was modified.
+
+## A2. Findings
+
+**Critical: 0 · High: 0.** The audit is clean on the merged tree and red
+under all 19 sabotage scenarios.
+
+Two design decisions are worth recording as deliberate, not overlooked:
+
+1. **The host-exec sweep is mechanical, not aspirational.** Both the audit
+   and `tests/test_sec_agentic_sandbox.py` scan every file under
+   `dream/security/` for an `exec`/`eval`/`compile`/`runpy` call site and
+   fail if one appears. The invariant "the host never runs model code" is
+   therefore enforced against future edits, not just documented.
+2. **Docker unavailability refuses.** The pre-existing data-QA path
+   degrades to a guarded local subprocess and says so in its warnings
+   (`dataqa/executor.py`). L9-A takes the stricter line for *model-written*
+   code specifically: no container, no execution. The two coexist because
+   they guard different inputs — a deterministic plan the planner built
+   versus a program a model composed.
+
+## A3. Verification
+
+| Check | Result |
+| --- | --- |
+| `python tools/security_audit.py` | **AUDIT CLEAN** — 8-layer battery + L9-A…L9-E, 981 tracked files scanned |
+| `pytest tests/test_sec_agentic_audit.py` | 22 passed — 19 sabotage scenarios each turn the audit red and name their layer |
+| `pytest tests/test_sec_agentic*.py` | 349 passed |
+| `pytest` (full suite) | 2851 passed, 14 skipped — from a 2502-passing baseline, zero regressions |
+| `ruff check .` | clean |
+| `pytest tests/test_security_secrets.py` | passed — no `sk-` / `ghp_` / `AKIA` shapes in tracked files |
+
+## A4. Residual risks (accepted, recorded)
+
+Container escape is Docker's boundary; codegen detectors are heuristics
+backed by a structural control; `verify_claims` grounds numbers and not
+qualitative statements; the L9-C/L9-D primitives are proven but their
+adoption at every P1/P3/P4 call site is scheduled follow-up outside P6's
+change surface; durable credentials depend on an OS keyring backend and
+fail closed without one. Each is expanded in threat model §7.
