@@ -24,11 +24,16 @@ describe('route registry seam', () => {
     }
   });
 
-  it('registers the dataqa route', () => {
+  it('registers the dataqa and research routes', () => {
     const dataqa = registeredRoutes.find((r) => r.path === '/dataqa');
     expect(dataqa).toBeDefined();
     expect(dataqa?.label).toBe('Data Q&A');
     expect(dataqa?.group).toBe('workspace');
+
+    const research = registeredRoutes.find((r) => r.path === '/research');
+    expect(research).toBeDefined();
+    expect(research?.label).toBe('Research');
+    expect(research?.group).toBe('workspace');
   });
 
   it('publishes only unique safe extension paths', () => {

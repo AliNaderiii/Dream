@@ -1,0 +1,128 @@
+{
+  "title": "研究与分析",
+  "subtitle": "自主数据科学研究，配备实时执行追踪和可验证报告。",
+  "newResearch": "新建研究",
+  "noSessions": "暂无研究会话",
+  "noSessionsDesc": "启动新的研究项目。",
+  "openSession": "打开会话：{{topic}}",
+  "noActiveSession": "没有活动会话",
+  "backToList": "返回列表",
+  "cancel": "取消",
+  "close": "关闭",
+  "published": "已发布",
+  "sections": "{{count}} 个章节",
+  "tokens": "令牌数",
+  "duration": "时长",
+  "estimatedCost": "预估费用",
+  "status": {
+    "IDLE": "Idle",
+    "PLANNING": "Planning",
+    "APPROVAL_PENDING": "Awaiting approval",
+    "IN_PROGRESS": "Running",
+    "PROOFREAD": "Proofreading",
+    "COMPILING": "Compiling",
+    "COMPLETE": "Complete",
+    "FAILED": "Failed",
+    "CANCELLED": "Cancelled"
+  },
+  "composer": {
+    "topic": "Research topic",
+    "topicPlaceholder": "e.g. Customer churn & onboarding friction",
+    "workspace": "Workspace folder",
+    "workspacePlaceholder": "/path/to/data",
+    "workspaceHelp": "The directory containing your data files. The research engine will discover and analyse them.",
+    "depth": "Research depth",
+    "modelRoute": "Model / route",
+    "privacyWarning": "Your prompts and data will leave this machine.",
+    "start": "Start research",
+    "starting": "Starting…",
+    "configSummary": "Configuration",
+    "maxSections": "Max sections",
+    "maxIterations": "Max iterations",
+    "maxTime": "Max time"
+  },
+  "depth": {
+    "brief": "Brief",
+    "briefDesc": "Quick analysis, ~5 minutes, 3 sections.",
+    "standard": "Standard",
+    "standardDesc": "Thorough analysis, ~15 minutes, 6 sections.",
+    "deep": "Deep",
+    "deepDesc": "Exhaustive analysis, ~30 minutes, 10 sections."
+  },
+  "privacy": {
+    "leavesMachine": "Data leaves this machine for this route.",
+    "staysLocal": "All data stays on this machine."
+  },
+  "plan": {
+    "generating": "Generating research plan…",
+    "topic": "Topic",
+    "workspace": "Workspace",
+    "researchQuestions": "Research Questions",
+    "hypotheses": "Hypotheses",
+    "methodology": "Methodology",
+    "sections": "Sections",
+    "actions": "Plan actions",
+    "approve": "Approve & Run",
+    "modify": "Modify",
+    "editPlan": "Edit plan",
+    "saveChanges": "Save changes"
+  },
+  "trace": {
+    "stop": "Stop research",
+    "stopping": "Stopping…",
+    "viewReport": "View report",
+    "completed": "Research completed successfully.",
+    "failed": "Research failed.",
+    "cancelled": "Research was cancelled.",
+    "waitingForSteps": "Waiting for execution steps…",
+    "noSteps": "No execution steps.",
+    "allEvents": "All events",
+    "filterByEvent": "Filter by event",
+    "clearFilters": "Clear filters",
+    "totalEvents": "{{count}} events",
+    "noEvents": "No events yet.",
+    "noMatches": "No events match the current filter.",
+    "stale": {
+      "title": "Engine may be unresponsive",
+      "description": "No heartbeat received for 15 seconds. The engine may have stalled.",
+      "restart": "Restart engine"
+    }
+  },
+  "traceInspector": "Trace inspector",
+  "report": {
+    "view": "Report",
+    "figures": "Figures",
+    "integrity": "Integrity",
+    "notAvailable": "No report available for this session.",
+    "exportBar": "Export options",
+    "exportMarkdown": "Markdown",
+    "exportPdf": "PDF",
+    "exportZip": "Reproduction ZIP",
+    "exportProvenance": ".provenance.json",
+    "exporting": "Exporting…",
+    "pdfEchoOnly": "PDF export requires the sidecar engine.",
+    "zipEchoOnly": "ZIP export requires the sidecar engine."
+  },
+  "figures": {
+    "gallery": "Figure gallery",
+    "none": "No figures in this report."
+  },
+  "integrity": {
+    "claims": "Claims & Evidence",
+    "summary": "Integrity summary",
+    "summaryDetail": "{{claims}} claims, {{evidence}} grounded in evidence.",
+    "noClaims": "No findings extracted for this report.",
+    "evidence": "Evidence",
+    "grounded": "Grounded",
+    "ungrounded": "Ungrounded"
+  },
+  "errors": {
+    "sessionNotFound": "Research session not found.",
+    "notApproved": "The plan must be approved before starting.",
+    "nothingToApprove": "Nothing to approve in the current state.",
+    "cancelled": "Research was cancelled.",
+    "timedOut": "Research timed out. The engine may be busy — try again.",
+    "notComplete": "Only a complete session can be exported.",
+    "unknown": "An unexpected error occurred."
+  }
+}
