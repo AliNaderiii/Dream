@@ -60,9 +60,17 @@ export function ChatRefs() {
 
   const onApprove = async () => {
     if (!shell) return;
+    if (shell.risk === 'dangerous') {
+      setError('dangerous shell commands are refused');
+      setShell({ ...shell, executed: false });
+      return;
+    }
     try {
       const result = await workspaceShellExecute(client, shell.approval_id, true);
       setShell({ ...shell, executed: result.executed });
+      if (!result.executed) {
+        setError('dangerous shell commands are refused');
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }

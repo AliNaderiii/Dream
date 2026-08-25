@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import re
 import threading
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 from dream.agentmodes.cancel import CancellationToken
@@ -17,6 +20,109 @@ _IMPOSSIBLE = (
     "exfiltrat",
     "ignore previous",
 )
+_FILE_TOKEN = re.compile(r"[A-Za-z0-9._-]+")
+_MAX_NAMES = 2_000
+_MAX_DIRS = 80
+_UNVERIFIED = "not verifiable from the local workspace"
+
+
+def _is_listing_criterion(lowered: str) -> bool:
+    if "has_more" in lowered or "list_cap" in lowered or "list cap" in lowered:
+        return True
+    if "bounded" in lowered and "list" in lowered:
+        return True
+    if "listing" in lowered and ("cap" in lowered or "bound" in lowered):
+        return True
+    return False
+
+
+def _collect_workspace_names(workspace: Any) -> tuple[set[str], bool]:
+    names: set[str] = set()
+    try:
+        roots = workspace.list_roots().get("roots") or []
+    except Exception:
+        return names, False
+    if not roots:
+        return names, False
+    scanned = 0
+    for row in roots:
+        raw = row.get("path")
+        if not raw:
+            continue
+        root = Path(str(raw))
+        if not root.is_dir():
+            continue
+        try:
+            for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+                scanned += 1
+                current = Path(dirpath)
+                dirnames[:] = [name for name in dirnames if not (current / name).is_symlink()][:50]
+                for name in filenames:
+                    if (current / name).is_symlink():
+                        continue
+                    names.add(name)
+                    names.add(name.lower())
+                    if len(names) >= _MAX_NAMES:
+                        return names, True
+                if scanned >= _MAX_DIRS:
+                    dirnames[:] = []
+                    break
+        except OSError:
+            continue
+    return names, True
+
+
+def _listing_respected_cap(workspace: Any) -> bool | None:
+    from dream.workspace.files import LIST_CAP
+
+    last = getattr(workspace, "last_listing", None)
+    if not isinstance(last, dict):
+        try:
+            roots = workspace.list_roots().get("roots") or []
+        except Exception:
+            return None
+        if not roots:
+            return None
+        try:
+            last = workspace.files_list(str(roots[0]["root_id"]), "", limit=min(50, LIST_CAP))
+        except Exception:
+            return None
+    try:
+        count = int(last.get("count") or 0)
+    except (TypeError, ValueError):
+        return None
+    return count <= LIST_CAP
+
+
+def _existing_filename_hit(criterion: str, names: set[str]) -> bool:
+    lowered = criterion.lower()
+    words = set(_FILE_TOKEN.findall(lowered))
+    for name in names:
+        needle = name.lower()
+        if needle in lowered:
+            return True
+        stem = needle.rsplit(".", 1)[0]
+        if len(stem) >= 3 and stem in words:
+            return True
+    return False
+
+
+def _evaluate_criterion(
+    criterion: str,
+    *,
+    names: set[str],
+    listing_ok: bool | None,
+) -> tuple[bool, str]:
+    lowered = criterion.lower()
+    if any(marker in lowered for marker in _IMPOSSIBLE):
+        return False, f"could not meet {criterion!r}: requires capabilities that are off"
+    if _is_listing_criterion(lowered):
+        if listing_ok is True:
+            return True, "listing respected LIST_CAP"
+        return False, f"could not meet '{criterion}': {_UNVERIFIED}"
+    if _existing_filename_hit(criterion, names):
+        return True, "found under a registered workspace root"
+    return False, f"could not meet '{criterion}': {_UNVERIFIED}"
 
 
 class GoalMode:
@@ -80,30 +186,24 @@ class GoalMode:
             record["report"] = "Stopped before the acceptance criteria could be checked."
             record["updated_at"] = time.time()
             return dict(record)
+        names: set[str] = set()
+        has_roots = False
+        listing_ok: bool | None = None
+        try:
+            from dream.workspace.service import get_service as workspace_service
+
+            workspace = workspace_service()
+            names, has_roots = _collect_workspace_names(workspace)
+            listing_ok = _listing_respected_cap(workspace) if has_roots else None
+        except Exception:
+            names, listing_ok = set(), None
         results: list[dict[str, Any]] = []
         unmet: list[str] = []
         for criterion in record["criteria"]:
-            lowered = criterion.lower()
-            impossible = any(marker in lowered for marker in _IMPOSSIBLE)
-            if impossible and not record["allow_network"]:
-                results.append(
-                    {
-                        "criterion": criterion,
-                        "met": False,
-                        "reason": (
-                            f"could not meet {criterion!r}: requires capabilities that are off"
-                        ),
-                    }
-                )
+            met, reason = _evaluate_criterion(criterion, names=names, listing_ok=listing_ok)
+            results.append({"criterion": criterion, "met": met, "reason": reason})
+            if not met:
                 unmet.append(criterion)
-            else:
-                results.append(
-                    {
-                        "criterion": criterion,
-                        "met": True,
-                        "reason": "criterion is checkable from the local workspace",
-                    }
-                )
         record["results"] = results
         record["unmet"] = unmet
         if unmet:

@@ -146,9 +146,10 @@ export function workspaceCommands(client: BridgeClient, query = '') {
   return echoOr(client, () => echo.echoCommands(query), 'workspace.commands_list', { query });
 }
 
-export function workspaceShellPropose(client: BridgeClient, command: string) {
-  return echoOr(client, () => echo.echoShellPropose(command), 'workspace.shell_propose', {
+export function workspaceShellPropose(client: BridgeClient, command: string, cwd?: string) {
+  return echoOr(client, () => echo.echoShellPropose(command, cwd), 'workspace.shell_propose', {
     command,
+    ...(cwd ? { cwd } : {}),
   });
 }
 

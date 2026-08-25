@@ -1,4 +1,4 @@
-"""Guarded !shell: risk-tiered, approval-gated, sandboxed, network off."""
+"""Guarded !shell: risk-tiered, fail-closed, path-confined, network off."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import os
 import re
 import shlex
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -13,7 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from dream.agentmodes.errors import AgentModeError
-from dream.workspace.paths import normalize_root
+from dream.workspace.errors import WorkspaceError, WorkspaceSecurityError
+from dream.workspace.paths import resolve_inside
 
 _SAFE = frozenset({"pwd", "echo", "date", "whoami", "true", "false"})
 _GUARDED = frozenset({"ls", "cat", "head", "tail", "wc", "stat", "file"})
@@ -23,6 +25,8 @@ _DENIED = re.compile(
     r"\bbash\b|\bsh\b|\bexec\b|\bsource\b|\beval\b|>\s|/etc/|/proc/)"
 )
 _METACHAR = re.compile(r"[;&|`$()<>]")
+_DANGEROUS_REFUSED = "dangerous shell commands are refused"
+_CWD_REQUIRED = "cwd must be a registered workspace root"
 
 
 def classify_command(command: str) -> str:
@@ -47,13 +51,65 @@ def classify_command(command: str) -> str:
     return "dangerous"
 
 
+def _is_flag(arg: str) -> bool:
+    if not arg.startswith("-"):
+        return False
+    if any(marker in arg for marker in ("/", "\\", "..")):
+        return False
+    return True
+
+
+def _looks_like_path(arg: str) -> bool:
+    if not arg or _is_flag(arg):
+        return False
+    return True
+
+
+def _confine_args(argv: list[str], root: Path) -> None:
+    """Refuse any path argument that is not inside *root*."""
+    for arg in argv[1:]:
+        if not _looks_like_path(arg):
+            continue
+        if arg.startswith("/") or (len(arg) >= 2 and arg[1] == ":"):
+            raise AgentModeError("path arguments must stay inside the workspace root")
+        try:
+            resolve_inside(root, arg)
+        except WorkspaceSecurityError as exc:
+            raise AgentModeError(str(exc)) from exc
+
+
+def _registered_root(cwd: str | None) -> Path:
+    if not cwd or not str(cwd).strip():
+        raise AgentModeError(_CWD_REQUIRED)
+    from dream.workspace.service import get_service
+
+    try:
+        return get_service().registered_root(cwd)
+    except (WorkspaceError, WorkspaceSecurityError, OSError, TypeError, ValueError) as exc:
+        raise AgentModeError(_CWD_REQUIRED) from exc
+
+
+def _refusal(approval_id: str, risk: str, message: str) -> dict[str, Any]:
+    return {
+        "approval_id": approval_id,
+        "executed": False,
+        "returncode": -1,
+        "stdout": "",
+        "stderr": message,
+        "error": message,
+        "timed_out": False,
+        "network": False,
+        "risk": risk,
+    }
+
+
 class ShellGate:
-    """Propose then execute. Execution never happens without approval."""
+    """Propose then execute. Dangerous commands never spawn, even if approved."""
 
     def __init__(self, cwd: str | os.PathLike[str] | None = None) -> None:
         self._lock = threading.RLock()
         self.pending: dict[str, dict[str, Any]] = {}
-        self._cwd = Path(cwd) if cwd else None
+        self._cwd = str(cwd) if cwd else None
 
     def propose(self, command: str, cwd: str | None = None) -> dict[str, Any]:
         risk = classify_command(command)
@@ -66,7 +122,7 @@ class ShellGate:
             "approved": False,
             "executed": False,
             "created_at": time.time(),
-            "cwd": cwd,
+            "cwd": cwd if cwd else self._cwd,
         }
         with self._lock:
             self.pending[approval_id] = record
@@ -95,12 +151,22 @@ class ShellGate:
         risk = record["risk"]
         if risk != "safe" and not approved:
             raise AgentModeError("this command requires explicit approval")
-        if risk == "dangerous" and not approved:
-            raise AgentModeError("dangerous shell commands are refused without approval")
+        if risk == "dangerous":
+            return _refusal(approval_id, risk, _DANGEROUS_REFUSED)
         if not 0.2 <= float(timeout) <= 15:
             raise AgentModeError("timeout must be between 0.2 and 15 seconds")
-        cwd = self._resolve_cwd(record.get("cwd"))
+        run_timeout = min(float(timeout), 5.0) if risk == "safe" else float(timeout)
         argv = shlex.split(record["command"], posix=True)
+        if risk == "guarded":
+            cwd = _registered_root(record.get("cwd"))
+            _confine_args(argv, cwd)
+        else:
+            raw_cwd = record.get("cwd")
+            if raw_cwd:
+                cwd = _registered_root(raw_cwd)
+            else:
+                cwd = Path(tempfile.mkdtemp(prefix="dream-sh-"))
+            _confine_args(argv, cwd)
         env = {"PATH": "/usr/bin:/bin", "HOME": str(cwd), "LANG": "C"}
         try:
             completed = subprocess.run(  # noqa: S603
@@ -109,7 +175,7 @@ class ShellGate:
                 env=env,
                 text=True,
                 capture_output=True,
-                timeout=timeout,
+                timeout=run_timeout,
                 check=False,
                 shell=False,
             )
@@ -147,13 +213,6 @@ class ShellGate:
                 "network": False,
                 "risk": risk,
             }
-        record["executed"] = True
+        record["executed"] = bool(result["executed"])
         record["approved"] = bool(approved) or risk == "safe"
         return result
-
-    def _resolve_cwd(self, cwd: str | None) -> Path:
-        if cwd:
-            return normalize_root(cwd)
-        if self._cwd is not None:
-            return self._cwd
-        return Path.cwd()

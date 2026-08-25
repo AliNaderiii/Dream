@@ -7,8 +7,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from dream.workspace.errors import WorkspaceError
-from dream.workspace.files import list_entries, stat_entry
+from dream.workspace.errors import WorkspaceError, WorkspaceSecurityError
+from dream.workspace.files import LIST_CAP, list_entries, stat_entry
 from dream.workspace.paths import normalize_root
 from dream.workspace.preview import preview_file
 from dream.workspace.projects import ProjectOverlay
@@ -30,6 +30,7 @@ class WorkspaceService:
         self.projects = ProjectOverlay(projects_path)
         self._lock = threading.RLock()
         self.ops_path = Path(os.environ.get("DREAM_WORKSPACE_OPS", _DEFAULT_OPS))
+        self.last_listing: dict[str, Any] | None = None
 
     def _log(self, action: str, **fields: Any) -> None:
         try:
@@ -62,7 +63,8 @@ class WorkspaceService:
             project = self.projects.adopt(folder, name=name)
             self.registry.bind(root["root_id"], project_id=project["project_id"])
             root["project_id"] = project["project_id"]
-        listing = list_entries(Path(root["path"]), "", cursor=0, limit=50)
+        listing = list_entries(Path(root["path"]), "", cursor=0, limit=min(50, LIST_CAP))
+        self.last_listing = listing
         self._log("import_folder", root_id=root["root_id"], copied=False, path=root["path"])
         return {
             "root": root,
@@ -80,6 +82,20 @@ class WorkspaceService:
 
     def unregister(self, root_id: str) -> dict[str, Any]:
         return self.registry.unregister(root_id)
+
+    def registered_root(self, cwd: str | os.PathLike[str]) -> Path:
+        """Return *cwd* only when it is an existing registered workspace root."""
+        try:
+            resolved = normalize_root(cwd)
+        except (WorkspaceError, WorkspaceSecurityError) as exc:
+            raise WorkspaceError("cwd must be a registered workspace root") from exc
+        for row in self.registry.list():
+            try:
+                if Path(str(row.get("path", ""))).resolve() == resolved:
+                    return resolved
+            except OSError:
+                continue
+        raise WorkspaceError("cwd must be a registered workspace root")
 
     def files_list(
         self,

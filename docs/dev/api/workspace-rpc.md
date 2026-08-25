@@ -20,7 +20,7 @@ Folders are imported **in place**: the registry stores a path pointer. Files are
 | `workspace.project_settings` | `project_id`, `settings?` | settings (`default_mode`, `language`) |
 | `workspace.project_move_session` | `project_id`, `session_id` | updated project |
 | `workspace.agentmode_plan` | `prompt`, `language?` | plan in `pending_approval` |
-| `workspace.agentmode_continue` | `plan_id` | executed plan or cancelled |
+| `workspace.agentmode_continue` | `plan_id` | executed plan or cancelled. No `step_delay` parameter. |
 | `workspace.agentmode_goal` | `objective`, `criteria[]` | honest completion or `could not meet …` |
 | `workspace.agentmode_report` | `goal_id` | latest honest report |
 | `workspace.agentmode_stop` | `plan_id?`, `goal_id?` | `{stopped: true, live: true}` |
@@ -31,14 +31,14 @@ Folders are imported **in place**: the registry stores a path pointer. Files are
 | `workspace.refs_conversation` | `session_id` | conversation reference |
 | `workspace.commands_list` | `query?` | slash palette (Persian aliases included) |
 | `workspace.shell_propose` | `command`, `cwd?` | risk tier, `network: false`, not executed |
-| `workspace.shell_execute` | `approval_id`, `approved?` | sandboxed run; refused without approval |
+| `workspace.shell_execute` | `approval_id`, `approved?` | guarded run inside a registered root after approval; dangerous commands are never executed |
 
 ## Safety
 
 - `..`, absolute paths, and symbolic links that leave a registered root are `INVALID_PARAMS`.
 - Preview never executes. HTML scripts and event handlers are stripped. Secrets matching password/token/bearer shapes are redacted.
 - Listings are capped (200 names, lazy cursor). Previews read at most 64 KiB.
-- `!shell` is risk-tiered. Network is off. Dangerous commands require `approved: true`.
+- `!shell` is risk-tiered and fail-closed. Network is off (`network: false`); proxy env vars are never passed. Dangerous commands (`rm`, `curl`, `python`, …) are refused even when `approved: true` and never spawn a host process. Guarded commands (`ls`, `cat`, …) run only after approval, only with `cwd` set to a registered workspace root, and only with path arguments that resolve inside that root (`ls ..` is refused). Safe commands (`echo`, `pwd`, …) may auto-run with `shell=False` in a temp directory or registered root — never the Dream process cwd.
 
 ## Agent modes
 

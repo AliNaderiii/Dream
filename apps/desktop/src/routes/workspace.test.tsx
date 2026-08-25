@@ -28,4 +28,11 @@ describe('Workspace route', () => {
     });
     expect(report.violations).toEqual([]);
   });
+
+  it('opens a nested folder on click and lists its children', async () => {
+    render(<WorkspaceRoute />);
+    expect(await screen.findByRole('button', { name: 'notes' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'notes' }));
+    expect(await screen.findByRole('button', { name: 'todo.md' })).toBeInTheDocument();
+  });
 });

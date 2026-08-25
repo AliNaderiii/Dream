@@ -171,10 +171,7 @@ def workspace_agentmode_plan(params: Any = None, **kwargs: Any) -> dict[str, Any
 def workspace_agentmode_continue(params: Any = None, **kwargs: Any) -> dict[str, Any]:
     data = _params(params, kwargs)
     plan_id = _string(data, "plan_id", limit=80)
-    delay = data.get("step_delay", 0.0)
-    if not isinstance(delay, (int, float)) or isinstance(delay, bool):
-        raise invalid_params("step_delay must be a number")
-    return _wrap(lambda: agent_service().continue_plan(plan_id, step_delay=float(delay)))
+    return _wrap(lambda: agent_service().continue_plan(plan_id))
 
 
 def workspace_agentmode_goal(params: Any = None, **kwargs: Any) -> dict[str, Any]:

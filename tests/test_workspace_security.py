@@ -8,7 +8,7 @@ import pytest
 
 from dream.workspace.errors import WorkspaceSecurityError
 from dream.workspace.paths import normalize_root, resolve_inside
-from dream.workspace.preview import preview_file, redact
+from dream.workspace.preview import TEXT_CHARS, preview_file, redact
 from dream.workspace.service import WorkspaceService
 
 
@@ -85,3 +85,17 @@ def test_secrets_are_redacted_from_text_preview(tmp_path: Path) -> None:
 def test_null_byte_path_is_refused(space: Path) -> None:
     with pytest.raises(WorkspaceSecurityError):
         resolve_inside(space, "ok\x00.txt")
+
+
+def test_preview_read_is_capped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    huge = tmp_path / "huge.txt"
+    huge.write_bytes(b"a" * (256 * 1024))
+
+    def forbid_read_bytes(self: Path) -> bytes:
+        del self
+        raise AssertionError("read_bytes must not slurp the whole file")
+
+    monkeypatch.setattr(Path, "read_bytes", forbid_read_bytes)
+    preview = preview_file(tmp_path, "huge.txt")
+    assert preview["truncated"] is True
+    assert len(preview["text"]) <= TEXT_CHARS

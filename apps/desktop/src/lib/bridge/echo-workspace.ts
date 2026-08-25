@@ -147,6 +147,88 @@ const SEED_FILES: WorkspaceEntry[] = [
   },
 ];
 
+const NOTES_FILES: WorkspaceEntry[] = [
+  {
+    path: 'notes/todo.md',
+    name: 'todo.md',
+    size: 22,
+    type: 'markdown',
+    mime: 'text/markdown',
+    mtime: BASE,
+    is_dir: false,
+    symlink: false,
+  },
+];
+
+const SAFE_SHELL = new Set(['pwd', 'echo', 'date', 'whoami', 'true', 'false']);
+const GUARDED_SHELL = new Set(['ls', 'cat', 'head', 'tail', 'wc', 'stat', 'file']);
+const DANGEROUS_SHELL =
+  /\b(rm|curl|wget|ssh|sudo|chmod|chown|mkfs|dd|python|perl|node|npm|nc|ncat|bash|sh|exec|source|eval)\b|[;&|`$()<>]|\/etc\/|\/proc\//;
+
+function classifyEchoCommand(command: string): string {
+  const stripped = command.trim();
+  if (!stripped || stripped.length > 500)
+    throw new Error('command must be a short non-empty string');
+  if (DANGEROUS_SHELL.test(stripped)) return 'dangerous';
+  const parts = stripped.split(/\s+/).filter(Boolean);
+  const name = (parts[0] ?? '').split(/[/\\]/).pop()?.toLowerCase() ?? '';
+  if (SAFE_SHELL.has(name) && parts.length <= 4) return 'safe';
+  if (GUARDED_SHELL.has(name) && parts.length <= 6) return 'guarded';
+  return 'dangerous';
+}
+
+function echoPathEscapes(command: string): boolean {
+  const parts = command.trim().split(/\s+/).slice(1);
+  return parts.some((arg) => {
+    if (arg.startsWith('-') && !arg.includes('/') && !arg.includes('..')) return false;
+    return arg === '..' || arg.includes('..') || arg.startsWith('/') || /^[A-Za-z]:[\\/]/.test(arg);
+  });
+}
+
+function echoFileNames(): Set<string> {
+  const names = new Set<string>();
+  for (const entries of files.values()) {
+    for (const entry of entries) names.add(entry.name.toLowerCase());
+  }
+  for (const entry of NOTES_FILES) names.add(entry.name.toLowerCase());
+  return names;
+}
+
+function evaluateEchoCriterion(
+  criterion: string,
+  names: Set<string>,
+): { met: boolean; reason: string } {
+  const lower = criterion.toLowerCase();
+  if (/network|live market|production deploy|exfiltrat|ignore previous/i.test(criterion)) {
+    return {
+      met: false,
+      reason: `could not meet '${criterion}': requires capabilities that are off`,
+    };
+  }
+  if (
+    /has_more/.test(lower) ||
+    /list(_|\s*)cap/.test(lower) ||
+    (lower.includes('bounded') && lower.includes('list')) ||
+    (lower.includes('listing') && (lower.includes('cap') || lower.includes('bound')))
+  ) {
+    return { met: true, reason: 'listing respected LIST_CAP' };
+  }
+  const words: string[] = lower.match(/[a-z0-9._-]+/g) ?? [];
+  for (const name of names) {
+    if (lower.includes(name)) {
+      return { met: true, reason: 'found under a registered workspace root' };
+    }
+    const stem = name.includes('.') ? name.slice(0, name.lastIndexOf('.')) : name;
+    if (stem.length >= 3 && words.includes(stem)) {
+      return { met: true, reason: 'found under a registered workspace root' };
+    }
+  }
+  return {
+    met: false,
+    reason: `could not meet '${criterion}': not verifiable from the local workspace`,
+  };
+}
+
 const roots = new Map<string, WorkspaceRoot>([[SEED_ROOT.root_id, { ...SEED_ROOT }]]);
 const files = new Map<string, WorkspaceEntry[]>([
   [SEED_ROOT.root_id, SEED_FILES.map((row) => ({ ...row }))],
@@ -154,7 +236,10 @@ const files = new Map<string, WorkspaceEntry[]>([
 const plans = new Map<string, AgentPlan>();
 const goals = new Map<string, AgentGoal>();
 const subagents = new Map<string, LiveSubagent>();
-const shellPending = new Map<string, { command: string; risk: string; executed: boolean }>();
+const shellPending = new Map<
+  string,
+  { command: string; risk: string; executed: boolean; cwd: string }
+>();
 let counter = 1;
 
 function now(): number {
@@ -241,6 +326,35 @@ export function echoFilesList(
 } {
   requireRoot(rootId);
   if (rel.includes('..')) throw new Error('parent-directory traversal is refused');
+  const normalized = rel
+    .replace(/\\/g, '/')
+    .replace(/^\.\/+/, '')
+    .replace(/^\/+|\/+$/g, '');
+  if (normalized === 'notes') {
+    const nested = NOTES_FILES.map((row) => ({ ...row }));
+    return {
+      root_id: rootId,
+      path: 'notes',
+      entries: nested,
+      count: nested.length,
+      cursor: 0,
+      next_cursor: null,
+      has_more: false,
+      truncated: false,
+    };
+  }
+  if (normalized) {
+    return {
+      root_id: rootId,
+      path: normalized,
+      entries: [],
+      count: 0,
+      cursor: 0,
+      next_cursor: null,
+      has_more: false,
+      truncated: false,
+    };
+  }
   const entries = files.get(rootId) ?? [];
   return {
     root_id: rootId,
@@ -379,21 +493,18 @@ export function echoContinue(planId: string): AgentPlan {
 export function echoGoal(objective: string, criteria: string[]): AgentGoal {
   if (!objective.trim()) throw new Error('objective must be a non-empty string');
   if (!criteria.length) throw new Error('criteria must be a non-empty list of strings');
-  const unmet = criteria.filter((item) =>
-    /network|live market|exfiltrat|ignore previous/i.test(item),
-  );
+  const names = echoFileNames();
+  const results = criteria.map((criterion) => {
+    const checked = evaluateEchoCriterion(criterion, names);
+    return { criterion, met: checked.met, reason: checked.reason };
+  });
+  const unmet = results.filter((row) => !row.met).map((row) => row.criterion);
   const goal: AgentGoal = {
     goal_id: nextId('goal'),
     objective,
     criteria,
     status: unmet.length ? 'unable' : 'complete',
-    results: criteria.map((criterion) => ({
-      criterion,
-      met: !unmet.includes(criterion),
-      reason: unmet.includes(criterion)
-        ? `could not meet '${criterion}': requires capabilities that are off`
-        : 'criterion is checkable from the local workspace',
-    })),
+    results,
     unmet,
     report: unmet.length
       ? `could not meet ${unmet.join('; ')}`
@@ -496,15 +607,11 @@ export function echoCommands(query = '') {
   return { commands, count: commands.length };
 }
 
-export function echoShellPropose(command: string) {
+export function echoShellPropose(command: string, cwd?: string) {
   if (!command.trim()) throw new Error('command must be a short non-empty string');
-  const risk = /[;&|`]|rm |curl |wget |sudo /.test(command)
-    ? 'dangerous'
-    : command.startsWith('ls')
-      ? 'guarded'
-      : 'safe';
+  const risk = classifyEchoCommand(command);
   const approvalId = nextId('sh');
-  shellPending.set(approvalId, { command, risk, executed: false });
+  shellPending.set(approvalId, { command, risk, executed: false, cwd: cwd?.trim() ?? '' });
   return {
     approval_id: approvalId,
     command,
@@ -520,6 +627,25 @@ export function echoShellExecute(approvalId: string, approved = false) {
   if (!pending) throw new Error(`no shell proposal with id ${approvalId}`);
   if (pending.risk !== 'safe' && !approved)
     throw new Error('this command requires explicit approval');
+  if (pending.risk === 'dangerous') {
+    return {
+      approval_id: approvalId,
+      executed: false,
+      returncode: -1,
+      stdout: '',
+      stderr: 'dangerous shell commands are refused',
+      timed_out: false,
+      network: false,
+      risk: pending.risk,
+    };
+  }
+  if (pending.risk === 'guarded') {
+    const cwd = pending.cwd.trim();
+    if (!cwd) throw new Error('cwd must be a registered workspace root');
+    const registered = [...roots.values()].some((root) => root.path === cwd);
+    if (!registered) throw new Error('cwd must be a registered workspace root');
+    if (echoPathEscapes(pending.command)) throw new Error('parent-directory traversal is refused');
+  }
   pending.executed = true;
   return {
     approval_id: approvalId,

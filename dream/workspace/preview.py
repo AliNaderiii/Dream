@@ -83,7 +83,8 @@ class _TextExtractor(HTMLParser):
 
 
 def _read_capped(path: Path, cap: int = PREVIEW_BYTES) -> tuple[bytes, bool]:
-    data = path.read_bytes()[: cap + 1]
+    with path.open("rb") as handle:
+        data = handle.read(cap + 1)
     return data[:cap], len(data) > cap
 
 
@@ -156,7 +157,9 @@ def _office_text(path: Path, member: str) -> str:
         with zipfile.ZipFile(path) as archive:
             if member not in archive.namelist():
                 return ""
-            return _xml_text(archive.read(member)[:PREVIEW_BYTES])
+            with archive.open(member) as handle:
+                payload = handle.read(PREVIEW_BYTES + 1)
+            return _xml_text(payload[:PREVIEW_BYTES])
     except (OSError, zipfile.BadZipFile):
         return ""
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,8 @@ from dream.agentmodes.provider import AgentModePromptProvider
 from dream.agentmodes.refs import parse_references
 from dream.agentmodes.service import AgentModeService, reset_service
 from dream.providers import ProviderManager
+from dream.workspace.service import WorkspaceService
+from dream.workspace.service import reset_service as reset_workspace
 
 
 @pytest.fixture(autouse=True)
@@ -42,12 +45,34 @@ def test_goal_reports_honest_inability() -> None:
     assert any("live market" in item.lower() for item in result["unmet"])
 
 
-def test_goal_reports_honest_completion() -> None:
-    modes = AgentModeService()
-    result = modes.goal("Document the folder", ["README exists", "listing is bounded"])
-    assert result["status"] == "complete"
-    assert result["unmet"] == []
-    assert "met" in result["report"].lower()
+def test_goal_reports_honest_completion(tmp_path: Path) -> None:
+    folder = tmp_path / "space"
+    folder.mkdir()
+    (folder / "README.md").write_text("# Demo workspace\n", encoding="utf-8")
+    workspace = WorkspaceService(
+        registry_path=tmp_path / "registry.json",
+        projects_path=tmp_path / "projects.json",
+    )
+    reset_workspace(workspace)
+    try:
+        workspace.import_folder(str(folder), name="Lab")
+        modes = AgentModeService()
+        result = modes.goal("Document the folder", ["README exists", "listing is bounded"])
+        assert result["status"] == "complete"
+        assert result["unmet"] == []
+        assert "met" in result["report"].lower()
+        mixed = modes.goal(
+            "Document the folder",
+            ["README exists", "teleport the files to Mars"],
+        )
+        assert mixed["status"] == "unable"
+        assert any("teleport" in item.lower() for item in mixed["unmet"])
+        assert "could not meet" in mixed["report"]
+        met = {row["criterion"]: row["met"] for row in mixed["results"]}
+        assert met["README exists"] is True
+        assert met["teleport the files to Mars"] is False
+    finally:
+        reset_workspace(None)
 
 
 def test_stop_cancels_a_running_plan() -> None:
@@ -98,6 +123,16 @@ def test_shell_is_approval_gated_and_network_off() -> None:
     dangerous = modes.shell_propose("rm -rf /")
     assert dangerous["risk"] == "dangerous"
     assert dangerous["requires_approval"] is True
+
+
+def test_safe_echo_does_not_need_approval() -> None:
+    modes = AgentModeService()
+    proposal = modes.shell_propose("echo hi")
+    assert proposal["risk"] == "safe"
+    result = modes.shell_execute(proposal["approval_id"], approved=False)
+    assert result["executed"] is True
+    assert "hi" in result["stdout"]
+    assert result["network"] is False
 
 
 def test_contribute_prompt_hook_is_available_on_the_provider() -> None:

@@ -73,13 +73,21 @@ class PlanMode:
             return dict(record)
         record["status"] = "running"
         record["updated_at"] = time.time()
+        try:
+            delay = float(step_delay)
+        except (TypeError, ValueError):
+            delay = 0.0
+        if delay < 0.0:
+            delay = 0.0
+        elif delay > 2.0:
+            delay = 2.0
         for step in record["steps"]:
             if token.is_cancelled():
                 record["status"] = "cancelled"
                 record["updated_at"] = time.time()
                 return dict(record)
-            if step_delay:
-                token.wait(step_delay)
+            if delay:
+                token.wait(delay)
             if token.is_cancelled():
                 record["status"] = "cancelled"
                 record["updated_at"] = time.time()

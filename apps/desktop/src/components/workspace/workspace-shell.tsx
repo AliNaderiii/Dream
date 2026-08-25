@@ -68,9 +68,13 @@ export function WorkspaceShell() {
   };
 
   const loadListing = async (rootId: string, rel: string) => {
-    const listing = await workspaceFilesList(client, rootId, rel);
-    setEntries(listing.entries);
-    setPath(rel);
+    try {
+      const listing = await workspaceFilesList(client, rootId, rel);
+      setEntries(listing.entries);
+      setPath(rel);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t('errors.unknown'));
+    }
   };
 
   const onPreview = async (entry: WorkspaceEntry) => {
@@ -162,13 +166,27 @@ export function WorkspaceShell() {
           </CardHeader>
           <CardContent>
             {path && (
-              <Button variant="ghost" size="sm" className="mb-2" onClick={() => setPath('')}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mb-2"
+                onClick={() => {
+                  if (active) void loadListing(active, '');
+                }}
+              >
                 {t('browser.global')}
               </Button>
             )}
             <FileBrowser
               entries={entries}
-              onOpen={(entry) => (entry.is_dir ? setPath(entry.path) : void onPreview(entry))}
+              onOpen={(entry) => {
+                if (!active) return;
+                if (entry.is_dir) {
+                  void loadListing(active, entry.path);
+                  return;
+                }
+                void onPreview(entry);
+              }}
               onPreview={(entry) => void onPreview(entry)}
               onCopyPath={(entry) => void onCopy(entry)}
             />

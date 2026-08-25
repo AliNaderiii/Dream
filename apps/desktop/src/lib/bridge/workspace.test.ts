@@ -4,12 +4,14 @@ import { getBridgeClient, resetBridgeClient } from './client';
 import { getSeedRootId, resetEchoWorkspace } from './echo-workspace';
 import {
   workspaceContinue,
+  workspaceFilesList,
   workspaceFilesPreview,
   workspaceGoal,
   workspaceImportFolder,
   workspacePlan,
   workspaceRefsParse,
   workspaceRootsList,
+  workspaceShellExecute,
   workspaceShellPropose,
   workspaceStatus,
   workspaceStop,
@@ -74,6 +76,21 @@ describe('workspace echo wrappers', () => {
     const proposal = await workspaceShellPropose(client, 'rm -rf /');
     expect(proposal.risk).toBe('dangerous');
     expect(proposal.network).toBe(false);
+    const executed = await workspaceShellExecute(client, proposal.approval_id, true);
+    expect(executed.executed).toBe(false);
+  });
+
+  it('lists nested notes entries and reports unverifiable goals honestly', async () => {
+    const client = getBridgeClient();
+    const listing = await workspaceFilesList(client, getSeedRootId(), 'notes');
+    expect(listing.entries.some((entry) => entry.name === 'todo.md')).toBe(true);
+    const goal = await workspaceGoal(client, 'Document the folder', [
+      'README exists',
+      'teleport the files to Mars',
+    ]);
+    expect(goal.status).toBe('unable');
+    expect(goal.results.find((row) => row.criterion === 'README exists')?.met).toBe(true);
+    expect(goal.results.find((row) => row.criterion.includes('Mars'))?.met).toBe(false);
   });
 
   it('imports a folder in place without copying', async () => {
