@@ -2,6 +2,11 @@
 
 Date: 2026-08-25. Base: `70b49cb` (`feat(workspace): local-first workspace,
 projects 2.0, and agent modes (#88)` — P0+P1+P2+P3+P4+P5 merged).
+**New commit: `35cf4a6c3fd37441d043cb05f07d9c4f618abee9`**
+(`feat(security): agentic defense-in-depth for code exec, plans, claims, and
+gateways`), authored `Ali Naderi <alinaderi@users.noreply.github.com>`,
+branch `arena/01a03879-dream`. `python tools/check_commit.py` →
+`Commit author and trailer rules passed for HEAD!`
 Python 3.11.2, ruff 0.16.4, pytest 9.1.1.
 
 All output below is real, copied from the runs described. Docker was **not**
