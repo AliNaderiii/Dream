@@ -134,7 +134,9 @@
     border-radius: var(--ds-radius-xs);
     outline: 0.125rem solid var(--ds-focus-ring);
     outline-offset: 0.125rem;
-    box-shadow: 0 0 0 0.125rem var(--ds-surface-base), 0 0 0 0.25rem var(--ds-focus-ring);
+    box-shadow:
+      0 0 0 0.125rem var(--ds-surface-base),
+      0 0 0 0.25rem var(--ds-focus-ring);
   }
 
   ::selection {

@@ -5,6 +5,9 @@ import { Progress } from './progress';
 describe('Progress', () => {
   it('exposes progressbar semantics', () => {
     render(<Progress value={50} label="Loading" />);
-    expect(screen.getByRole('progressbar', { name: 'Loading' })).toHaveAttribute('aria-valuenow', '50');
+    expect(screen.getByRole('progressbar', { name: 'Loading' })).toHaveAttribute(
+      'aria-valuenow',
+      '50',
+    );
   });
 });

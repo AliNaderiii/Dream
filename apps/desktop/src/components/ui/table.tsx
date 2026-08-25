@@ -10,7 +10,9 @@ export function Table({ className, ...props }: ComponentProps<'table'>) {
 }
 
 export function TableCaption({ className, ...props }: ComponentProps<'caption'>) {
-  return <caption className={cn('py-3 px-4 text-caption text-fg-secondary', className)} {...props} />;
+  return (
+    <caption className={cn('py-3 px-4 text-caption text-fg-secondary', className)} {...props} />
+  );
 }
 
 export function TableHeader({ className, ...props }: ComponentProps<'thead'>) {
@@ -38,7 +40,5 @@ export function TableBody({ className, ...props }: ComponentProps<'tbody'>) {
 }
 
 export function TableCell({ className, ...props }: ComponentProps<'td'>) {
-  return (
-    <td className={cn('px-4 py-3 text-body text-fg-primary', className)} {...props} />
-  );
+  return <td className={cn('px-4 py-3 text-body text-fg-primary', className)} {...props} />;
 }

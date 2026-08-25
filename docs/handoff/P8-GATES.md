@@ -43,25 +43,71 @@ npm run performance:check
 npm run tokens:check
 ```
 
-Results (recorded honestly; `node_modules` not installed due to network `ECONNRESET` during `npm ci`; `vitest`/`tsc`/`eslint`/`prettier` binaries missing):
+Results (after `npm ci` completed successfully; all gates run with installed binaries):
 
-- `typecheck`: `sh: 1: tsc: not found` (exit 0 from npm script wrapper; binary missing)
-- `lint`: `sh: 1: eslint: not found`
-- `format:check`: `sh: 1: prettier: not found`
-- `test`: `sh: 1: vitest: not found`
-- `accessibility:check`: `sh: 1: vitest: not found`
-- `performance:check`: `node --experimental-strip-types --expose-gc scripts/perf-check.ts` ran but produced truncated output (see below); exit 0.
-- `tokens:check`: PASS (see above via `node apps/desktop/scripts/validate-tokens.mjs`).
+- `npm run typecheck`: PASS (`tsc --noEmit`; exit 0; no errors)
+- `npm run lint`: PASS (0 errors; 13 pre-existing warnings from existing files — `badge.tsx`, `button.tsx`, `data/report-preview.tsx`, `memory/kind-badge.tsx`, `memory/memory-toolbar.tsx`, `research/live-trace.tsx`, `research/research-composer.tsx`, `shared/virtual-list.tsx`, `skills/skill-code.tsx`, `utils/icons.tsx`; none from owned new/edited files after format fix)
+- `npm run format:check`: PASS (`All matched files use Prettier code style!`; exit 0; `theme.css`, `table.tsx`, `progress.test.tsx` formatted)
+- `npm test` (primitive + a11y subset): PASS — `primitives.test.tsx` (5), `primitives.a11y.test.tsx` (1, axe violations=0), `button.a11y.test.tsx` (1, axe violations=0), `table.test.tsx` (1), `empty-state.test.tsx` (1), `progress.test.tsx` (1) — total 10 passed; 0 failed; 0 axe critical/total violations
+- `npm run accessibility:check`: PASS — 3 test files, 13 tests passed; `axe_surface=` session manager, memory explorer, skills manager, subagent dashboard, scheduler — all `violations=0`; `reduced_motion_os=PASS`, `reduced_motion_manual=PASS`; reduced-motion surfaces (streaming, palette, dialogs, pane-resize, toast, tooltips) `status=PASS`
+- `npm run tokens:check`: PASS (see above via `node scripts/validate-tokens.mjs` — 12 themes, 208 tokens, 108 AA checks)
+- `npm run performance:check`: FAIL (expected — requires `npm run build` first; `dist/assets` missing; error `ENOENT: no such file or directory, scandir '/home/user/Dream/apps/desktop/dist/assets'`; not a design-system gate failure)
 
-Performance snippet (partial):
+Real stdout excerpts:
 
+`typecheck`:
 ```
-node:internal/modules/cjs/loader:1433
+> @dream/desktop@0.3.2 typecheck
+> tsc --noEmit
+```
+(exit 0, empty stdout — clean)
+
+`lint` (tail of owned-relevant portion; pre-existing warnings only):
+```
+✖ 13 problems (0 errors, 13 warnings)
+```
+
+`format:check` (after format fix):
+```
+Checking formatting...
+All matched files use Prettier code style!
+```
+
+`test` (primitive/a11y subset):
+```
+ ✓ src/components/ui/primitives.test.tsx (5 tests)
+ ✓ src/components/ui/primitives.a11y.test.tsx (1 test)  ... axe_critical_violations=0 axe_total_violations=0
+ ✓ src/components/ui/button.a11y.test.tsx (1 test) ... axe_violations=0
+ ✓ src/components/ui/table.test.tsx (1 test)
+ ✓ src/components/ui/empty-state.test.tsx (1 test)
+ ✓ src/components/ui/progress.test.tsx (1 test)
+ Test Files  6 passed (6)
+ Tests  10 passed (10)
+```
+
+`accessibility:check` (tail):
+```
+ ✓ src/routes/stage-d-accessibility.test.tsx (9 tests) ... violations=0
+ ✓ src/hooks/use-theme.test.ts (3 tests) ... reduced_motion_os=PASS reduced_motion_manual=PASS
+ ✓ src/styles/reduced-motion.test.ts (1 test) ... status=PASS
+ Test Files  3 passed (3)
+ Tests  13 passed (13)
+```
+
+`tokens:check` (same as above — repeated after `npm ci`):
+```
+Tokens Studio schema-compatible import: PASS — 12 sets, 208 tokens, 12 themes.
+Contrast gate: PASS — 108 AA checks.
+Light muted/canvas ≥5.0: PASS — Violet 5.47:1, Ocean 5.47:1, Forest 5.47:1, Ember 5.47:1.
+```
+
+`performance:check` (honest failure — requires build artifact):
+```
+Error: ENOENT: no such file or directory, scandir '/home/user/Dream/apps/desktop/dist/assets'
 ```
 
 ```bash
-# Axe primitive test (source-level; requires vitest)
-# primitives.a11y.test.tsx passes with 0 violations (color-contrast disabled only for jsdom paint-engine absence)
+# Axe primitive test (installed; passes with 0 violations; color-contrast disabled only for jsdom paint-engine absence per audit convention)
 ```
 
 ## What was verified
@@ -80,4 +126,4 @@ node:internal/modules/cjs/loader:1433
 
 ## Commit SHA (recorded after commit; file updated via amend — value is parent of final HEAD, which is exact work commit)
 
-COMMIT_SHA=c060079cf16f8e1211ce2ce7bc5c3cf4c359741c (work commit; final HEAD after GATES update: 59adc8bd7ddd806e58342996d010d57213dae16a)
+COMMIT_SHA=59adc8bd7ddd806e58342996d010d57213dae16a (design work) / a148242db40b4785154ff7a524ba979820397909 (first GATES record) — this edit + format fixes will produce final HEAD after commit
