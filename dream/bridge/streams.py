@@ -25,6 +25,10 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from dream.reliability.deadline import MAX_STEP_DELAY_SECONDS, clamp_delay
+from dream.reliability.streams import StreamStalledError as StreamStalledError
+from dream.reliability.streams import guarded_aiter
+
 #: A chunk payload emitted to the frontend. The server adds the request ``id``
 #: and ``session_id`` routing keys before sending.
 Chunk = dict[str, Any]
@@ -83,6 +87,7 @@ async def stream_chunks(
     to_text: Callable[[Any], str] | None = None,
     max_chars: int = DEFAULT_MAX_CHARS,
     delay: float = 0.0,
+    stall_timeout: float | None = None,
 ) -> Stream:
     """Run a blocking ``produce()`` call and return a :class:`Stream` of its text.
 
@@ -93,8 +98,13 @@ async def stream_chunks(
     ``result``; the chunked text becomes ``Stream.chunks``.
 
     ``delay`` adds an optional inter-chunk await — useful only for tests that
-    want to observe ordering; production passes ``0``.
+    want to observe ordering; production passes ``0``. The value is clamped
+    to :data:`MAX_STEP_DELAY_SECONDS` so a client cannot hang the stream.
+
+    ``stall_timeout`` is opt-in. When set, a quiet producer raises
+    :class:`StreamStalledError` instead of spinning forever.
     """
+    delay = clamp_delay(delay, hard_max=MAX_STEP_DELAY_SECONDS)
     result = await asyncio.to_thread(produce)
     text = to_text(result) if to_text is not None else str(result)
 
@@ -104,21 +114,37 @@ async def stream_chunks(
             if delay:
                 await asyncio.sleep(delay)
 
-    return Stream(final=result, chunks=_chunks())
+    chunks: AsyncIterator[Chunk] = _chunks()
+    if stall_timeout is not None:
+        chunks = stream_with_stall_guard(chunks, stall_timeout=stall_timeout)
+    return Stream(final=result, chunks=chunks)
 
 
 async def stream_text(
-    text: str, *, max_chars: int = DEFAULT_MAX_CHARS, delay: float = 0.0
+    text: str,
+    *,
+    max_chars: int = DEFAULT_MAX_CHARS,
+    delay: float = 0.0,
+    stall_timeout: float | None = None,
 ) -> AsyncIterator[Chunk]:
     """Stream an already-available *text* string.
 
     Convenience wrapper used by handlers that have the text up front and just
-    want it chunked (e.g. echoing a stored reply).
+    want it chunked (e.g. echoing a stored reply). ``delay`` is clamped.
     """
-    for piece in tokenise(text, max_chars=max_chars):
-        yield {"token": piece}
-        if delay:
-            await asyncio.sleep(delay)
+    delay = clamp_delay(delay, hard_max=MAX_STEP_DELAY_SECONDS)
+
+    async def _chunks() -> AsyncIterator[Chunk]:
+        for piece in tokenise(text, max_chars=max_chars):
+            yield {"token": piece}
+            if delay:
+                await asyncio.sleep(delay)
+
+    chunks: AsyncIterator[Chunk] = _chunks()
+    if stall_timeout is not None:
+        chunks = stream_with_stall_guard(chunks, stall_timeout=stall_timeout)
+    async for piece in chunks:
+        yield piece
 
 
 async def collect(async_iter: AsyncIterator[Any]) -> list[Any]:
@@ -127,6 +153,23 @@ async def collect(async_iter: AsyncIterator[Any]) -> list[Any]:
     async for item in async_iter:
         out.append(item)
     return out
+
+
+async def stream_with_stall_guard(
+    chunks: AsyncIterator[Chunk],
+    *,
+    stall_timeout: float = 5.0,
+    name: str = "bridge.stream",
+) -> AsyncIterator[Chunk]:
+    """Additive wrapper: terminate a quiet producer with ``StreamStalledError``.
+
+    Keeps one pending ``__anext__`` (see ``dream.reliability.streams``).
+    Existing callers that do not opt in are unchanged.
+    """
+    async for item in guarded_aiter(
+        chunks, stall_timeout=stall_timeout, name=name
+    ):
+        yield item
 
 
 def ensure_awaitable(value: Any) -> Awaitable[Any]:
