@@ -1,0 +1,159 @@
+{
+  "title": "Forschung & Analyse",
+  "subtitle": "Autonome Datenwissenschaft mit Live-Ausführungsprotokoll und überprüfbaren Berichten.",
+  "newResearch": "Neue Forschung",
+  "noSessions": "Noch keine Forschungssitzungen",
+  "noSessionsDesc": "Starten Sie ein neues Forschungsprojekt, um Ihre Daten mit KI-gestützten Erkenntnissen zu analysieren.",
+  "openSession": "Forschungssitzung öffnen: {{topic}}",
+  "noActiveSession": "Keine aktive Forschungssitzung",
+  "backToList": "Zurück zu Sitzungen",
+  "cancel": "Abbrechen",
+  "close": "Schließen",
+  "add": "Hinzufügen",
+  "sections": "{{count}} Abschnitte",
+  "claims": "{{count}} Behauptungen",
+  "tokens": "Tokens",
+  "cost": "Kosten",
+  "duration": "Dauer",
+  "estimatedCost": "Geschätzte Kosten",
+  "breakdown": "Aufschlüsselung nach Phase",
+
+  "status": {
+    "pending": "Ausstehend",
+    "planning": "Planung",
+    "awaiting_approval": "Warte auf Genehmigung",
+    "running": "Läuft",
+    "completed": "Abgeschlossen",
+    "failed": "Fehlgeschlagen",
+    "cancelled": "Abgebrochen"
+  },
+
+  "composer": {
+    "topic": "Forschungsthema",
+    "topicPlaceholder": "z.B. Kundenabwanderung & Onboarding-Reibung",
+    "objective": "Zielsetzung",
+    "objectivePlaceholder": "Beschreiben Sie, was Sie lernen oder beweisen möchten…",
+    "dataSources": "Datenquellen",
+    "addSource": "Dataset-Name oder Dateipfad hinzufügen…",
+    "depth": "Forschungstiefe",
+    "modelRoute": "Modell / Route",
+    "privacyWarning": "Ihre Prompts und Daten verlassen diesen Rechner.",
+    "start": "Forschung starten",
+    "starting": "Starte…"
+  },
+
+  "depth": {
+    "simple": "Einfach",
+    "simpleDesc": "Schnelle Analyse, ~2 Minuten, weniger Iterationen.",
+    "deep": "Tiefgehend",
+    "deepDesc": "Gründliche Analyse, ~5 Minuten, mehrteiliger Bericht."
+  },
+
+  "privacy": {
+    "leavesMachine": "Daten verlassen diesen Rechner für diese Route.",
+    "staysLocal": "Alle Daten bleiben auf diesem Rechner."
+  },
+
+  "plan": {
+    "generating": "Forschungsplan wird erstellt…",
+    "topic": "Thema",
+    "objective": "Zielsetzung",
+    "researchQuestions": "Forschungsfragen",
+    "hypotheses": "Hypothesen",
+    "methodology": "Methodik",
+    "outline": "Berichtsgliederung",
+    "actions": "Planaktionen",
+    "approve": "Genehmigen & Ausführen",
+    "modify": "Ändern",
+    "editPlan": "Plan bearbeiten",
+    "saveChanges": "Änderungen speichern",
+    "onePerLine": "Eine pro Zeile"
+  },
+
+  "stepStatus": {
+    "pending": "Ausstehend",
+    "running": "Läuft",
+    "done": "Fertig",
+    "failed": "Fehlgeschlagen",
+    "blocked": "Blockiert"
+  },
+
+  "trace": {
+    "progress": "{{completed}} / {{total}} Schritte",
+    "progressBar": "Forschungsfortschritt",
+    "eta": "~{{minutes}} Min. verbleibend",
+    "stop": "Forschung stoppen",
+    "stopping": "Stoppe…",
+    "viewReport": "Bericht ansehen",
+    "completed": "Forschung erfolgreich abgeschlossen.",
+    "failed": "Forschung fehlgeschlagen.",
+    "cancelled": "Forschung wurde abgebrochen.",
+    "waitingForSteps": "Warte auf Ausführungsschritte…",
+    "noSteps": "Keine Ausführungsschritte.",
+    "output": "Ausgabe",
+    "toolCalls": "Werkzeugaufrufe",
+    "args": "Args",
+    "result": "Ergebnis",
+    "error": "Fehler",
+    "ok": "OK",
+    "running": "Läuft",
+    "why": "Warum",
+    "fixAndRetry": "Beheben & erneut versuchen",
+    "allPhases": "Alle Phasen",
+    "allTools": "Alle Werkzeuge",
+    "filterByPhase": "Nach Phase filtern",
+    "filterByTool": "Nach Werkzeug filtern",
+    "clearFilters": "Filter löschen",
+    "totalCalls": "{{count}} Aufrufe",
+    "errors": "{{count}} Fehler",
+    "noToolCalls": "Noch keine Werkzeugaufrufe.",
+    "noMatches": "Keine Werkzeugaufrufe entsprechen dem aktuellen Filter.",
+    "stale": {
+      "title": "Engine reagiert möglicherweise nicht",
+      "description": "Seit 15 Sekunden kein Heartbeat empfangen.",
+      "restart": "Engine neu starten"
+    }
+  },
+
+  "traceInspector": "Protokollinspektor",
+
+  "report": {
+    "view": "Bericht",
+    "figures": "Abbildungen",
+    "integrity": "Integrität",
+    "notAvailable": "Für diese Sitzung ist kein Bericht verfügbar.",
+    "exportBar": "Exportoptionen",
+    "exportMarkdown": "Markdown",
+    "exportPdf": "PDF",
+    "exportZip": "Reproduktions-ZIP",
+    "exportProvenance": ".provenance.json"
+  },
+
+  "figures": {
+    "gallery": "Abbildungsgalerie",
+    "none": "Keine Abbildungen in diesem Bericht.",
+    "source": "Quellschritt"
+  },
+
+  "integrity": {
+    "claims": "Behauptungen & Evidenz",
+    "summary": "Integritätszusammenfassung",
+    "summaryDetail": "{{claims}} Behauptungen gegen {{evidence}} Evidenzstücke geprüft.",
+    "noClaims": "Keine Behauptungen aus diesem Bericht extrahiert.",
+    "claim": "Behauptung {{index}}",
+    "evidenceCount": "{{count}} Evidenzstücke",
+    "showCode": "Code anzeigen",
+    "hideCode": "Code verbergen"
+  },
+
+  "errors": {
+    "sessionNotFound": "Forschungssitzung nicht gefunden.",
+    "noReport": "Noch kein Bericht verfügbar.",
+    "cancelled": "Forschung wurde abgebrochen.",
+    "timedOut": "Forschung hat das Zeitlimit überschritten. Die Engine ist möglicherweise beschäftigt.",
+    "noDataSources": "Fügen Sie mindestens eine Datenquelle hinzu, um zu beginnen.",
+    "unknown": "Ein unerwarteter Fehler ist aufgetreten."
+  },
+
+  "removeSource": "Datenquelle entfernen: {{name}}"
+}

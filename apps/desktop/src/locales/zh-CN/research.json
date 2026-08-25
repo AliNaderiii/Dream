@@ -1,0 +1,159 @@
+{
+  "title": "研究与分析",
+  "subtitle": "自主数据科学研究，配备实时执行追踪和可验证报告。",
+  "newResearch": "新建研究",
+  "noSessions": "暂无研究会话",
+  "noSessionsDesc": "启动一个新的研究项目，用 AI 驱动的洞察分析您的数据。",
+  "openSession": "打开研究会话：{{topic}}",
+  "noActiveSession": "没有活动的研究会话",
+  "backToList": "返回会话列表",
+  "cancel": "取消",
+  "close": "关闭",
+  "add": "添加",
+  "sections": "{{count}} 个章节",
+  "claims": "{{count}} 个论断",
+  "tokens": "令牌数",
+  "cost": "费用",
+  "duration": "时长",
+  "estimatedCost": "预估费用",
+  "breakdown": "按阶段细分",
+
+  "status": {
+    "pending": "等待中",
+    "planning": "规划中",
+    "awaiting_approval": "等待审批",
+    "running": "运行中",
+    "completed": "已完成",
+    "failed": "失败",
+    "cancelled": "已取消"
+  },
+
+  "composer": {
+    "topic": "研究主题",
+    "topicPlaceholder": "例如：客户流失与入职摩擦",
+    "objective": "研究目标",
+    "objectivePlaceholder": "描述您想学习或证明的内容…",
+    "dataSources": "数据来源",
+    "addSource": "添加数据集名称或文件路径…",
+    "depth": "研究深度",
+    "modelRoute": "模型/路由",
+    "privacyWarning": "您的提示和数据将离开本机。",
+    "start": "开始研究",
+    "starting": "正在启动…"
+  },
+
+  "depth": {
+    "simple": "简单",
+    "simpleDesc": "快速分析，约2分钟，迭代较少。",
+    "deep": "深度",
+    "deepDesc": "全面分析，约5分钟，多章节报告。"
+  },
+
+  "privacy": {
+    "leavesMachine": "数据将通过此路由离开本机。",
+    "staysLocal": "所有数据保留在本机。"
+  },
+
+  "plan": {
+    "generating": "正在生成研究计划…",
+    "topic": "主题",
+    "objective": "目标",
+    "researchQuestions": "研究问题",
+    "hypotheses": "假设",
+    "methodology": "方法论",
+    "outline": "报告大纲",
+    "actions": "计划操作",
+    "approve": "批准并运行",
+    "modify": "修改",
+    "editPlan": "编辑计划",
+    "saveChanges": "保存更改",
+    "onePerLine": "每行一个"
+  },
+
+  "stepStatus": {
+    "pending": "等待中",
+    "running": "运行中",
+    "done": "已完成",
+    "failed": "失败",
+    "blocked": "已阻塞"
+  },
+
+  "trace": {
+    "progress": "{{completed}} / {{total}} 步",
+    "progressBar": "研究进度",
+    "eta": "约{{minutes}}分钟剩余",
+    "stop": "停止研究",
+    "stopping": "正在停止…",
+    "viewReport": "查看报告",
+    "completed": "研究已成功完成。",
+    "failed": "研究失败。",
+    "cancelled": "研究已取消。",
+    "waitingForSteps": "等待执行步骤…",
+    "noSteps": "没有执行步骤。",
+    "output": "输出",
+    "toolCalls": "工具调用",
+    "args": "参数",
+    "result": "结果",
+    "error": "错误",
+    "ok": "成功",
+    "running": "运行中",
+    "why": "原因",
+    "fixAndRetry": "修复并重试",
+    "allPhases": "所有阶段",
+    "allTools": "所有工具",
+    "filterByPhase": "按阶段筛选",
+    "filterByTool": "按工具筛选",
+    "clearFilters": "清除筛选",
+    "totalCalls": "{{count}} 次调用",
+    "errors": "{{count}} 个错误",
+    "noToolCalls": "暂无工具调用。",
+    "noMatches": "没有匹配当前筛选条件的工具调用。",
+    "stale": {
+      "title": "引擎可能无响应",
+      "description": "15秒内未收到心跳。引擎可能已停滞。",
+      "restart": "重启引擎"
+    }
+  },
+
+  "traceInspector": "追踪检查器",
+
+  "report": {
+    "view": "报告",
+    "figures": "图表",
+    "integrity": "完整性",
+    "notAvailable": "此会话没有可用报告。",
+    "exportBar": "导出选项",
+    "exportMarkdown": "Markdown",
+    "exportPdf": "PDF",
+    "exportZip": "可复现 ZIP",
+    "exportProvenance": ".provenance.json"
+  },
+
+  "figures": {
+    "gallery": "图表库",
+    "none": "此报告没有图表。",
+    "source": "来源步骤"
+  },
+
+  "integrity": {
+    "claims": "论断与证据",
+    "summary": "完整性摘要",
+    "summaryDetail": "{{claims}} 个论断已对照 {{evidence}} 条证据验证。",
+    "noClaims": "此报告未提取到论断。",
+    "claim": "论断 {{index}}",
+    "evidenceCount": "{{count}} 条证据",
+    "showCode": "显示代码",
+    "hideCode": "隐藏代码"
+  },
+
+  "errors": {
+    "sessionNotFound": "未找到研究会话。",
+    "noReport": "尚无可用报告。",
+    "cancelled": "研究已取消。",
+    "timedOut": "研究超时。引擎可能正忙——请重试。",
+    "noDataSources": "请附加至少一个数据来源以开始研究。",
+    "unknown": "发生了意外错误。"
+  },
+
+  "removeSource": "移除数据来源：{{name}}"
+}

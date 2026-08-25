@@ -1,0 +1,159 @@
+{
+  "title": "Investigación y Análisis",
+  "subtitle": "Investigación autónoma en ciencia de datos con traza de ejecución en vivo e informes verificables.",
+  "newResearch": "Nueva investigación",
+  "noSessions": "Aún no hay sesiones de investigación",
+  "noSessionsDesc": "Inicia un nuevo proyecto de investigación para analizar tus datos con insights impulsados por IA.",
+  "openSession": "Abrir sesión de investigación: {{topic}}",
+  "noActiveSession": "No hay sesión de investigación activa",
+  "backToList": "Volver a sesiones",
+  "cancel": "Cancelar",
+  "close": "Cerrar",
+  "add": "Añadir",
+  "sections": "{{count}} secciones",
+  "claims": "{{count}} afirmaciones",
+  "tokens": "Tokens",
+  "cost": "Coste",
+  "duration": "Duración",
+  "estimatedCost": "Coste estimado",
+  "breakdown": "Desglose por fase",
+
+  "status": {
+    "pending": "Pendiente",
+    "planning": "Planificando",
+    "awaiting_approval": "Esperando aprobación",
+    "running": "En ejecución",
+    "completed": "Completado",
+    "failed": "Fallido",
+    "cancelled": "Cancelado"
+  },
+
+  "composer": {
+    "topic": "Tema de investigación",
+    "topicPlaceholder": "p. ej. Abandono de clientes y fricción en la incorporación",
+    "objective": "Objetivo",
+    "objectivePlaceholder": "Describe qué quieres aprender o demostrar…",
+    "dataSources": "Fuentes de datos",
+    "addSource": "Añade un nombre de dataset o ruta de archivo…",
+    "depth": "Profundidad de investigación",
+    "modelRoute": "Modelo / ruta",
+    "privacyWarning": "Tus prompts y datos saldrán de este equipo.",
+    "start": "Iniciar investigación",
+    "starting": "Iniciando…"
+  },
+
+  "depth": {
+    "simple": "Simple",
+    "simpleDesc": "Análisis rápido, ~2 minutos, menos iteraciones.",
+    "deep": "Profundo",
+    "deepDesc": "Análisis exhaustivo, ~5 minutos, informe multi-sección."
+  },
+
+  "privacy": {
+    "leavesMachine": "Los datos salen de este equipo para esta ruta.",
+    "staysLocal": "Todos los datos permanecen en este equipo."
+  },
+
+  "plan": {
+    "generating": "Generando plan de investigación…",
+    "topic": "Tema",
+    "objective": "Objetivo",
+    "researchQuestions": "Preguntas de investigación",
+    "hypotheses": "Hipótesis",
+    "methodology": "Metodología",
+    "outline": "Esquema del informe",
+    "actions": "Acciones del plan",
+    "approve": "Aprobar y ejecutar",
+    "modify": "Modificar",
+    "editPlan": "Editar plan",
+    "saveChanges": "Guardar cambios",
+    "onePerLine": "Una por línea"
+  },
+
+  "stepStatus": {
+    "pending": "Pendiente",
+    "running": "En ejecución",
+    "done": "Hecho",
+    "failed": "Fallido",
+    "blocked": "Bloqueado"
+  },
+
+  "trace": {
+    "progress": "{{completed}} / {{total}} pasos",
+    "progressBar": "Progreso de la investigación",
+    "eta": "~{{minutes}} min restantes",
+    "stop": "Detener investigación",
+    "stopping": "Deteniendo…",
+    "viewReport": "Ver informe",
+    "completed": "Investigación completada con éxito.",
+    "failed": "La investigación falló.",
+    "cancelled": "La investigación fue cancelada.",
+    "waitingForSteps": "Esperando pasos de ejecución…",
+    "noSteps": "No hay pasos de ejecución.",
+    "output": "Salida",
+    "toolCalls": "Llamadas a herramientas",
+    "args": "Args",
+    "result": "Resultado",
+    "error": "Error",
+    "ok": "OK",
+    "running": "En ejecución",
+    "why": "Por qué",
+    "fixAndRetry": "Corregir y reintentar",
+    "allPhases": "Todas las fases",
+    "allTools": "Todas las herramientas",
+    "filterByPhase": "Filtrar por fase",
+    "filterByTool": "Filtrar por herramienta",
+    "clearFilters": "Limpiar filtros",
+    "totalCalls": "{{count}} llamadas",
+    "errors": "{{count}} errores",
+    "noToolCalls": "Aún no hay llamadas a herramientas.",
+    "noMatches": "Ninguna llamada coincide con el filtro actual.",
+    "stale": {
+      "title": "El motor puede no estar respondiendo",
+      "description": "No se ha recibido latido en 15 segundos.",
+      "restart": "Reiniciar motor"
+    }
+  },
+
+  "traceInspector": "Inspector de traza",
+
+  "report": {
+    "view": "Informe",
+    "figures": "Figuras",
+    "integrity": "Integridad",
+    "notAvailable": "No hay informe disponible para esta sesión.",
+    "exportBar": "Opciones de exportación",
+    "exportMarkdown": "Markdown",
+    "exportPdf": "PDF",
+    "exportZip": "ZIP de reproducción",
+    "exportProvenance": ".provenance.json"
+  },
+
+  "figures": {
+    "gallery": "Galería de figuras",
+    "none": "No hay figuras en este informe.",
+    "source": "Paso fuente"
+  },
+
+  "integrity": {
+    "claims": "Afirmaciones y Evidencias",
+    "summary": "Resumen de integridad",
+    "summaryDetail": "{{claims}} afirmaciones verificadas con {{evidence}} evidencias.",
+    "noClaims": "No se extrajeron afirmaciones de este informe.",
+    "claim": "Afirmación {{index}}",
+    "evidenceCount": "{{count}} evidencias",
+    "showCode": "Mostrar código",
+    "hideCode": "Ocultar código"
+  },
+
+  "errors": {
+    "sessionNotFound": "Sesión de investigación no encontrada.",
+    "noReport": "Aún no hay informe disponible.",
+    "cancelled": "La investigación fue cancelada.",
+    "timedOut": "La investigación agotó el tiempo. El motor puede estar ocupado.",
+    "noDataSources": "Adjunta al menos una fuente de datos para comenzar.",
+    "unknown": "Ocurrió un error inesperado."
+  },
+
+  "removeSource": "Eliminar fuente de datos: {{name}}"
+}

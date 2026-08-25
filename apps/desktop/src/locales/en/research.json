@@ -1,0 +1,159 @@
+{
+  "title": "Research & Analysis",
+  "subtitle": "Autonomous data-science research with live execution trace and verifiable reports.",
+  "newResearch": "New Research",
+  "noSessions": "No research sessions yet",
+  "noSessionsDesc": "Start a new research project to analyse your data with AI-powered insights.",
+  "openSession": "Open research session: {{topic}}",
+  "noActiveSession": "No active research session",
+  "backToList": "Back to sessions",
+  "cancel": "Cancel",
+  "close": "Close",
+  "add": "Add",
+  "sections": "{{count}} sections",
+  "claims": "{{count}} claims",
+  "tokens": "Tokens",
+  "cost": "Cost",
+  "duration": "Duration",
+  "estimatedCost": "Estimated cost",
+  "breakdown": "Breakdown by phase",
+
+  "status": {
+    "pending": "Pending",
+    "planning": "Planning",
+    "awaiting_approval": "Awaiting approval",
+    "running": "Running",
+    "completed": "Completed",
+    "failed": "Failed",
+    "cancelled": "Cancelled"
+  },
+
+  "composer": {
+    "topic": "Research topic",
+    "topicPlaceholder": "e.g. Customer churn & onboarding friction",
+    "objective": "Objective",
+    "objectivePlaceholder": "Describe what you want to learn or prove…",
+    "dataSources": "Data sources",
+    "addSource": "Add a dataset name or file path…",
+    "depth": "Research depth",
+    "modelRoute": "Model / route",
+    "privacyWarning": "Your prompts and data will leave this machine.",
+    "start": "Start research",
+    "starting": "Starting…"
+  },
+
+  "depth": {
+    "simple": "Simple",
+    "simpleDesc": "Quick analysis, ~2 minutes, fewer iterations.",
+    "deep": "Deep",
+    "deepDesc": "Thorough analysis, ~5 minutes, multi-section report."
+  },
+
+  "privacy": {
+    "leavesMachine": "Data leaves this machine for this route.",
+    "staysLocal": "All data stays on this machine."
+  },
+
+  "plan": {
+    "generating": "Generating research plan…",
+    "topic": "Topic",
+    "objective": "Objective",
+    "researchQuestions": "Research Questions",
+    "hypotheses": "Hypotheses",
+    "methodology": "Methodology",
+    "outline": "Report Outline",
+    "actions": "Plan actions",
+    "approve": "Approve & Run",
+    "modify": "Modify",
+    "editPlan": "Edit plan",
+    "saveChanges": "Save changes",
+    "onePerLine": "One per line"
+  },
+
+  "stepStatus": {
+    "pending": "Pending",
+    "running": "Running",
+    "done": "Done",
+    "failed": "Failed",
+    "blocked": "Blocked"
+  },
+
+  "trace": {
+    "progress": "{{completed}} / {{total}} steps",
+    "progressBar": "Research progress",
+    "eta": "~{{minutes}} min remaining",
+    "stop": "Stop research",
+    "stopping": "Stopping…",
+    "viewReport": "View report",
+    "completed": "Research completed successfully.",
+    "failed": "Research failed.",
+    "cancelled": "Research was cancelled.",
+    "waitingForSteps": "Waiting for execution steps…",
+    "noSteps": "No execution steps.",
+    "output": "Output",
+    "toolCalls": "Tool calls",
+    "args": "Args",
+    "result": "Result",
+    "error": "Error",
+    "ok": "OK",
+    "running": "Running",
+    "why": "Why",
+    "fixAndRetry": "Fix & retry",
+    "allPhases": "All phases",
+    "allTools": "All tools",
+    "filterByPhase": "Filter by phase",
+    "filterByTool": "Filter by tool",
+    "clearFilters": "Clear filters",
+    "totalCalls": "{{count}} calls",
+    "errors": "{{count}} errors",
+    "noToolCalls": "No tool calls yet.",
+    "noMatches": "No tool calls match the current filter.",
+    "stale": {
+      "title": "Engine may be unresponsive",
+      "description": "No heartbeat received for 15 seconds. The engine may have stalled.",
+      "restart": "Restart engine"
+    }
+  },
+
+  "traceInspector": "Trace inspector",
+
+  "report": {
+    "view": "Report",
+    "figures": "Figures",
+    "integrity": "Integrity",
+    "notAvailable": "No report available for this session.",
+    "exportBar": "Export options",
+    "exportMarkdown": "Markdown",
+    "exportPdf": "PDF",
+    "exportZip": "Reproduction ZIP",
+    "exportProvenance": ".provenance.json"
+  },
+
+  "figures": {
+    "gallery": "Figure gallery",
+    "none": "No figures in this report.",
+    "source": "Source step"
+  },
+
+  "integrity": {
+    "claims": "Claims & Evidence",
+    "summary": "Integrity summary",
+    "summaryDetail": "{{claims}} claims verified against {{evidence}} pieces of evidence.",
+    "noClaims": "No claims extracted for this report.",
+    "claim": "Claim {{index}}",
+    "evidenceCount": "{{count}} evidence items",
+    "showCode": "Show code",
+    "hideCode": "Hide code"
+  },
+
+  "errors": {
+    "sessionNotFound": "Research session not found.",
+    "noReport": "No report available yet.",
+    "cancelled": "Research was cancelled.",
+    "timedOut": "Research timed out. The engine may be busy — try again.",
+    "noDataSources": "Attach at least one data source to begin research.",
+    "unknown": "An unexpected error occurred."
+  },
+
+  "removeSource": "Remove data source: {{name}}"
+}

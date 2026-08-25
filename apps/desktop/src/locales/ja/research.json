@@ -1,0 +1,159 @@
+{
+  "title": "リサーチ＆分析",
+  "subtitle": "ライブ実行トレースと検証可能なレポートを備えた自律型データサイエンスリサーチ。",
+  "newResearch": "新しいリサーチ",
+  "noSessions": "リサーチセッションはまだありません",
+  "noSessionsDesc": "新しいリサーチプロジェクトを開始して、AI搭載のインサイトでデータを分析しましょう。",
+  "openSession": "リサーチセッションを開く：{{topic}}",
+  "noActiveSession": "アクティブなリサーチセッションはありません",
+  "backToList": "セッション一覧に戻る",
+  "cancel": "キャンセル",
+  "close": "閉じる",
+  "add": "追加",
+  "sections": "{{count}} セクション",
+  "claims": "{{count}} 件の主張",
+  "tokens": "トークン",
+  "cost": "コスト",
+  "duration": "所要時間",
+  "estimatedCost": "推定コスト",
+  "breakdown": "フェーズ別の内訳",
+
+  "status": {
+    "pending": "保留中",
+    "planning": "計画中",
+    "awaiting_approval": "承認待ち",
+    "running": "実行中",
+    "completed": "完了",
+    "failed": "失敗",
+    "cancelled": "キャンセル済み"
+  },
+
+  "composer": {
+    "topic": "リサーチテーマ",
+    "topicPlaceholder": "例：顧客離脱とオンボーディングの摩擦",
+    "objective": "目的",
+    "objectivePlaceholder": "学びたいことや証明したいことを記述してください…",
+    "dataSources": "データソース",
+    "addSource": "データセット名またはファイルパスを追加…",
+    "depth": "リサーチの深さ",
+    "modelRoute": "モデル / ルート",
+    "privacyWarning": "プロンプトとデータはこのマシンから送信されます。",
+    "start": "リサーチを開始",
+    "starting": "開始中…"
+  },
+
+  "depth": {
+    "simple": "シンプル",
+    "simpleDesc": "クイック分析、約2分、反復少なめ。",
+    "deep": "ディープ",
+    "deepDesc": "徹底的な分析、約5分、マルチセクションレポート。"
+  },
+
+  "privacy": {
+    "leavesMachine": "このルートではデータがこのマシンから送信されます。",
+    "staysLocal": "すべてのデータはこのマシンに保持されます。"
+  },
+
+  "plan": {
+    "generating": "リサーチプランを生成中…",
+    "topic": "テーマ",
+    "objective": "目的",
+    "researchQuestions": "研究課題",
+    "hypotheses": "仮説",
+    "methodology": "方法論",
+    "outline": "レポート構成",
+    "actions": "プラン操作",
+    "approve": "承認して実行",
+    "modify": "修正",
+    "editPlan": "プランを編集",
+    "saveChanges": "変更を保存",
+    "onePerLine": "1行に1つ"
+  },
+
+  "stepStatus": {
+    "pending": "保留中",
+    "running": "実行中",
+    "done": "完了",
+    "failed": "失敗",
+    "blocked": "ブロック中"
+  },
+
+  "trace": {
+    "progress": "{{completed}} / {{total}} ステップ",
+    "progressBar": "リサーチ進捗",
+    "eta": "残り約{{minutes}}分",
+    "stop": "リサーチを停止",
+    "stopping": "停止中…",
+    "viewReport": "レポートを表示",
+    "completed": "リサーチが正常に完了しました。",
+    "failed": "リサーチが失敗しました。",
+    "cancelled": "リサーチがキャンセルされました。",
+    "waitingForSteps": "実行ステップを待っています…",
+    "noSteps": "実行ステップはありません。",
+    "output": "出力",
+    "toolCalls": "ツール呼び出し",
+    "args": "引数",
+    "result": "結果",
+    "error": "エラー",
+    "ok": "成功",
+    "running": "実行中",
+    "why": "理由",
+    "fixAndRetry": "修正して再試行",
+    "allPhases": "全フェーズ",
+    "allTools": "全ツール",
+    "filterByPhase": "フェーズで絞り込み",
+    "filterByTool": "ツールで絞り込み",
+    "clearFilters": "フィルターをクリア",
+    "totalCalls": "{{count}} 回の呼び出し",
+    "errors": "{{count}} 件のエラー",
+    "noToolCalls": "ツール呼び出しはまだありません。",
+    "noMatches": "現在のフィルターに一致するツール呼び出しはありません。",
+    "stale": {
+      "title": "エンジンが応答していない可能性があります",
+      "description": "15秒間ハートビートを受信していません。",
+      "restart": "エンジンを再起動"
+    }
+  },
+
+  "traceInspector": "トレースインスペクター",
+
+  "report": {
+    "view": "レポート",
+    "figures": "図表",
+    "integrity": "整合性",
+    "notAvailable": "このセッションにはレポートがありません。",
+    "exportBar": "エクスポートオプション",
+    "exportMarkdown": "Markdown",
+    "exportPdf": "PDF",
+    "exportZip": "再現用ZIP",
+    "exportProvenance": ".provenance.json"
+  },
+
+  "figures": {
+    "gallery": "図表ギャラリー",
+    "none": "このレポートには図表がありません。",
+    "source": "ソースステップ"
+  },
+
+  "integrity": {
+    "claims": "主張と証拠",
+    "summary": "整合性サマリー",
+    "summaryDetail": "{{claims}} 件の主張が {{evidence}} 件の証拠に対して検証されました。",
+    "noClaims": "このレポートから主張は抽出されませんでした。",
+    "claim": "主張 {{index}}",
+    "evidenceCount": "{{count}} 件の証拠",
+    "showCode": "コードを表示",
+    "hideCode": "コードを非表示"
+  },
+
+  "errors": {
+    "sessionNotFound": "リサーチセッションが見つかりません。",
+    "noReport": "まだレポートはありません。",
+    "cancelled": "リサーチがキャンセルされました。",
+    "timedOut": "リサーチがタイムアウトしました。エンジンがビジーの可能性があります。",
+    "noDataSources": "リサーチを開始するには少なくとも1つのデータソースを添付してください。",
+    "unknown": "予期しないエラーが発生しました。"
+  },
+
+  "removeSource": "データソースを削除：{{name}}"
+}

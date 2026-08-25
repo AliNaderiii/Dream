@@ -1,0 +1,159 @@
+{
+  "title": "Recherche & Analyse",
+  "subtitle": "Recherche autonome en science des données avec trace d'exécution en direct et rapports vérifiables.",
+  "newResearch": "Nouvelle recherche",
+  "noSessions": "Aucune session de recherche pour le moment",
+  "noSessionsDesc": "Démarrez un nouveau projet de recherche pour analyser vos données avec des insights IA.",
+  "openSession": "Ouvrir la session de recherche : {{topic}}",
+  "noActiveSession": "Aucune session de recherche active",
+  "backToList": "Retour aux sessions",
+  "cancel": "Annuler",
+  "close": "Fermer",
+  "add": "Ajouter",
+  "sections": "{{count}} sections",
+  "claims": "{{count}} affirmations",
+  "tokens": "Jetons",
+  "cost": "Coût",
+  "duration": "Durée",
+  "estimatedCost": "Coût estimé",
+  "breakdown": "Ventilation par phase",
+
+  "status": {
+    "pending": "En attente",
+    "planning": "Planification",
+    "awaiting_approval": "En attente d'approbation",
+    "running": "En cours",
+    "completed": "Terminé",
+    "failed": "Échoué",
+    "cancelled": "Annulé"
+  },
+
+  "composer": {
+    "topic": "Sujet de recherche",
+    "topicPlaceholder": "ex. Attrition client & friction d'intégration",
+    "objective": "Objectif",
+    "objectivePlaceholder": "Décrivez ce que vous souhaitez apprendre ou prouver…",
+    "dataSources": "Sources de données",
+    "addSource": "Ajouter un nom de dataset ou un chemin de fichier…",
+    "depth": "Profondeur de recherche",
+    "modelRoute": "Modèle / route",
+    "privacyWarning": "Vos prompts et données quitteront cette machine.",
+    "start": "Démarrer la recherche",
+    "starting": "Démarrage…"
+  },
+
+  "depth": {
+    "simple": "Simple",
+    "simpleDesc": "Analyse rapide, ~2 minutes, moins d'itérations.",
+    "deep": "Approfondie",
+    "deepDesc": "Analyse exhaustive, ~5 minutes, rapport multi-sections."
+  },
+
+  "privacy": {
+    "leavesMachine": "Les données quittent cette machine pour cette route.",
+    "staysLocal": "Toutes les données restent sur cette machine."
+  },
+
+  "plan": {
+    "generating": "Génération du plan de recherche…",
+    "topic": "Sujet",
+    "objective": "Objectif",
+    "researchQuestions": "Questions de recherche",
+    "hypotheses": "Hypothèses",
+    "methodology": "Méthodologie",
+    "outline": "Plan du rapport",
+    "actions": "Actions du plan",
+    "approve": "Approuver & Lancer",
+    "modify": "Modifier",
+    "editPlan": "Modifier le plan",
+    "saveChanges": "Enregistrer les modifications",
+    "onePerLine": "Une par ligne"
+  },
+
+  "stepStatus": {
+    "pending": "En attente",
+    "running": "En cours",
+    "done": "Terminé",
+    "failed": "Échoué",
+    "blocked": "Bloqué"
+  },
+
+  "trace": {
+    "progress": "{{completed}} / {{total}} étapes",
+    "progressBar": "Progression de la recherche",
+    "eta": "~{{minutes}} min restantes",
+    "stop": "Arrêter la recherche",
+    "stopping": "Arrêt en cours…",
+    "viewReport": "Voir le rapport",
+    "completed": "Recherche terminée avec succès.",
+    "failed": "La recherche a échoué.",
+    "cancelled": "La recherche a été annulée.",
+    "waitingForSteps": "En attente des étapes d'exécution…",
+    "noSteps": "Aucune étape d'exécution.",
+    "output": "Sortie",
+    "toolCalls": "Appels d'outils",
+    "args": "Args",
+    "result": "Résultat",
+    "error": "Erreur",
+    "ok": "OK",
+    "running": "En cours",
+    "why": "Pourquoi",
+    "fixAndRetry": "Corriger & réessayer",
+    "allPhases": "Toutes les phases",
+    "allTools": "Tous les outils",
+    "filterByPhase": "Filtrer par phase",
+    "filterByTool": "Filtrer par outil",
+    "clearFilters": "Effacer les filtres",
+    "totalCalls": "{{count}} appels",
+    "errors": "{{count}} erreurs",
+    "noToolCalls": "Aucun appel d'outil pour le moment.",
+    "noMatches": "Aucun appel ne correspond au filtre actuel.",
+    "stale": {
+      "title": "Le moteur peut ne pas répondre",
+      "description": "Aucun battement de cœur reçu depuis 15 secondes.",
+      "restart": "Redémarrer le moteur"
+    }
+  },
+
+  "traceInspector": "Inspecteur de trace",
+
+  "report": {
+    "view": "Rapport",
+    "figures": "Figures",
+    "integrity": "Intégrité",
+    "notAvailable": "Aucun rapport disponible pour cette session.",
+    "exportBar": "Options d'exportation",
+    "exportMarkdown": "Markdown",
+    "exportPdf": "PDF",
+    "exportZip": "ZIP de reproduction",
+    "exportProvenance": ".provenance.json"
+  },
+
+  "figures": {
+    "gallery": "Galerie de figures",
+    "none": "Aucune figure dans ce rapport.",
+    "source": "Étape source"
+  },
+
+  "integrity": {
+    "claims": "Affirmations & Preuves",
+    "summary": "Résumé d'intégrité",
+    "summaryDetail": "{{claims}} affirmations vérifiées contre {{evidence}} preuves.",
+    "noClaims": "Aucune affirmation extraite de ce rapport.",
+    "claim": "Affirmation {{index}}",
+    "evidenceCount": "{{count}} preuves",
+    "showCode": "Afficher le code",
+    "hideCode": "Masquer le code"
+  },
+
+  "errors": {
+    "sessionNotFound": "Session de recherche introuvable.",
+    "noReport": "Aucun rapport disponible pour le moment.",
+    "cancelled": "La recherche a été annulée.",
+    "timedOut": "La recherche a expiré. Le moteur est peut-être occupé.",
+    "noDataSources": "Joignez au moins une source de données pour commencer.",
+    "unknown": "Une erreur inattendue s'est produite."
+  },
+
+  "removeSource": "Supprimer la source de données : {{name}}"
+}

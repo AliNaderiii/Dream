@@ -1,0 +1,159 @@
+{
+  "title": "پژوهش و تحلیل",
+  "subtitle": "پژوهش خودکار علوم داده با ردیاب اجرای زنده و گزارش‌های قابل تأیید.",
+  "newResearch": "پژوهش جدید",
+  "noSessions": "هنوز جلسه پژوهشی نیست",
+  "noSessionsDesc": "یک پروژه پژوهشی جدید آغاز کنید تا داده‌هایتان را با بینش‌های هوش مصنوعی تحلیل کنید.",
+  "openSession": "باز کردن جلسه پژوهش: {{topic}}",
+  "noActiveSession": "جلسه پژوهش فعالی نیست",
+  "backToList": "بازگشت به جلسات",
+  "cancel": "لغو",
+  "close": "بستن",
+  "add": "افزودن",
+  "sections": "{{count}} بخش",
+  "claims": "{{count}} ادعا",
+  "tokens": "توکن‌ها",
+  "cost": "هزینه",
+  "duration": "مدت",
+  "estimatedCost": "هزینه تخمینی",
+  "breakdown": "تفکیک بر اساس مرحله",
+
+  "status": {
+    "pending": "در انتظار",
+    "planning": "در حال برنامه‌ریزی",
+    "awaiting_approval": "در انتظار تأیید",
+    "running": "در حال اجرا",
+    "completed": "تکمیل‌شده",
+    "failed": "ناموفق",
+    "cancelled": "لغو‌شده"
+  },
+
+  "composer": {
+    "topic": "موضوع پژوهش",
+    "topicPlaceholder": "مثلاً ریزش مشتری و اصطکاک آنبوردینگ",
+    "objective": "هدف",
+    "objectivePlaceholder": "توضیح دهید چه چیزی می‌خواهید بیاموزید یا اثبات کنید…",
+    "dataSources": "منابع داده",
+    "addSource": "نام مجموعه‌داده یا مسیر فایل را وارد کنید…",
+    "depth": "عمق پژوهش",
+    "modelRoute": "مدل / مسیر",
+    "privacyWarning": "درخواست‌ها و داده‌های شما از این دستگاه خارج خواهند شد.",
+    "start": "آغاز پژوهش",
+    "starting": "در حال آغاز…"
+  },
+
+  "depth": {
+    "simple": "ساده",
+    "simpleDesc": "تحلیل سریع، حدود ۲ دقیقه، تکرار کمتر.",
+    "deep": "عمیق",
+    "deepDesc": "تحلیل جامع، حدود ۵ دقیقه، گزارش چندبخشی."
+  },
+
+  "privacy": {
+    "leavesMachine": "داده‌ها برای این مسیر از این دستگاه خارج می‌شوند.",
+    "staysLocal": "همه داده‌ها روی این دستگاه باقی می‌مانند."
+  },
+
+  "plan": {
+    "generating": "در حال تولید برنامه پژوهش…",
+    "topic": "موضوع",
+    "objective": "هدف",
+    "researchQuestions": "سؤالات پژوهش",
+    "hypotheses": "فرضیه‌ها",
+    "methodology": "روش‌شناسی",
+    "outline": "ساختار گزارش",
+    "actions": "اقدامات برنامه",
+    "approve": "تأیید و اجرا",
+    "modify": "ویرایش",
+    "editPlan": "ویرایش برنامه",
+    "saveChanges": "ذخیره تغییرات",
+    "onePerLine": "هر کدام در یک خط"
+  },
+
+  "stepStatus": {
+    "pending": "در انتظار",
+    "running": "در حال اجرا",
+    "done": "انجام‌شده",
+    "failed": "ناموفق",
+    "blocked": "مسدود"
+  },
+
+  "trace": {
+    "progress": "{{completed}} / {{total}} مرحله",
+    "progressBar": "پیشرفت پژوهش",
+    "eta": "حدود {{minutes}} دقیقه باقی‌مانده",
+    "stop": "توقف پژوهش",
+    "stopping": "در حال توقف…",
+    "viewReport": "مشاهده گزارش",
+    "completed": "پژوهش با موفقیت تکمیل شد.",
+    "failed": "پژوهش ناموفق بود.",
+    "cancelled": "پژوهش لغو شد.",
+    "waitingForSteps": "در انتظار مراحل اجرا…",
+    "noSteps": "مرحله اجرایی وجود ندارد.",
+    "output": "خروجی",
+    "toolCalls": "فراخوانی ابزار",
+    "args": "آرگومان‌ها",
+    "result": "نتیجه",
+    "error": "خطا",
+    "ok": "موفق",
+    "running": "در حال اجرا",
+    "why": "چرا",
+    "fixAndRetry": "اصلاح و تلاش مجدد",
+    "allPhases": "همه مراحل",
+    "allTools": "همه ابزارها",
+    "filterByPhase": "فیلتر بر اساس مرحله",
+    "filterByTool": "فیلتر بر اساس ابزار",
+    "clearFilters": "پاک کردن فیلترها",
+    "totalCalls": "{{count}} فراخوانی",
+    "errors": "{{count}} خطا",
+    "noToolCalls": "هنوز فراخوانی ابزاری نیست.",
+    "noMatches": "هیچ فراخوانی ابزاری با فیلتر فعلی مطابقت ندارد.",
+    "stale": {
+      "title": "موتور ممکن است پاسخگو نباشد",
+      "description": "هیچ ضربان قلبی در ۱۵ ثانیه گذشته دریافت نشده است.",
+      "restart": "بازراه‌اندازی موتور"
+    }
+  },
+
+  "traceInspector": "بازرس ردیابی",
+
+  "report": {
+    "view": "گزارش",
+    "figures": "شکل‌ها",
+    "integrity": "صحت‌سنجی",
+    "notAvailable": "گزارشی برای این جلسه موجود نیست.",
+    "exportBar": "گزینه‌های خروجی",
+    "exportMarkdown": "مارک‌داون",
+    "exportPdf": "پی‌دی‌اف",
+    "exportZip": "آرشیو تکرارپذیری",
+    "exportProvenance": ".provenance.json"
+  },
+
+  "figures": {
+    "gallery": "گالری شکل‌ها",
+    "none": "شکلی در این گزارش نیست.",
+    "source": "مرحله منبع"
+  },
+
+  "integrity": {
+    "claims": "ادعاها و شواهد",
+    "summary": "خلاصه صحت‌سنجی",
+    "summaryDetail": "{{claims}} ادعا در برابر {{evidence}} شاهد تأیید شده‌اند.",
+    "noClaims": "ادعایی برای این گزارش استخراج نشده است.",
+    "claim": "ادعای {{index}}",
+    "evidenceCount": "{{count}} شاهد",
+    "showCode": "نمایش کد",
+    "hideCode": "پنهان کردن کد"
+  },
+
+  "errors": {
+    "sessionNotFound": "جلسه پژوهش یافت نشد.",
+    "noReport": "هنوز گزارشی موجود نیست.",
+    "cancelled": "پژوهش لغو شد.",
+    "timedOut": "پژوهش زمان‌بر شد. موتور ممکن است مشغول باشد — دوباره تلاش کنید.",
+    "noDataSources": "حداقل یک منبع داده برای شروع پژوهش ضمیمه کنید.",
+    "unknown": "خطای غیرمنتظره‌ای رخ داد."
+  },
+
+  "removeSource": "حذف منبع داده: {{name}}"
+}
