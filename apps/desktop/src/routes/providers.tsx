@@ -20,6 +20,7 @@ import {
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 
+import { ProviderHubsPanel } from '@/components/providerhubs/providerhubs-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/lib/i18n';
@@ -138,6 +139,8 @@ export function ProvidersRoute() {
           ))}
         </div>
       )}
+
+      <ProviderHubsPanel />
 
       {editor && (
         <ProviderEditor

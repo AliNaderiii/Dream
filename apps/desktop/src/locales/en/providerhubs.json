@@ -1,0 +1,84 @@
+{
+  "hubTitle": "Local runtimes",
+  "hubSubtitle": "Stay on a low-cost local model when you can. Optional cloud routes and a tool gateway are never required to chat.",
+  "recommendedDefault": "Ollama recommended",
+  "routeTitle": "Route priority",
+  "routeHint": "The first healthy route wins. Local Ollama stays the recommended default.",
+  "honestCost": "Dream does not invent prices. Cost is local, bring-your-own-key, or an optional subscription.",
+  "detected": "Local runtime detected",
+  "recommended": "Recommended",
+  "reducedReliability": "Reduced reliability",
+  "modelPicker": "Model",
+  "test": "Test",
+  "testing": "Testing…",
+  "testAria": "Test {{name}}",
+  "testOk": "Probe succeeded in {{ms}} ms. No secrets were sent.",
+  "testFail": "This runtime did not answer. Try another route.",
+  "noModels": "No models listed yet.",
+  "loading": "Loading runtimes…",
+  "error": "Could not load local runtimes.",
+  "retry": "Retry",
+  "noCloudKey": "No cloud key is required to run locally.",
+  "tabs": {
+    "label": "Provider hubs",
+    "runtimes": "Local runtimes",
+    "catalog": "Catalog",
+    "gateway": "Tool gateway",
+    "diagnostics": "Diagnostics"
+  },
+  "status": {
+    "healthy": "Healthy",
+    "down": "Down",
+    "unknown": "Unknown",
+    "idle": "Idle"
+  },
+  "toolCalling": {
+    "native": "Tool calling supported",
+    "fallback": "Fallback parser",
+    "disabled": "Tool calling not enabled"
+  },
+  "cost": {
+    "local": "Local — no cloud bill",
+    "byok": "Bring your own key",
+    "optional": "Optional subscription — price not listed here"
+  },
+  "catalog": {
+    "title": "Provider catalog",
+    "subtitle": "Search local and optional cloud backends. Privacy lines stay honest.",
+    "search": "Search catalog",
+    "searchPlaceholder": "Name or runtime",
+    "local": "Local",
+    "cloud": "Cloud"
+  },
+  "gateway": {
+    "title": "Tool gateway",
+    "subtitle": "Optional. One auth for extra tools, or bring your own key per tool. Never required to run locally.",
+    "optional": "Optional / subscription",
+    "enable": "Enable tool gateway",
+    "enableDesc": "Turn on only the tools you want. Local chat still works when this is off.",
+    "on": "Gateway on. Each tool can still be disabled.",
+    "off": "Gateway off — local chat still works.",
+    "keychain": "A scoped token is stored in the OS keychain.",
+    "noToken": "No gateway token is stored.",
+    "byokHint": "Works alongside bring-your-own-key. Not all-or-nothing."
+  },
+  "tools": {
+    "web_search": "Web search",
+    "image": "Image generation",
+    "tts": "Speech",
+    "browser": "Browser control"
+  },
+  "diagnostics": {
+    "title": "Why aren't tool calls firing?",
+    "subtitle": "Reads the selected runtime and gives an actionable fix. No secrets are probed.",
+    "runtime": "Runtime",
+    "action": "Diagnose tool calling",
+    "firing": "Tool calls can fire",
+    "notFiring": "Tool calls appear as text"
+  },
+  "errors": {
+    "unknownRuntime": "Unknown runtime. Try another route.",
+    "timedOut": "The probe timed out. Try another route.",
+    "unknown": "Something went wrong."
+  }
+}

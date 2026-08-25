@@ -1,0 +1,84 @@
+{
+  "hubTitle": "Exécutions locales",
+  "hubSubtitle": "Restez sur un modèle local peu coûteux quand vous le pouvez. Les routes cloud et la passerelle d’outils ne sont pas nécessaires pour discuter.",
+  "recommendedDefault": "Ollama recommandé",
+  "routeTitle": "Priorité des routes",
+  "routeHint": "La première route saine l’emporte. Ollama local reste le défaut recommandé.",
+  "honestCost": "Dream n’invente pas de prix. Le coût est local, clé personnelle ou abonnement facultatif.",
+  "detected": "Exécution locale détectée",
+  "recommended": "Recommandé",
+  "reducedReliability": "Fiabilité réduite",
+  "modelPicker": "Modèle",
+  "test": "Tester",
+  "testing": "Test en cours…",
+  "testAria": "Tester {{name}}",
+  "testOk": "Sonde réussie en {{ms}} ms. Aucun secret n’a été envoyé.",
+  "testFail": "Cette exécution n’a pas répondu. Essayez une autre route.",
+  "noModels": "Aucun modèle listé pour l’instant.",
+  "loading": "Chargement des exécutions…",
+  "error": "Impossible de charger les exécutions locales.",
+  "retry": "Réessayer",
+  "noCloudKey": "Aucune clé cloud n’est requise pour exécuter en local.",
+  "tabs": {
+    "label": "Hubs de fournisseurs",
+    "runtimes": "Exécutions locales",
+    "catalog": "Catalogue",
+    "gateway": "Passerelle d’outils",
+    "diagnostics": "Diagnostic"
+  },
+  "status": {
+    "healthy": "Saine",
+    "down": "Hors service",
+    "unknown": "Inconnue",
+    "idle": "Inactive"
+  },
+  "toolCalling": {
+    "native": "Appels d’outils pris en charge",
+    "fallback": "Analyseur de repli",
+    "disabled": "Appels d’outils non activés"
+  },
+  "cost": {
+    "local": "Local — pas de facture cloud",
+    "byok": "Apportez votre propre clé",
+    "optional": "Abonnement facultatif — le prix n’est pas listé ici"
+  },
+  "catalog": {
+    "title": "Catalogue des fournisseurs",
+    "subtitle": "Cherchez des backends locaux et cloud facultatifs. Les phrases de confidentialité restent honnêtes.",
+    "search": "Rechercher dans le catalogue",
+    "searchPlaceholder": "Nom ou exécution",
+    "local": "Local",
+    "cloud": "Cloud"
+  },
+  "gateway": {
+    "title": "Passerelle d’outils",
+    "subtitle": "Facultatif. Une authentification pour des outils supplémentaires, ou une clé par outil. Jamais requis pour le local.",
+    "optional": "Facultatif / abonnement",
+    "enable": "Activer la passerelle d’outils",
+    "enableDesc": "N’activez que les outils voulus. Le chat local fonctionne encore si c’est éteint.",
+    "on": "Passerelle allumée. Chaque outil peut encore être désactivé.",
+    "off": "Passerelle éteinte — le chat local fonctionne encore.",
+    "keychain": "Un jeton limité est stocké dans le trousseau du système.",
+    "noToken": "Aucun jeton de passerelle n’est stocké.",
+    "byokHint": "Fonctionne avec votre propre clé. Ce n’est pas tout ou rien."
+  },
+  "tools": {
+    "web_search": "Recherche web",
+    "image": "Génération d’images",
+    "tts": "Parole",
+    "browser": "Contrôle du navigateur"
+  },
+  "diagnostics": {
+    "title": "Pourquoi les appels d’outils ne se déclenchent-ils pas ?",
+    "subtitle": "Lit l’exécution choisie et donne une correction concrète. Aucun secret n’est sondé.",
+    "runtime": "Exécution",
+    "action": "Diagnostiquer les appels d’outils",
+    "firing": "Les appels peuvent se déclencher",
+    "notFiring": "Les appels apparaissent comme du texte"
+  },
+  "errors": {
+    "unknownRuntime": "Exécution inconnue. Essayez une autre route.",
+    "timedOut": "La sonde a expiré. Essayez une autre route.",
+    "unknown": "Une erreur inattendue s’est produite."
+  }
+}

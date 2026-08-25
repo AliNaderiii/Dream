@@ -1,0 +1,84 @@
+{
+  "hubTitle": "Lokale Laufzeiten",
+  "hubSubtitle": "Bleiben Sie wenn möglich bei einem günstigen lokalen Modell. Optionale Cloud-Routen und das Tool-Gateway sind für den Chat nicht nötig.",
+  "recommendedDefault": "Ollama empfohlen",
+  "routeTitle": "Routenpriorität",
+  "routeHint": "Die erste gesunde Route gewinnt. Lokales Ollama bleibt die empfohlene Vorgabe.",
+  "honestCost": "Dream erfindet keine Preise. Kosten sind lokal, eigener Schlüssel oder optionales Abo.",
+  "detected": "Lokale Laufzeit erkannt",
+  "recommended": "Empfohlen",
+  "reducedReliability": "Geringere Zuverlässigkeit",
+  "modelPicker": "Modell",
+  "test": "Testen",
+  "testing": "Test läuft…",
+  "testAria": "{{name}} testen",
+  "testOk": "Sonde erfolgreich in {{ms}} ms. Es wurden keine Geheimnisse gesendet.",
+  "testFail": "Diese Laufzeit hat nicht geantwortet. Versuchen Sie eine andere Route.",
+  "noModels": "Noch keine Modelle.",
+  "loading": "Laufzeiten werden geladen…",
+  "error": "Lokale Laufzeiten konnten nicht geladen werden.",
+  "retry": "Erneut versuchen",
+  "noCloudKey": "Für den lokalen Betrieb ist kein Cloud-Schlüssel nötig.",
+  "tabs": {
+    "label": "Anbieter-Hubs",
+    "runtimes": "Lokale Laufzeiten",
+    "catalog": "Katalog",
+    "gateway": "Tool-Gateway",
+    "diagnostics": "Diagnose"
+  },
+  "status": {
+    "healthy": "Gesund",
+    "down": "Nicht erreichbar",
+    "unknown": "Unbekannt",
+    "idle": "Leerlauf"
+  },
+  "toolCalling": {
+    "native": "Tool-Aufrufe unterstützt",
+    "fallback": "Ersatzparser",
+    "disabled": "Tool-Aufrufe nicht aktiv"
+  },
+  "cost": {
+    "local": "Lokal — keine Cloud-Rechnung",
+    "byok": "Eigenen Schlüssel mitbringen",
+    "optional": "Optionales Abo — Preis steht hier nicht"
+  },
+  "catalog": {
+    "title": "Anbieterkatalog",
+    "subtitle": "Suchen Sie lokale und optionale Cloud-Backends. Datenschutzzeilen bleiben ehrlich.",
+    "search": "Katalog durchsuchen",
+    "searchPlaceholder": "Name oder Laufzeit",
+    "local": "Lokal",
+    "cloud": "Cloud"
+  },
+  "gateway": {
+    "title": "Tool-Gateway",
+    "subtitle": "Optional. Eine Anmeldung für Extra-Werkzeuge oder ein eigener Schlüssel je Werkzeug. Für den lokalen Betrieb nie nötig.",
+    "optional": "Optional / Abo",
+    "enable": "Tool-Gateway aktivieren",
+    "enableDesc": "Schalten Sie nur die gewünschten Werkzeuge ein. Lokaler Chat funktioniert auch ausgeschaltet.",
+    "on": "Gateway an. Jedes Werkzeug kann einzeln aus bleiben.",
+    "off": "Gateway aus — lokaler Chat funktioniert weiter.",
+    "keychain": "Ein begrenztes Token liegt im Betriebssystem-Schlüsselbund.",
+    "noToken": "Kein Gateway-Token gespeichert.",
+    "byokHint": "Funktioniert neben dem eigenen Schlüssel. Nicht alles oder nichts."
+  },
+  "tools": {
+    "web_search": "Websuche",
+    "image": "Bilderzeugung",
+    "tts": "Sprache",
+    "browser": "Browsersteuerung"
+  },
+  "diagnostics": {
+    "title": "Warum feuern Tool-Aufrufe nicht?",
+    "subtitle": "Liest die gewählte Laufzeit und gibt eine umsetzbare Korrektur. Es werden keine Geheimnisse gesondert.",
+    "runtime": "Laufzeit",
+    "action": "Tool-Aufrufe diagnostizieren",
+    "firing": "Tool-Aufrufe können feuern",
+    "notFiring": "Tool-Aufrufe erscheinen als Text"
+  },
+  "errors": {
+    "unknownRuntime": "Unbekannte Laufzeit. Versuchen Sie eine andere Route.",
+    "timedOut": "Die Sonde ist abgelaufen. Versuchen Sie eine andere Route.",
+    "unknown": "Es ist ein unerwarteter Fehler aufgetreten."
+  }
+}
