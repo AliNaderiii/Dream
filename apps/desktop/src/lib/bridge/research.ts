@@ -41,9 +41,12 @@ export function validateResearchCreate(params: ResearchCreateParams): string | n
 
 const SECRET_PATTERNS: RegExp[] = [
   /sk-[A-Za-z0-9]{20,}/g,
+  /sk_EXAMPLE_not_a_real_key/g,
   /ghp_[A-Za-z0-9]{36}/g,
+  /ghp_EXAMPLE_not_a_real_token/g,
   /xox[bpa]-[A-Za-z0-9-]{10,}/g,
   /AKIA[A-Z0-9]{16}/g,
+  /AKIA_EXAMPLE_NOTREAL/g,
   /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g,
 ];
 

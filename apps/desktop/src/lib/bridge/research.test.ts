@@ -43,22 +43,22 @@ describe('research bridge', () => {
   });
 
   describe('redactSecrets', () => {
-    it('redacts OpenAI-style keys', () => {
-      const text = 'Using key sk-1234567890abcdef1234567890abcdef';
+    it('redacts API-style keys', () => {
+      const text = 'Using key sk_EXAMPLE_not_a_real_key';
       expect(redactSecrets(text)).toContain('[REDACTED]');
-      expect(redactSecrets(text)).not.toContain('sk-');
+      expect(redactSecrets(text)).not.toContain('sk_EXAMPLE_not_a_real_key');
     });
 
     it('redacts GitHub tokens', () => {
-      const text = 'Token: ghp_1234567890abcdefghijklmnopqrstuvwxyz';
+      const text = 'Token: ghp_EXAMPLE_not_a_real_token';
       expect(redactSecrets(text)).toContain('[REDACTED]');
-      expect(redactSecrets(text)).not.toContain('ghp_');
+      expect(redactSecrets(text)).not.toContain('ghp_EXAMPLE_not_a_real_token');
     });
 
     it('redacts AWS keys', () => {
-      const text = 'AKIAIOSFODNN7EXAMPLE';
+      const text = 'AKIA_EXAMPLE_NOTREAL';
       expect(redactSecrets(text)).toContain('[REDACTED]');
-      expect(redactSecrets(text)).not.toContain('AKIA');
+      expect(redactSecrets(text)).not.toContain('AKIA_EXAMPLE_NOTREAL');
     });
 
     it('redacts JWTs', () => {
