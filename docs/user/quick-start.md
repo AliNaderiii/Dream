@@ -27,14 +27,14 @@ visible. `check.bat` runs offline diagnostics. `Dream.bat` and
 `Dream-Start.bat` launch the older `desktop.py` window; they are not the Tauri
 product UI and are not the first-run path.
 
-### 2. Tauri installer (from the `v0.3.1` release onward)
+### 2. Tauri installer (from the `v0.4.0` release onward)
 
-Download `Dream_0.3.1_x64-setup.exe` from the GitHub Release, install it, and
-run Dream. The kernel is inside the installer — no separate `pip install`, no
-local Python required:
+Download `Dream_0.4.0_x64-setup.exe` from the GitHub Release, install it, and
+run Dream. On Windows the kernel is inside the installer — no separate
+`pip install`, no local Python required:
 
-1. Download **`Dream_0.3.1_x64-setup.exe`** from the
-   [GitHub Release](https://github.com/AliNaderiii/Dream/releases) for `v0.3.1`.
+1. Download **`Dream_0.4.0_x64-setup.exe`** from the
+   [GitHub Release](https://github.com/AliNaderiii/Dream/releases) for `v0.4.0`.
 2. Run the installer. SmartScreen may warn because the installer is
    **unsigned** — choose **More info → Run anyway**.
 3. WebView2 may be downloaded during installation if it is missing.

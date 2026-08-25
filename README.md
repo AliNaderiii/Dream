@@ -74,13 +74,14 @@ Two ways to run Dream on Windows — both are honest about what they are:
    Ollama backend with model `qwen2.5:7b`. If Ollama is missing it prints a
    Persian and English message with <https://ollama.com/download> and waits so
    the window stays readable.
-2. **Tauri installer (from the `v0.3.1` release).** Download
-   **`Dream_0.3.1_x64-setup.exe`** from the GitHub Release, install it, and run
-   Dream. The kernel is inside the installer — a bundled CPython plus the Dream
-   package — so no separate `pip install` and no local Python are needed. The
-   installer is **unsigned**, so SmartScreen warns; choose **More info → Run
-   anyway**. WebView2 may be downloaded during installation. Ollama is optional
-   for a real local model; without it the router may fall through to echo.
+2. **Tauri installer (from the `v0.4.0` release).** Download
+   **`Dream_0.4.0_x64-setup.exe`** from the GitHub Release, install it, and run
+   Dream. The kernel is inside the Windows installer — a bundled CPython plus the
+   Dream package — so no separate `pip install` and no local Python are needed on
+   Windows. The installer is **unsigned**, so SmartScreen warns; choose
+   **More info → Run anyway**. WebView2 may be downloaded during installation.
+   Ollama is optional for a real local model; without it the router may fall
+   through to echo.
 
 See [docs/user/quick-start.md](docs/user/quick-start.md) for extras
 (`.[web]`, `.[data]`) and the first conversation.
@@ -289,8 +290,8 @@ python -m ruff check .
 python -m build
 ```
 
-The core `dream/` package has **no runtime dependencies**. Development tools
-are available through the `dev` extra; `web` (fastapi, uvicorn) and `data`
+The core `dream/` package depends only on `keyring` and `Authlib`. Development
+tools are available through the `dev` extra; `web` (fastapi, uvicorn) and `data`
 (nbformat) extras cover the optional web gateway and notebook tooling. Sample
 data lives in [`examples/`](examples/), including an Iranian sales CSV with
 Persian headers. See [CONTRIBUTING.md](CONTRIBUTING.md) and
