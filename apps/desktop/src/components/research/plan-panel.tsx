@@ -1,9 +1,8 @@
 /**
  * Plan approval panel — human-in-the-loop checkpoint.
  *
- * Shows the generated research plan (questions, hypotheses, methodology,
- * outline tree) with Approve / Modify / Cancel. On Modify, opens an inline
- * editor for the plan fields.
+ * Shows the P1 plan shape: questions, hypotheses, methodology, sections
+ * (each with section_id, title, thesis, questions). Approve / Modify / Cancel.
  */
 
 import {
@@ -17,63 +16,66 @@ import {
   Microscope,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/lib/i18n';
-import { researchApprove, researchModifyPlan, researchStart } from '@/lib/bridge/research';
+import {
+  researchApprove,
+  researchGet,
+  researchModify,
+  researchStart,
+  mapResearchError,
+} from '@/lib/bridge/research';
 import { useBridge } from '@/lib/bridge/hooks';
-import type { ResearchOutlineNode, ResearchPlan } from '@/lib/bridge/research-types';
+import type { Plan, Section } from '@/lib/bridge/research-types';
 import { useResearchStore } from '@/stores/research-store';
 import { cn } from '@/utils/cn';
 
-function OutlineTree({ nodes, depth = 0 }: { nodes: ResearchOutlineNode[]; depth?: number }) {
-  const [expanded, setExpanded] = useState<Set<number>>(new Set([0]));
-
-  const toggle = (index: number) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
-  };
+function SectionOutline({ section, depth = 0 }: { section: Section; depth?: number }) {
+  const [expanded, setExpanded] = useState(depth === 0);
+  const hasDetails = section.questions.length > 0 || section.thesis;
 
   return (
-    <ul className={cn('flex flex-col gap-1', depth > 0 && 'ps-4')} role="tree">
-      {nodes.map((node, i) => {
-        const hasChildren = node.children && node.children.length > 0;
-        const isOpen = expanded.has(i);
-        return (
-          <li
-            key={`${depth}-${i}`}
-            role="treeitem"
-            aria-expanded={hasChildren ? isOpen : undefined}
+    <li className={cn('flex flex-col gap-1', depth > 0 && 'ps-4')} role="treeitem">
+      <div className="flex items-center gap-1.5">
+        {hasDetails ? (
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="shrink-0 text-fg-muted hover:text-fg-primary"
           >
-            <div className="flex items-center gap-1.5">
-              {hasChildren ? (
-                <button
-                  type="button"
-                  onClick={() => toggle(i)}
-                  className="shrink-0 text-fg-muted hover:text-fg-primary"
-                  aria-label={isOpen ? 'Collapse' : 'Expand'}
-                >
-                  {isOpen ? (
-                    <ChevronDown className="size-3.5" aria-hidden />
-                  ) : (
-                    <ChevronRight className="size-3.5" aria-hidden />
-                  )}
-                </button>
-              ) : (
-                <span className="size-3.5 shrink-0" />
-              )}
-              <span className="text-caption">{node.title}</span>
-            </div>
-            {hasChildren && isOpen && <OutlineTree nodes={node.children!} depth={depth + 1} />}
-          </li>
-        );
-      })}
-    </ul>
+            {expanded ? (
+              <ChevronDown className="size-3.5" aria-hidden />
+            ) : (
+              <ChevronRight className="size-3.5" aria-hidden />
+            )}
+          </button>
+        ) : (
+          <span className="size-3.5 shrink-0" />
+        )}
+        <span className="text-caption font-semibold">{section.title}</span>
+        {section.status !== 'PENDING' && (
+          <span className="text-micro text-fg-muted">({section.status})</span>
+        )}
+      </div>
+      {expanded && hasDetails && (
+        <div className="flex flex-col gap-1 ps-5">
+          {section.thesis && (
+            <p className="text-micro text-fg-secondary italic">{section.thesis}</p>
+          )}
+          {section.questions.length > 0 && (
+            <ul className="flex flex-col gap-0.5">
+              {section.questions.map((q, i) => (
+                <li key={i} className="text-micro text-fg-muted">
+                  • {q}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -82,21 +84,25 @@ function PlanEditor({
   onSave,
   onCancel,
 }: {
-  plan: ResearchPlan;
-  onSave: (plan: ResearchPlan) => void;
+  plan: Plan;
+  onSave: (changes: Record<string, unknown>) => void;
   onCancel: () => void;
 }) {
   const { t } = useTranslation('research');
-  const [questions, setQuestions] = useState(plan.research_questions.join('\n'));
+  const [questions, setQuestions] = useState(plan.questions.join('\n'));
   const [hypotheses, setHypotheses] = useState(plan.hypotheses.join('\n'));
   const [methodology, setMethodology] = useState(plan.methodology);
 
   const handleSave = () => {
     onSave({
-      ...plan,
-      research_questions: questions.split('\n').filter(Boolean),
-      hypotheses: hypotheses.split('\n').filter(Boolean),
-      methodology,
+      sections: plan.sections.map((s) => ({
+        section_id: s.section_id,
+        title: s.title,
+        thesis: s.thesis,
+      })),
+      _questions: questions.split('\n').filter(Boolean),
+      _hypotheses: hypotheses.split('\n').filter(Boolean),
+      _methodology: methodology,
     });
   };
 
@@ -116,10 +122,8 @@ function PlanEditor({
           onChange={(e) => setQuestions(e.target.value)}
           rows={4}
           className="rounded-md border border-border-default bg-surface px-3 py-2 text-caption outline-none focus:border-accent ltr-island"
-          placeholder={t('plan.onePerLine')}
         />
       </fieldset>
-
       <fieldset className="flex flex-col gap-1.5">
         <label htmlFor="plan-hypotheses" className="text-caption font-semibold">
           {t('plan.hypotheses')}
@@ -130,10 +134,8 @@ function PlanEditor({
           onChange={(e) => setHypotheses(e.target.value)}
           rows={3}
           className="rounded-md border border-border-default bg-surface px-3 py-2 text-caption outline-none focus:border-accent ltr-island"
-          placeholder={t('plan.onePerLine')}
         />
       </fieldset>
-
       <fieldset className="flex flex-col gap-1.5">
         <label htmlFor="plan-methodology" className="text-caption font-semibold">
           {t('plan.methodology')}
@@ -146,7 +148,6 @@ function PlanEditor({
           className="rounded-md border border-border-default bg-surface px-3 py-2 text-caption outline-none focus:border-accent ltr-island"
         />
       </fieldset>
-
       <div className="flex items-center gap-2">
         <Button variant="primary" size="sm" onClick={handleSave}>
           {t('plan.saveChanges')}
@@ -162,65 +163,63 @@ function PlanEditor({
 export function PlanPanel() {
   const { t } = useTranslation('research');
   const { client } = useBridge();
-  const { activeSession, upsertSession, setView } = useResearchStore();
+  const { activeRecord, setActiveRecord, upsertSession, setView } = useResearchStore();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const session = activeSession();
-
-  // Auto-fetch plan when the session is in planning state
-  useEffect(() => {
-    if (!session) return;
-    if (session.status === 'planning' && !session.plan) {
-      // Trigger plan generation via echo
-      researchStart(client, session.session_id)
-        .then((updated) => upsertSession(updated))
-        .catch((err) => setError(err instanceof Error ? err.message : String(err)));
-    }
-  }, [session, client, upsertSession]);
+  const plan = activeRecord?.plan;
+  const costEstimate = activeRecord?.cost_estimate;
 
   const handleApprove = useCallback(() => {
-    if (!session || busy) return;
+    if (!activeRecord || busy) return;
     setBusy(true);
     setError(null);
-    researchApprove(client, session.session_id)
-      .then((updated) => {
-        upsertSession(updated);
+    researchApprove(client, activeRecord.session_id)
+      .then((result) => {
+        upsertSession(result);
+        // Now start execution
+        return researchStart(client, activeRecord.session_id);
+      })
+      .then((summary) => {
+        upsertSession(summary);
+        // Refresh the record
+        return researchGet(client, activeRecord.session_id);
+      })
+      .then((record) => {
+        setActiveRecord(record);
         setView('trace');
       })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : String(err));
+        const mapped = mapResearchError(err);
+        setError(mapped.fallback);
       })
-      .finally(() => {
-        setBusy(false);
-      });
-  }, [session, client, upsertSession, setView, busy]);
+      .finally(() => setBusy(false));
+  }, [activeRecord, client, upsertSession, setActiveRecord, setView, busy]);
 
   const handleModify = useCallback(
-    (plan: ResearchPlan) => {
-      if (!session || busy) return;
+    (changes: Record<string, unknown>) => {
+      if (!activeRecord || busy) return;
       setBusy(true);
       setError(null);
-      researchModifyPlan(client, {
-        session_id: session.session_id,
-        plan,
-      })
-        .then((updated) => {
-          upsertSession(updated);
+      researchModify(client, { session_id: activeRecord.session_id, changes })
+        .then((result) => {
+          upsertSession(result);
+          return researchGet(client, activeRecord.session_id);
+        })
+        .then((record) => {
+          setActiveRecord(record);
           setEditing(false);
         })
         .catch((err: unknown) => {
           setError(err instanceof Error ? err.message : String(err));
         })
-        .finally(() => {
-          setBusy(false);
-        });
+        .finally(() => setBusy(false));
     },
-    [session, client, upsertSession, busy],
+    [activeRecord, client, upsertSession, setActiveRecord, busy],
   );
 
-  if (!session) {
+  if (!activeRecord) {
     return (
       <div className="flex items-center justify-center p-8 text-body text-fg-muted">
         {t('noActiveSession')}
@@ -228,9 +227,7 @@ export function PlanPanel() {
     );
   }
 
-  const plan = session.plan;
-
-  if (!plan) {
+  if (!plan || plan.sections.length === 0) {
     return (
       <div
         className="flex flex-col items-center justify-center gap-3 p-8"
@@ -256,18 +253,18 @@ export function PlanPanel() {
         >
           ← {t('backToList')}
         </button>
-        <h3 className="text-body font-semibold">{session.topic}</h3>
+        <h3 className="text-body font-semibold">{activeRecord.topic}</h3>
       </div>
 
-      {/* Header with topic & objective */}
+      {/* Topic & workspace */}
       <div className="rounded-lg border border-border-default bg-surface p-4">
         <h4 className="text-caption font-semibold text-fg-muted">{t('plan.topic')}</h4>
-        <p className="mt-1 text-body">{session.topic}</p>
-        <h4 className="mt-3 text-caption font-semibold text-fg-muted">{t('plan.objective')}</h4>
-        <p className="mt-1 text-caption text-fg-secondary">{session.objective}</p>
+        <p className="mt-1 text-body">{activeRecord.topic}</p>
+        <h4 className="mt-3 text-caption font-semibold text-fg-muted">{t('plan.workspace')}</h4>
+        <p className="mt-1 text-caption text-fg-secondary font-mono">{activeRecord.workspace}</p>
       </div>
 
-      {editing ? (
+      {editing && plan ? (
         <PlanEditor plan={plan} onSave={handleModify} onCancel={() => setEditing(false)} />
       ) : (
         <>
@@ -278,7 +275,7 @@ export function PlanPanel() {
               {t('plan.researchQuestions')}
             </h4>
             <ol className="list-inside list-decimal flex flex-col gap-1">
-              {plan.research_questions.map((q, i) => (
+              {plan.questions.map((q, i) => (
                 <li key={i} className="text-caption text-fg-secondary">
                   {q}
                 </li>
@@ -307,38 +304,45 @@ export function PlanPanel() {
             <p className="text-caption text-fg-secondary">{plan.methodology}</p>
           </section>
 
-          {/* Outline */}
+          {/* Sections outline */}
           <section className="rounded-lg border border-border-default bg-surface p-4">
             <h4 className="mb-2 flex items-center gap-2 text-caption font-semibold">
               <ListTree className="size-4 text-accent" aria-hidden />
-              {t('plan.outline')}
+              {t('plan.sections')} ({plan.sections.length})
             </h4>
-            <OutlineTree nodes={plan.outline} />
+            <ul className="flex flex-col gap-2" role="tree">
+              {plan.sections.map((section) => (
+                <SectionOutline key={section.section_id} section={section} />
+              ))}
+            </ul>
           </section>
 
           {/* Cost estimate from plan */}
-          {plan.estimated_cost_usd !== undefined && (
+          {costEstimate && costEstimate.estimated_tokens > 0 && (
             <div className="flex items-center gap-4 rounded-md bg-surface-2 px-4 py-2 text-micro">
               <span className="text-fg-muted">{t('estimatedCost')}:</span>
-              <span className="font-semibold">${plan.estimated_cost_usd.toFixed(2)}</span>
+              <span className="font-semibold">{costEstimate.estimated_model_calls} calls</span>
               <span className="text-fg-muted">·</span>
               <span className="text-fg-muted">{t('tokens')}:</span>
               <span className="font-semibold">
-                {((plan.estimated_tokens ?? 0) / 1000).toFixed(0)}k
+                {(costEstimate.estimated_tokens / 1000).toFixed(0)}k
+              </span>
+              <span className="text-fg-muted">·</span>
+              <span className="text-fg-muted">{t('duration')}:</span>
+              <span className="font-semibold">
+                ~{Math.round(costEstimate.max_wall_clock_seconds / 60)}m
               </span>
             </div>
           )}
         </>
       )}
 
-      {/* Error */}
       {error && (
         <p role="alert" className="rounded-md bg-danger-bg p-2.5 text-caption text-danger-fg">
           {error}
         </p>
       )}
 
-      {/* Action buttons */}
       {!editing && (
         <div
           className="flex items-center gap-3 border-t border-border-default pt-4"

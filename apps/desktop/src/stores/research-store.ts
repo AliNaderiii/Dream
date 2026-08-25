@@ -10,9 +10,10 @@
 import { create } from 'zustand';
 
 import type {
-  ResearchProgressEvent,
-  ResearchSession,
-  ResearchStep,
+  ListSummary,
+  ResearchEvent,
+  SessionRecord,
+  SessionSummary,
 } from '@/lib/bridge/research-types';
 
 /** Maximum trace events kept in memory per session (bounded buffer). */
@@ -23,17 +24,19 @@ const MAX_OUTPUT_LINES = 200;
 
 /** Per-session streaming state. */
 interface SessionStreamState {
-  steps: ResearchStep[];
-  events: ResearchProgressEvent[];
-  currentStepId: string | null;
+  events: ResearchEvent[];
+  cursor: number;
   heartbeatAt: number | null;
-  /** True when the sidecar hasn't sent a heartbeat within the threshold. */
   isStale: boolean;
 }
 
 interface ResearchState {
-  sessions: ResearchSession[];
+  sessions: ListSummary[];
   activeSessionId: string | null;
+  /** Full record for the active session (from research.get). */
+  activeRecord: SessionRecord | null;
+  /** Latest summary for the active session. */
+  activeSummary: SessionSummary | null;
   /** Per-session streaming state, keyed by session_id. */
   streams: Record<string, SessionStreamState>;
   /** UI view mode for the active session. */
@@ -42,37 +45,34 @@ interface ResearchState {
   traceInspectorOpen: boolean;
   /** Filter for the trace inspector. */
   traceFilter: {
-    phase: string | null;
-    status: string | null;
-    tool: string | null;
+    event: string | null;
   };
 
   // Actions
-  setSessions: (sessions: ResearchSession[]) => void;
-  upsertSession: (session: ResearchSession) => void;
+  setSessions: (sessions: ListSummary[]) => void;
+  upsertSession: (summary: SessionSummary) => void;
   setActiveSession: (sessionId: string | null) => void;
+  setActiveRecord: (record: SessionRecord | null) => void;
+  setActiveSummary: (summary: SessionSummary | null) => void;
   setView: (view: ResearchState['view']) => void;
   setTraceInspectorOpen: (open: boolean) => void;
   setTraceFilter: (filter: Partial<ResearchState['traceFilter']>) => void;
 
   // Streaming actions
   initStream: (sessionId: string) => void;
-  pushEvent: (sessionId: string, event: ResearchProgressEvent) => void;
-  updateSteps: (sessionId: string, steps: ResearchStep[]) => void;
+  pushEvent: (sessionId: string, event: ResearchEvent, cursor: number) => void;
   markStale: (sessionId: string, stale: boolean) => void;
   clearStream: (sessionId: string) => void;
 
   // Selectors
-  activeSession: () => ResearchSession | null;
   activeStream: () => SessionStreamState | null;
-  filteredSteps: () => ResearchStep[];
+  filteredEvents: () => ResearchEvent[];
 }
 
 function emptyStreamState(): SessionStreamState {
   return {
-    steps: [],
     events: [],
-    currentStepId: null,
+    cursor: 0,
     heartbeatAt: null,
     isStale: false,
   };
@@ -81,24 +81,41 @@ function emptyStreamState(): SessionStreamState {
 export const useResearchStore = create<ResearchState>()((set, get) => ({
   sessions: [],
   activeSessionId: null,
+  activeRecord: null,
+  activeSummary: null,
   streams: {},
   view: 'list',
   traceInspectorOpen: false,
-  traceFilter: { phase: null, status: null, tool: null },
+  traceFilter: { event: null },
 
   setSessions: (sessions) => set({ sessions }),
 
-  upsertSession: (session) =>
+  upsertSession: (summary) =>
     set((state) => {
-      const index = state.sessions.findIndex((s) => s.session_id === session.session_id);
+      const listSummary: ListSummary = {
+        session_id: summary.session_id,
+        topic: summary.topic,
+        status: summary.status,
+        sections: summary.sections_total,
+        created_at: 0,
+        updated_at: 0,
+        published: summary.published,
+        report: summary.report.markdown_path,
+      };
+      const index = state.sessions.findIndex((s) => s.session_id === summary.session_id);
       const sessions =
         index >= 0
-          ? state.sessions.map((s, i) => (i === index ? session : s))
-          : [session, ...state.sessions];
+          ? state.sessions.map((s, i) => (i === index ? { ...s, ...listSummary } : s))
+          : [listSummary, ...state.sessions];
       return { sessions };
     }),
 
-  setActiveSession: (activeSessionId) => set({ activeSessionId }),
+  setActiveSession: (activeSessionId) =>
+    set({ activeSessionId, activeRecord: null, activeSummary: null }),
+
+  setActiveRecord: (activeRecord) => set({ activeRecord }),
+
+  setActiveSummary: (activeSummary) => set({ activeSummary }),
 
   setView: (view) => set({ view }),
 
@@ -115,44 +132,21 @@ export const useResearchStore = create<ResearchState>()((set, get) => ({
       },
     })),
 
-  pushEvent: (sessionId, event) =>
+  pushEvent: (sessionId, event, cursor) =>
     set((state) => {
       const existing = state.streams[sessionId] ?? emptyStreamState();
       const events = [...existing.events, event];
-      // Bounded buffer: keep only the last MAX_TRACE_EVENTS
       const trimmed = events.length > MAX_TRACE_EVENTS ? events.slice(-MAX_TRACE_EVENTS) : events;
-
-      let currentStepId = existing.currentStepId;
-      let heartbeatAt = existing.heartbeatAt;
-
-      if (event.event_type === 'step_started' && event.step) {
-        currentStepId = event.step.step_id;
-      }
-      if (event.event_type === 'heartbeat') {
-        heartbeatAt = Date.now();
-      }
-
       return {
         streams: {
           ...state.streams,
           [sessionId]: {
             ...existing,
             events: trimmed,
-            currentStepId,
-            heartbeatAt,
+            cursor,
+            heartbeatAt: Date.now(),
             isStale: false,
           },
-        },
-      };
-    }),
-
-  updateSteps: (sessionId, steps) =>
-    set((state) => {
-      const existing = state.streams[sessionId] ?? emptyStreamState();
-      return {
-        streams: {
-          ...state.streams,
-          [sessionId]: { ...existing, steps },
         },
       };
     }),
@@ -175,26 +169,17 @@ export const useResearchStore = create<ResearchState>()((set, get) => ({
       return { streams: rest };
     }),
 
-  activeSession: () => {
-    const { sessions, activeSessionId } = get();
-    return sessions.find((s) => s.session_id === activeSessionId) ?? null;
-  },
-
   activeStream: () => {
     const { streams, activeSessionId } = get();
     return activeSessionId ? (streams[activeSessionId] ?? null) : null;
   },
 
-  filteredSteps: () => {
+  filteredEvents: () => {
     const stream = get().activeStream();
     if (!stream) return [];
     const { traceFilter } = get();
-    return stream.steps.filter((step) => {
-      if (traceFilter.phase && step.phase !== traceFilter.phase) return false;
-      if (traceFilter.status && step.status !== traceFilter.status) return false;
-      if (traceFilter.tool && !step.tool_calls?.some((tc) => tc.tool_name === traceFilter.tool)) {
-        return false;
-      }
+    return stream.events.filter((event) => {
+      if (traceFilter.event && event.event !== traceFilter.event) return false;
       return true;
     });
   },

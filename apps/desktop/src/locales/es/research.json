@@ -1,159 +1,128 @@
 {
   "title": "Investigación y Análisis",
-  "subtitle": "Investigación autónoma en ciencia de datos con traza de ejecución en vivo e informes verificables.",
+  "subtitle": "Investigación autónoma con traza en vivo e informes verificables.",
   "newResearch": "Nueva investigación",
-  "noSessions": "Aún no hay sesiones de investigación",
-  "noSessionsDesc": "Inicia un nuevo proyecto de investigación para analizar tus datos con insights impulsados por IA.",
-  "openSession": "Abrir sesión de investigación: {{topic}}",
-  "noActiveSession": "No hay sesión de investigación activa",
-  "backToList": "Volver a sesiones",
+  "noSessions": "Sin sesiones",
+  "noSessionsDesc": "Inicia un nuevo proyecto.",
+  "openSession": "Abrir: {{topic}}",
+  "noActiveSession": "Sin sesión activa",
+  "backToList": "Volver",
   "cancel": "Cancelar",
   "close": "Cerrar",
-  "add": "Añadir",
+  "published": "Publicado",
   "sections": "{{count}} secciones",
-  "claims": "{{count}} afirmaciones",
   "tokens": "Tokens",
-  "cost": "Coste",
   "duration": "Duración",
   "estimatedCost": "Coste estimado",
-  "breakdown": "Desglose por fase",
-
   "status": {
-    "pending": "Pendiente",
-    "planning": "Planificando",
-    "awaiting_approval": "Esperando aprobación",
-    "running": "En ejecución",
-    "completed": "Completado",
-    "failed": "Fallido",
-    "cancelled": "Cancelado"
+    "IDLE": "Idle",
+    "PLANNING": "Planning",
+    "APPROVAL_PENDING": "Awaiting approval",
+    "IN_PROGRESS": "Running",
+    "PROOFREAD": "Proofreading",
+    "COMPILING": "Compiling",
+    "COMPLETE": "Complete",
+    "FAILED": "Failed",
+    "CANCELLED": "Cancelled"
   },
-
   "composer": {
-    "topic": "Tema de investigación",
-    "topicPlaceholder": "p. ej. Abandono de clientes y fricción en la incorporación",
-    "objective": "Objetivo",
-    "objectivePlaceholder": "Describe qué quieres aprender o demostrar…",
-    "dataSources": "Fuentes de datos",
-    "addSource": "Añade un nombre de dataset o ruta de archivo…",
-    "depth": "Profundidad de investigación",
-    "modelRoute": "Modelo / ruta",
-    "privacyWarning": "Tus prompts y datos saldrán de este equipo.",
-    "start": "Iniciar investigación",
-    "starting": "Iniciando…"
+    "topic": "Research topic",
+    "topicPlaceholder": "e.g. Customer churn & onboarding friction",
+    "workspace": "Workspace folder",
+    "workspacePlaceholder": "/path/to/data",
+    "workspaceHelp": "The directory containing your data files. The research engine will discover and analyse them.",
+    "depth": "Research depth",
+    "modelRoute": "Model / route",
+    "privacyWarning": "Your prompts and data will leave this machine.",
+    "start": "Start research",
+    "starting": "Starting…",
+    "configSummary": "Configuration",
+    "maxSections": "Max sections",
+    "maxIterations": "Max iterations",
+    "maxTime": "Max time"
   },
-
   "depth": {
-    "simple": "Simple",
-    "simpleDesc": "Análisis rápido, ~2 minutos, menos iteraciones.",
-    "deep": "Profundo",
-    "deepDesc": "Análisis exhaustivo, ~5 minutos, informe multi-sección."
+    "brief": "Brief",
+    "briefDesc": "Quick analysis, ~5 minutes, 3 sections.",
+    "standard": "Standard",
+    "standardDesc": "Thorough analysis, ~15 minutes, 6 sections.",
+    "deep": "Deep",
+    "deepDesc": "Exhaustive analysis, ~30 minutes, 10 sections."
   },
-
   "privacy": {
-    "leavesMachine": "Los datos salen de este equipo para esta ruta.",
-    "staysLocal": "Todos los datos permanecen en este equipo."
+    "leavesMachine": "Data leaves this machine for this route.",
+    "staysLocal": "All data stays on this machine."
   },
-
   "plan": {
-    "generating": "Generando plan de investigación…",
-    "topic": "Tema",
-    "objective": "Objetivo",
-    "researchQuestions": "Preguntas de investigación",
-    "hypotheses": "Hipótesis",
-    "methodology": "Metodología",
-    "outline": "Esquema del informe",
-    "actions": "Acciones del plan",
-    "approve": "Aprobar y ejecutar",
-    "modify": "Modificar",
-    "editPlan": "Editar plan",
-    "saveChanges": "Guardar cambios",
-    "onePerLine": "Una por línea"
+    "generating": "Generating research plan…",
+    "topic": "Topic",
+    "workspace": "Workspace",
+    "researchQuestions": "Research Questions",
+    "hypotheses": "Hypotheses",
+    "methodology": "Methodology",
+    "sections": "Sections",
+    "actions": "Plan actions",
+    "approve": "Approve & Run",
+    "modify": "Modify",
+    "editPlan": "Edit plan",
+    "saveChanges": "Save changes"
   },
-
-  "stepStatus": {
-    "pending": "Pendiente",
-    "running": "En ejecución",
-    "done": "Hecho",
-    "failed": "Fallido",
-    "blocked": "Bloqueado"
-  },
-
   "trace": {
-    "progress": "{{completed}} / {{total}} pasos",
-    "progressBar": "Progreso de la investigación",
-    "eta": "~{{minutes}} min restantes",
-    "stop": "Detener investigación",
-    "stopping": "Deteniendo…",
-    "viewReport": "Ver informe",
-    "completed": "Investigación completada con éxito.",
-    "failed": "La investigación falló.",
-    "cancelled": "La investigación fue cancelada.",
-    "waitingForSteps": "Esperando pasos de ejecución…",
-    "noSteps": "No hay pasos de ejecución.",
-    "output": "Salida",
-    "toolCalls": "Llamadas a herramientas",
-    "args": "Args",
-    "result": "Resultado",
-    "error": "Error",
-    "ok": "OK",
-    "running": "En ejecución",
-    "why": "Por qué",
-    "fixAndRetry": "Corregir y reintentar",
-    "allPhases": "Todas las fases",
-    "allTools": "Todas las herramientas",
-    "filterByPhase": "Filtrar por fase",
-    "filterByTool": "Filtrar por herramienta",
-    "clearFilters": "Limpiar filtros",
-    "totalCalls": "{{count}} llamadas",
-    "errors": "{{count}} errores",
-    "noToolCalls": "Aún no hay llamadas a herramientas.",
-    "noMatches": "Ninguna llamada coincide con el filtro actual.",
+    "stop": "Stop research",
+    "stopping": "Stopping…",
+    "viewReport": "View report",
+    "completed": "Research completed successfully.",
+    "failed": "Research failed.",
+    "cancelled": "Research was cancelled.",
+    "waitingForSteps": "Waiting for execution steps…",
+    "noSteps": "No execution steps.",
+    "allEvents": "All events",
+    "filterByEvent": "Filter by event",
+    "clearFilters": "Clear filters",
+    "totalEvents": "{{count}} events",
+    "noEvents": "No events yet.",
+    "noMatches": "No events match the current filter.",
     "stale": {
-      "title": "El motor puede no estar respondiendo",
-      "description": "No se ha recibido latido en 15 segundos.",
-      "restart": "Reiniciar motor"
+      "title": "Engine may be unresponsive",
+      "description": "No heartbeat received for 15 seconds. The engine may have stalled.",
+      "restart": "Restart engine"
     }
   },
-
-  "traceInspector": "Inspector de traza",
-
+  "traceInspector": "Trace inspector",
   "report": {
-    "view": "Informe",
-    "figures": "Figuras",
-    "integrity": "Integridad",
-    "notAvailable": "No hay informe disponible para esta sesión.",
-    "exportBar": "Opciones de exportación",
+    "view": "Report",
+    "figures": "Figures",
+    "integrity": "Integrity",
+    "notAvailable": "No report available for this session.",
+    "exportBar": "Export options",
     "exportMarkdown": "Markdown",
     "exportPdf": "PDF",
-    "exportZip": "ZIP de reproducción",
-    "exportProvenance": ".provenance.json"
+    "exportZip": "Reproduction ZIP",
+    "exportProvenance": ".provenance.json",
+    "exporting": "Exporting…",
+    "pdfEchoOnly": "PDF export requires the sidecar engine.",
+    "zipEchoOnly": "ZIP export requires the sidecar engine."
   },
-
   "figures": {
-    "gallery": "Galería de figuras",
-    "none": "No hay figuras en este informe.",
-    "source": "Paso fuente"
+    "gallery": "Figure gallery",
+    "none": "No figures in this report."
   },
-
   "integrity": {
-    "claims": "Afirmaciones y Evidencias",
-    "summary": "Resumen de integridad",
-    "summaryDetail": "{{claims}} afirmaciones verificadas con {{evidence}} evidencias.",
-    "noClaims": "No se extrajeron afirmaciones de este informe.",
-    "claim": "Afirmación {{index}}",
-    "evidenceCount": "{{count}} evidencias",
-    "showCode": "Mostrar código",
-    "hideCode": "Ocultar código"
+    "claims": "Claims & Evidence",
+    "summary": "Integrity summary",
+    "summaryDetail": "{{claims}} claims, {{evidence}} grounded in evidence.",
+    "noClaims": "No findings extracted for this report.",
+    "evidence": "Evidence",
+    "grounded": "Grounded",
+    "ungrounded": "Ungrounded"
   },
-
   "errors": {
-    "sessionNotFound": "Sesión de investigación no encontrada.",
-    "noReport": "Aún no hay informe disponible.",
-    "cancelled": "La investigación fue cancelada.",
-    "timedOut": "La investigación agotó el tiempo. El motor puede estar ocupado.",
-    "noDataSources": "Adjunta al menos una fuente de datos para comenzar.",
-    "unknown": "Ocurrió un error inesperado."
-  },
-
-  "removeSource": "Eliminar fuente de datos: {{name}}"
+    "sessionNotFound": "Research session not found.",
+    "notApproved": "The plan must be approved before starting.",
+    "nothingToApprove": "Nothing to approve in the current state.",
+    "cancelled": "Research was cancelled.",
+    "timedOut": "Research timed out. The engine may be busy — try again.",
+    "notComplete": "Only a complete session can be exported.",
+    "unknown": "An unexpected error occurred."
+  }
 }

@@ -2,158 +2,127 @@
   "title": "연구 및 분석",
   "subtitle": "실시간 실행 추적과 검증 가능한 보고서를 갖춘 자율 데이터 과학 연구.",
   "newResearch": "새 연구",
-  "noSessions": "아직 연구 세션이 없습니다",
-  "noSessionsDesc": "AI 기반 인사이트로 데이터를 분석할 새 연구 프로젝트를 시작하세요.",
-  "openSession": "연구 세션 열기: {{topic}}",
-  "noActiveSession": "활성 연구 세션이 없습니다",
-  "backToList": "세션 목록으로 돌아가기",
+  "noSessions": "세션 없음",
+  "noSessionsDesc": "새 프로젝트를 시작하세요.",
+  "openSession": "열기: {{topic}}",
+  "noActiveSession": "활성 세션 없음",
+  "backToList": "목록으로",
   "cancel": "취소",
   "close": "닫기",
-  "add": "추가",
+  "published": "게시됨",
   "sections": "{{count}} 섹션",
-  "claims": "{{count}} 주장",
   "tokens": "토큰",
-  "cost": "비용",
   "duration": "소요 시간",
   "estimatedCost": "예상 비용",
-  "breakdown": "단계별 내역",
-
   "status": {
-    "pending": "대기 중",
-    "planning": "계획 중",
-    "awaiting_approval": "승인 대기",
-    "running": "실행 중",
-    "completed": "완료",
-    "failed": "실패",
-    "cancelled": "취소됨"
+    "IDLE": "Idle",
+    "PLANNING": "Planning",
+    "APPROVAL_PENDING": "Awaiting approval",
+    "IN_PROGRESS": "Running",
+    "PROOFREAD": "Proofreading",
+    "COMPILING": "Compiling",
+    "COMPLETE": "Complete",
+    "FAILED": "Failed",
+    "CANCELLED": "Cancelled"
   },
-
   "composer": {
-    "topic": "연구 주제",
-    "topicPlaceholder": "예: 고객 이탈 및 온보딩 마찰",
-    "objective": "목표",
-    "objectivePlaceholder": "배우거나 증명하고 싶은 내용을 설명하세요…",
-    "dataSources": "데이터 소스",
-    "addSource": "데이터셋 이름 또는 파일 경로 추가…",
-    "depth": "연구 깊이",
-    "modelRoute": "모델 / 라우트",
-    "privacyWarning": "프롬프트와 데이터가 이 기기에서 전송됩니다.",
-    "start": "연구 시작",
-    "starting": "시작 중…"
+    "topic": "Research topic",
+    "topicPlaceholder": "e.g. Customer churn & onboarding friction",
+    "workspace": "Workspace folder",
+    "workspacePlaceholder": "/path/to/data",
+    "workspaceHelp": "The directory containing your data files. The research engine will discover and analyse them.",
+    "depth": "Research depth",
+    "modelRoute": "Model / route",
+    "privacyWarning": "Your prompts and data will leave this machine.",
+    "start": "Start research",
+    "starting": "Starting…",
+    "configSummary": "Configuration",
+    "maxSections": "Max sections",
+    "maxIterations": "Max iterations",
+    "maxTime": "Max time"
   },
-
   "depth": {
-    "simple": "간단",
-    "simpleDesc": "빠른 분석, 약 2분, 적은 반복.",
-    "deep": "심층",
-    "deepDesc": "철저한 분석, 약 5분, 다중 섹션 보고서."
+    "brief": "Brief",
+    "briefDesc": "Quick analysis, ~5 minutes, 3 sections.",
+    "standard": "Standard",
+    "standardDesc": "Thorough analysis, ~15 minutes, 6 sections.",
+    "deep": "Deep",
+    "deepDesc": "Exhaustive analysis, ~30 minutes, 10 sections."
   },
-
   "privacy": {
-    "leavesMachine": "이 라우트에서 데이터가 이 기기에서 전송됩니다.",
-    "staysLocal": "모든 데이터가 이 기기에 유지됩니다."
+    "leavesMachine": "Data leaves this machine for this route.",
+    "staysLocal": "All data stays on this machine."
   },
-
   "plan": {
-    "generating": "연구 계획 생성 중…",
-    "topic": "주제",
-    "objective": "목표",
-    "researchQuestions": "연구 질문",
-    "hypotheses": "가설",
-    "methodology": "방법론",
-    "outline": "보고서 개요",
-    "actions": "계획 작업",
-    "approve": "승인 및 실행",
-    "modify": "수정",
-    "editPlan": "계획 편집",
-    "saveChanges": "변경사항 저장",
-    "onePerLine": "한 줄에 하나씩"
+    "generating": "Generating research plan…",
+    "topic": "Topic",
+    "workspace": "Workspace",
+    "researchQuestions": "Research Questions",
+    "hypotheses": "Hypotheses",
+    "methodology": "Methodology",
+    "sections": "Sections",
+    "actions": "Plan actions",
+    "approve": "Approve & Run",
+    "modify": "Modify",
+    "editPlan": "Edit plan",
+    "saveChanges": "Save changes"
   },
-
-  "stepStatus": {
-    "pending": "대기 중",
-    "running": "실행 중",
-    "done": "완료",
-    "failed": "실패",
-    "blocked": "차단됨"
-  },
-
   "trace": {
-    "progress": "{{completed}} / {{total}} 단계",
-    "progressBar": "연구 진행률",
-    "eta": "약 {{minutes}}분 남음",
-    "stop": "연구 중지",
-    "stopping": "중지 중…",
-    "viewReport": "보고서 보기",
-    "completed": "연구가 성공적으로 완료되었습니다.",
-    "failed": "연구가 실패했습니다.",
-    "cancelled": "연구가 취소되었습니다.",
-    "waitingForSteps": "실행 단계를 기다리는 중…",
-    "noSteps": "실행 단계가 없습니다.",
-    "output": "출력",
-    "toolCalls": "도구 호출",
-    "args": "인수",
-    "result": "결과",
-    "error": "오류",
-    "ok": "성공",
-    "running": "실행 중",
-    "why": "이유",
-    "fixAndRetry": "수정 후 재시도",
-    "allPhases": "모든 단계",
-    "allTools": "모든 도구",
-    "filterByPhase": "단계별 필터",
-    "filterByTool": "도구별 필터",
-    "clearFilters": "필터 초기화",
-    "totalCalls": "{{count}}회 호출",
-    "errors": "{{count}}개 오류",
-    "noToolCalls": "아직 도구 호출이 없습니다.",
-    "noMatches": "현재 필터에 일치하는 도구 호출이 없습니다.",
+    "stop": "Stop research",
+    "stopping": "Stopping…",
+    "viewReport": "View report",
+    "completed": "Research completed successfully.",
+    "failed": "Research failed.",
+    "cancelled": "Research was cancelled.",
+    "waitingForSteps": "Waiting for execution steps…",
+    "noSteps": "No execution steps.",
+    "allEvents": "All events",
+    "filterByEvent": "Filter by event",
+    "clearFilters": "Clear filters",
+    "totalEvents": "{{count}} events",
+    "noEvents": "No events yet.",
+    "noMatches": "No events match the current filter.",
     "stale": {
-      "title": "엔진이 응답하지 않을 수 있습니다",
-      "description": "15초 동안 하트비트를 받지 못했습니다.",
-      "restart": "엔진 재시작"
+      "title": "Engine may be unresponsive",
+      "description": "No heartbeat received for 15 seconds. The engine may have stalled.",
+      "restart": "Restart engine"
     }
   },
-
-  "traceInspector": "추적 인스펙터",
-
+  "traceInspector": "Trace inspector",
   "report": {
-    "view": "보고서",
-    "figures": "그림",
-    "integrity": "무결성",
-    "notAvailable": "이 세션에 사용 가능한 보고서가 없습니다.",
-    "exportBar": "내보내기 옵션",
+    "view": "Report",
+    "figures": "Figures",
+    "integrity": "Integrity",
+    "notAvailable": "No report available for this session.",
+    "exportBar": "Export options",
     "exportMarkdown": "Markdown",
     "exportPdf": "PDF",
-    "exportZip": "재현 ZIP",
-    "exportProvenance": ".provenance.json"
+    "exportZip": "Reproduction ZIP",
+    "exportProvenance": ".provenance.json",
+    "exporting": "Exporting…",
+    "pdfEchoOnly": "PDF export requires the sidecar engine.",
+    "zipEchoOnly": "ZIP export requires the sidecar engine."
   },
-
   "figures": {
-    "gallery": "그림 갤러리",
-    "none": "이 보고서에 그림이 없습니다.",
-    "source": "소스 단계"
+    "gallery": "Figure gallery",
+    "none": "No figures in this report."
   },
-
   "integrity": {
-    "claims": "주장 및 증거",
-    "summary": "무결성 요약",
-    "summaryDetail": "{{claims}}개 주장이 {{evidence}}개 증거에 대해 검증되었습니다.",
-    "noClaims": "이 보고서에서 추출된 주장이 없습니다.",
-    "claim": "주장 {{index}}",
-    "evidenceCount": "{{count}}개 증거",
-    "showCode": "코드 보기",
-    "hideCode": "코드 숨기기"
+    "claims": "Claims & Evidence",
+    "summary": "Integrity summary",
+    "summaryDetail": "{{claims}} claims, {{evidence}} grounded in evidence.",
+    "noClaims": "No findings extracted for this report.",
+    "evidence": "Evidence",
+    "grounded": "Grounded",
+    "ungrounded": "Ungrounded"
   },
-
   "errors": {
-    "sessionNotFound": "연구 세션을 찾을 수 없습니다.",
-    "noReport": "아직 보고서가 없습니다.",
-    "cancelled": "연구가 취소되었습니다.",
-    "timedOut": "연구 시간이 초과되었습니다. 엔진이 바쁠 수 있습니다.",
-    "noDataSources": "연구를 시작하려면 하나 이상의 데이터 소스를 첨부하세요.",
-    "unknown": "예상치 못한 오류가 발생했습니다."
-  },
-
-  "removeSource": "데이터 소스 제거: {{name}}"
+    "sessionNotFound": "Research session not found.",
+    "notApproved": "The plan must be approved before starting.",
+    "nothingToApprove": "Nothing to approve in the current state.",
+    "cancelled": "Research was cancelled.",
+    "timedOut": "Research timed out. The engine may be busy — try again.",
+    "notComplete": "Only a complete session can be exported.",
+    "unknown": "An unexpected error occurred."
+  }
 }

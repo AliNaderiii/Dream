@@ -2,158 +2,127 @@
   "title": "リサーチ＆分析",
   "subtitle": "ライブ実行トレースと検証可能なレポートを備えた自律型データサイエンスリサーチ。",
   "newResearch": "新しいリサーチ",
-  "noSessions": "リサーチセッションはまだありません",
-  "noSessionsDesc": "新しいリサーチプロジェクトを開始して、AI搭載のインサイトでデータを分析しましょう。",
-  "openSession": "リサーチセッションを開く：{{topic}}",
-  "noActiveSession": "アクティブなリサーチセッションはありません",
-  "backToList": "セッション一覧に戻る",
+  "noSessions": "セッションはまだありません",
+  "noSessionsDesc": "新しいリサーチプロジェクトを開始しましょう。",
+  "openSession": "セッションを開く：{{topic}}",
+  "noActiveSession": "アクティブなセッションはありません",
+  "backToList": "一覧に戻る",
   "cancel": "キャンセル",
   "close": "閉じる",
-  "add": "追加",
+  "published": "公開済み",
   "sections": "{{count}} セクション",
-  "claims": "{{count}} 件の主張",
   "tokens": "トークン",
-  "cost": "コスト",
   "duration": "所要時間",
   "estimatedCost": "推定コスト",
-  "breakdown": "フェーズ別の内訳",
-
   "status": {
-    "pending": "保留中",
-    "planning": "計画中",
-    "awaiting_approval": "承認待ち",
-    "running": "実行中",
-    "completed": "完了",
-    "failed": "失敗",
-    "cancelled": "キャンセル済み"
+    "IDLE": "Idle",
+    "PLANNING": "Planning",
+    "APPROVAL_PENDING": "Awaiting approval",
+    "IN_PROGRESS": "Running",
+    "PROOFREAD": "Proofreading",
+    "COMPILING": "Compiling",
+    "COMPLETE": "Complete",
+    "FAILED": "Failed",
+    "CANCELLED": "Cancelled"
   },
-
   "composer": {
-    "topic": "リサーチテーマ",
-    "topicPlaceholder": "例：顧客離脱とオンボーディングの摩擦",
-    "objective": "目的",
-    "objectivePlaceholder": "学びたいことや証明したいことを記述してください…",
-    "dataSources": "データソース",
-    "addSource": "データセット名またはファイルパスを追加…",
-    "depth": "リサーチの深さ",
-    "modelRoute": "モデル / ルート",
-    "privacyWarning": "プロンプトとデータはこのマシンから送信されます。",
-    "start": "リサーチを開始",
-    "starting": "開始中…"
+    "topic": "Research topic",
+    "topicPlaceholder": "e.g. Customer churn & onboarding friction",
+    "workspace": "Workspace folder",
+    "workspacePlaceholder": "/path/to/data",
+    "workspaceHelp": "The directory containing your data files. The research engine will discover and analyse them.",
+    "depth": "Research depth",
+    "modelRoute": "Model / route",
+    "privacyWarning": "Your prompts and data will leave this machine.",
+    "start": "Start research",
+    "starting": "Starting…",
+    "configSummary": "Configuration",
+    "maxSections": "Max sections",
+    "maxIterations": "Max iterations",
+    "maxTime": "Max time"
   },
-
   "depth": {
-    "simple": "シンプル",
-    "simpleDesc": "クイック分析、約2分、反復少なめ。",
-    "deep": "ディープ",
-    "deepDesc": "徹底的な分析、約5分、マルチセクションレポート。"
+    "brief": "Brief",
+    "briefDesc": "Quick analysis, ~5 minutes, 3 sections.",
+    "standard": "Standard",
+    "standardDesc": "Thorough analysis, ~15 minutes, 6 sections.",
+    "deep": "Deep",
+    "deepDesc": "Exhaustive analysis, ~30 minutes, 10 sections."
   },
-
   "privacy": {
-    "leavesMachine": "このルートではデータがこのマシンから送信されます。",
-    "staysLocal": "すべてのデータはこのマシンに保持されます。"
+    "leavesMachine": "Data leaves this machine for this route.",
+    "staysLocal": "All data stays on this machine."
   },
-
   "plan": {
-    "generating": "リサーチプランを生成中…",
-    "topic": "テーマ",
-    "objective": "目的",
-    "researchQuestions": "研究課題",
-    "hypotheses": "仮説",
-    "methodology": "方法論",
-    "outline": "レポート構成",
-    "actions": "プラン操作",
-    "approve": "承認して実行",
-    "modify": "修正",
-    "editPlan": "プランを編集",
-    "saveChanges": "変更を保存",
-    "onePerLine": "1行に1つ"
+    "generating": "Generating research plan…",
+    "topic": "Topic",
+    "workspace": "Workspace",
+    "researchQuestions": "Research Questions",
+    "hypotheses": "Hypotheses",
+    "methodology": "Methodology",
+    "sections": "Sections",
+    "actions": "Plan actions",
+    "approve": "Approve & Run",
+    "modify": "Modify",
+    "editPlan": "Edit plan",
+    "saveChanges": "Save changes"
   },
-
-  "stepStatus": {
-    "pending": "保留中",
-    "running": "実行中",
-    "done": "完了",
-    "failed": "失敗",
-    "blocked": "ブロック中"
-  },
-
   "trace": {
-    "progress": "{{completed}} / {{total}} ステップ",
-    "progressBar": "リサーチ進捗",
-    "eta": "残り約{{minutes}}分",
-    "stop": "リサーチを停止",
-    "stopping": "停止中…",
-    "viewReport": "レポートを表示",
-    "completed": "リサーチが正常に完了しました。",
-    "failed": "リサーチが失敗しました。",
-    "cancelled": "リサーチがキャンセルされました。",
-    "waitingForSteps": "実行ステップを待っています…",
-    "noSteps": "実行ステップはありません。",
-    "output": "出力",
-    "toolCalls": "ツール呼び出し",
-    "args": "引数",
-    "result": "結果",
-    "error": "エラー",
-    "ok": "成功",
-    "running": "実行中",
-    "why": "理由",
-    "fixAndRetry": "修正して再試行",
-    "allPhases": "全フェーズ",
-    "allTools": "全ツール",
-    "filterByPhase": "フェーズで絞り込み",
-    "filterByTool": "ツールで絞り込み",
-    "clearFilters": "フィルターをクリア",
-    "totalCalls": "{{count}} 回の呼び出し",
-    "errors": "{{count}} 件のエラー",
-    "noToolCalls": "ツール呼び出しはまだありません。",
-    "noMatches": "現在のフィルターに一致するツール呼び出しはありません。",
+    "stop": "Stop research",
+    "stopping": "Stopping…",
+    "viewReport": "View report",
+    "completed": "Research completed successfully.",
+    "failed": "Research failed.",
+    "cancelled": "Research was cancelled.",
+    "waitingForSteps": "Waiting for execution steps…",
+    "noSteps": "No execution steps.",
+    "allEvents": "All events",
+    "filterByEvent": "Filter by event",
+    "clearFilters": "Clear filters",
+    "totalEvents": "{{count}} events",
+    "noEvents": "No events yet.",
+    "noMatches": "No events match the current filter.",
     "stale": {
-      "title": "エンジンが応答していない可能性があります",
-      "description": "15秒間ハートビートを受信していません。",
-      "restart": "エンジンを再起動"
+      "title": "Engine may be unresponsive",
+      "description": "No heartbeat received for 15 seconds. The engine may have stalled.",
+      "restart": "Restart engine"
     }
   },
-
-  "traceInspector": "トレースインスペクター",
-
+  "traceInspector": "Trace inspector",
   "report": {
-    "view": "レポート",
-    "figures": "図表",
-    "integrity": "整合性",
-    "notAvailable": "このセッションにはレポートがありません。",
-    "exportBar": "エクスポートオプション",
+    "view": "Report",
+    "figures": "Figures",
+    "integrity": "Integrity",
+    "notAvailable": "No report available for this session.",
+    "exportBar": "Export options",
     "exportMarkdown": "Markdown",
     "exportPdf": "PDF",
-    "exportZip": "再現用ZIP",
-    "exportProvenance": ".provenance.json"
+    "exportZip": "Reproduction ZIP",
+    "exportProvenance": ".provenance.json",
+    "exporting": "Exporting…",
+    "pdfEchoOnly": "PDF export requires the sidecar engine.",
+    "zipEchoOnly": "ZIP export requires the sidecar engine."
   },
-
   "figures": {
-    "gallery": "図表ギャラリー",
-    "none": "このレポートには図表がありません。",
-    "source": "ソースステップ"
+    "gallery": "Figure gallery",
+    "none": "No figures in this report."
   },
-
   "integrity": {
-    "claims": "主張と証拠",
-    "summary": "整合性サマリー",
-    "summaryDetail": "{{claims}} 件の主張が {{evidence}} 件の証拠に対して検証されました。",
-    "noClaims": "このレポートから主張は抽出されませんでした。",
-    "claim": "主張 {{index}}",
-    "evidenceCount": "{{count}} 件の証拠",
-    "showCode": "コードを表示",
-    "hideCode": "コードを非表示"
+    "claims": "Claims & Evidence",
+    "summary": "Integrity summary",
+    "summaryDetail": "{{claims}} claims, {{evidence}} grounded in evidence.",
+    "noClaims": "No findings extracted for this report.",
+    "evidence": "Evidence",
+    "grounded": "Grounded",
+    "ungrounded": "Ungrounded"
   },
-
   "errors": {
-    "sessionNotFound": "リサーチセッションが見つかりません。",
-    "noReport": "まだレポートはありません。",
-    "cancelled": "リサーチがキャンセルされました。",
-    "timedOut": "リサーチがタイムアウトしました。エンジンがビジーの可能性があります。",
-    "noDataSources": "リサーチを開始するには少なくとも1つのデータソースを添付してください。",
-    "unknown": "予期しないエラーが発生しました。"
-  },
-
-  "removeSource": "データソースを削除：{{name}}"
+    "sessionNotFound": "Research session not found.",
+    "notApproved": "The plan must be approved before starting.",
+    "nothingToApprove": "Nothing to approve in the current state.",
+    "cancelled": "Research was cancelled.",
+    "timedOut": "Research timed out. The engine may be busy — try again.",
+    "notComplete": "Only a complete session can be exported.",
+    "unknown": "An unexpected error occurred."
+  }
 }

@@ -1,212 +1,88 @@
 /**
- * New research composer — topic, objective, data sources, depth, and
- * model/route picker. Shows a cost estimate before start and surfaces the
- * privacy sentence ("does data leave the machine?") for the selected route.
+ * New research composer — topic, workspace, depth, and model/route picker.
+ *
+ * Maps the P1 `research.create` params: { topic, workspace, config? }.
+ * Shows cost estimate from the plan response (not a separate RPC).
+ * Surfaces the privacy sentence for the selected route.
  */
 
-import { AlertTriangle, Database, Globe, Lock, Sparkles, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { AlertTriangle, FolderOpen, Globe, Lock, Sparkles } from 'lucide-react';
+import { useCallback, useState } from 'react';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/lib/i18n';
 import {
   researchCreate,
-  researchEstimate,
-  researchStart,
+  researchGet,
+  researchPlan,
   validateResearchCreate,
 } from '@/lib/bridge/research';
 import { useBridge } from '@/lib/bridge/hooks';
-import type {
-  ResearchCostEstimate,
-  ResearchCreateParams,
-  ResearchDataSource,
-  ResearchDepth,
-} from '@/lib/bridge/research-types';
+import type { ResearchCreateParams, ResearchConfig } from '@/lib/bridge/research-types';
 import { useResearchStore } from '@/stores/research-store';
 import { cn } from '@/utils/cn';
 
 const MODEL_ROUTES = [
-  {
-    id: 'local-ollama',
-    label: 'Local (Ollama)',
-    description: 'Never leaves this machine',
-    leavesMachine: false,
-  },
-  {
-    id: 'local-transformers',
-    label: 'Local (Transformers)',
-    description: 'Never leaves this machine',
-    leavesMachine: false,
-  },
-  {
-    id: 'aval-ai',
-    label: 'Aval AI',
-    description: 'Prompts leave this machine to api.avalai.ir',
-    leavesMachine: true,
-  },
-  {
-    id: 'openai',
-    label: 'OpenAI',
-    description: 'Prompts leave this machine to api.openai.com',
-    leavesMachine: true,
-  },
+  { id: 'local', label: 'Local (offline)', leavesMachine: false },
+  { id: 'aval-ai', label: 'Aval AI', leavesMachine: true },
+  { id: 'openai', label: 'OpenAI', leavesMachine: true },
 ];
 
-function CostEstimatePanel({ estimate }: { estimate: ResearchCostEstimate }) {
-  const { t } = useTranslation('research');
-  return (
-    <div className="rounded-lg border border-border-default bg-surface-2 p-3">
-      <h4 className="text-caption font-semibold">{t('costEstimate')}</h4>
-      <div className="mt-2 grid grid-cols-3 gap-3 text-micro">
-        <div>
-          <span className="text-fg-muted">{t('tokens')}</span>
-          <p className="font-semibold">{(estimate.estimated_tokens / 1000).toFixed(0)}k</p>
-        </div>
-        <div>
-          <span className="text-fg-muted">{t('cost')}</span>
-          <p className="font-semibold">${estimate.estimated_cost_usd.toFixed(2)}</p>
-        </div>
-        <div>
-          <span className="text-fg-muted">{t('duration')}</span>
-          <p className="font-semibold">~{Math.round(estimate.estimated_duration_seconds / 60)}m</p>
-        </div>
-      </div>
-      <details className="mt-2">
-        <summary className="cursor-pointer text-micro text-fg-muted hover:text-fg-secondary">
-          {t('breakdown')}
-        </summary>
-        <div className="mt-2 flex flex-col gap-1">
-          {estimate.breaks_down.map((item) => (
-            <div key={item.phase} className="flex items-center justify-between text-micro">
-              <span className="capitalize text-fg-muted">{item.phase}</span>
-              <span>
-                {(item.tokens / 1000).toFixed(0)}k · ${item.cost_usd.toFixed(3)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </details>
-    </div>
-  );
-}
-
-function PrivacySentence({ leavesMachine }: { leavesMachine: boolean }) {
-  const { t } = useTranslation('research');
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-2 rounded-md px-3 py-2 text-caption',
-        leavesMachine ? 'bg-warning-bg text-warning-fg' : 'bg-success-bg text-success-fg',
-      )}
-      role="status"
-    >
-      {leavesMachine ? (
-        <>
-          <Globe className="size-4 shrink-0" aria-hidden />
-          <span>{t('privacy.leavesMachine')}</span>
-        </>
-      ) : (
-        <>
-          <Lock className="size-4 shrink-0" aria-hidden />
-          <span>{t('privacy.staysLocal')}</span>
-        </>
-      )}
-    </div>
-  );
-}
-
-function DataSourceRow({ source, onRemove }: { source: ResearchDataSource; onRemove: () => void }) {
-  const { t } = useTranslation('research');
-  return (
-    <li className="flex items-center gap-2 rounded-md border border-border-default bg-surface px-3 py-2">
-      <Database className="size-4 shrink-0 text-fg-muted" aria-hidden />
-      <span className="min-w-0 flex-1 truncate text-caption">{source.name}</span>
-      <Badge variant="neutral">{source.kind}</Badge>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="text-fg-muted hover:text-danger-fg"
-        aria-label={t('removeSource', { name: source.name })}
-      >
-        <Trash2 className="size-4" aria-hidden />
-      </button>
-    </li>
-  );
-}
+const DEPTH_PRESETS: Record<string, Partial<ResearchConfig>> = {
+  brief: { max_iterations: 2, max_sections: 3, output_length: 'brief', max_time_seconds: 300 },
+  standard: {
+    max_iterations: 3,
+    max_sections: 6,
+    output_length: 'standard',
+    max_time_seconds: 900,
+  },
+  deep: { max_iterations: 5, max_sections: 10, output_length: 'detailed', max_time_seconds: 1800 },
+};
 
 export function ResearchComposer() {
   const { t } = useTranslation('research');
   const { client } = useBridge();
-  const { setView, upsertSession, setActiveSession } = useResearchStore();
+  const { setView, upsertSession, setActiveSession, setActiveRecord, setActiveSummary } =
+    useResearchStore();
 
   const [topic, setTopic] = useState('');
-  const [objective, setObjective] = useState('');
-  const [depth, setDepth] = useState<ResearchDepth>('deep');
+  const [workspace, setWorkspace] = useState('');
+  const [depth, setDepth] = useState<'brief' | 'standard' | 'deep'>('standard');
   const [modelRoute, setModelRoute] = useState(MODEL_ROUTES[0].id);
-  const [dataSources, setDataSources] = useState<ResearchDataSource[]>([]);
-  const [newSourceName, setNewSourceName] = useState('');
-  const [estimate, setEstimate] = useState<ResearchCostEstimate | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedRoute = MODEL_ROUTES.find((r) => r.id === modelRoute) ?? MODEL_ROUTES[0];
+  const config = DEPTH_PRESETS[depth];
 
   const params: ResearchCreateParams = {
     topic,
-    objective,
-    depth,
-    data_sources: dataSources,
-    model_route: modelRoute,
+    workspace,
+    config: { ...config, allow_network: selectedRoute.leavesMachine },
   };
 
   const validationError = validateResearchCreate(params);
 
-  // Estimate cost when params change (debounced)
-  useEffect(() => {
-    if (validationError) return;
-    const timer = setTimeout(() => {
-      researchEstimate(client, params)
-        .then(setEstimate)
-        .catch(() => setEstimate(null));
-    }, 400);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topic, objective, depth, client]);
-
-  // Clear estimate when validation fails
-  if (validationError && estimate !== null) {
-    setEstimate(null);
-  }
-
-  const addSource = useCallback(() => {
-    if (!newSourceName.trim()) return;
-    const source: ResearchDataSource = {
-      source_id: `src-${Date.now()}`,
-      name: newSourceName.trim(),
-      kind: 'dataset',
-    };
-    setDataSources((prev) => [...prev, source]);
-    setNewSourceName('');
-  }, [newSourceName]);
-
-  const removeSource = useCallback((id: string) => {
-    setDataSources((prev) => prev.filter((s) => s.source_id !== id));
-  }, []);
-
-  const handleStart = () => {
+  const handleStart = useCallback(() => {
     if (validationError || busy) return;
     setBusy(true);
     setError(null);
 
     researchCreate(client, params)
-      .then((session) => {
-        upsertSession(session);
-        setActiveSession(session.session_id);
-        return researchStart(client, session.session_id);
+      .then((summary) => {
+        upsertSession(summary);
+        setActiveSession(summary.session_id);
+        // Trigger planning
+        return researchPlan(client, summary.session_id);
       })
-      .then((started) => {
-        upsertSession(started);
+      .then((planResult) => {
+        upsertSession(planResult);
+        // Fetch the full record for the plan panel
+        return researchGet(client, planResult.session_id);
+      })
+      .then((record) => {
+        setActiveRecord(record);
+        setActiveSummary(null);
         setView('plan');
       })
       .catch((err: unknown) => {
@@ -215,7 +91,17 @@ export function ResearchComposer() {
       .finally(() => {
         setBusy(false);
       });
-  };
+  }, [
+    validationError,
+    busy,
+    client,
+    params,
+    upsertSession,
+    setActiveSession,
+    setActiveRecord,
+    setActiveSummary,
+    setView,
+  ]);
 
   return (
     <div className="flex flex-col gap-4 overflow-y-auto">
@@ -246,61 +132,30 @@ export function ResearchComposer() {
           />
         </fieldset>
 
-        {/* Objective */}
+        {/* Workspace */}
         <fieldset className="flex flex-col gap-1.5">
-          <label htmlFor="research-objective" className="text-caption font-semibold">
-            {t('composer.objective')}
+          <label htmlFor="research-workspace" className="text-caption font-semibold">
+            {t('composer.workspace')}
           </label>
-          <textarea
-            id="research-objective"
-            value={objective}
-            onChange={(e) => setObjective(e.target.value)}
-            placeholder={t('composer.objectivePlaceholder')}
-            rows={3}
-            maxLength={2000}
-            className="rounded-md border border-border-default bg-surface px-3 py-2 text-body outline-none focus:border-accent ltr-island"
-          />
-        </fieldset>
-
-        {/* Data Sources */}
-        <fieldset className="flex flex-col gap-1.5">
-          <label className="text-caption font-semibold">{t('composer.dataSources')}</label>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <FolderOpen className="size-4 shrink-0 text-fg-muted" aria-hidden />
             <input
+              id="research-workspace"
               type="text"
-              value={newSourceName}
-              onChange={(e) => setNewSourceName(e.target.value)}
-              placeholder={t('composer.addSource')}
-              className="h-8 flex-1 rounded-md border border-border-default bg-surface px-2.5 text-caption outline-none focus:border-accent ltr-island"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  addSource();
-                }
-              }}
+              value={workspace}
+              onChange={(e) => setWorkspace(e.target.value)}
+              placeholder={t('composer.workspacePlaceholder')}
+              className="h-10 flex-1 rounded-md border border-border-default bg-surface px-3 text-body outline-none focus:border-accent ltr-island"
             />
-            <Button variant="ghost" size="sm" onClick={addSource} disabled={!newSourceName.trim()}>
-              {t('add')}
-            </Button>
           </div>
-          {dataSources.length > 0 && (
-            <ul className="flex flex-col gap-1.5">
-              {dataSources.map((source) => (
-                <DataSourceRow
-                  key={source.source_id}
-                  source={source}
-                  onRemove={() => removeSource(source.source_id)}
-                />
-              ))}
-            </ul>
-          )}
+          <p className="text-micro text-fg-muted">{t('composer.workspaceHelp')}</p>
         </fieldset>
 
         {/* Depth */}
         <fieldset className="flex flex-col gap-1.5">
           <label className="text-caption font-semibold">{t('composer.depth')}</label>
           <div className="flex gap-3" role="radiogroup" aria-label={t('composer.depth')}>
-            {(['simple', 'deep'] as const).map((d) => (
+            {(['brief', 'standard', 'deep'] as const).map((d) => (
               <label
                 key={d}
                 className={cn(
@@ -345,7 +200,28 @@ export function ResearchComposer() {
               </option>
             ))}
           </select>
-          <PrivacySentence leavesMachine={selectedRoute.leavesMachine} />
+          {/* Privacy sentence */}
+          <div
+            className={cn(
+              'flex items-center gap-2 rounded-md px-3 py-2 text-caption',
+              selectedRoute.leavesMachine
+                ? 'bg-warning-bg text-warning-fg'
+                : 'bg-success-bg text-success-fg',
+            )}
+            role="status"
+          >
+            {selectedRoute.leavesMachine ? (
+              <>
+                <Globe className="size-4 shrink-0" aria-hidden />
+                <span>{t('privacy.leavesMachine')}</span>
+              </>
+            ) : (
+              <>
+                <Lock className="size-4 shrink-0" aria-hidden />
+                <span>{t('privacy.staysLocal')}</span>
+              </>
+            )}
+          </div>
           {selectedRoute.leavesMachine && (
             <p className="flex items-center gap-1.5 text-micro text-warning-fg">
               <AlertTriangle className="size-3.5" aria-hidden />
@@ -354,8 +230,26 @@ export function ResearchComposer() {
           )}
         </fieldset>
 
-        {/* Cost Estimate */}
-        {estimate && <CostEstimatePanel estimate={estimate} />}
+        {/* Config summary */}
+        {config && (
+          <div className="rounded-lg border border-border-default bg-surface-2 p-3">
+            <h4 className="text-caption font-semibold">{t('composer.configSummary')}</h4>
+            <div className="mt-2 grid grid-cols-3 gap-3 text-micro">
+              <div>
+                <span className="text-fg-muted">{t('composer.maxSections')}</span>
+                <p className="font-semibold">{config.max_sections}</p>
+              </div>
+              <div>
+                <span className="text-fg-muted">{t('composer.maxIterations')}</span>
+                <p className="font-semibold">{config.max_iterations}</p>
+              </div>
+              <div>
+                <span className="text-fg-muted">{t('composer.maxTime')}</span>
+                <p className="font-semibold">{Math.round((config.max_time_seconds ?? 0) / 60)}m</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Error */}
         {error && (

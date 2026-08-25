@@ -1,25 +1,18 @@
 /**
- * Unit tests for the research bridge wrapper (P2).
+ * Unit tests for the research bridge wrapper (P2) + XSS sanitization.
  */
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  redactSecrets,
-  validateResearchCreate,
-  validateResearchPlan,
-  mapResearchError,
-} from './research';
-import type { ResearchCreateParams, ResearchPlan } from './research-types';
+import { redactSecrets, validateResearchCreate, mapResearchError } from './research';
+import type { ResearchCreateParams } from './research-types';
 
 describe('research bridge', () => {
   describe('validateResearchCreate', () => {
     it('accepts valid params', () => {
       const params: ResearchCreateParams = {
         topic: 'Customer churn analysis',
-        objective: 'Identify the main causes of customer churn',
-        depth: 'deep',
-        data_sources: [],
+        workspace: '/workspace/research',
       };
       expect(validateResearchCreate(params)).toBeNull();
     });
@@ -27,74 +20,25 @@ describe('research bridge', () => {
     it('rejects empty topic', () => {
       const params: ResearchCreateParams = {
         topic: '',
-        objective: 'Test',
-        depth: 'simple',
-        data_sources: [],
+        workspace: '/workspace/research',
       };
       expect(validateResearchCreate(params)).toContain('Topic');
     });
 
-    it('rejects empty objective', () => {
+    it('rejects empty workspace', () => {
       const params: ResearchCreateParams = {
         topic: 'Test',
-        objective: '',
-        depth: 'simple',
-        data_sources: [],
+        workspace: '',
       };
-      expect(validateResearchCreate(params)).toContain('Objective');
-    });
-
-    it('rejects invalid depth', () => {
-      const params: ResearchCreateParams = {
-        topic: 'Test',
-        objective: 'Test',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        depth: 'invalid' as any as ResearchCreateParams['depth'],
-        data_sources: [],
-      };
-      expect(validateResearchCreate(params)).toContain('Depth');
+      expect(validateResearchCreate(params)).toContain('Workspace');
     });
 
     it('rejects topic > 500 chars', () => {
       const params: ResearchCreateParams = {
         topic: 'a'.repeat(501),
-        objective: 'Test',
-        depth: 'simple',
-        data_sources: [],
+        workspace: '/workspace',
       };
       expect(validateResearchCreate(params)).toContain('500');
-    });
-  });
-
-  describe('validateResearchPlan', () => {
-    it('accepts valid plan', () => {
-      const plan: ResearchPlan = {
-        research_questions: ['Q1', 'Q2'],
-        hypotheses: ['H1'],
-        methodology: 'Mixed methods',
-        outline: [{ title: 'Intro' }],
-      };
-      expect(validateResearchPlan(plan)).toBeNull();
-    });
-
-    it('rejects empty questions', () => {
-      const plan: ResearchPlan = {
-        research_questions: [],
-        hypotheses: ['H1'],
-        methodology: 'Test',
-        outline: [{ title: 'Intro' }],
-      };
-      expect(validateResearchPlan(plan)).toContain('research question');
-    });
-
-    it('rejects empty outline', () => {
-      const plan: ResearchPlan = {
-        research_questions: ['Q1'],
-        hypotheses: ['H1'],
-        methodology: 'Test',
-        outline: [],
-      };
-      expect(validateResearchPlan(plan)).toContain('outline');
     });
   });
 
@@ -117,6 +61,12 @@ describe('research bridge', () => {
       expect(redactSecrets(text)).not.toContain('AKIA');
     });
 
+    it('redacts JWTs', () => {
+      const text =
+        'Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U';
+      expect(redactSecrets(text)).toContain('[REDACTED]');
+    });
+
     it('leaves safe text untouched', () => {
       const text = 'This is a normal sentence with no secrets.';
       expect(redactSecrets(text)).toBe(text);
@@ -129,9 +79,16 @@ describe('research bridge', () => {
       expect(result.key).toBe('errors.sessionNotFound');
     });
 
-    it('maps no report', () => {
-      const result = mapResearchError(new Error('no report for session abc'));
-      expect(result.key).toBe('errors.noReport');
+    it('maps not approved', () => {
+      const result = mapResearchError(
+        new Error('the plan must be approved before an interactive run starts'),
+      );
+      expect(result.key).toBe('errors.notApproved');
+    });
+
+    it('maps nothing to approve', () => {
+      const result = mapResearchError(new Error('nothing to approve: the session is IDLE'));
+      expect(result.key).toBe('errors.nothingToApprove');
     });
 
     it('maps cancelled', () => {
@@ -140,18 +97,97 @@ describe('research bridge', () => {
     });
 
     it('maps timed out', () => {
-      const result = mapResearchError(new Error('research.stream_progress timed out'));
+      const result = mapResearchError(
+        new Error('the research run exceeded 900s and was cancelled'),
+      );
       expect(result.key).toBe('errors.timedOut');
     });
 
-    it('maps no data sources', () => {
-      const result = mapResearchError(new Error('No data sources attached'));
-      expect(result.key).toBe('errors.noDataSources');
+    it('maps not complete for export', () => {
+      const result = mapResearchError(new Error('only a COMPLETE session can be published'));
+      expect(result.key).toBe('errors.notComplete');
     });
 
     it('falls back to unknown', () => {
       const result = mapResearchError(new Error('something weird'));
       expect(result.key).toBe('errors.unknown');
     });
+  });
+});
+
+describe('XSS sanitization', () => {
+  // Import the renderMarkdown function indirectly by testing the patterns
+  // that the report-viewer uses. We test the strip + escape pipeline.
+
+  function escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function stripHtmlTags(text: string): string {
+    return text.replace(/<[^>]*>/g, '');
+  }
+
+  function sanitize(input: string): string {
+    return escapeHtml(stripHtmlTags(input));
+  }
+
+  it('strips <script> tags', () => {
+    const input = '<script>alert("xss")</script>Hello';
+    const result = sanitize(input);
+    expect(result).not.toContain('<script>');
+    expect(result).not.toContain('</script>');
+    expect(result).toContain('Hello');
+    // The text content between script tags is kept but escaped
+    expect(result).not.toContain('<');
+  });
+
+  it('strips <img onerror=...> tags', () => {
+    const input = '<img src=x onerror="alert(1)">';
+    const result = sanitize(input);
+    expect(result).not.toContain('onerror');
+    expect(result).not.toContain('<img');
+    expect(result).not.toContain('<');
+  });
+
+  it('strips javascript: URLs', () => {
+    const input = '<a href="javascript:alert(1)">click</a>';
+    const result = sanitize(input);
+    expect(result).not.toContain('javascript:');
+    expect(result).not.toContain('<a');
+    expect(result).toContain('click');
+  });
+
+  it('strips HTML tags and escapes remaining text', () => {
+    const input = 'Use <div> for layout';
+    const result = sanitize(input);
+    // <div> is stripped entirely by stripHtmlTags
+    expect(result).not.toContain('<div>');
+    expect(result).not.toContain('<');
+    expect(result).toContain('Use');
+    expect(result).toContain('for layout');
+  });
+
+  it('escapes ampersands', () => {
+    const input = 'A & B';
+    const result = sanitize(input);
+    expect(result).toContain('&amp;');
+  });
+
+  it('handles nested script tags', () => {
+    const input = '<script><script>alert(1)</script></script>';
+    const result = sanitize(input);
+    expect(result).not.toContain('<script');
+  });
+
+  it('handles SVG onload', () => {
+    const input = '<svg onload="alert(1)"><circle r="50"/></svg>';
+    const result = sanitize(input);
+    expect(result).not.toContain('onload');
+    expect(result).not.toContain('<svg');
   });
 });

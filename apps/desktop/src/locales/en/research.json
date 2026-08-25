@@ -9,44 +9,48 @@
   "backToList": "Back to sessions",
   "cancel": "Cancel",
   "close": "Close",
-  "add": "Add",
+  "published": "Published",
   "sections": "{{count}} sections",
-  "claims": "{{count}} claims",
   "tokens": "Tokens",
-  "cost": "Cost",
   "duration": "Duration",
   "estimatedCost": "Estimated cost",
-  "breakdown": "Breakdown by phase",
 
   "status": {
-    "pending": "Pending",
-    "planning": "Planning",
-    "awaiting_approval": "Awaiting approval",
-    "running": "Running",
-    "completed": "Completed",
-    "failed": "Failed",
-    "cancelled": "Cancelled"
+    "IDLE": "Idle",
+    "PLANNING": "Planning",
+    "APPROVAL_PENDING": "Awaiting approval",
+    "IN_PROGRESS": "Running",
+    "PROOFREAD": "Proofreading",
+    "COMPILING": "Compiling",
+    "COMPLETE": "Complete",
+    "FAILED": "Failed",
+    "CANCELLED": "Cancelled"
   },
 
   "composer": {
     "topic": "Research topic",
     "topicPlaceholder": "e.g. Customer churn & onboarding friction",
-    "objective": "Objective",
-    "objectivePlaceholder": "Describe what you want to learn or prove…",
-    "dataSources": "Data sources",
-    "addSource": "Add a dataset name or file path…",
+    "workspace": "Workspace folder",
+    "workspacePlaceholder": "/path/to/data",
+    "workspaceHelp": "The directory containing your data files. The research engine will discover and analyse them.",
     "depth": "Research depth",
     "modelRoute": "Model / route",
     "privacyWarning": "Your prompts and data will leave this machine.",
     "start": "Start research",
-    "starting": "Starting…"
+    "starting": "Starting…",
+    "configSummary": "Configuration",
+    "maxSections": "Max sections",
+    "maxIterations": "Max iterations",
+    "maxTime": "Max time"
   },
 
   "depth": {
-    "simple": "Simple",
-    "simpleDesc": "Quick analysis, ~2 minutes, fewer iterations.",
+    "brief": "Brief",
+    "briefDesc": "Quick analysis, ~5 minutes, 3 sections.",
+    "standard": "Standard",
+    "standardDesc": "Thorough analysis, ~15 minutes, 6 sections.",
     "deep": "Deep",
-    "deepDesc": "Thorough analysis, ~5 minutes, multi-section report."
+    "deepDesc": "Exhaustive analysis, ~30 minutes, 10 sections."
   },
 
   "privacy": {
@@ -57,31 +61,19 @@
   "plan": {
     "generating": "Generating research plan…",
     "topic": "Topic",
-    "objective": "Objective",
+    "workspace": "Workspace",
     "researchQuestions": "Research Questions",
     "hypotheses": "Hypotheses",
     "methodology": "Methodology",
-    "outline": "Report Outline",
+    "sections": "Sections",
     "actions": "Plan actions",
     "approve": "Approve & Run",
     "modify": "Modify",
     "editPlan": "Edit plan",
-    "saveChanges": "Save changes",
-    "onePerLine": "One per line"
-  },
-
-  "stepStatus": {
-    "pending": "Pending",
-    "running": "Running",
-    "done": "Done",
-    "failed": "Failed",
-    "blocked": "Blocked"
+    "saveChanges": "Save changes"
   },
 
   "trace": {
-    "progress": "{{completed}} / {{total}} steps",
-    "progressBar": "Research progress",
-    "eta": "~{{minutes}} min remaining",
     "stop": "Stop research",
     "stopping": "Stopping…",
     "viewReport": "View report",
@@ -90,24 +82,12 @@
     "cancelled": "Research was cancelled.",
     "waitingForSteps": "Waiting for execution steps…",
     "noSteps": "No execution steps.",
-    "output": "Output",
-    "toolCalls": "Tool calls",
-    "args": "Args",
-    "result": "Result",
-    "error": "Error",
-    "ok": "OK",
-    "running": "Running",
-    "why": "Why",
-    "fixAndRetry": "Fix & retry",
-    "allPhases": "All phases",
-    "allTools": "All tools",
-    "filterByPhase": "Filter by phase",
-    "filterByTool": "Filter by tool",
+    "allEvents": "All events",
+    "filterByEvent": "Filter by event",
     "clearFilters": "Clear filters",
-    "totalCalls": "{{count}} calls",
-    "errors": "{{count}} errors",
-    "noToolCalls": "No tool calls yet.",
-    "noMatches": "No tool calls match the current filter.",
+    "totalEvents": "{{count}} events",
+    "noEvents": "No events yet.",
+    "noMatches": "No events match the current filter.",
     "stale": {
       "title": "Engine may be unresponsive",
       "description": "No heartbeat received for 15 seconds. The engine may have stalled.",
@@ -126,34 +106,34 @@
     "exportMarkdown": "Markdown",
     "exportPdf": "PDF",
     "exportZip": "Reproduction ZIP",
-    "exportProvenance": ".provenance.json"
+    "exportProvenance": ".provenance.json",
+    "exporting": "Exporting…",
+    "pdfEchoOnly": "PDF export requires the sidecar engine.",
+    "zipEchoOnly": "ZIP export requires the sidecar engine."
   },
 
   "figures": {
     "gallery": "Figure gallery",
-    "none": "No figures in this report.",
-    "source": "Source step"
+    "none": "No figures in this report."
   },
 
   "integrity": {
     "claims": "Claims & Evidence",
     "summary": "Integrity summary",
-    "summaryDetail": "{{claims}} claims verified against {{evidence}} pieces of evidence.",
-    "noClaims": "No claims extracted for this report.",
-    "claim": "Claim {{index}}",
-    "evidenceCount": "{{count}} evidence items",
-    "showCode": "Show code",
-    "hideCode": "Hide code"
+    "summaryDetail": "{{claims}} claims, {{evidence}} grounded in evidence.",
+    "noClaims": "No findings extracted for this report.",
+    "evidence": "Evidence",
+    "grounded": "Grounded",
+    "ungrounded": "Ungrounded"
   },
 
   "errors": {
     "sessionNotFound": "Research session not found.",
-    "noReport": "No report available yet.",
+    "notApproved": "The plan must be approved before starting.",
+    "nothingToApprove": "Nothing to approve in the current state.",
     "cancelled": "Research was cancelled.",
     "timedOut": "Research timed out. The engine may be busy — try again.",
-    "noDataSources": "Attach at least one data source to begin research.",
+    "notComplete": "Only a complete session can be exported.",
     "unknown": "An unexpected error occurred."
-  },
-
-  "removeSource": "Remove data source: {{name}}"
+  }
 }

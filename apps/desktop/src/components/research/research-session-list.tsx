@@ -6,9 +6,11 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  FileText,
   Loader2,
   Microscope,
   PauseCircle,
+  PenLine,
   XCircle,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
@@ -16,24 +18,27 @@ import type { ComponentType } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/shared/empty-state';
 import { useTranslation } from '@/lib/i18n';
-import type { ResearchSession, ResearchStatus } from '@/lib/bridge/research-types';
+import { researchGet } from '@/lib/bridge/research';
+import { useBridge } from '@/lib/bridge/hooks';
+import type { ListSummary, ResearchStatus } from '@/lib/bridge/research-types';
 import { useResearchStore } from '@/stores/research-store';
 import { cn } from '@/utils/cn';
 
 interface StatusConfig {
   icon: ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
   variant: 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
-  ariaLabel: string;
 }
 
 const STATUS_CONFIG: Record<ResearchStatus, StatusConfig> = {
-  pending: { icon: Clock, variant: 'neutral', ariaLabel: 'Pending' },
-  planning: { icon: Loader2, variant: 'info', ariaLabel: 'Planning' },
-  awaiting_approval: { icon: PauseCircle, variant: 'warning', ariaLabel: 'Awaiting approval' },
-  running: { icon: Loader2, variant: 'accent', ariaLabel: 'Running' },
-  completed: { icon: CheckCircle2, variant: 'success', ariaLabel: 'Completed' },
-  failed: { icon: XCircle, variant: 'danger', ariaLabel: 'Failed' },
-  cancelled: { icon: AlertCircle, variant: 'neutral', ariaLabel: 'Cancelled' },
+  IDLE: { icon: Clock, variant: 'neutral' },
+  PLANNING: { icon: Loader2, variant: 'info' },
+  APPROVAL_PENDING: { icon: PauseCircle, variant: 'warning' },
+  IN_PROGRESS: { icon: Loader2, variant: 'accent' },
+  PROOFREAD: { icon: PenLine, variant: 'info' },
+  COMPILING: { icon: FileText, variant: 'accent' },
+  COMPLETE: { icon: CheckCircle2, variant: 'success' },
+  FAILED: { icon: XCircle, variant: 'danger' },
+  CANCELLED: { icon: AlertCircle, variant: 'neutral' },
 };
 
 function StatusBadge({ status }: { status: ResearchStatus }) {
@@ -45,7 +50,8 @@ function StatusBadge({ status }: { status: ResearchStatus }) {
       <Icon
         className={cn(
           'size-3.5',
-          status === 'running' && 'animate-spin motion-reduce:animate-none',
+          (status === 'IN_PROGRESS' || status === 'PLANNING' || status === 'COMPILING') &&
+            'animate-spin motion-reduce:animate-none',
         )}
         aria-hidden
       />
@@ -54,26 +60,38 @@ function StatusBadge({ status }: { status: ResearchStatus }) {
   );
 }
 
-function SessionCard({ session }: { session: ResearchSession }) {
+function SessionCard({ session }: { session: ListSummary }) {
   const { t } = useTranslation('research');
-  const { setActiveSession, setView } = useResearchStore();
+  const { client } = useBridge();
+  const { setActiveSession, setActiveRecord, setView } = useResearchStore();
 
   const handleClick = () => {
     setActiveSession(session.session_id);
-    // Route to the appropriate view based on status
-    if (session.status === 'completed' && session.report) {
-      setView('report');
-    } else if (session.status === 'awaiting_approval' && session.plan) {
-      setView('plan');
-    } else if (session.status === 'running' || session.status === 'planning') {
-      setView('trace');
-    } else {
-      setView('trace'); // Default to trace for visibility
-    }
+    // Fetch the full record and route to the appropriate view
+    researchGet(client, session.session_id)
+      .then((record) => {
+        setActiveRecord(record);
+        if (record.status === 'COMPLETE') {
+          setView('report');
+        } else if (record.status === 'APPROVAL_PENDING') {
+          setView('plan');
+        } else if (
+          record.status === 'IN_PROGRESS' ||
+          record.status === 'PLANNING' ||
+          record.status === 'COMPILING' ||
+          record.status === 'PROOFREAD'
+        ) {
+          setView('trace');
+        } else if (record.status === 'IDLE') {
+          setView('plan'); // Trigger planning
+        } else {
+          setView('trace');
+        }
+      })
+      .catch(() => {
+        setView('trace');
+      });
   };
-
-  const sections = session.plan?.outline.length ?? 0;
-  const verdict = session.report?.claims.length ?? 0;
 
   return (
     <button
@@ -85,23 +103,15 @@ function SessionCard({ session }: { session: ResearchSession }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-body font-semibold">{session.topic}</h3>
-          <p className="mt-0.5 line-clamp-2 text-caption text-fg-muted">{session.objective}</p>
         </div>
         <StatusBadge status={session.status} />
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-micro text-fg-muted">
-        <span>{new Date(session.created_at).toLocaleDateString()}</span>
-        {sections > 0 && <span>{t('sections', { count: sections })}</span>}
-        {verdict > 0 && <span>{t('claims', { count: verdict })}</span>}
-        <span className="truncate">{session.model_route}</span>
+        <span>{new Date(session.created_at * 1000).toLocaleDateString()}</span>
+        {session.sections > 0 && <span>{t('sections', { count: session.sections })}</span>}
+        {session.published && <Badge variant="success">{t('published')}</Badge>}
       </div>
-
-      {session.error && (
-        <p className="mt-1 rounded bg-danger-bg px-2 py-1 text-micro text-danger-fg">
-          {session.error}
-        </p>
-      )}
     </button>
   );
 }
