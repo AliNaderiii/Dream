@@ -1,0 +1,75 @@
+{
+  "title": "Espace de travail",
+  "subtitle": "Dossiers locaux, importés sur place. Rien n’est copié.",
+  "roots": {
+    "import": "Importer un dossier sur place",
+    "importHelp": "Enregistre un pointeur de chemin. Le vrai dossier est listé ; les fichiers ne sont jamais copiés.",
+    "pathLabel": "Chemin du dossier",
+    "nameLabel": "Nom affiché",
+    "register": "Importer sur place",
+    "neverCopied": "Sur place — jamais copié",
+    "copied": "Copié (ne devrait pas arriver)"
+  },
+  "browser": {
+    "title": "Fichiers",
+    "empty": "Aucun fichier dans ce dossier.",
+    "open": "Ouvrir",
+    "preview": "Aperçu",
+    "copyPath": "Copier le chemin",
+    "copied": "Chemin copié",
+    "global": "Racine de l’espace",
+    "menu": "Actions"
+  },
+  "preview": {
+    "title": "Aperçu",
+    "empty": "Sélectionnez un fichier pour un aperçu sûr.",
+    "safe": "non exécuté",
+    "truncated": "tronqué"
+  },
+  "errors": {
+    "unknown": "Une erreur s’est produite.",
+    "traversal": "Ce chemin est hors de l’espace de travail."
+  },
+  "agents": {
+    "title": "Modes d’agent",
+    "subtitle": "Planifier d’abord, définir « terminé », et arrêter vraiment.",
+    "planTitle": "Planifier puis exécuter",
+    "planHelp": "Un plan est produit d’abord. L’exécution ne commence qu’après Continuer.",
+    "goalTitle": "Objectif avec critères d’acceptation",
+    "goalHelp": "L’agent travaille jusqu’à ce que les critères soient atteints, ou déclare honnêtement son incapacité.",
+    "prompt": "Que faut-il planifier ?",
+    "plan": "Rédiger le plan",
+    "continue": "Continuer",
+    "stop": "Arrêter",
+    "objective": "Objectif",
+    "criteria": "Critères d’acceptation (un par ligne)",
+    "startGoal": "Démarrer l’objectif",
+    "subagents": "Sous-agents en direct",
+    "noSubagents": "Aucun sous-agent n’est en cours.",
+    "progress": "Progression",
+    "live": "état en direct",
+    "running": "en cours",
+    "cancelled": "annulé",
+    "mode": {
+      "chat": "Discussion",
+      "plan": "Plan",
+      "goal": "Objectif"
+    }
+  },
+  "refs": {
+    "title": "Références de discussion",
+    "hint": "Utilisez @file, #conversation, /commands et !shell.",
+    "draft": "Brouillon",
+    "parse": "Analyser les références",
+    "proposeShell": "Proposer !shell",
+    "files": "Fichiers",
+    "conversations": "Conversations",
+    "commands": "Commandes",
+    "shell": "Shell",
+    "palette": "Recherche de commandes",
+    "searchCommands": "Rechercher /commands",
+    "risk": "Risque",
+    "approveShell": "Approuver la commande shell",
+    "executed": "Commande terminée (sandbox, réseau coupé)."
+  }
+}

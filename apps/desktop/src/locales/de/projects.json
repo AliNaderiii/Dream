@@ -1,0 +1,9 @@
+{
+  "v2": {
+    "importInPlace": "Ordner vor Ort importieren (nie kopieren)",
+    "importHelp": "Das Projekt zeigt auf den echten Ordner. Nichts wird kopiert.",
+    "openWorkspace": "Im Arbeitsbereich öffnen",
+    "settings": "Plan als Standardmodus",
+    "inPlaceBadge": "Vor Ort — nie kopiert"
+  }
+}

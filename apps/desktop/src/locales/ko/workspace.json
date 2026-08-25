@@ -1,0 +1,75 @@
+{
+  "title": "작업 공간",
+  "subtitle": "로컬 폴더를 제자리에 가져옵니다. 복사하지 않습니다.",
+  "roots": {
+    "import": "폴더를 제자리에 가져오기",
+    "importHelp": "경로 포인터만 등록합니다. 실제 폴더를 나열하며 파일은 절대 복사하지 않습니다.",
+    "pathLabel": "폴더 경로",
+    "nameLabel": "표시 이름",
+    "register": "제자리에 가져오기",
+    "neverCopied": "제자리 — 복사하지 않음",
+    "copied": "복사됨 (일어나면 안 됨)"
+  },
+  "browser": {
+    "title": "파일",
+    "empty": "이 폴더에 파일이 없습니다.",
+    "open": "열기",
+    "preview": "미리보기",
+    "copyPath": "경로 복사",
+    "copied": "경로를 복사했습니다",
+    "global": "작업 공간 루트",
+    "menu": "동작"
+  },
+  "preview": {
+    "title": "미리보기",
+    "empty": "안전하게 미리볼 파일을 선택하세요.",
+    "safe": "실행하지 않음",
+    "truncated": "잘림"
+  },
+  "errors": {
+    "unknown": "문제가 발생했습니다.",
+    "traversal": "그 경로는 작업 공간 밖입니다."
+  },
+  "agents": {
+    "title": "에이전트 모드",
+    "subtitle": "먼저 계획하고, 완료를 정의하고, 실제로 중지합니다.",
+    "planTitle": "계획 후 실행",
+    "planHelp": "먼저 계획이 만들어집니다. 실행은 계속한 뒤에만 시작합니다.",
+    "goalTitle": "수락 기준이 있는 목표",
+    "goalHelp": "기준을 충족할 때까지 작업하거나, 할 수 없음을 정직하게 보고합니다.",
+    "prompt": "무엇을 계획할까요?",
+    "plan": "계획 초안",
+    "continue": "계속",
+    "stop": "중지",
+    "objective": "목표",
+    "criteria": "수락 기준 (한 줄에 하나)",
+    "startGoal": "목표 시작",
+    "subagents": "라이브 서브에이전트",
+    "noSubagents": "실행 중인 서브에이전트가 없습니다.",
+    "progress": "진행",
+    "live": "라이브 상태",
+    "running": "실행 중",
+    "cancelled": "취소됨",
+    "mode": {
+      "chat": "채팅",
+      "plan": "계획",
+      "goal": "목표"
+    }
+  },
+  "refs": {
+    "title": "채팅 참조",
+    "hint": "@file, #conversation, /commands, !shell 을 사용하세요.",
+    "draft": "초안",
+    "parse": "참조 구문 분석",
+    "proposeShell": "!shell 제안",
+    "files": "파일",
+    "conversations": "대화",
+    "commands": "명령",
+    "shell": "셸",
+    "palette": "명령 검색",
+    "searchCommands": "/commands 검색",
+    "risk": "위험",
+    "approveShell": "셸 명령 승인",
+    "executed": "명령 완료 (샌드박스, 네트워크 꺼짐)."
+  }
+}

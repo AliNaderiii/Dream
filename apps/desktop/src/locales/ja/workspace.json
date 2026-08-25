@@ -1,0 +1,75 @@
+{
+  "title": "ワークスペース",
+  "subtitle": "ローカルフォルダーをその場で取り込みます。コピーはしません。",
+  "roots": {
+    "import": "フォルダーをその場で取り込む",
+    "importHelp": "パスのポインターだけを登録します。実フォルダーを一覧し、ファイルは決してコピーしません。",
+    "pathLabel": "フォルダーパス",
+    "nameLabel": "表示名",
+    "register": "その場で取り込む",
+    "neverCopied": "その場 — 未コピー",
+    "copied": "コピー済み（発生してはいけない）"
+  },
+  "browser": {
+    "title": "ファイル",
+    "empty": "このフォルダーにファイルはありません。",
+    "open": "開く",
+    "preview": "プレビュー",
+    "copyPath": "パスをコピー",
+    "copied": "パスをコピーしました",
+    "global": "ワークスペースのルート",
+    "menu": "操作"
+  },
+  "preview": {
+    "title": "プレビュー",
+    "empty": "安全にプレビューするファイルを選んでください。",
+    "safe": "未実行",
+    "truncated": "切り詰め"
+  },
+  "errors": {
+    "unknown": "問題が発生しました。",
+    "traversal": "そのパスはワークスペースの外です。"
+  },
+  "agents": {
+    "title": "エージェントモード",
+    "subtitle": "まず計画し、完了条件を定め、本当に停止します。",
+    "planTitle": "計画してから実行",
+    "planHelp": "先に計画を出します。実行は続行後のみです。",
+    "goalTitle": "受入条件つきの目標",
+    "goalHelp": "条件を満たすまで作業するか、できないことを正直に報告します。",
+    "prompt": "何を計画しますか？",
+    "plan": "計画を下書き",
+    "continue": "続行",
+    "stop": "停止",
+    "objective": "目標",
+    "criteria": "受入条件（1行に1つ）",
+    "startGoal": "目標を開始",
+    "subagents": "ライブサブエージェント",
+    "noSubagents": "実行中のサブエージェントはありません。",
+    "progress": "進捗",
+    "live": "ライブ状態",
+    "running": "実行中",
+    "cancelled": "キャンセル済み",
+    "mode": {
+      "chat": "チャット",
+      "plan": "計画",
+      "goal": "目標"
+    }
+  },
+  "refs": {
+    "title": "チャット参照",
+    "hint": "@file、#conversation、/commands、!shell を使います。",
+    "draft": "下書き",
+    "parse": "参照を解析",
+    "proposeShell": "!shell を提案",
+    "files": "ファイル",
+    "conversations": "会話",
+    "commands": "コマンド",
+    "shell": "シェル",
+    "palette": "コマンド検索",
+    "searchCommands": "/commands を検索",
+    "risk": "リスク",
+    "approveShell": "シェルコマンドを承認",
+    "executed": "コマンド終了（サンドボックス、ネットワークオフ）。"
+  }
+}

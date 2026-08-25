@@ -1,0 +1,9 @@
+{
+  "v2": {
+    "importInPlace": "Importer le dossier sur place (jamais copier)",
+    "importHelp": "Le projet pointe vers le vrai dossier. Rien n’est copié.",
+    "openWorkspace": "Ouvrir dans l’espace de travail",
+    "settings": "Plan comme mode par défaut",
+    "inPlaceBadge": "Sur place — jamais copié"
+  }
+}
