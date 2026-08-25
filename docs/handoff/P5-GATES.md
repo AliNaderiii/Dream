@@ -16,7 +16,7 @@ Live vLLM / SGLang / llama.cpp / LM Studio adapters were not installed here. The
 | Patch whitespace | `git diff --check` | **PASS** — no output |
 | Owned-surface review | `git status --short` plus forbidden-path diffs | **PASS** — only the P5 UI/docs paths below; no edits to `dream/bridge/methods.py`, `App.tsx`, `activity-rail.tsx`, `app-shell.tsx`, `client.ts`, `cli.py`, `common.json`, or `route-registry.test.ts` |
 | Secret-shape scan (owned files) | ripgrep for `sk-` / `ghp_` / `AKIA` shaped tokens | **PASS** — no matches |
-| Python / sidecar adapters | not run | **NOT RUN** — this slice is the desktop P5 UI. No local Python environment was present. Live runtime smoke is owner-run. |
+| Python / sidecar adapters | see Backend section | **PASS** — added after the UI slice. |
 
 Verbose vitest tail:
 
@@ -55,3 +55,32 @@ English fallback counts: fa=0, zh-CN=372, ja=372, es=372, de=372, fr=372, ko=372
 - `docs/dev/api/providerhubs-rpc.md`
 - `docs/handoff/P5.md`
 - `docs/handoff/P5-GATES.md`
+
+## Backend section (sidecar)
+
+Date: 2026-08-25. Implements `dream/providerhubs/**` and `dream/bridge/methods_providerhubs.py` against the existing UI RPC contract. Desktop providerhubs components and locale files were not rewritten.
+
+| Gate | Command | Observed result |
+|---|---|---|
+| New Python tests | `.venv/bin/python -m pytest -q tests/test_providerhubs.py tests/test_providerhubs_security.py tests/test_toolcall_parsers.py` | **PASS** — `25 passed in 4.72s` |
+| Full Python regression | `.venv/bin/python -m pytest -q` | **PASS** — `2463 passed, 14 skipped in 111.22s` |
+| Ruff (owned Python) | `.venv/bin/ruff check dream/providerhubs dream/bridge/methods_providerhubs.py tools/runtime_probe.py examples/runtime_demo.py tests/test_providerhubs.py tests/test_toolcall_parsers.py tests/test_providerhubs_security.py` | **PASS** — `All checks passed!` |
+| Syntax | `.venv/bin/python -m compileall -q dream/providerhubs dream/bridge/methods_providerhubs.py tools/runtime_probe.py examples/runtime_demo.py` | **PASS** — no output |
+| Offline demo | `.venv/bin/python examples/runtime_demo.py` | **PASS** — route `hosted → aval → ollama → byok → echo`; catalog 8; Ollama firing; vLLM/SGLang/llama.cpp/LM Studio not firing with documented flags; generic reduced-reliability fallback parsed `search`; gateway optional |
+| Handler namespace | import `HANDLERS` | **PASS** — 11 keys, all `providerhubs.*`, matching the UI method list |
+| Secret-shape scan (backend files) | ripgrep for `sk-` / `ghp_` / `AKIA` shaped tokens | **PASS** — no matches |
+| Forbidden-path review | diffs of `methods.py`, `App.tsx`, `client.ts`, `cli.py` | **PASS** — unchanged |
+
+Demo tail:
+
+```
+route ['hosted', 'aval', 'ollama', 'byok', 'echo']
+catalog 8
+ollama firing= True fix= Ollama tool calling is on by default.
+generic firing= True fix= This endpoint has no native tools. Dream will parse structur
+parsed [{"id": "", "name": "search", "arguments": {"q": "tehran"}, "source": "qwen"}]
+gateway optional True
+handlers 11
+```
+
+Live vLLM / SGLang / llama.cpp / LM Studio processes were not installed. Adapter chat/list/health is proven against a local mock compatible endpoint. Owner-run smoke for those stacks remains outstanding.
