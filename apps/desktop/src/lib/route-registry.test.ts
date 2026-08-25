@@ -1,6 +1,6 @@
-﻿import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { registeredNav, registeredRoutes, shellSlots } from './route-registry';
+import { registeredRoutes } from './route-registry';
 
 const PRE_P0_PATHS = new Set([
   '/',
