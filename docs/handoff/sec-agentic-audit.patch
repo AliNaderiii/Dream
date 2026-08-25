@@ -1,0 +1,38 @@
+P6 — CI wiring for the agentic security layer (Path B).
+
+`tools/security_audit.py` now asserts the five L9 controls in addition to
+the original eight-layer battery, and `tests/test_sec_agentic_audit.py`
+proves it turns red under twenty sabotage scenarios. The audit is already
+wired into CI by `docs/handoff/sec-audit.patch` (the `Security audit`
+step), so an owner who applied that patch gets the new coverage for free
+on the next run — no workflow change is required for the audit itself.
+
+This patch adds the two things that patch does not cover:
+
+1. the L9 sabotage suite as its own named step, so a broken alarm is
+   distinguishable in the CI log from a broken control;
+2. the offline probe as a smoke check, so `tools/sec_agentic_probe.py`
+   cannot rot silently.
+
+Apply with:
+
+    git apply docs/handoff/sec-agentic-audit.patch
+
+If `docs/handoff/sec-audit.patch` has not been applied yet, apply it
+first — this patch anchors on the `Security audit` step it introduces.
+
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -46,6 +46,12 @@
+ 
+       - name: Security audit
+         run: python tools/security_audit.py
++
++      - name: Agentic security alarm (L9 sabotage suite)
++        run: python -m pytest tests/test_sec_agentic_audit.py -q
++
++      - name: Agentic security probe (offline smoke)
++        run: python tools/sec_agentic_probe.py
+       # Keep pytest isolated from frontend/Rust builds in this job. Telegram
+       # timing assertions are sensitive to CPU contention and can flake when a
+       # developer runs a concurrent build; each CI job has its own runner.
