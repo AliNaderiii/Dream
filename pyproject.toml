@@ -65,6 +65,7 @@ select = ["E", "F", "I", "UP", "B"]
 # the top of the file.
 "tools/memory_probe.py" = ["E402"]
 "tools/runtime_probe.py" = ["E402"]
+"tools/sec_agentic_probe.py" = ["E402"]
 "examples/runtime_demo.py" = ["E402"]
 
 [tool.pytest.ini_options]
