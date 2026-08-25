@@ -444,7 +444,43 @@ Notebook paths are confined to the datasets directory (escapes raise
 execution methods raise code `-32012` with an actionable message; file-level
 methods (`create`/`read`) keep working.
 
-### 3.14 `commerce.*` / `route.*` — plan, usage, and model route (S05)
+### 3.14 `research.*` — autonomous deep research (Prompt P1)
+
+The research engine (`dream/research/`, see
+`docs/architecture/data-science.md`) plans an open-ended analytical project,
+discovers and profiles a workspace's data sources, iterates
+KnowledgeGap → ToolSelector → CodeAct → Observe with real runtime feedback,
+and compiles a grounded Markdown + PDF report. Handlers are registered
+through the P0 extension seam in `dream/bridge/methods_research.py`;
+`dream/bridge/methods.py` is not modified.
+
+Sessions move through `IDLE → PLANNING → APPROVAL_PENDING → IN_PROGRESS →
+PROOFREAD → COMPILING → COMPLETE | FAILED | CANCELLED`, persisted under
+`data/research/{session_id}.json` and resumable.
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `research.create` | `{topic, workspace, config?}` | session summary — `config` ⊆ `{max_iterations, max_time_seconds, step_timeout_seconds, max_retries, max_sections, language: "en"\|"fa", autonomous, allow_network, max_pages, output_length}`; every value is hard-clamped |
+| `research.list` | `{}` | `{sessions: [{session_id, topic, status, sections, created_at, updated_at, published, report}], count}` |
+| `research.get` | `{session_id}` | the full record: plan, sections, iterations, findings, report, events |
+| `research.plan` | `{session_id, force?}` | `{…summary, plan}` — leaves the session in `APPROVAL_PENDING` with a `cost_estimate` |
+| `research.approve` | `{session_id}` | `{…summary, plan}` — the human-in-the-loop checkpoint |
+| `research.modify` | `{session_id, changes}` | `{…summary, plan}` — `changes` may carry `objective`, `questions`, `hypotheses`, `methodology`, a user-edited `sections` outline, or `{"replan": true}` |
+| `research.start` | `{session_id}` | session summary — refused unless the plan is approved (interactive) ; bounded by `DREAM_RESEARCH_START_TIMEOUT` |
+| `research.status` | `{session_id, cursor?}` | `{…summary, cursor, new_events}` — cheap poll |
+| `research.stream` | `{session_id, cursor?, follow?, timeout?}` | streaming: each `stream.chunk` is `{event, cursor}`; the final result is the session summary |
+| `research.stop` | `{session_id}` | session summary — cooperative cancellation at the next step boundary |
+| `research.export` | `{session_id}` | `{…summary, report}` — publishes a `COMPLETE` session and returns `{markdown_path, pdf_path, bundle_path, record_ids, pages, proofread}` |
+
+Security invariants enforced at this boundary: the workspace is resolved
+against the sensitive-path denylist, the topic crosses the injection gate,
+model-authored code passes an AST allowlist before it reaches the sandbox,
+autonomous sessions run a degraded read-only grant set, and every number in
+the report is checked against the grounding ledger. Every expected failure —
+bad params, unknown session, illegal transition, refused action, blown
+deadline — maps to `INVALID_PARAMS` (-32602).
+
+### 3.15 `commerce.*` / `route.*` — plan, usage, and model route (S05)
 
 Read-only serialisers over `dream.commerce` and `dream.router`. The pricing
 policy lives in Python (`commerce.py`): a paid plan's `price` is `null` with
@@ -457,7 +493,7 @@ numeric IRR except `0` for the free plans.
 | `commerce.usage` | `{}` | `{plan_id, window: "day"\|"month"\|"year"\|null, used, limit: int\|null, remaining: int\|null, unlimited}` — `limit`/`remaining` are `null` and `unlimited` is `true` when no ledger is attached (the `local` plan) |
 | `route.resolve` | `{}` | `{name: "hosted"\|"aval"\|"ollama"\|"byok"\|"echo", leaves_machine: bool, sentence_en, sentence_fa}` — the exact route and privacy sentences `dream.router` resolves, same as `dream --route` |
 
-### 3.15 `project.*` — workspace folders grouping sessions (S06)
+### 3.16 `project.*` — workspace folders grouping sessions (S06)
 
 A project is a folder-like grouping, not a CRM record: it owns a name, an
 optional workspace folder path (linked in place — nothing is copied), and the
@@ -481,7 +517,7 @@ The index persists in `data/bridge_projects.json` (override with
 `DREAM_PROJECTS_PATH`), following the sessions-index rules: best-effort
 atomic writes, metadata only, survives a sidecar restart.
 
-### 3.16 `council.*` — opt-in three-role review (S10)
+### 3.17 `council.*` — opt-in three-role review (S10)
 
 A council is exactly three child agents run as one `subagent.pipeline` in the
 fixed order **proposer → critic → judge**; each stage's result becomes the
@@ -709,6 +745,7 @@ The sidecar may emit notifications with **no** `id`:
 | Connectivity gateway | `dream/connectivity/` (`gateway.py`, `adapters/`) | — | `lib/bridge/echo-gateway.ts`, `routes/connectivity.tsx` |
 | Data science pipeline | `dream/skills/data_science.py`, `dream/skills/notebooks.py` | — | `lib/bridge/data-science.ts`, `lib/bridge/echo-data.ts`, `routes/data.tsx`, `routes/data.dataset.tsx` |
 | Conversation UX (S07) | `dream/bridge/methods.py` (existing) | — | `components/chat/tool-card.tsx`, `components/chat/approval-dialog.tsx`, `components/panes/pane.tsx` |
+| Deep research engine (P1) | `dream/research/` (`session.py`, `planner.py`, `iterate.py`, `discovery.py`, `prep.py`, `analyze.py`, `executor.py`, `writer.py`, `proofread.py`, `report.py`), `dream/bridge/methods_research.py` (P0 seam) | — | (P2) |
 
 ---
 
@@ -798,3 +835,4 @@ Bridge method modules follow the additive `dream/bridge/methods_<domain>.py`
 contract documented in [extension-contract.md](extension-contract.md). Discovery
 is package-local, deterministic, build-once, and fail-closed: a bad extension is
 quarantined and cannot affect built-in RPC methods.
+
