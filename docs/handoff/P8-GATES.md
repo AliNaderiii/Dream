@@ -80,4 +80,4 @@ node:internal/modules/cjs/loader:1433
 
 ## Commit SHA (recorded after commit; file updated via amend — value is parent of final HEAD, which is exact work commit)
 
-COMMIT_SHA=c060079cf16f8e1211ce2ce7bc5c3cf4c359741c
+COMMIT_SHA=c060079cf16f8e1211ce2ce7bc5c3cf4c359741c (work commit; final HEAD after GATES update: 59adc8bd7ddd806e58342996d010d57213dae16a)
