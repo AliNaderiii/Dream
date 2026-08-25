@@ -126,4 +126,4 @@ Error: ENOENT: no such file or directory, scandir '/home/user/Dream/apps/desktop
 
 ## Commit SHA (recorded after commit; file updated via amend — value is parent of final HEAD, which is exact work commit)
 
-COMMIT_SHA=59adc8bd7ddd806e58342996d010d57213dae16a (design work) / a148242db40b4785154ff7a524ba979820397909 (first GATES record) — this edit + format fixes will produce final HEAD after commit
+COMMIT_SHA=59adc8bd7ddd806e58342996d010d57213dae16a (design work) / a148242db40b4785154ff7a524ba979820397909 (first GATES) / fe3571af11ed634a874c384bea35fdc44429fe99 (final HEAD after gate verification + format fixes)
