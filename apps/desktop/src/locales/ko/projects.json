@@ -1,0 +1,9 @@
+{
+  "v2": {
+    "importInPlace": "폴더를 제자리에 가져오기 (복사하지 않음)",
+    "importHelp": "프로젝트가 실제 폴더를 가리킵니다. 복사하지 않습니다.",
+    "openWorkspace": "작업 공간에서 열기",
+    "settings": "기본 모드를 계획으로",
+    "inPlaceBadge": "제자리 — 복사하지 않음"
+  }
+}

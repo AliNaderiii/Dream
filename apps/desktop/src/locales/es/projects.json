@@ -1,0 +1,9 @@
+{
+  "v2": {
+    "importInPlace": "Importar carpeta in situ (nunca copiar)",
+    "importHelp": "El proyecto apunta a la carpeta real. No se copia nada.",
+    "openWorkspace": "Abrir en el espacio de trabajo",
+    "settings": "Plan como modo predeterminado",
+    "inPlaceBadge": "In situ — nunca copiado"
+  }
+}

@@ -35,6 +35,7 @@ import {
   listProjects,
   removeSessionFromProject,
 } from '@/lib/bridge/projects';
+import { workspaceImportFolder, workspaceProjectSettings } from '@/lib/bridge/workspace';
 import type { BridgeProject } from '@/lib/bridge/types';
 import type { BridgeSession } from '@/lib/bridge/types';
 import { useTranslation } from '@/lib/i18n';
@@ -44,6 +45,7 @@ import { relativeTime } from '@/utils/time';
 
 export function ProjectsRoute() {
   const { t } = useTranslation('common');
+  const { t: tp } = useTranslation('projects');
   const { client } = useBridge();
   const navigate = useNavigate();
 
@@ -95,11 +97,15 @@ export function ProjectsRoute() {
     [sessions],
   );
 
-  const onCreate = async (draft: { name: string; folder: string | null }) => {
+  const onCreate = async (draft: { name: string; folder: string | null; inPlace?: boolean }) => {
     setBusy(true);
     setError(null);
     try {
-      await createProject(client, draft);
+      if (draft.inPlace && draft.folder) {
+        await workspaceImportFolder(client, draft.folder, draft.name);
+      } else {
+        await createProject(client, draft);
+      }
       setCreateOpen(false);
       await refresh();
     } catch (err) {
@@ -205,6 +211,9 @@ export function ProjectsRoute() {
                       {project.folder}
                     </p>
                   )}
+                  {project.folder && (
+                    <p className="mt-1 text-micro text-fg-muted">{tp('v2.inPlaceBadge')}</p>
+                  )}
                 </div>
                 <Button
                   variant="ghost"
@@ -286,6 +295,20 @@ export function ProjectsRoute() {
                   <FolderPlus className="size-4" aria-hidden />
                   {t('projects.newSession')}
                 </Button>
+                {project.folder && (
+                  <Button variant="ghost" size="sm" onClick={() => void navigate('/workspace')}>
+                    {tp('v2.openWorkspace')}
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    void workspaceProjectSettings(client, project.id, { default_mode: 'plan' })
+                  }
+                >
+                  {tp('v2.settings')}
+                </Button>
               </div>
             </li>
           ))}
@@ -326,11 +349,17 @@ function CreateProjectDialog({
   open: boolean;
   busy: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (draft: { name: string; folder: string | null }) => Promise<void> | void;
+  onCreate: (draft: {
+    name: string;
+    folder: string | null;
+    inPlace?: boolean;
+  }) => Promise<void> | void;
 }) {
   const { t } = useTranslation('common');
+  const { t: tp } = useTranslation('projects');
   const [name, setName] = useState('');
   const [folder, setFolder] = useState('');
+  const [inPlace, setInPlace] = useState(false);
 
   const browse = async () => {
     if (!isTauri()) return; // the text input is the browser fallback
@@ -373,6 +402,15 @@ function CreateProjectDialog({
               {t('projects.folderOptional')}
             </span>
           </label>
+          <label className="flex items-center gap-2 text-caption font-medium">
+            <input
+              type="checkbox"
+              checked={inPlace}
+              onChange={(event) => setInPlace(event.target.checked)}
+            />
+            {tp('v2.importInPlace')}
+          </label>
+          <p className="text-micro text-fg-muted">{tp('v2.importHelp')}</p>
         </DialogBody>
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
@@ -381,7 +419,9 @@ function CreateProjectDialog({
           <Button
             variant="primary"
             disabled={busy || !name.trim()}
-            onClick={() => void onCreate({ name: name.trim(), folder: folder.trim() || null })}
+            onClick={() =>
+              void onCreate({ name: name.trim(), folder: folder.trim() || null, inPlace })
+            }
           >
             {t('projects.create')}
           </Button>

@@ -34,6 +34,16 @@ describe('route registry seam', () => {
     expect(research).toBeDefined();
     expect(research?.label).toBe('Research');
     expect(research?.group).toBe('workspace');
+
+    const workspace = registeredRoutes.find((r) => r.path === '/workspace');
+    expect(workspace).toBeDefined();
+    expect(workspace?.label).toBe('Workspace');
+    expect(workspace?.group).toBe('workspace');
+
+    const agents = registeredRoutes.find((r) => r.path === '/agents');
+    expect(agents).toBeDefined();
+    expect(agents?.label).toBe('Agents');
+    expect(agents?.group).toBe('workspace');
   });
 
   it('publishes only unique safe extension paths', () => {

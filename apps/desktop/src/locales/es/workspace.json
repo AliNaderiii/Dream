@@ -1,0 +1,75 @@
+{
+  "title": "Espacio de trabajo",
+  "subtitle": "Carpetas locales, importadas in situ. No se copia nada.",
+  "roots": {
+    "import": "Importar carpeta in situ",
+    "importHelp": "Registra un puntero de ruta. Se lista la carpeta real; los archivos nunca se copian.",
+    "pathLabel": "Ruta de la carpeta",
+    "nameLabel": "Nombre visible",
+    "register": "Importar in situ",
+    "neverCopied": "In situ — nunca copiado",
+    "copied": "Copiado (no debería ocurrir)"
+  },
+  "browser": {
+    "title": "Archivos",
+    "empty": "No hay archivos en esta carpeta.",
+    "open": "Abrir",
+    "preview": "Vista previa",
+    "copyPath": "Copiar ruta",
+    "copied": "Ruta copiada",
+    "global": "Raíz del espacio",
+    "menu": "Acciones"
+  },
+  "preview": {
+    "title": "Vista previa",
+    "empty": "Seleccione un archivo para previsualizarlo con seguridad.",
+    "safe": "no ejecutado",
+    "truncated": "truncado"
+  },
+  "errors": {
+    "unknown": "Algo salió mal.",
+    "traversal": "Esa ruta está fuera del espacio de trabajo."
+  },
+  "agents": {
+    "title": "Modos de agente",
+    "subtitle": "Planificar primero, definir lo hecho y detener de verdad.",
+    "planTitle": "Planificar y luego ejecutar",
+    "planHelp": "Primero se produce un plan. La ejecución empieza solo al continuar.",
+    "goalTitle": "Objetivo con criterios de aceptación",
+    "goalHelp": "El agente trabaja hasta cumplir los criterios o declara con honestidad que no puede.",
+    "prompt": "¿Qué debe planificarse?",
+    "plan": "Borrador del plan",
+    "continue": "Continuar",
+    "stop": "Detener",
+    "objective": "Objetivo",
+    "criteria": "Criterios de aceptación (uno por línea)",
+    "startGoal": "Iniciar objetivo",
+    "subagents": "Subagentes en vivo",
+    "noSubagents": "No hay subagentes en ejecución.",
+    "progress": "Progreso",
+    "live": "estado en vivo",
+    "running": "en ejecución",
+    "cancelled": "cancelado",
+    "mode": {
+      "chat": "Chat",
+      "plan": "Plan",
+      "goal": "Objetivo"
+    }
+  },
+  "refs": {
+    "title": "Referencias del chat",
+    "hint": "Use @file, #conversation, /commands y !shell.",
+    "draft": "Borrador",
+    "parse": "Analizar referencias",
+    "proposeShell": "Proponer !shell",
+    "files": "Archivos",
+    "conversations": "Conversaciones",
+    "commands": "Comandos",
+    "shell": "Shell",
+    "palette": "Búsqueda de comandos",
+    "searchCommands": "Buscar /commands",
+    "risk": "Riesgo",
+    "approveShell": "Aprobar comando shell",
+    "executed": "Comando finalizado (sandbox, red desactivada)."
+  }
+}

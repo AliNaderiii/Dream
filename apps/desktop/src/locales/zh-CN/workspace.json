@@ -1,0 +1,75 @@
+{
+  "title": "工作区",
+  "subtitle": "本地文件夹就地导入。不会复制任何内容。",
+  "roots": {
+    "import": "就地导入文件夹",
+    "importHelp": "只注册路径指针。列出真实文件夹；文件永远不会被复制。",
+    "pathLabel": "文件夹路径",
+    "nameLabel": "显示名称",
+    "register": "就地导入",
+    "neverCopied": "就地 — 从未复制",
+    "copied": "已复制（不应发生）"
+  },
+  "browser": {
+    "title": "文件",
+    "empty": "此文件夹中没有文件。",
+    "open": "打开",
+    "preview": "预览",
+    "copyPath": "复制路径",
+    "copied": "已复制路径",
+    "global": "工作区根目录",
+    "menu": "操作"
+  },
+  "preview": {
+    "title": "预览",
+    "empty": "选择一个文件以安全预览。",
+    "safe": "未执行",
+    "truncated": "已截断"
+  },
+  "errors": {
+    "unknown": "出了点问题。",
+    "traversal": "该路径位于工作区之外。"
+  },
+  "agents": {
+    "title": "代理模式",
+    "subtitle": "先计划、明确完成标准，并真正停止。",
+    "planTitle": "先计划再执行",
+    "planHelp": "先生成计划。只有在你继续之后才开始执行。",
+    "goalTitle": "带验收标准的目标",
+    "goalHelp": "代理会工作到标准满足，或诚实报告无法完成。",
+    "prompt": "需要计划什么？",
+    "plan": "起草计划",
+    "continue": "继续",
+    "stop": "停止",
+    "objective": "目标",
+    "criteria": "验收标准（每行一条）",
+    "startGoal": "开始目标",
+    "subagents": "实时子代理",
+    "noSubagents": "没有正在运行的子代理。",
+    "progress": "进度",
+    "live": "实时状态",
+    "running": "运行中",
+    "cancelled": "已取消",
+    "mode": {
+      "chat": "对话",
+      "plan": "计划",
+      "goal": "目标"
+    }
+  },
+  "refs": {
+    "title": "对话引用",
+    "hint": "使用 @file、#conversation、/commands 和 !shell。",
+    "draft": "草稿",
+    "parse": "解析引用",
+    "proposeShell": "提议 !shell",
+    "files": "文件",
+    "conversations": "对话",
+    "commands": "命令",
+    "shell": "外壳",
+    "palette": "命令搜索",
+    "searchCommands": "搜索 /commands",
+    "risk": "风险",
+    "approveShell": "批准外壳命令",
+    "executed": "命令已结束（沙箱，网络关闭）。"
+  }
+}
