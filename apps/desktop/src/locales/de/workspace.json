@@ -1,0 +1,75 @@
+{
+  "title": "Arbeitsbereich",
+  "subtitle": "Lokale Ordner, vor Ort importiert. Nichts wird kopiert.",
+  "roots": {
+    "import": "Ordner vor Ort importieren",
+    "importHelp": "Registriert einen Pfadzeiger. Der echte Ordner wird gelistet; Dateien werden nie kopiert.",
+    "pathLabel": "Ordnerpfad",
+    "nameLabel": "Anzeigename",
+    "register": "Vor Ort importieren",
+    "neverCopied": "Vor Ort — nie kopiert",
+    "copied": "Kopiert (sollte nicht passieren)"
+  },
+  "browser": {
+    "title": "Dateien",
+    "empty": "Keine Dateien in diesem Ordner.",
+    "open": "Öffnen",
+    "preview": "Vorschau",
+    "copyPath": "Pfad kopieren",
+    "copied": "Pfad kopiert",
+    "global": "Arbeitsbereichswurzel",
+    "menu": "Aktionen"
+  },
+  "preview": {
+    "title": "Vorschau",
+    "empty": "Wählen Sie eine Datei für eine sichere Vorschau.",
+    "safe": "nicht ausgeführt",
+    "truncated": "gekürzt"
+  },
+  "errors": {
+    "unknown": "Etwas ist schiefgelaufen.",
+    "traversal": "Dieser Pfad liegt außerhalb des Arbeitsbereichs."
+  },
+  "agents": {
+    "title": "Agentenmodi",
+    "subtitle": "Zuerst planen, Fertig definieren, wirklich stoppen.",
+    "planTitle": "Planen, dann ausführen",
+    "planHelp": "Zuerst entsteht ein Plan. Die Ausführung startet erst nach Continue.",
+    "goalTitle": "Ziel mit Akzeptanzkriterien",
+    "goalHelp": "Der Agent arbeitet, bis die Kriterien erfüllt sind, oder meldet ehrlich Unvermögen.",
+    "prompt": "Was soll geplant werden?",
+    "plan": "Plan entwerfen",
+    "continue": "Fortfahren",
+    "stop": "Stopp",
+    "objective": "Ziel",
+    "criteria": "Akzeptanzkriterien (eine pro Zeile)",
+    "startGoal": "Ziel starten",
+    "subagents": "Live-Subagenten",
+    "noSubagents": "Keine Subagenten laufen.",
+    "progress": "Fortschritt",
+    "live": "Live-Zustand",
+    "running": "läuft",
+    "cancelled": "abgebrochen",
+    "mode": {
+      "chat": "Chat",
+      "plan": "Plan",
+      "goal": "Ziel"
+    }
+  },
+  "refs": {
+    "title": "Chat-Referenzen",
+    "hint": "Nutzen Sie @file, #conversation, /commands und !shell.",
+    "draft": "Entwurf",
+    "parse": "Referenzen parsen",
+    "proposeShell": "!shell vorschlagen",
+    "files": "Dateien",
+    "conversations": "Gespräche",
+    "commands": "Befehle",
+    "shell": "Shell",
+    "palette": "Befehlssuche",
+    "searchCommands": "/commands suchen",
+    "risk": "Risiko",
+    "approveShell": "Shell-Befehl freigeben",
+    "executed": "Befehl beendet (Sandbox, Netzwerk aus)."
+  }
+}

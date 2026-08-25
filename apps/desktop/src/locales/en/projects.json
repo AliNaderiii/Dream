@@ -1,0 +1,9 @@
+{
+  "v2": {
+    "importInPlace": "Import folder in place (never copy)",
+    "importHelp": "The project points at the real folder. Nothing is copied.",
+    "openWorkspace": "Open in workspace",
+    "settings": "Plan as default mode",
+    "inPlaceBadge": "In place — never copied"
+  }
+}

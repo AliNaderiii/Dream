@@ -1,0 +1,9 @@
+{
+  "v2": {
+    "importInPlace": "就地导入文件夹（永不复制）",
+    "importHelp": "项目指向真实文件夹。不会复制任何内容。",
+    "openWorkspace": "在工作区中打开",
+    "settings": "将计划设为默认模式",
+    "inPlaceBadge": "就地 — 从未复制"
+  }
+}

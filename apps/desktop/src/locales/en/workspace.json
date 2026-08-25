@@ -1,0 +1,75 @@
+{
+  "title": "Workspace",
+  "subtitle": "Local-first folders, imported in place. Nothing is copied.",
+  "roots": {
+    "import": "Import folder in place",
+    "importHelp": "Registers a path pointer. The real folder is listed; files are never copied.",
+    "pathLabel": "Folder path",
+    "nameLabel": "Display name",
+    "register": "Import in place",
+    "neverCopied": "In place — never copied",
+    "copied": "Copied (should not happen)"
+  },
+  "browser": {
+    "title": "Files",
+    "empty": "No files in this folder.",
+    "open": "Open",
+    "preview": "Preview",
+    "copyPath": "Copy path",
+    "copied": "Copied path",
+    "global": "Workspace root",
+    "menu": "Actions"
+  },
+  "preview": {
+    "title": "Preview",
+    "empty": "Select a file to preview it safely.",
+    "safe": "not executed",
+    "truncated": "truncated"
+  },
+  "errors": {
+    "unknown": "Something went wrong.",
+    "traversal": "That path is outside the workspace."
+  },
+  "agents": {
+    "title": "Agent modes",
+    "subtitle": "Plan first, define done, and stop for real.",
+    "planTitle": "Plan then execute",
+    "planHelp": "A plan is produced first. Execution starts only when you continue.",
+    "goalTitle": "Goal with acceptance criteria",
+    "goalHelp": "The agent works until the criteria are met, or it reports an honest inability.",
+    "prompt": "What should be planned?",
+    "plan": "Draft plan",
+    "continue": "Continue",
+    "stop": "Stop",
+    "objective": "Objective",
+    "criteria": "Acceptance criteria (one per line)",
+    "startGoal": "Start goal",
+    "subagents": "Live subagents",
+    "noSubagents": "No subagents are running.",
+    "progress": "Progress",
+    "live": "live state",
+    "running": "running",
+    "cancelled": "cancelled",
+    "mode": {
+      "chat": "Chat",
+      "plan": "Plan",
+      "goal": "Goal"
+    }
+  },
+  "refs": {
+    "title": "Chat references",
+    "hint": "Use @file, #conversation, /commands, and !shell. Persian aliases: /برنامه /هدف /توقف.",
+    "draft": "Composer",
+    "parse": "Parse references",
+    "proposeShell": "Propose !shell",
+    "files": "Files",
+    "conversations": "Conversations",
+    "commands": "Commands",
+    "shell": "Shell",
+    "palette": "Command search",
+    "searchCommands": "Search /commands",
+    "risk": "Risk",
+    "approveShell": "Approve shell command",
+    "executed": "Command finished (sandboxed, network off)."
+  }
+}
