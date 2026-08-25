@@ -1,0 +1,84 @@
+{
+  "hubTitle": "本地运行时",
+  "hubSubtitle": "尽可能留在低成本本地模型上。可选云路由和工具网关并不是对话所必需的。",
+  "recommendedDefault": "推荐 Ollama",
+  "routeTitle": "路由优先级",
+  "routeHint": "第一个健康路由胜出。本地 Ollama 仍是推荐默认项。",
+  "honestCost": "Dream 不会编造价格。费用为本地、自带密钥或可选订阅。",
+  "detected": "已检测到本地运行时",
+  "recommended": "推荐",
+  "reducedReliability": "可靠性降低",
+  "modelPicker": "模型",
+  "test": "测试",
+  "testing": "正在测试…",
+  "testAria": "测试 {{name}}",
+  "testOk": "探测在 {{ms}} 毫秒内成功。未发送任何密钥。",
+  "testFail": "该运行时未响应。请尝试其他路由。",
+  "noModels": "尚未列出模型。",
+  "loading": "正在加载运行时…",
+  "error": "无法加载本地运行时。",
+  "retry": "重试",
+  "noCloudKey": "本地运行不需要云密钥。",
+  "tabs": {
+    "label": "提供方中心",
+    "runtimes": "本地运行时",
+    "catalog": "目录",
+    "gateway": "工具网关",
+    "diagnostics": "诊断"
+  },
+  "status": {
+    "healthy": "健康",
+    "down": "不可用",
+    "unknown": "未知",
+    "idle": "空闲"
+  },
+  "toolCalling": {
+    "native": "支持工具调用",
+    "fallback": "回退解析器",
+    "disabled": "未启用工具调用"
+  },
+  "cost": {
+    "local": "本地 — 无云账单",
+    "byok": "自带密钥",
+    "optional": "可选订阅 — 此处不列出价格"
+  },
+  "catalog": {
+    "title": "提供方目录",
+    "subtitle": "搜索本地和可选云后端。隐私说明保持诚实。",
+    "search": "搜索目录",
+    "searchPlaceholder": "名称或运行时",
+    "local": "本地",
+    "cloud": "云端"
+  },
+  "gateway": {
+    "title": "工具网关",
+    "subtitle": "可选。一个身份验证用于额外工具，或按工具自带密钥。本地运行从不需要它。",
+    "optional": "可选 / 订阅",
+    "enable": "启用工具网关",
+    "enableDesc": "只打开你需要的工具。关闭时本地对话仍可用。",
+    "on": "网关已开启。仍可单独关闭每个工具。",
+    "off": "网关已关闭 — 本地对话仍可用。",
+    "keychain": "作用域令牌已保存在操作系统钥匙串中。",
+    "noToken": "未保存网关令牌。",
+    "byokHint": "可与自带密钥并存，并非全开或全关。"
+  },
+  "tools": {
+    "web_search": "网页搜索",
+    "image": "图像生成",
+    "tts": "语音",
+    "browser": "浏览器控制"
+  },
+  "diagnostics": {
+    "title": "为什么工具调用没有触发？",
+    "subtitle": "读取所选运行时并给出可操作的修复。探测不会发送密钥。",
+    "runtime": "运行时",
+    "action": "诊断工具调用",
+    "firing": "可以触发工具调用",
+    "notFiring": "工具调用显示为文本"
+  },
+  "errors": {
+    "unknownRuntime": "未知运行时。请尝试其他路由。",
+    "timedOut": "探测超时。请尝试其他路由。",
+    "unknown": "发生了意外错误。"
+  }
+}

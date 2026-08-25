@@ -64,6 +64,8 @@ select = ["E", "F", "I", "UP", "B"]
 # put on sys.path before Dream can be imported, so imports cannot all sit at
 # the top of the file.
 "tools/memory_probe.py" = ["E402"]
+"tools/runtime_probe.py" = ["E402"]
+"examples/runtime_demo.py" = ["E402"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

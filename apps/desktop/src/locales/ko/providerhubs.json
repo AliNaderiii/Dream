@@ -1,0 +1,84 @@
+{
+  "hubTitle": "로컬 런타임",
+  "hubSubtitle": "가능하면 저비용 로컬 모델을 사용하세요. 선택적 클라우드 경로와 도구 게이트웨이는 대화에 필요하지 않습니다.",
+  "recommendedDefault": "Ollama 권장",
+  "routeTitle": "경로 우선순위",
+  "routeHint": "건강한 첫 경로가 선택됩니다. 로컬 Ollama가 권장 기본값입니다.",
+  "honestCost": "Dream은 가격을 지어내지 않습니다. 비용은 로컬, 직접 가져온 키, 또는 선택 구독입니다.",
+  "detected": "로컬 런타임 감지됨",
+  "recommended": "권장",
+  "reducedReliability": "신뢰성 감소",
+  "modelPicker": "모델",
+  "test": "테스트",
+  "testing": "테스트 중…",
+  "testAria": "{{name}} 테스트",
+  "testOk": "프로브가 {{ms}} ms 만에 성공했습니다. 비밀은 전송되지 않았습니다.",
+  "testFail": "이 런타임이 응답하지 않았습니다. 다른 경로를 시도하세요.",
+  "noModels": "아직 나열된 모델이 없습니다.",
+  "loading": "런타임을 불러오는 중…",
+  "error": "로컬 런타임을 불러올 수 없습니다.",
+  "retry": "다시 시도",
+  "noCloudKey": "로컬 실행에는 클라우드 키가 필요하지 않습니다.",
+  "tabs": {
+    "label": "제공자 허브",
+    "runtimes": "로컬 런타임",
+    "catalog": "목록",
+    "gateway": "도구 게이트웨이",
+    "diagnostics": "진단"
+  },
+  "status": {
+    "healthy": "정상",
+    "down": "중단",
+    "unknown": "알 수 없음",
+    "idle": "대기"
+  },
+  "toolCalling": {
+    "native": "도구 호출 지원",
+    "fallback": "대체 파서",
+    "disabled": "도구 호출이 켜져 있지 않음"
+  },
+  "cost": {
+    "local": "로컬 — 클라우드 청구 없음",
+    "byok": "직접 키 가져오기",
+    "optional": "선택 구독 — 가격은 여기에 없음"
+  },
+  "catalog": {
+    "title": "제공자 목록",
+    "subtitle": "로컬 및 선택적 클라우드 백엔드를 검색합니다. 개인정보 문구는 정직합니다.",
+    "search": "목록 검색",
+    "searchPlaceholder": "이름 또는 런타임",
+    "local": "로컬",
+    "cloud": "클라우드"
+  },
+  "gateway": {
+    "title": "도구 게이트웨이",
+    "subtitle": "선택 사항입니다. 추가 도구용 단일 인증 또는 도구별 직접 키. 로컬 실행에는 필요 없습니다.",
+    "optional": "선택 / 구독",
+    "enable": "도구 게이트웨이 켜기",
+    "enableDesc": "원하는 도구만 켜세요. 꺼져 있어도 로컬 대화는 동작합니다.",
+    "on": "게이트웨이가 켜져 있습니다. 각 도구는 따로 끌 수 있습니다.",
+    "off": "게이트웨이 꺼짐 — 로컬 대화는 계속 동작합니다.",
+    "keychain": "범위가 제한된 토큰이 OS 키체인에 저장되어 있습니다.",
+    "noToken": "게이트웨이 토큰이 저장되어 있지 않습니다.",
+    "byokHint": "직접 키와 함께 동작합니다. 전부 아니면 전부가 아닙니다."
+  },
+  "tools": {
+    "web_search": "웹 검색",
+    "image": "이미지 생성",
+    "tts": "음성",
+    "browser": "브라우저 제어"
+  },
+  "diagnostics": {
+    "title": "도구 호출이 동작하지 않는 이유",
+    "subtitle": "선택한 런타임을 읽고 실행 가능한 수정 방법을 줍니다. 비밀은 프로브하지 않습니다.",
+    "runtime": "런타임",
+    "action": "도구 호출 진단",
+    "firing": "도구 호출이 실행될 수 있음",
+    "notFiring": "도구 호출이 텍스트로 나타남"
+  },
+  "errors": {
+    "unknownRuntime": "알 수 없는 런타임입니다. 다른 경로를 시도하세요.",
+    "timedOut": "프로브가 시간 초과되었습니다. 다른 경로를 시도하세요.",
+    "unknown": "예기치 않은 오류가 발생했습니다."
+  }
+}
