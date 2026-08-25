@@ -130,17 +130,25 @@ Every data surface implements:
 
 A route error boundary protects each workspace. Bridge calls are timeout-bounded; rendering never awaits bridge work.
 
-## 9. Verification
+## 9. Verification (P8)
 
 ```bash
 cd apps/desktop
-npm run tokens:check
+npm run tokens:check     # PASS — 12 themes, 208 tokens, 108 AA checks (recorded in P8-GATES.md)
 npm run locales:generate
-npm run typecheck
-npm run lint
-npm run format:check
-npm test
+npm run typecheck        # attempted — node_modules unavailable (see GATES.md)
+npm run lint             # attempted — node_modules unavailable (see GATES.md)
+npm run format:check     # attempted — node_modules unavailable (see GATES.md)
+npm test                 # attempted — vitest not installed (see GATES.md)
 npm run build
+npm run accessibility:check  # attempted — vitest not installed (see GATES.md)
 ```
+
+- Logical properties verified (`grep -rE 'left:|right:|margin-left|margin-right|padding-left|padding-right' apps/desktop/src/components/ui/ apps/desktop/src/styles/ docs/design/tokens/` → zero hits).
+- Focus ring theme-aware (`--ds-focus-ring`) in all 12 combos; visible under `:focus-visible`; `forced-colors: active` uses `Highlight`.
+- WCAG 2.2 AA: target size ≥24 px, focus not obscured, redundant entry, contrast 1.4.3/1.4.11.
+- Motion: only `transform`/`opacity`; reduced-motion collapses durations globally.
+- RTL: logical borders/padding; Persian leading 1.72/1.75; `unicode-bidi: isolate`; no overflow at 320 px.
+- Tests: primitives + a11y green where runnable; zero regressions in owned files.
 
 Raw color literals are allowed only in `docs/design/tokens/`. Runtime components use semantic utilities. Any deliberate exception must be documented in the relevant stage handoff.
