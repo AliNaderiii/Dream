@@ -161,3 +161,73 @@ the existing `normalize_fa`. Exact match wins; a folded hit returns the
 headers (Persian letters, spaces, light punctuation) are accepted by the
 column checker; injection characters (`;`, `/`, quotes, …) are still
 refused.
+
+---
+
+## The research engine (P1)
+
+`dream/research/` is the autonomous layer *above* this pipeline. It never
+re-implements an operation from `dream/skills/data_science.py`; it calls it.
+The pipeline provides the sandbox, the registry, and the validated ops; the
+research engine provides the judgement about which ones to run, in what order,
+and what the results mean.
+
+### Pipeline
+
+```
+topic + workspace
+   └─ discovery.py   walk the space, ingest each source into the registry,
+                     rank by lexical relevance (Persian-normalised)
+   └─ planner.py     → research questions, hypotheses, methodology, outline
+   └─ [human checkpoint: approve | modify | cancel]
+   └─ prep.py        profile → propose ops → clean → re-profile (DeepPrep-style)
+   └─ iterate.py     per section, up to max_iterations:
+                       KnowledgeGap → ToolSelector → CodeAct → Observe/Reflect
+   └─ writer.py      grounded findings → analyst prose (+ root cause, action)
+   └─ proofread.py   grounding guard: ungrounded numbers are redacted
+   └─ report.py      Markdown + PDF + provenance + reproducibility ZIP
+```
+
+Each stage has a deterministic path that runs with **no model at all**. That
+is what makes the engine testable offline with `EchoBackend` and usable behind
+a local Ollama install with no network.
+
+### Grounding
+
+The engine keeps a *grounding ledger*: the canonical set of every number that
+an executed step produced (`analyze.extract_numbers` harvests emitted results,
+stdout, and profile statistics). The proofreader compares every numeric
+literal in the draft against that ledger; anything outside it is redacted
+before compilation, so a hallucinated figure cannot reach the PDF. The
+report's own bookkeeping (section counts, executed-step counts, measured
+iteration timings) is added to the ledger explicitly — those are facts about
+the run, produced by the run.
+
+### Sandboxing
+
+Model-authored code passes three gates: an AST allowlist
+(`research/executor.py`) that refuses imports outside a science allowlist,
+`exec`/`eval`/`__import__`, dunder attribute access, file writes, and absolute
+or traversing path literals; then the existing Docker sandbox (network off,
+`--cap-drop ALL`, seccomp, memory/CPU bounds) or the guarded `-I` subprocess
+fallback with a loud warning; then a wall-clock watchdog that abandons a
+wedged execution thread rather than joining it. Parameters travel through
+`_params.json`; they are never interpolated into source.
+
+### Grant sets
+
+| Mode | Tools available | Writes |
+| --- | --- | --- |
+| interactive | `profile_data analyze_data auto_chart create_chart clean_data` | dataset dir only, guarded tools need an approver |
+| autonomous (cron) | `profile_data analyze_data auto_chart` | none — no cleaning, no chart export |
+
+`run_shell`, `write_file`, `delete_file`, and `http_request` are absent from
+every research grant set, in every mode.
+
+### Reliability
+
+Every step has a deadline; a section has a fair share of the global budget;
+the session has a hard wall-clock bound. A provider that stops answering
+trips a circuit breaker after two consecutive timeouts and the engine finishes
+on its deterministic path. A failing section is recorded as a limitation, not
+as a dead run. Cancellation is cooperative and checked at every step boundary.

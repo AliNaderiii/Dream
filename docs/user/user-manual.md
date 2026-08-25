@@ -166,3 +166,112 @@ solution table.
 - Diagnose locally first: `python doctor.py` then `dream --backend echo --debug`.
 - Version policy: follow the changelog (`CHANGELOG.md`); `dream --version`
   prints your build.
+
+---
+
+## Deep research (autonomous data science)
+
+Dream can run a whole analytical project on its own: point it at a folder of
+data and a question, and it plans a study, analyses the data step by step, and
+writes you a report with a PDF — every number in it produced by code that
+actually ran.
+
+### Running one
+
+```bash
+python examples/research_demo.py                    # offline demo, seeded data
+python examples/research_demo.py --backend ollama   # local model, no VPN
+```
+
+From Python:
+
+```python
+from dream.research import ResearchEngine
+
+engine = ResearchEngine()
+session = engine.create(
+    "Why did revenue dip in March?",
+    "/path/to/my/data-folder",
+    config={"language": "fa", "max_iterations": 3},
+)
+
+plan = session.plan()          # Dream proposes the study
+for section in plan.sections:  # review it before anything expensive runs
+    print(section.title, "—", section.thesis)
+print(session.record.cost_estimate)
+
+session.approve()              # or session.modify({...}) / session.cancel()
+session.start()
+print(session.record.report.markdown_path)
+print(session.record.report.pdf_path)
+```
+
+### What you get
+
+A cover, an abstract, the methodology (including exactly which cleaning steps
+ran and why), one section per research question with tables and figures,
+anomaly alerts (spikes, drops, outliers the data itself raised), a discussion,
+conclusions, an honest limitations list, recommended actions, the full
+execution trace as an appendix, references, and reproducibility notes.
+
+### Reviewing and editing the plan
+
+The plan is a document, not a black box. Before you approve it you can edit
+the outline:
+
+```python
+session.modify({
+    "sections": [
+        {"title": "March revenue", "thesis": "Isolate the dip to a region."},
+        {"title": "Discount effect", "thesis": "Test discount rate against revenue."},
+    ]
+})
+```
+
+Or ask for a fresh plan with `session.modify({"replan": True})`. Nothing runs
+until you call `approve()`.
+
+### Steering the research with a document
+
+Put a `METHODOLOGY.md` in the folder and Dream reads it as guidance for the
+plan — "focus on the March dip", "always report the discount rate alongside
+revenue". It is treated as *your* guidance, not as a command channel: it still
+passes through Dream's prompt-injection gate.
+
+### Persian
+
+Set `"language": "fa"` and the plan, prose, and headings are Persian, with
+RTL-safe Markdown and Persian-digit-aware data handling.
+
+### Safety
+
+- Code Dream writes runs in a sandbox with no network, never on your machine
+  directly, and is refused outright if it tries to import `os`, open an
+  absolute path, or write a file.
+- Text *inside* your data is treated as data. A CSV cell saying "ignore all
+  previous instructions" is reported as content, never obeyed.
+- Numbers are checked. If a sentence contains a figure that no executed step
+  produced, that sentence is removed before the report is written.
+- Nothing hangs. Every step has a deadline; a stuck run fails cleanly and
+  tells you which section it gave up on.
+- Scheduled/unattended runs use a reduced, read-only tool set — they can
+  profile and analyse, but they cannot clean, write charts, or touch anything
+  outside the dataset directory.
+
+### Configuration
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `max_iterations` | 3 | research turns per section |
+| `max_time_seconds` | 900 | hard wall-clock budget for the whole run |
+| `step_timeout_seconds` | 120 | deadline for one model call or one code run |
+| `max_retries` | 2 | self-correction attempts after a failed snippet |
+| `max_sections` | 6 | report sections |
+| `language` | `en` | `en` or `fa` |
+| `autonomous` | `false` | skip the approval checkpoint, degraded grant set |
+| `max_pages` | 20 | PDF page cap |
+| `output_length` | `standard` | `brief`, `standard`, or `detailed` |
+
+Environment: `DREAM_RESEARCH_DIR` (session storage, default `data/research`),
+`DREAM_DATASETS_DIR` (dataset registry), `DREAM_DATA_LOCAL_EXEC=1` (force the
+guarded subprocess when Docker is unavailable).
