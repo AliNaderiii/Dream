@@ -1,0 +1,84 @@
+{
+  "hubTitle": "Tiempos de ejecución locales",
+  "hubSubtitle": "Quédese en un modelo local de bajo coste cuando pueda. Las rutas en la nube y la pasarela de herramientas no son necesarias para conversar.",
+  "recommendedDefault": "Ollama recomendado",
+  "routeTitle": "Prioridad de ruta",
+  "routeHint": "Gana la primera ruta sana. Ollama local sigue siendo el valor recomendado.",
+  "honestCost": "Dream no inventa precios. El coste es local, clave propia o una suscripción opcional.",
+  "detected": "Tiempo de ejecución local detectado",
+  "recommended": "Recomendado",
+  "reducedReliability": "Menor fiabilidad",
+  "modelPicker": "Modelo",
+  "test": "Probar",
+  "testing": "Probando…",
+  "testAria": "Probar {{name}}",
+  "testOk": "La sonda respondió en {{ms}} ms. No se enviaron secretos.",
+  "testFail": "Este tiempo de ejecución no respondió. Pruebe otra ruta.",
+  "noModels": "Aún no hay modelos.",
+  "loading": "Cargando tiempos de ejecución…",
+  "error": "No se pudieron cargar los tiempos de ejecución locales.",
+  "retry": "Reintentar",
+  "noCloudKey": "No hace falta una clave en la nube para ejecutar en local.",
+  "tabs": {
+    "label": "Centros de proveedores",
+    "runtimes": "Tiempos de ejecución locales",
+    "catalog": "Catálogo",
+    "gateway": "Pasarela de herramientas",
+    "diagnostics": "Diagnóstico"
+  },
+  "status": {
+    "healthy": "Sano",
+    "down": "Caído",
+    "unknown": "Desconocido",
+    "idle": "Inactivo"
+  },
+  "toolCalling": {
+    "native": "Admite llamadas a herramientas",
+    "fallback": "Analizador de reserva",
+    "disabled": "Llamadas a herramientas no activadas"
+  },
+  "cost": {
+    "local": "Local — sin factura en la nube",
+    "byok": "Traiga su propia clave",
+    "optional": "Suscripción opcional — el precio no se lista aquí"
+  },
+  "catalog": {
+    "title": "Catálogo de proveedores",
+    "subtitle": "Busque backends locales y opcionales en la nube. Las líneas de privacidad son honestas.",
+    "search": "Buscar en el catálogo",
+    "searchPlaceholder": "Nombre o tiempo de ejecución",
+    "local": "Local",
+    "cloud": "Nube"
+  },
+  "gateway": {
+    "title": "Pasarela de herramientas",
+    "subtitle": "Opcional. Un solo acceso para herramientas extra, o una clave propia por herramienta. Nunca es necesaria para ejecutar en local.",
+    "optional": "Opcional / suscripción",
+    "enable": "Activar la pasarela de herramientas",
+    "enableDesc": "Active solo las herramientas que quiera. El chat local sigue funcionando si está apagada.",
+    "on": "Pasarela activa. Cada herramienta se puede desactivar.",
+    "off": "Pasarela apagada — el chat local sigue funcionando.",
+    "keychain": "Un token con alcance está en el llavero del sistema.",
+    "noToken": "No hay token de pasarela guardado.",
+    "byokHint": "Convive con la clave propia. No es todo o nada."
+  },
+  "tools": {
+    "web_search": "Búsqueda web",
+    "image": "Generación de imágenes",
+    "tts": "Voz",
+    "browser": "Control del navegador"
+  },
+  "diagnostics": {
+    "title": "¿Por qué no se disparan las llamadas a herramientas?",
+    "subtitle": "Lee el tiempo de ejecución elegido y da una corrección accionable. No se sondean secretos.",
+    "runtime": "Tiempo de ejecución",
+    "action": "Diagnosticar llamadas a herramientas",
+    "firing": "Las llamadas pueden dispararse",
+    "notFiring": "Las llamadas aparecen como texto"
+  },
+  "errors": {
+    "unknownRuntime": "Tiempo de ejecución desconocido. Pruebe otra ruta.",
+    "timedOut": "La sonda agotó el tiempo. Pruebe otra ruta.",
+    "unknown": "Ocurrió un error inesperado."
+  }
+}
