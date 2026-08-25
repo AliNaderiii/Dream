@@ -67,6 +67,7 @@ select = ["E", "F", "I", "UP", "B"]
 "tools/runtime_probe.py" = ["E402"]
 "tools/sec_agentic_probe.py" = ["E402"]
 "examples/runtime_demo.py" = ["E402"]
+"tools/soak_test.py" = ["E402"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
