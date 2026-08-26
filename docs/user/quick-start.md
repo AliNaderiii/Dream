@@ -27,14 +27,14 @@ visible. `check.bat` runs offline diagnostics. `Dream.bat` and
 `Dream-Start.bat` launch the older `desktop.py` window; they are not the Tauri
 product UI and are not the first-run path.
 
-### 2. Tauri installer (from the `v0.4.1` release onward)
+### 2. Tauri installer (from the `v0.4.2` release onward)
 
-Download `Dream_0.4.1_x64-setup.exe` from the GitHub Release, install it, and
+Download `Dream_0.4.2_x64-setup.exe` from the GitHub Release, install it, and
 run Dream. On Windows the kernel is inside the installer — no separate
 `pip install`, no local Python required:
 
-1. Download **`Dream_0.4.1_x64-setup.exe`** from the
-   [GitHub Release](https://github.com/AliNaderiii/Dream/releases) for `v0.4.1`.
+1. Download **`Dream_0.4.2_x64-setup.exe`** from the
+   [GitHub Release](https://github.com/AliNaderiii/Dream/releases) for `v0.4.2`.
 2. Run the installer. SmartScreen may warn because the installer is
    **unsigned** — choose **More info → Run anyway**.
 3. WebView2 may be downloaded during installation if it is missing.
@@ -176,9 +176,9 @@ not a crash — the app stays usable and never pretends the model is local.
   WebView2 runtime from Microsoft first.
 
 - **Persian chat fails with `charmap` / `bridge is not connected` on Start
-  Menu.** Fixed in the sidecar hotfix after v0.4.1: the engine now forces
-  UTF-8 and writes `data/` under `%LOCALAPPDATA%\\Dream`. Until that installer
-  is installed, launch with
+  Menu.** Fixed in `v0.4.2`: the engine now forces
+  UTF-8 and writes `data/` under `%LOCALAPPDATA%\\Dream`. On a 0.4.1 install,
+  launch with
   `Start-Process "C:\\Program Files\\Dream\\dream-desktop.exe" -WorkingDirectory $env:LOCALAPPDATA\\Dream`
   and `$env:PYTHONUTF8 = "1"`.
 - **Still stuck.** From a terminal in the repository root, run

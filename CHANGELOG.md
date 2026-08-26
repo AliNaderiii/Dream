@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.4.2] - 2026-08-26
+
+Windows sidecar daily-use hotfix on top of 0.4.1. Product version stays unified.
+
 ### Fixed
 
 - **Windows sidecar UTF-8.** `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8` are
@@ -18,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`get_datetime` / Asia/Tehran.** `tzdata` is a runtime dependency and is
   smoked in the Windows sidecar bundle. Missing IANA data falls back to the
   host offset instead of raising `ZoneInfoNotFoundError`.
+- **Warm-route CI budget.** Shared runners occasionally exceed the 300 ms
+  warm-route assertion; the unit budget is 450 ms.
+
+### Known notes
+
+- The Windows installer is unsigned — SmartScreen warns.
+- WebView2 may download during install.
+- Aval / OpenRouter HTTP 429 is an account quota, not this patch.
+- P5 parsers, P6 call sites, and P7 wiring remain documented residuals.
 
 ## [0.4.1] - 2026-08-26
 

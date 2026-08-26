@@ -1,5 +1,15 @@
 # Status
 
+## 0.4.2 — Sidecar UTF-8, AppData root, tzdata — CUT
+
+**What shipped.** Version **0.4.2** (hotfix #96 plus this bump). Start Menu
+sets UTF-8 on the sidecar, writes `data/` under `%LOCALAPPDATA%\Dream`, and
+bundles `tzdata` so `get_datetime` / Asia/Tehran does not raise.
+
+**What is next.** Owner installs `Dream_0.4.2_x64-setup.exe`. P9/P10 wait
+for an explicit ask.
+
+
 ## 0.4.1 — Desktop daily-use patch — CUT
 
 **What shipped.** Version **0.4.1** (desktop fix #94 plus this bump).
