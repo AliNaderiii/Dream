@@ -1,5 +1,15 @@
 # Status
 
+## 0.4.1 — Desktop daily-use patch — CUT
+
+**What shipped.** Version **0.4.1** (desktop fix #94 plus this bump).
+Windows Start Menu should start the bundled sidecar without an env override.
+One process, one tray icon; X quits by default. Rail can expand with labels.
+
+**What is next.** Owner installs `Dream_0.4.1_x64-setup.exe`. P9/P10 wait
+for an explicit ask.
+
+
 ## 0.4.0 — Research, workspace, and unified release — CUT
 
 **What shipped.** Product version **0.4.0** unifies the Python package
