@@ -38,7 +38,7 @@ def extract_bearer(headers: Any, query: dict[str, list[str]]) -> str:
 
 
 class RemoteGwHandler(BaseHTTPRequestHandler):
-    server_version = "DreamRemote/0.4.2"
+    server_version = "DreamRemote/0.4.3"
     sys_version = ""
 
     def log_message(self, fmt: str, *args: object) -> None:

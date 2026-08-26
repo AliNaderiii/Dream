@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Dream",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "identifier": "com.dream.assistant",
   "build": {
     "beforeDevCommand": "npm run dev",
