@@ -7,7 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-## [0.4.0] - 2026-08-25
+## [0.4.1] - 2026-08-26
+
+Windows daily-use patch on top of 0.4.0. Product version stays unified.
+
+### Fixed
+
+- **Bundled sidecar discovery.** Stock NSIS installs find
+  `{install}/resources/python/python.exe` next to `dream-desktop.exe` without
+  setting `DREAM_SIDECAR_PYTHON`. Missed candidates are logged.
+- **Single instance and tray teardown.** A second launch focuses the running
+  window. Close (default) destroys the tray icon, kills the sidecar, and exits
+  so icons do not stack in the notification area. Duplicate config-level tray
+  builder removed. Settings `closeToTray` default matches Rust (`false`).
+- **Layout containment.** Settings language row and disconnected banners wrap
+  inside their own boxes instead of overlapping chips or actions.
+- **Activity rail drawer.** Collapsed / expanded / hover-peek with a pin
+  control; labels from existing `nav.*` keys; RTL logical layout.
+
+### Known notes
+
+- The Windows installer is unsigned — SmartScreen warns.
+- WebView2 may download during install.
+- Aval / OpenRouter HTTP 429 is an account quota, not this patch.
+- P5 parsers, P6 call sites, and P7 wiring remain documented residuals.
+
+
 
 First product cut that includes the P0–P8 local-first workbench on `main`
 (research, data QA, workspace, provider hubs, security primitives,
