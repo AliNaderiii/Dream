@@ -39,4 +39,44 @@ describe('SettingsRoute (S05 billing)', () => {
     // Language picker still offers Persian.
     expect(screen.getByRole('button', { name: /🇮🇷/ })).toBeInTheDocument();
   });
+
+  it('contains the language row: description and locale chips never share a line box', async () => {
+    render(<SettingsRoute />);
+
+    // The row's description text ("Persian switches the whole shell to
+    // right-to-left.") and the locale chips must live in separate flex
+    // children so chips wrap inside their own area — never through the
+    // description (owner screenshot: English description running through the
+    // locale chips).
+    const description = await screen.findByText(
+      'Persian switches the whole shell to right-to-left.',
+    );
+    const labelColumn = description.parentElement;
+    expect(labelColumn).not.toBeNull();
+    expect(labelColumn!.className).toContain('min-w-0');
+
+    const chips = screen.getAllByRole('button', { name: /🇮🇷|🇬🇧|🇩🇪|🇪🇸|🇫🇷|🇯🇵|🇰🇷|🇨🇳/ });
+    expect(chips.length).toBeGreaterThanOrEqual(8);
+    // All eight locale chips share one wrapping chip row (their own row with
+    // gap — the fix for chips wrapping through the next control).
+    const chipBoxes = new Set(chips.map((chip) => chip.parentElement));
+    expect(chipBoxes.size).toBe(1);
+    const chipRow = [...chipBoxes][0]!;
+    expect(chipRow.className).toContain('flex-wrap');
+    expect(chipRow.className).toContain('gap-1');
+
+    // The control column around the chip row: can shrink, wraps inside its own
+    // box, capped at its own column on wide rows — never overlapping the label.
+    const controlColumn = chipRow.parentElement;
+    expect(controlColumn).not.toBeNull();
+    expect(controlColumn!.className).toContain('min-w-0');
+    expect(controlColumn!.className).toContain('flex-wrap');
+    expect(controlColumn!.className).toContain('md:max-w-[55%]');
+
+    // The control column is a sibling of the label column inside the row, not
+    // a descendant — no text runs through the chips.
+    expect(controlColumn).toBe(labelColumn!.parentElement!.lastElementChild);
+    expect(labelColumn!.parentElement!.className).toContain('md:flex-row');
+    expect(labelColumn!.parentElement!.className).toContain('flex-col');
+  });
 });

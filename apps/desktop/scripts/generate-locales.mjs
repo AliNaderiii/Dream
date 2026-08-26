@@ -33,6 +33,13 @@ const en = {
       settings: 'Settings',
       provenance: 'Provenance',
     },
+    rail: {
+      pin: 'Pin rail open',
+      unpin: 'Unpin rail',
+      modeCollapsed: 'Rail mode: collapsed',
+      modeHover: 'Rail mode: hover to peek',
+      modeExpanded: 'Rail mode: expanded',
+    },
     sessions: {
       title: 'Sessions',
       new: 'New session',
@@ -897,6 +904,13 @@ const fa = {
       providers: 'سرویس‌ها',
       settings: 'تنظیمات',
       provenance: 'تاریخچه',
+    },
+    rail: {
+      pin: 'ثابت نگه‌داشتن نوار',
+      unpin: 'آزاد کردن نوار',
+      modeCollapsed: 'حالت نوار: جمع‌شده',
+      modeHover: 'حالت نوار: نمایش با نشانگر',
+      modeExpanded: 'حالت نوار: باز',
     },
     sessions: {
       title: 'نشست‌ها',
@@ -1763,6 +1777,13 @@ const zhCN = {
       settings: '设置',
       provenance: '溯源',
     },
+    rail: {
+      pin: '固定导航栏',
+      unpin: '取消固定导航栏',
+      modeCollapsed: '导航栏模式：折叠',
+      modeHover: '导航栏模式：悬停显示',
+      modeExpanded: '导航栏模式：展开',
+    },
     sessions: {
       title: '会话',
       new: '新会话',
@@ -2210,6 +2231,13 @@ const ja = {
       providers: 'プロバイダー',
       settings: '設定',
       provenance: '来歴',
+    },
+    rail: {
+      pin: 'レールを固定',
+      unpin: 'レールの固定を解除',
+      modeCollapsed: 'レールモード：折りたたみ',
+      modeHover: 'レールモード：ホバーで表示',
+      modeExpanded: 'レールモード：展開',
     },
     sessions: {
       title: 'セッション',
@@ -2662,6 +2690,13 @@ const es = {
       providers: 'Proveedores',
       settings: 'Ajustes',
       provenance: 'Procedencia',
+    },
+    rail: {
+      pin: 'Fijar la barra',
+      unpin: 'Soltar la barra',
+      modeCollapsed: 'Modo barra: contraída',
+      modeHover: 'Modo barra: vista al pasar',
+      modeExpanded: 'Modo barra: expandida',
     },
     sessions: {
       title: 'Sesiones',
@@ -3119,6 +3154,13 @@ const de = {
       providers: 'Anbieter',
       settings: 'Einstellungen',
       provenance: 'Herkunft',
+    },
+    rail: {
+      pin: 'Leiste anpinnen',
+      unpin: 'Leiste lösen',
+      modeCollapsed: 'Leistenmodus: eingeklappt',
+      modeHover: 'Leistenmodus: beim Überfahren',
+      modeExpanded: 'Leistenmodus: erweitert',
     },
     sessions: {
       title: 'Sitzungen',
@@ -3582,6 +3624,13 @@ const fr = {
       settings: 'Réglages',
       provenance: 'Provenance',
     },
+    rail: {
+      pin: 'Épingler la barre',
+      unpin: 'Détacher la barre',
+      modeCollapsed: 'Mode barre : réduit',
+      modeHover: 'Mode barre : aperçu au survol',
+      modeExpanded: 'Mode barre : déployé',
+    },
     sessions: {
       title: 'Sessions',
       new: 'Nouvelle session',
@@ -4043,6 +4092,13 @@ const ko = {
       providers: '제공자',
       settings: '설정',
       provenance: '출처',
+    },
+    rail: {
+      pin: '레일 고정',
+      unpin: '레일 고정 해제',
+      modeCollapsed: '레일 모드: 접힘',
+      modeHover: '레일 모드: 호버 표시',
+      modeExpanded: '레일 모드: 펼침',
     },
     sessions: {
       title: '세션',

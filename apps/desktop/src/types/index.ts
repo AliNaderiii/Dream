@@ -24,6 +24,15 @@ export type Density = 'comfortable' | 'dense';
 /** Display digits without changing normalized values in the data layer. */
 export type NumeralStyle = 'latin' | 'persian';
 
+/**
+ * Activity-rail mode (design-system §7 drawer).
+ * - `collapsed`: icon-only rail, tooltip on hover (the historical look).
+ * - `hover`: collapsed until the pointer enters the rail, then expands and
+ *   collapses on leave unless pinned.
+ * - `expanded`: wider rail with icon + visible label.
+ */
+export type RailMode = 'collapsed' | 'hover' | 'expanded';
+
 /** Snapshot of Rust-side app state. Mirrors `state::AppStateSnapshot`. */
 export interface AppStateSnapshot {
   agentStatus: AgentStatus;

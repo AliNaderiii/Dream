@@ -15,6 +15,7 @@ import type {
   Direction,
   Locale,
   NumeralStyle,
+  RailMode,
   ResolvedTheme,
   ThemeMode,
 } from '@/types';
@@ -39,6 +40,12 @@ interface AppState {
   commandPaletteOpen: boolean;
   /** MEM Stage F: the Ctrl/Cmd+P conversation-search dialog. */
   sessionSearchOpen: boolean;
+
+  /* activity rail (design-system §7 drawer) */
+  /** `collapsed` | `hover` | `expanded` — the rail's resting behaviour. */
+  railMode: RailMode;
+  /** Pin the rail open; only meaningful while `railMode === 'hover'`. */
+  railPinned: boolean;
 
   /* agent (mirrored from Rust) */
   agentStatus: AgentStatus;
@@ -66,6 +73,8 @@ interface AppState {
   setAgentStatus: (status: AgentStatus) => void;
   setPendingApprovals: (count: number) => void;
   setWorkspaceRoot: (path: string | null) => void;
+  setRailMode: (mode: RailMode) => void;
+  setRailPinned: (pinned: boolean) => void;
 }
 
 /** Minimum and maximum sidebar widths, per the design system's layout rules. */
@@ -87,6 +96,8 @@ type PersistedAppState = Pick<
   | 'numerals'
   | 'sidebarCollapsed'
   | 'sidebarWidth'
+  | 'railMode'
+  | 'railPinned'
   | 'workspaceRoot'
 >;
 
@@ -108,6 +119,12 @@ export function migrateAppState(persisted: unknown): PersistedAppState {
     sidebarCollapsed: value['sidebarCollapsed'] === true,
     sidebarWidth:
       typeof value['sidebarWidth'] === 'number' ? value['sidebarWidth'] : SIDEBAR_DEFAULT_WIDTH,
+    // The rail defaults to hover-to-peek, unpinned: visually identical to the
+    // historical icon-only rail until the pointer enters it.
+    railMode: ['collapsed', 'hover', 'expanded'].includes(value['railMode'] as string)
+      ? (value['railMode'] as RailMode)
+      : 'hover',
+    railPinned: value['railPinned'] === true,
     workspaceRoot: typeof value['workspaceRoot'] === 'string' ? value['workspaceRoot'] : null,
   };
 }
@@ -130,6 +147,9 @@ export const useAppStore = create<AppState>()(
       commandPaletteOpen: false,
 
       sessionSearchOpen: false,
+
+      railMode: 'hover',
+      railPinned: false,
 
       agentStatus: 'idle',
       pendingApprovals: 0,
@@ -165,10 +185,14 @@ export const useAppStore = create<AppState>()(
       setAgentStatus: (agentStatus) => set({ agentStatus }),
       setPendingApprovals: (pendingApprovals) => set({ pendingApprovals }),
       setWorkspaceRoot: (workspaceRoot) => set({ workspaceRoot }),
+      setRailMode: (railMode) => set({ railMode }),
+      setRailPinned: (railPinned) => set({ railPinned }),
     }),
     {
       name: 'dream.app',
-      version: 2,
+      // v3: the activity-rail drawer fields (railMode/railPinned) joined the
+      // persisted surface; old payloads are normalised through migrateAppState.
+      version: 3,
       migrate: (persisted) => migrateAppState(persisted),
       // Session-scoped and Rust-owned fields are deliberately not persisted.
       partialize: (state) => ({
@@ -182,6 +206,8 @@ export const useAppStore = create<AppState>()(
         numerals: state.numerals,
         sidebarCollapsed: state.sidebarCollapsed,
         sidebarWidth: state.sidebarWidth,
+        railMode: state.railMode,
+        railPinned: state.railPinned,
         workspaceRoot: state.workspaceRoot,
       }),
     },

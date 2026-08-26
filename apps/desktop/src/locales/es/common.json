@@ -13,6 +13,13 @@
     "settings": "Ajustes",
     "provenance": "Procedencia"
   },
+  "rail": {
+    "pin": "Fijar la barra",
+    "unpin": "Soltar la barra",
+    "modeCollapsed": "Modo barra: contraída",
+    "modeHover": "Modo barra: vista al pasar",
+    "modeExpanded": "Modo barra: expandida"
+  },
   "sessions": {
     "title": "Sesiones",
     "new": "Nueva sesión",

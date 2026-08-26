@@ -15,7 +15,15 @@ import { dialogApi, windowApi } from '@/lib/tauri';
 import { MAX_UI_ZOOM, MIN_UI_ZOOM, useAppStore } from '@/stores/use-app-store';
 import type { Accent, Density, NumeralStyle, ThemeMode } from '@/types';
 
-/** A labelled settings row. */
+/**
+ * A labelled settings row.
+ *
+ * Containment contract (no collision): on narrow widths the control stack
+ * wraps below the label instead of running through it; on wide widths label
+ * and control share the row, each capped at its own column so the chips/buttons
+ * wrap *inside* their own area — never into the label or across the row
+ * boundary. All directions use logical properties, so RTL mirrors cleanly.
+ */
 function Row({
   label,
   description,
@@ -26,12 +34,16 @@ function Row({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-6 border-b border-border-default py-3 last:border-b-0">
-      <div className="min-w-0">
+    <div className="flex flex-col gap-2 border-b border-border-default py-3 last:border-b-0 md:flex-row md:items-center md:justify-between md:gap-6">
+      <div className="min-w-0 md:max-w-[45%]">
         <p className="text-body font-medium">{label}</p>
-        {description && <p className="text-caption text-fg-secondary">{description}</p>}
+        {description && (
+          <p className="mt-0.5 break-words text-caption text-fg-secondary">{description}</p>
+        )}
       </div>
-      <div className="shrink-0">{children}</div>
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5 md:max-w-[55%] md:shrink-0 md:justify-end">
+        {children}
+      </div>
     </div>
   );
 }
@@ -63,8 +75,12 @@ export function SettingsRoute() {
   const workspaceRoot = useAppStore((s) => s.workspaceRoot);
   const setWorkspaceRoot = useAppStore((s) => s.setWorkspaceRoot);
 
+  // Defaults mirror the Rust-side defaults exactly (state.rs): close quits the
+  // process for real (tray icon destroyed, sidecar killed). The mount effect
+  // below pushes these values to Rust, so a wrong default here would silently
+  // flip quit-on-close to hide-to-tray for every fresh install.
   const [minimizeToTray, setMinimizeToTray] = useState(false);
-  const [closeToTray, setCloseToTray] = useState(true);
+  const [closeToTray, setCloseToTray] = useState(false);
 
   // MCP & ACP State
   const [mcpServers, setMcpServers] = useState<MCPServerDto[]>([]);
