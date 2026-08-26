@@ -298,6 +298,11 @@ NETWORK_REFUSAL_MESSAGE = (
     "\u0627\u0645\u06a9\u0627\u0646 \u062f\u0631\u06cc\u0627\u0641\u062a "
     "\u0627\u06cc\u0646\u062a\u0631\u0646\u062a\u06cc \u0646\u06cc\u0633\u062a."
 )
+NETWORK_EMPTY_MESSAGE = (
+    "\u062c\u0633\u062a\u062c\u0648 \u0646\u062a\u06cc\u062c\u0647\u200c\u0627\u06cc "
+    "\u0628\u0631\u0646\u06af\u0631\u062f\u0627\u0646\u062f."
+)
+_WIKI_HOSTS = ("fa.wikipedia.org", "en.wikipedia.org")
 
 
 class _AddressRefused(ValueError):
@@ -428,6 +433,47 @@ def _fetch(address: str, cap: int) -> tuple[bytes, bool]:
         return _read_capped(response, cap)
 
 
+def _wikipedia_topics(query: str) -> list[tuple[str, str]]:
+    """Public Wikipedia opensearch hits, still SSRF-gated through _fetch."""
+    encoded = urlencode(
+        {
+            "action": "opensearch",
+            "search": query,
+            "limit": "5",
+            "namespace": "0",
+            "format": "json",
+        }
+    )
+    rows: list[tuple[str, str]] = []
+    for host in _WIKI_HOSTS:
+        try:
+            body, _ = _fetch(f"https://{host}/w/api.php?{encoded}", SEARCH_RESPONSE_CAP)
+            payload = json.loads(body.decode("utf-8", "replace"))
+        except (OSError, ValueError, UnicodeError, json.JSONDecodeError, _AddressRefused):
+            continue
+        if not isinstance(payload, list) or len(payload) < 4:
+            continue
+        titles, urls = payload[1], payload[3]
+        if not isinstance(titles, list) or not isinstance(urls, list):
+            continue
+        for title, address in zip(titles, urls):
+            if not isinstance(title, str) or not isinstance(address, str):
+                continue
+            if not title.strip() or not address.strip():
+                continue
+            try:
+                _validate_network_url(address)
+            except _AddressRefused:
+                continue
+            hostname = (urlsplit(address).hostname or "").lower().rstrip(".")
+            if hostname not in _WIKI_HOSTS:
+                continue
+            rows.append((_strip_markup(title), address))
+            if len(rows) >= 4:
+                return rows
+    return rows
+
+
 def _related_topics(value: object) -> list[tuple[str, str]]:
     """Flatten DuckDuckGo's related-topic groups into at most four safe rows."""
     results: list[tuple[str, str]] = []
@@ -453,22 +499,31 @@ def search_web(query: str) -> str:
     """
     if not _network_enabled():
         return NETWORK_DISABLED_MESSAGE
+    fetch_failed = False
+    answer = ""
+    topics: list[tuple[str, str]] = []
     try:
         encoded = urlencode({"q": query, "format": "json", "no_html": "1", "skip_disambig": "1"})
         body, _ = _fetch(f"https://api.duckduckgo.com/?{encoded}", SEARCH_RESPONSE_CAP)
         payload = json.loads(body.decode("utf-8", "replace"))
         answer = _strip_markup(str(payload.get("AbstractText", ""))).strip()
         topics = _related_topics(payload.get("RelatedTopics"))
-        if not answer and not topics:
-            return NETWORK_REFUSAL_MESSAGE
-        lines = [answer] if answer else []
-        lines.extend(f"- {title}: {address}" for title, address in topics)
-        from dream.security.injection import guard_untrusted
-
-        # L5 (SEC Stage D): web extraction crosses into context only scanned.
-        return guard_untrusted("\n".join(lines), source="web:search")
     except (OSError, ValueError, UnicodeError, json.JSONDecodeError, _AddressRefused):
-        return NETWORK_REFUSAL_MESSAGE
+        fetch_failed = True
+    if not answer and not topics:
+        wiki = _wikipedia_topics(query)
+        if wiki:
+            topics = wiki
+        elif fetch_failed:
+            return NETWORK_REFUSAL_MESSAGE
+        else:
+            return NETWORK_EMPTY_MESSAGE
+    lines = [answer] if answer else []
+    lines.extend(f"- {title}: {address}" for title, address in topics)
+    from dream.security.injection import guard_untrusted
+
+    # L5 (SEC Stage D): web extraction crosses into context only scanned.
+    return guard_untrusted("\n".join(lines), source="web:search")
 
 
 @tool(risk="guarded")
