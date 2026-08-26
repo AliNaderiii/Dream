@@ -146,7 +146,11 @@ export default function SpaceRoute() {
           <CardDescription>{t('createHelp')}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-[1fr_auto]">
-          <Input label={t('nameLabel')} value={name} onChange={(event) => setName(event.target.value)} />
+          <Input
+            label={t('nameLabel')}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
           <Button className="self-end" onClick={() => void onCreate()}>
             <Plus aria-hidden />
             {t('create')}
@@ -183,9 +187,7 @@ export default function SpaceRoute() {
               <CardDescription>{t('folderHelp')}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              {active.imported_in_place && (
-                <Badge variant="success">{t('inPlace')}</Badge>
-              )}
+              {active.imported_in_place && <Badge variant="success">{t('inPlace')}</Badge>}
               <Input
                 label={t('folderLabel')}
                 value={folder}
@@ -257,7 +259,11 @@ export default function SpaceRoute() {
               <CardDescription>{t('draftHelp')}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              <Input label={t('ruleLabel')} value={rule} onChange={(event) => setRule(event.target.value)} />
+              <Input
+                label={t('ruleLabel')}
+                value={rule}
+                onChange={(event) => setRule(event.target.value)}
+              />
               <Button onClick={() => void onDraft()}>{t('propose')}</Button>
               <ul className="flex flex-col gap-2" aria-label={t('drafts')}>
                 {drafts.map((draft) => (

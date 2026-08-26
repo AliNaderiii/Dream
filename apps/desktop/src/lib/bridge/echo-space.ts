@@ -177,7 +177,8 @@ export function echoSpaceGet(spaceId: string) {
     roles: ROLES.map((role) => ({
       ...role,
       tools: [...role.tools],
-      effective_ceiling: role.risk_ceiling === 'guarded' && record.ceiling === 'safe' ? 'safe' : role.risk_ceiling,
+      effective_ceiling:
+        role.risk_ceiling === 'guarded' && record.ceiling === 'safe' ? 'safe' : role.risk_ceiling,
     })),
   };
 }
@@ -213,7 +214,10 @@ export function echoSpaceSetInstruction(spaceId: string, text?: string, path?: s
   if (source.startsWith('http://') || source.startsWith('https://')) {
     throw new Error('web instruction sources are refused while network tools are off');
   }
-  if (/ignore\s+previous\s+instructions/i.test(body) || /ignore\s+previous\s+instructions/i.test(source)) {
+  if (
+    /ignore\s+previous\s+instructions/i.test(body) ||
+    /ignore\s+previous\s+instructions/i.test(source)
+  ) {
     throw new Error('instruction doc looks like a prompt injection and was quarantined');
   }
   if (!body) throw new Error('instruction text must be non-empty');
@@ -226,7 +230,8 @@ export function echoSpaceAsk(spaceId: string, roleId: string, question: string) 
   const record = requireSpace(spaceId);
   const role = ROLES.find((item) => item.role_id === roleId);
   if (!role) throw new Error(`unknown role ${roleId}`);
-  if (!question.trim()) throw new Error('question must be a non-empty string of at most 4000 characters');
+  if (!question.trim())
+    throw new Error('question must be a non-empty string of at most 4000 characters');
   if (!record.instruction) throw new Error('this space has no instruction doc yet');
   const ceiling =
     role.risk_ceiling === 'guarded' && record.ceiling === 'safe' ? 'safe' : role.risk_ceiling;
