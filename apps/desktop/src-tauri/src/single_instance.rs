@@ -301,9 +301,10 @@ fn focus_request_path(app_data_dir: &Path) -> PathBuf {
 /// Milliseconds since the Unix epoch, or 0 when the system clock is before
 /// the epoch. A plain `match` (no closure) so clippy -D warnings stays clean.
 fn unix_time_millis() -> u128 {
-    match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(elapsed) => elapsed.as_millis(),
-        Err(_) => 0,
+    if let Ok(elapsed) = SystemTime::now().duration_since(UNIX_EPOCH) {
+        elapsed.as_millis()
+    } else {
+        0
     }
 }
 
