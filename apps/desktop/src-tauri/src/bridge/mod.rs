@@ -22,7 +22,9 @@ use tokio::sync::Mutex;
 
 use crate::bridge::dispatcher::{Dispatcher, RequestChannels};
 use crate::bridge::framing::Outcome;
-use crate::bridge::process::{run_supervisor, SidecarConfig};
+use crate::bridge::process::{
+    ensure_sidecar_data_root, run_supervisor, sidecar_data_root, SidecarConfig,
+};
 use crate::bridge::state::{ConnectionState, SharedState};
 
 pub mod dispatcher;
@@ -118,6 +120,14 @@ impl<R: Runtime> Bridge<R> {
             let resource_dir = app.path().resource_dir().ok();
             config.prepend_bundled(&exe_dir, resource_dir.as_deref(), is_override);
         }
+        let data_root = sidecar_data_root();
+        if let Err(err) = ensure_sidecar_data_root(&data_root) {
+            log::warn!(
+                "bridge: could not create sidecar data root {}: {err}",
+                data_root.display()
+            );
+        }
+        config.set_data_root(data_root);
         Self {
             app,
             state: Arc::new(SharedState::default()),

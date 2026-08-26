@@ -175,6 +175,12 @@ not a crash — the app stays usable and never pretends the model is local.
   runtime; Windows usually fetches it automatically. If offline, install the
   WebView2 runtime from Microsoft first.
 
+- **Persian chat fails with `charmap` / `bridge is not connected` on Start
+  Menu.** Fixed in the sidecar hotfix after v0.4.1: the engine now forces
+  UTF-8 and writes `data/` under `%LOCALAPPDATA%\\Dream`. Until that installer
+  is installed, launch with
+  `Start-Process "C:\\Program Files\\Dream\\dream-desktop.exe" -WorkingDirectory $env:LOCALAPPDATA\\Dream`
+  and `$env:PYTHONUTF8 = "1"`.
 - **Still stuck.** From a terminal in the repository root, run
   `python doctor.py` (offline checks) and `python -m dream.bridge` to confirm
   the kernel starts. If either fails, the message tells you the next step.

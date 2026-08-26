@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- **Windows sidecar UTF-8.** `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8` are
+  set on every sidecar spawn, including when `DREAM_SIDECAR_PYTHON` overrides
+  discovery. Persian chat no longer raises `charmap`.
+- **Writable data root.** The sidecar cwd is `%LOCALAPPDATA%\\Dream` (or
+  `DREAM_HOME` / XDG), so relative `data/` files are never created under
+  `Program Files`. Start Menu launches handshake without a custom shortcut.
+- **`get_datetime` / Asia/Tehran.** `tzdata` is a runtime dependency and is
+  smoked in the Windows sidecar bundle. Missing IANA data falls back to the
+  host offset instead of raising `ZoneInfoNotFoundError`.
+
 ## [0.4.1] - 2026-08-26
 
 Windows daily-use patch on top of 0.4.0. Product version stays unified.
