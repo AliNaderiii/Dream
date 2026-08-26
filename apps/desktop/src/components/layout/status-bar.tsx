@@ -6,6 +6,7 @@
 import { Circle, Globe, HardDrive, Languages } from 'lucide-react';
 
 import { BridgeStatusIndicator } from '@/components/bridge/bridge-status';
+import { RouteHonestyIndicator } from '@/components/liveloop/route-honesty';
 import { SandboxStatusIndicator } from '@/components/sandbox/sandbox-status';
 import { SecurityStatusIndicator } from '@/components/security/security-status-indicator';
 import {
@@ -73,6 +74,8 @@ export function StatusBar() {
           )}
         </span>
       )}
+
+      <RouteHonestyIndicator />
 
       <span className="ms-auto flex items-center gap-3">
         {workspaceRoot && (

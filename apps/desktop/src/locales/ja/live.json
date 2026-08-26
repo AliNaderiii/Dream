@@ -1,0 +1,19 @@
+{
+  "title": "Live",
+  "subtitle": "Arm approved Space drafts onto the scheduler. Role turns stay local unless you ask for live.",
+  "honestyTitle": "Route honesty",
+  "honestyHelp": "The status bar follows Settings. A chat pane can use Earth Runtime while this bar still says Echo.",
+  "honestyHint": "Settings provider — not the chat pane",
+  "honestyOk": "No mismatch declared",
+  "honestyMismatch": "Status bar is Settings. Chat panes pick their own model.",
+  "roleTitle": "Role turn",
+  "roleHelp": "Uses the Space instruction doc. Live hosted completion is refused without a real key.",
+  "spaceId": "Space id",
+  "question": "Question",
+  "ask": "Ask locally",
+  "armTitle": "Arm a draft",
+  "armHelp": "Only APPROVED, non-dangerous drafts become schedules. Each fire still needs approval.",
+  "draftId": "Draft id",
+  "arm": "Arm on scheduler",
+  "armedAs": "Armed as"
+}
