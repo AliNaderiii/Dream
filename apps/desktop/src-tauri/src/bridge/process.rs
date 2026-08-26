@@ -143,15 +143,19 @@ pub(crate) fn bundled_interpreter_paths(
     let mut candidates: Vec<PathBuf> = Vec::new();
 
     if let Some(dir) = resource_dir {
-        if dir
+        // When the resource dir already *is* the python folder, the
+        // interpreter sits directly inside it; otherwise it lives in a
+        // `python` subfolder. A plain if-else binding (no nested if) keeps
+        // clippy -D warnings clean.
+        let python_dir = if dir
             .file_name()
             .is_some_and(|name| name.to_string_lossy().eq_ignore_ascii_case("python"))
         {
-            // The resource dir already *is* the python folder.
-            candidates.push(dir.join("python.exe"));
+            dir.to_path_buf()
         } else {
-            candidates.push(dir.join("python").join("python.exe"));
-        }
+            dir.join("python")
+        };
+        candidates.push(python_dir.join("python.exe"));
     }
     candidates.push(exe_dir.join("resources").join("python").join("python.exe"));
     candidates.push(exe_dir.join("python").join("python.exe"));

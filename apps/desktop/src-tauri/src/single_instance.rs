@@ -56,20 +56,22 @@ pub enum AcquireOutcome {
     Secondary,
 }
 
-/// Check whether another Dream process is already running.
+/// Check whether another Dream process is already running (Windows: named
+/// mutex; other platforms: PID lockfile).
 ///
 /// The check is advisory, not a security boundary: on any error the caller
 /// proceeds as primary (fail open) so a broken mutex can never prevent the app
 /// from launching.
+#[cfg(windows)]
 pub fn acquire(_app_data_dir: &Path) -> AcquireOutcome {
-    #[cfg(windows)]
-    {
-        acquire_windows()
-    }
-    #[cfg(not(windows))]
-    {
-        acquire_lockfile(_app_data_dir)
-    }
+    acquire_windows()
+}
+
+/// Check whether another Dream process is already running (non-Windows
+/// variant; see [`acquire`]).
+#[cfg(not(windows))]
+pub fn acquire(app_data_dir: &Path) -> AcquireOutcome {
+    acquire_lockfile(app_data_dir)
 }
 
 #[cfg(windows)]
