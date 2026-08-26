@@ -456,7 +456,7 @@ def _wikipedia_topics(query: str) -> list[tuple[str, str]]:
         titles, urls = payload[1], payload[3]
         if not isinstance(titles, list) or not isinstance(urls, list):
             continue
-        for title, address in zip(titles, urls):
+        for title, address in zip(titles, urls, strict=False):
             if not isinstance(title, str) or not isinstance(address, str):
                 continue
             if not title.strip() or not address.strip():
