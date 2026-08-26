@@ -74,8 +74,8 @@ Two ways to run Dream on Windows — both are honest about what they are:
    Ollama backend with model `qwen2.5:7b`. If Ollama is missing it prints a
    Persian and English message with <https://ollama.com/download> and waits so
    the window stays readable.
-2. **Tauri installer (from the `v0.4.1` release).** Download
-   **`Dream_0.4.1_x64-setup.exe`** from the GitHub Release, install it, and run
+2. **Tauri installer (from the `v0.4.2` release).** Download
+   **`Dream_0.4.2_x64-setup.exe`** from the GitHub Release, install it, and run
    Dream. The kernel is inside the Windows installer — a bundled CPython plus the
    Dream package — so no separate `pip install` and no local Python are needed on
    Windows. The installer is **unsigned**, so SmartScreen warns; choose
