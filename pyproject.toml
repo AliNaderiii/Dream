@@ -47,7 +47,7 @@ Repository = "https://github.com/AliNaderiii/Dream"
 Issues = "https://github.com/AliNaderiii/Dream/issues"
 
 [tool.setuptools]
-py-modules = ["cli", "doctor"]
+py-modules = ["cli", "doctor", "dream_serve"]
 
 [tool.setuptools.packages.find]
 include = ["dream*"]

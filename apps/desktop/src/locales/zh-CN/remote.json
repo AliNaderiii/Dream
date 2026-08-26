@@ -1,0 +1,18 @@
+{
+  "title": "Remote",
+  "subtitle": "Talk to Dream from this computer or the LAN. Tokens never go in the QR.",
+  "bindTitle": "Bind",
+  "bindHelp": "Default is 127.0.0.1. LAN needs an explicit private address. WAN is refused.",
+  "running": "Listening",
+  "stopped": "Stopped",
+  "leavesNo": "This token stays on this machine",
+  "leavesYes": "This bind leaves the machine (LAN)",
+  "start": "Start loopback",
+  "stop": "Stop",
+  "qrTitle": "Phone URL",
+  "qrHelp": "The QR is the URL only. Paste the token once as Authorization: Bearer.",
+  "qrLabel": "URL-only QR placeholder",
+  "qrHint": "Query-string tokens are refused.",
+  "issue": "Issue a read token",
+  "pasteOnce": "Paste once"
+}
