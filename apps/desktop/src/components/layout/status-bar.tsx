@@ -75,6 +75,8 @@ export function StatusBar() {
         </span>
       )}
 
+      <RouteHonestyIndicator />
+
       <span className="ms-auto flex items-center gap-3">
         {workspaceRoot && (
           <span className="ltr-island max-w-72 truncate text-fg-muted" title={workspaceRoot}>
