@@ -3,14 +3,15 @@
 //! One Dream process owns one tray icon; a second launch must not create a
 //! second process (and therefore a second tray icon) — it should bring the
 //! running window to the front and exit. The `tauri-plugin-single-instance`
-//! crate was removed (S15) and crates.io is unreachable from the release
+//! crate was removed (`S15`) and crates.io is unreachable from the release
 //! environment, so this module implements the same contract with zero extra
 //! dependencies:
 //!
 //! - **Windows**: a per-session named mutex (`Local\DreamDesktop.SingleInstance`)
-//!   created through a minimal direct FFI to `kernel32`. The mutex handle is
-//!   deliberately leaked for the process lifetime — the OS destroys the kernel
-//!   object when the last handle closes, i.e. when the primary exits.
+//!   created through a minimal direct FFI to `kernel32`. The handle is moved
+//!   into a `!Copy` `MutexHandle` wrapper that is deliberately leaked for the
+//!   process lifetime — the OS destroys the kernel object when the last
+//!   handle closes, i.e. when the primary exits.
 //! - **Other platforms**: a PID lockfile in the app data directory with stale
 //!   lock recovery (a lockfile whose recorded PID is no longer alive is taken
 //!   over).
@@ -77,7 +78,8 @@ mod win {
     //!
     //! `windows-sys` is already in the dependency tree of `tauri`, but adding
     //! it to `Cargo.toml` would require crates.io access at build time; the
-    //! release environment has none. These four symbols are stable Win32 API.
+    //! release environment has none. These three symbols are stable `Win32`
+    //! API.
 
     use std::ffi::c_void;
 
@@ -95,7 +97,7 @@ mod win {
         fn CloseHandle(h_object: *mut c_void) -> i32;
     }
 
-    /// ERROR_ALREADY_EXISTS: the mutex name was created by another handle —
+    /// `ERROR_ALREADY_EXISTS`: the mutex name was created by another handle —
     /// i.e. a previous instance is running.
     pub const ERROR_ALREADY_EXISTS: u32 = 183;
 
@@ -103,11 +105,31 @@ mod win {
     pub enum MutexOutcome {
         /// This process created the mutex — it is the primary instance.
         /// Carries the handle that must stay open for the process lifetime.
-        Primary(*mut c_void),
+        Primary(MutexHandle),
         /// Another instance already holds the mutex name.
         Secondary,
         /// The mutex could not be created at all (`GetLastError` code).
         Failed(u32),
+    }
+
+    /// Process-lifetime owner of a `CreateMutexW` handle.
+    ///
+    /// `*mut c_void` is `Copy`, so `std::mem::forget` on the raw handle would
+    /// trip `clippy::forget_copy`. This wrapper is `!Copy` (it implements
+    /// `Drop`); the primary instance leaks it with `Box::leak`, so `drop`
+    /// never runs during normal operation and the kernel mutex object stays
+    /// open until the process exits. If the leak is ever removed, `Drop`
+    /// closes the handle instead of leaking it.
+    pub struct MutexHandle(*mut c_void);
+
+    impl Drop for MutexHandle {
+        fn drop(&mut self) {
+            // SAFETY: `self.0` is the open handle returned by `CreateMutexW`
+            // and this `MutexHandle` is its only owner. Closing a valid
+            // handle is always sound; the kernel mutex object is destroyed
+            // once every other handle to it is closed.
+            unsafe { CloseHandle(self.0) };
+        }
     }
 
     /// Create (or open) the named mutex and report who owns the name.
@@ -130,7 +152,7 @@ mod win {
             unsafe { CloseHandle(handle) };
             return MutexOutcome::Secondary;
         }
-        MutexOutcome::Primary(handle)
+        MutexOutcome::Primary(MutexHandle(handle))
     }
 }
 
@@ -139,12 +161,13 @@ mod win {
 fn acquire_windows() -> AcquireOutcome {
     match win::try_create_mutex(MUTEX_NAME) {
         win::MutexOutcome::Primary(handle) => {
-            // Deliberately leak the handle: the kernel mutex must stay alive
-            // for this process's lifetime (the OS destroys it when the last
-            // handle closes, i.e. when the primary exits). A few bytes of
-            // leaked memory are the standard price of a process-lifetime
-            // kernel object.
-            std::mem::forget(handle);
+            // Deliberately leak the wrapper: the kernel mutex object must
+            // stay open for this process's lifetime (the OS destroys it when
+            // the last handle closes — i.e. when the primary exits). Leaking
+            // the `!Copy` wrapper via `Box::leak` keeps the handle open
+            // without `std::mem::forget` on a `Copy` raw pointer
+            // (`clippy::forget_copy`).
+            let _ = Box::leak(Box::new(handle));
             log::info!("single-instance: primary — created named mutex {MUTEX_NAME}");
             AcquireOutcome::Primary
         }
