@@ -1,0 +1,15 @@
+{
+  "title": "Google",
+  "subtitle": "Connect your Google account for read-only Gmail, Calendar, and Drive. Sending stays human.",
+  "statusTitle": "Connection",
+  "statusHelp": "Tokens stay in the OS keychain. Dream never puts them in the prompt.",
+  "connected": "Connected",
+  "disconnected": "Not connected",
+  "readonlyNote": "Read-only in this cut. Send, delete, and share are refused.",
+  "connectTitle": "OAuth",
+  "connectHelp": "Set DREAM_GOOGLE_CLIENT_ID. Open the URL, then paste the loopback redirect or code.",
+  "begin": "Start Google sign-in",
+  "code": "Redirect URL or code",
+  "complete": "Finish connect",
+  "disconnect": "Disconnect"
+}
