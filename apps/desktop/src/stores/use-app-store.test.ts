@@ -48,6 +48,31 @@ describe('useAppStore', () => {
     expect(useAppStore.getState().theme).toBe('light');
   });
 
+  it('defaults the activity rail to hover-peek, unpinned', () => {
+    const state = useAppStore.getState();
+    expect(state.railMode).toBe('hover');
+    expect(state.railPinned).toBe(false);
+  });
+
+  it('persists rail mode and pin state through migration', () => {
+    const migrated = migrateAppState({
+      railMode: 'expanded',
+      railPinned: true,
+    });
+    expect(migrated.railMode).toBe('expanded');
+    expect(migrated.railPinned).toBe(true);
+
+    // Old persisted state (no rail fields) must fall back to hover-peek.
+    const legacy = migrateAppState({});
+    expect(legacy.railMode).toBe('hover');
+    expect(legacy.railPinned).toBe(false);
+
+    // Corrupt values are rejected, not trusted.
+    const corrupt = migrateAppState({ railMode: 'sideways', railPinned: 'yes' });
+    expect(corrupt.railMode).toBe('hover');
+    expect(corrupt.railPinned).toBe(false);
+  });
+
   it('clamps zoom and persists the complete appearance model', () => {
     useAppStore.getState().setZoom(12);
     expect(useAppStore.getState().zoom).toBe(MIN_UI_ZOOM);

@@ -49,13 +49,6 @@
         "enable": true,
         "scope": []
       }
-    },
-    "trayIcon": {
-      "id": "dream-tray",
-      "iconPath": "icons/tray/tray-32.png",
-      "iconAsTemplate": true,
-      "menuOnLeftClick": false,
-      "tooltip": "Dream"
     }
   },
   "bundle": {
