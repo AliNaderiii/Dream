@@ -6,8 +6,8 @@
 
 pub mod commands;
 pub mod error;
-pub mod state;
 mod single_instance;
+pub mod state;
 
 // The Python sidecar bridge is desktop-only: mobile platforms cannot spawn the
 // sidecar process. Its commands degrade to a `not_ready` error when uninitialised.

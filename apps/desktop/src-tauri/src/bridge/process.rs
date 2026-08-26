@@ -168,7 +168,10 @@ pub(crate) fn bundled_interpreter_paths(
     for candidate in candidates {
         if candidate.is_file() {
             if seen.insert(candidate.clone()) {
-                log::info!("bridge: bundled interpreter candidate: {}", candidate.display());
+                log::info!(
+                    "bridge: bundled interpreter candidate: {}",
+                    candidate.display()
+                );
                 existing.push(candidate);
             }
         } else {
@@ -638,7 +641,10 @@ mod tests {
         let tmp = tempfile::tempdir().expect("temp dir");
         let install_root = tmp.path().join("Program Files").join("Dream");
         let exe_dir = install_root.clone();
-        let bundled = install_root.join("resources").join("python").join("python.exe");
+        let bundled = install_root
+            .join("resources")
+            .join("python")
+            .join("python.exe");
         std::fs::create_dir_all(bundled.parent().unwrap()).unwrap();
         std::fs::write(&bundled, b"").unwrap();
 
@@ -654,7 +660,10 @@ mod tests {
         let tmp = tempfile::tempdir().expect("temp dir");
         let install_root = tmp.path().join("Program Files").join("Dream");
         let exe_dir = install_root.clone();
-        let bundled = install_root.join("resources").join("python").join("python.exe");
+        let bundled = install_root
+            .join("resources")
+            .join("python")
+            .join("python.exe");
         std::fs::create_dir_all(bundled.parent().unwrap()).unwrap();
         std::fs::write(&bundled, b"").unwrap();
 
@@ -710,7 +719,10 @@ mod tests {
         let install_root = tmp.path().join("install");
         let exe_dir = install_root.join("bin");
         std::fs::create_dir_all(&exe_dir).unwrap();
-        let bundled = install_root.join("resources").join("python").join("python.exe");
+        let bundled = install_root
+            .join("resources")
+            .join("python")
+            .join("python.exe");
         std::fs::create_dir_all(bundled.parent().unwrap()).unwrap();
         std::fs::write(&bundled, b"").unwrap();
 

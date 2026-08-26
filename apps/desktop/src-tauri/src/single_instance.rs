@@ -288,7 +288,10 @@ pub fn request_focus(app_data_dir: &Path) {
             path.display()
         );
     } else {
-        log::info!("single-instance: focus request written to {}", path.display());
+        log::info!(
+            "single-instance: focus request written to {}",
+            path.display()
+        );
     }
 }
 
@@ -319,9 +322,7 @@ pub fn spawn_focus_watcher<R: Runtime>(app: AppHandle<R>, app_data_dir: PathBuf)
                     && now.saturating_sub(timestamp) <= FOCUS_REQUEST_MAX_AGE_SECS * 1000
                 {
                     last_handled = timestamp;
-                    log::info!(
-                        "single-instance: focus request received — showing the main window"
-                    );
+                    log::info!("single-instance: focus request received — showing the main window");
                     let _ = focus_window(app.clone(), None);
                     let _ = std::fs::remove_file(&path);
                 }
