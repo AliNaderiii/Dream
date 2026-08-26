@@ -24,7 +24,7 @@ from types import UnionType
 from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
 from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dream.memory import normalize_fa
 from dream.security.blocklist import scan as _floor_scan
@@ -251,9 +251,18 @@ def get_datetime(timezone_name: str = "Asia/Tehran") -> str:
 
     :param timezone_name: IANA zone name, such as ``Asia/Tehran``.
     """
+    from datetime import timezone as dt_timezone
+
     from dream.jalali import gregorian_to_jalali
 
-    moment = datetime.now(ZoneInfo(timezone_name))
+    try:
+        zoneinfo = ZoneInfo(timezone_name)
+        zone = "\u062a\u0647\u0631\u0627\u0646" if timezone_name == "Asia/Tehran" else timezone_name
+    except ZoneInfoNotFoundError:
+        # Embeddable Windows CPython ships without the IANA database.
+        zoneinfo = datetime.now().astimezone().tzinfo or dt_timezone.utc
+        zone = timezone_name
+    moment = datetime.now(zoneinfo)
     jy, jm, jd = gregorian_to_jalali(moment.year, moment.month, moment.day)
     digits = str.maketrans(
         "0123456789",
@@ -261,7 +270,6 @@ def get_datetime(timezone_name: str = "Asia/Tehran") -> str:
     )
     date = f"{jy:04d}/{jm:02d}/{jd:02d}".translate(digits)
     clock = f"{moment.hour:02d}:{moment.minute:02d}".translate(digits)
-    zone = "\u062a\u0647\u0631\u0627\u0646" if timezone_name == "Asia/Tehran" else timezone_name
     return (
         "\u0627\u0645\u0631\u0648\u0632 "
         f"{date}"

@@ -237,7 +237,13 @@ async function main() {
   }
 
   // Idempotency: a working interpreter + kernel means there is nothing to do.
-  if (existsSync(PYTHON_EXE) && runStatus(PYTHON_EXE, ['-c', 'import dream.bridge']) === 0) {
+  if (
+    existsSync(PYTHON_EXE) &&
+    runStatus(PYTHON_EXE, [
+      '-c',
+      "import dream.bridge; from zoneinfo import ZoneInfo; ZoneInfo('Asia/Tehran')",
+    ]) === 0
+  ) {
     console.log('[bundle-sidecar] bundled interpreter + Dream kernel already present — skipping');
     return;
   }

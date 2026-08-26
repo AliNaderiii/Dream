@@ -40,6 +40,10 @@ pub struct SidecarConfig {
     /// next to the app (Windows only). Spawning one of these isolates the
     /// interpreter from user site-packages (see [`SidecarConfig::is_bundled`]).
     bundled: Vec<String>,
+    /// Writable directory used as the sidecar cwd so relative `data/` files
+    /// never land under Program Files. `None` leaves the inherited cwd
+    /// (tests that never spawn).
+    data_root: Option<PathBuf>,
 }
 
 /// Interpreter candidates when `DREAM_SIDECAR_PYTHON` is unset. On Windows the
@@ -64,7 +68,13 @@ impl SidecarConfig {
             python,
             module,
             bundled: Vec::new(),
+            data_root: None,
         }
+    }
+
+    /// Record the writable data root used as the sidecar working directory.
+    pub fn set_data_root(&mut self, root: PathBuf) {
+        self.data_root = Some(root);
     }
 
     /// Interpreter candidates to try, in order.
@@ -84,20 +94,20 @@ impl SidecarConfig {
         resource_dir: Option<&Path>,
         is_override: bool,
     ) {
-        if is_override {
-            return;
-        }
         let bundled: Vec<String> = bundled_interpreter_paths(exe_dir, resource_dir)
             .into_iter()
             .map(|path| path.to_string_lossy().into_owned())
             .collect();
-        if bundled.is_empty() {
+        // Always remember which paths are the installer runtime, even when
+        // `DREAM_SIDECAR_PYTHON` is a hard override. An override that *is*
+        // the bundled exe must still get PYTHONNOUSERSITE isolation.
+        self.bundled = bundled.clone();
+        if is_override || bundled.is_empty() {
             return;
         }
         let mut merged = bundled.clone();
         merged.extend(self.python.iter().cloned());
         self.python = merged;
-        self.bundled = bundled;
     }
 
     /// Whether `exe` is a bundled (embedded) interpreter, so the spawner can
@@ -189,6 +199,64 @@ pub(crate) fn bundled_interpreter_paths(
         }
     }
     existing
+}
+
+/// Writable root for sidecar relative paths (`data/dream.db`, providers).
+///
+/// Owner-measured: a stock Start Menu launch inherits
+/// `C:\Program Files\Dream` as cwd, so `data/` cannot be created and the
+/// sidecar exits before `DREAM-PROTOCOL`. Prefer, in order:
+/// `DREAM_HOME`, `%LOCALAPPDATA%\Dream`, `$XDG_DATA_HOME/Dream`,
+/// `$HOME/.local/share/Dream`, then the process temp dir.
+pub(crate) fn sidecar_data_root() -> PathBuf {
+    if let Ok(raw) = std::env::var("DREAM_HOME") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        let trimmed = local.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed).join("Dream");
+        }
+    }
+    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+        let trimmed = xdg.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed).join("Dream");
+        }
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        let trimmed = home.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed)
+                .join(".local")
+                .join("share")
+                .join("Dream");
+        }
+    }
+    std::env::temp_dir().join("Dream")
+}
+
+/// Create `{root}` and `{root}/data`, then return `root`.
+pub(crate) fn ensure_sidecar_data_root(root: &Path) -> std::io::Result<PathBuf> {
+    std::fs::create_dir_all(root.join("data"))?;
+    log::info!("bridge: sidecar data root {}", root.display());
+    Ok(root.to_path_buf())
+}
+
+/// Environment applied to every sidecar spawn.
+///
+/// `PYTHONUTF8` / `PYTHONIOENCODING` are **always** set: Persian chat
+/// (`سلام`) raised `charmap` on Windows when `DREAM_SIDECAR_PYTHON`
+/// skipped the bundled env block. `PYTHONNOUSERSITE` stays bundled-only.
+pub(crate) fn sidecar_python_env(is_bundled: bool) -> Vec<(&'static str, &'static str)> {
+    let mut env = vec![("PYTHONUTF8", "1"), ("PYTHONIOENCODING", "utf-8")];
+    if is_bundled {
+        env.push(("PYTHONNOUSERSITE", "1"));
+    }
+    env
 }
 
 /// Backoff schedule (seconds) between restart attempts. Three attempts max.
@@ -471,11 +539,12 @@ fn spawn(config: &SidecarConfig, exe: &str) -> std::io::Result<Child> {
     if let Ok(path) = std::env::var("DREAM_PYTHONPATH") {
         cmd.env("PYTHONPATH", path);
     }
-    // The bundled embeddable CPython runs `import site`; disable user
-    // site-packages so a `pip install --user dream` on the host cannot shadow
-    // the embedded kernel, and force UTF-8 for the stdio JSON-RPC framing.
-    if config.is_bundled(exe) {
-        cmd.env("PYTHONNOUSERSITE", "1").env("PYTHONUTF8", "1");
+    for (key, value) in sidecar_python_env(config.is_bundled(exe)) {
+        cmd.env(key, value);
+    }
+    if let Some(root) = &config.data_root {
+        let _ = std::fs::create_dir_all(root.join("data"));
+        cmd.current_dir(root);
     }
     cmd.spawn()
 }
@@ -804,5 +873,58 @@ mod tests {
 
         assert_eq!(config.python, vec!["C:\\dream\\venv\\python.exe"]);
         assert!(!config.is_bundled("C:\\dream\\venv\\python.exe"));
+    }
+
+    #[test]
+    fn override_that_is_the_bundled_exe_is_still_marked_bundled() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let exe_dir = tmp.path().join("exe");
+        std::fs::create_dir_all(exe_dir.join("python")).unwrap();
+        let bundled = exe_dir.join("python").join("python.exe");
+        std::fs::write(&bundled, b"").unwrap();
+        let bundled_str = bundled.to_string_lossy().into_owned();
+
+        let mut env = HashMap::new();
+        env.insert("DREAM_SIDECAR_PYTHON", bundled_str.as_str());
+        let mut config = SidecarConfig::from_env(&env_from(&env));
+        config.prepend_bundled(&exe_dir, None, true);
+
+        assert_eq!(config.python, vec![bundled_str.clone()]);
+        assert!(config.is_bundled(&bundled_str));
+    }
+
+    #[test]
+    fn sidecar_python_env_always_forces_utf8() {
+        let host = sidecar_python_env(false);
+        assert!(host.contains(&("PYTHONUTF8", "1")));
+        assert!(host.contains(&("PYTHONIOENCODING", "utf-8")));
+        assert!(!host.iter().any(|(key, _)| *key == "PYTHONNOUSERSITE"));
+
+        let bundled = sidecar_python_env(true);
+        assert!(bundled.contains(&("PYTHONUTF8", "1")));
+        assert!(bundled.contains(&("PYTHONNOUSERSITE", "1")));
+    }
+
+    #[test]
+    fn sidecar_data_root_prefers_dream_home() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let home = tmp.path().join("custom-home");
+        let previous = std::env::var_os("DREAM_HOME");
+        std::env::set_var("DREAM_HOME", &home);
+        let root = sidecar_data_root();
+        match previous {
+            Some(value) => std::env::set_var("DREAM_HOME", value),
+            None => std::env::remove_var("DREAM_HOME"),
+        }
+        assert_eq!(root, home);
+    }
+
+    #[test]
+    fn ensure_sidecar_data_root_creates_data_subdir() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let root = tmp.path().join("Dream");
+        let got = ensure_sidecar_data_root(&root).expect("create");
+        assert_eq!(got, root);
+        assert!(root.join("data").is_dir());
     }
 }
