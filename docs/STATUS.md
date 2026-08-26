@@ -1,5 +1,14 @@
 # Status
 
+## 0.4.3 — Space, remotegw, live loops — CUT
+
+**What shipped.** Version **0.4.3** (P10 #98, P9 #99, P11 #100 plus this bump).
+Start Menu installer now includes Space, loopback `dream-serve`, and Live arming.
+
+**What is next.** Owner installs `Dream_0.4.3_x64-setup.exe`. Daily use. No new
+numbered phase until an explicit ask.
+
+
 ## 0.4.2 — Sidecar UTF-8, AppData root, tzdata — CUT
 
 **What shipped.** Version **0.4.2** (hotfix #96 plus this bump). Start Menu

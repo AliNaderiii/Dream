@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.4.3] - 2026-08-26
+
+Space, loopback remote gateway, and Live loops on top of the 0.4.2 sidecar hotfix.
+
+### Added
+
+- **Space (P10).** Specialized roles, instruction docs, and approval drafts.
+  Web URLs are refused while `DREAM_ALLOW_NETWORK` is off.
+- **Remote gateway (P9).** `dream-serve` binds `127.0.0.1:8765` by default.
+  WAN / `0.0.0.0` is refused. Bearer only; query-string tokens are refused.
+- **Live loops (P11).** Arm approved, non-dangerous Space drafts onto the
+  scheduler with per-fire approval. Status bar names when Settings is Echo
+  while a chat pane uses another provider.
+
+### Known notes
+
+- Live hosted role turns are not wired in this cut; use the chat pane.
+- `search_web` / `read_page` stay off until `DREAM_ALLOW_NETWORK=true`.
+- Bridge protocol version stays `0.1.0`.
+- The Windows installer is unsigned — SmartScreen warns.
+- WebView2 may download during install.
+- Aval HTTP 429 is an account quota, not this cut.
+
 ## [0.4.2] - 2026-08-26
 
 Windows sidecar daily-use hotfix on top of 0.4.1. Product version stays unified.
