@@ -166,19 +166,22 @@ pub(crate) fn bundled_interpreter_paths(
     let mut seen = std::collections::HashSet::new();
     let mut existing: Vec<PathBuf> = Vec::new();
     for candidate in candidates {
-        if candidate.is_file() {
-            if seen.insert(candidate.clone()) {
-                log::info!(
-                    "bridge: bundled interpreter candidate: {}",
-                    candidate.display()
-                );
-                existing.push(candidate);
-            }
-        } else {
+        if !candidate.is_file() {
             log::warn!(
                 "bridge: bundled interpreter candidate {} skipped — not a file on disk",
                 candidate.display()
             );
+            continue;
+        }
+        // `seen.insert` reports whether the path is a new candidate; a
+        // duplicate (e.g. resource_dir == exe_dir/resources) is dropped
+        // silently, exactly like the original nested-if version.
+        if seen.insert(candidate.clone()) {
+            log::info!(
+                "bridge: bundled interpreter candidate: {}",
+                candidate.display()
+            );
+            existing.push(candidate);
         }
     }
     existing

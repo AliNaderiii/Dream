@@ -296,15 +296,21 @@ fn focus_request_path(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join(FOCUS_REQUEST_NAME)
 }
 
+/// Milliseconds since the Unix epoch, or 0 when the system clock is before
+/// the epoch. A plain `match` (no closure) so clippy -D warnings stays clean.
+fn unix_time_millis() -> u128 {
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(elapsed) => elapsed.as_millis(),
+        Err(_) => 0,
+    }
+}
+
 /// Ask the running (primary) instance to focus its main window. Called by the
 /// secondary instance right before it exits; the primary notices the marker
 /// within one poll interval and shows/focuses its window.
 pub fn request_focus(app_data_dir: &Path) {
     let path = focus_request_path(app_data_dir);
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_millis())
-        .unwrap_or(0);
+    let timestamp = unix_time_millis();
     if let Err(err) = std::fs::write(&path, timestamp.to_string()) {
         log::warn!(
             "single-instance: could not write focus request {}: {err}",
@@ -331,10 +337,7 @@ pub fn spawn_focus_watcher<R: Runtime>(app: AppHandle<R>, app_data_dir: PathBuf)
             let mut last_handled: u128 = 0;
             loop {
                 std::thread::sleep(FOCUS_POLL_INTERVAL);
-                let now = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map(|elapsed| elapsed.as_millis())
-                    .unwrap_or(0);
+                let now = unix_time_millis();
                 let marker = std::fs::read_to_string(&path)
                     .ok()
                     .and_then(|content| content.trim().parse::<u128>().ok());
@@ -413,10 +416,7 @@ mod tests {
         let marker = focus_request_path(tmp.path());
         let content = std::fs::read_to_string(&marker).expect("marker file");
         let timestamp: u128 = content.trim().parse().expect("timestamp");
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|elapsed| elapsed.as_millis())
-            .unwrap_or(0);
+        let now = unix_time_millis();
         assert!(now >= timestamp, "marker must be in the past");
     }
 
