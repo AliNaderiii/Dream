@@ -115,28 +115,80 @@ impl Default for SidecarConfig {
 
 /// Absolute paths of a bundled CPython interpreter, in priority order.
 ///
-/// The Windows installer embeds a CPython runtime (`python/python.exe`) next to
-/// the app; the supervisor prefers it over the PATH fallback so a bare Release
-/// download can start the sidecar. Candidates are resolved from, in order: the
-/// Tauri resource directory, the executable's directory, then a `resources`
-/// subdirectory of the executable's directory. Only paths that exist on disk
-/// are returned. On POSIX there is no bundled interpreter (Linux/macOS still
-/// use the system Python), so no `python.exe` file exists next to the binary
-/// and this naturally returns an empty list.
+/// The Windows installer embeds a CPython runtime next to the app; the
+/// supervisor prefers it over the PATH fallback so a stock install never needs
+/// `DREAM_SIDECAR_PYTHON`. Candidates are probed in this order (every path
+/// that exists as a file wins, first match first):
+///
+/// 1. `{resource_dir}/python/python.exe` — the standard Tauri resource layout;
+/// 2. `{resource_dir}/python.exe` — when the resource dir *is* the python dir;
+/// 3. `{exe_dir}/resources/python/python.exe` — the measured NSIS layout
+///    (`C:\Program Files\Dream\dream-desktop.exe` plus
+///    `resources\python\python.exe`);
+/// 4. `{exe_dir}/python/python.exe` — python next to the exe itself;
+/// 5. the same two layouts relative to the parent of `exe_dir`, for installs
+///    where the binary lives in a subfolder of the install root.
+///
+/// Every candidate that does not resolve to an existing file is logged with
+/// the reason it was skipped, so a stock-install miss is diagnosable from the
+/// app log alone. Only paths that exist on disk are returned (duplicates such
+/// as `resource_dir == exe_dir/resources` are collapsed). On POSIX there is no
+/// bundled interpreter (Linux/macOS still use the system Python), so no
+/// `python.exe` file exists next to the binary and this naturally returns an
+/// empty list.
 pub(crate) fn bundled_interpreter_paths(
     exe_dir: &Path,
     resource_dir: Option<&Path>,
 ) -> Vec<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
+
     if let Some(dir) = resource_dir {
-        candidates.push(dir.join("python").join("python.exe"));
+        // When the resource dir already *is* the python folder, the
+        // interpreter sits directly inside it; otherwise it lives in a
+        // `python` subfolder. A plain if-else binding (no nested if) keeps
+        // clippy -D warnings clean.
+        let python_dir = if dir
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().eq_ignore_ascii_case("python"))
+        {
+            dir.to_path_buf()
+        } else {
+            dir.join("python")
+        };
+        candidates.push(python_dir.join("python.exe"));
     }
-    candidates.push(exe_dir.join("python").join("python.exe"));
     candidates.push(exe_dir.join("resources").join("python").join("python.exe"));
-    candidates
-        .into_iter()
-        .filter(|path| path.is_file())
-        .collect()
+    candidates.push(exe_dir.join("python").join("python.exe"));
+    // The executable may live in a subfolder of the install root (e.g.
+    // `C:\Program Files\Dream\bin\dream-desktop.exe`); probe the install-root
+    // layouts one level up as well.
+    if let Some(parent) = exe_dir.parent() {
+        candidates.push(parent.join("resources").join("python").join("python.exe"));
+        candidates.push(parent.join("python").join("python.exe"));
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    let mut existing: Vec<PathBuf> = Vec::new();
+    for candidate in candidates {
+        if !candidate.is_file() {
+            log::warn!(
+                "bridge: bundled interpreter candidate {} skipped — not a file on disk",
+                candidate.display()
+            );
+            continue;
+        }
+        // `seen.insert` reports whether the path is a new candidate; a
+        // duplicate (e.g. resource_dir == exe_dir/resources) is dropped
+        // silently, exactly like the original nested-if version.
+        if seen.insert(candidate.clone()) {
+            log::info!(
+                "bridge: bundled interpreter candidate: {}",
+                candidate.display()
+            );
+            existing.push(candidate);
+        }
+    }
+    existing
 }
 
 /// Backoff schedule (seconds) between restart attempts. Three attempts max.
@@ -557,7 +609,7 @@ mod tests {
     }
 
     #[test]
-    fn bundled_interpreter_paths_prefer_resource_then_exe_then_resources_subdir() {
+    fn bundled_interpreter_paths_prefer_resource_then_resources_subdir_then_exe_side() {
         // Pure path construction + existence filter: create dummy `python.exe`
         // files in each location (never spawn a real interpreter) and assert
         // the priority order.
@@ -580,10 +632,109 @@ mod tests {
             paths,
             vec![
                 resource_dir.join("python").join("python.exe"),
-                exe_dir.join("python").join("python.exe"),
                 exe_dir.join("resources").join("python").join("python.exe"),
+                exe_dir.join("python").join("python.exe"),
             ]
         );
+    }
+
+    #[test]
+    fn bundled_interpreter_paths_finds_nsis_layout_without_resource_dir() {
+        // Mirrors the measured stock install:
+        //   C:\Program Files\Dream\dream-desktop.exe
+        //   C:\Program Files\Dream\resources\python\python.exe
+        // `resource_dir` is missing (None) — the exe-side `resources` subdir
+        // must be found and come first, before any exe-side `python` dir.
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let install_root = tmp.path().join("Program Files").join("Dream");
+        let exe_dir = install_root.clone();
+        let bundled = install_root
+            .join("resources")
+            .join("python")
+            .join("python.exe");
+        std::fs::create_dir_all(bundled.parent().unwrap()).unwrap();
+        std::fs::write(&bundled, b"").unwrap();
+
+        let paths = bundled_interpreter_paths(&exe_dir, None);
+        assert_eq!(paths, vec![bundled]);
+    }
+
+    #[test]
+    fn bundled_interpreter_paths_finds_nsis_layout_with_wrong_resource_dir() {
+        // Same NSIS layout, but the resolver reports a resource dir that does
+        // not exist (or points somewhere else). Discovery must still find the
+        // measured `{exe_dir}/resources/python/python.exe` first.
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let install_root = tmp.path().join("Program Files").join("Dream");
+        let exe_dir = install_root.clone();
+        let bundled = install_root
+            .join("resources")
+            .join("python")
+            .join("python.exe");
+        std::fs::create_dir_all(bundled.parent().unwrap()).unwrap();
+        std::fs::write(&bundled, b"").unwrap();
+
+        let wrong_resource_dir = tmp.path().join("does-not-exist");
+        let paths = bundled_interpreter_paths(&exe_dir, Some(&wrong_resource_dir));
+        assert_eq!(paths, vec![bundled]);
+    }
+
+    #[test]
+    fn bundled_interpreter_paths_prefers_resources_subdir_over_exe_side_python() {
+        // When both `{exe_dir}/python/python.exe` and
+        // `{exe_dir}/resources/python/python.exe` exist, the NSIS `resources`
+        // layout wins — it is the layout the installer ships.
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let exe_dir = tmp.path().join("exe");
+        std::fs::create_dir_all(exe_dir.join("python")).unwrap();
+        std::fs::create_dir_all(exe_dir.join("resources").join("python")).unwrap();
+        std::fs::write(exe_dir.join("python").join("python.exe"), b"").unwrap();
+        std::fs::write(
+            exe_dir.join("resources").join("python").join("python.exe"),
+            b"",
+        )
+        .unwrap();
+
+        let paths = bundled_interpreter_paths(&exe_dir, None);
+        assert_eq!(
+            paths,
+            vec![
+                exe_dir.join("resources").join("python").join("python.exe"),
+                exe_dir.join("python").join("python.exe"),
+            ]
+        );
+    }
+
+    #[test]
+    fn bundled_interpreter_paths_accepts_a_resource_dir_that_is_the_python_folder() {
+        // Some bundles point the resource dir directly at the python folder;
+        // in that case `{resource_dir}/python.exe` is the right candidate.
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let python_dir = tmp.path().join("python");
+        std::fs::create_dir_all(&python_dir).unwrap();
+        std::fs::write(python_dir.join("python.exe"), b"").unwrap();
+
+        let paths = bundled_interpreter_paths(&python_dir, Some(&python_dir));
+        assert_eq!(paths, vec![python_dir.join("python.exe")]);
+    }
+
+    #[test]
+    fn bundled_interpreter_paths_checks_the_parent_of_exe_dir() {
+        // The binary may live in a subfolder of the install root; the bundled
+        // interpreter still sits at the install root.
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let install_root = tmp.path().join("install");
+        let exe_dir = install_root.join("bin");
+        std::fs::create_dir_all(&exe_dir).unwrap();
+        let bundled = install_root
+            .join("resources")
+            .join("python")
+            .join("python.exe");
+        std::fs::create_dir_all(bundled.parent().unwrap()).unwrap();
+        std::fs::write(&bundled, b"").unwrap();
+
+        let paths = bundled_interpreter_paths(&exe_dir, None);
+        assert_eq!(paths, vec![bundled]);
     }
 
     #[test]

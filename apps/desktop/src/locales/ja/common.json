@@ -13,6 +13,13 @@
     "settings": "設定",
     "provenance": "来歴"
   },
+  "rail": {
+    "pin": "レールを固定",
+    "unpin": "レールの固定を解除",
+    "modeCollapsed": "レールモード：折りたたみ",
+    "modeHover": "レールモード：ホバーで表示",
+    "modeExpanded": "レールモード：展開"
+  },
   "sessions": {
     "title": "セッション",
     "new": "新しいセッション",

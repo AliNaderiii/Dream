@@ -13,6 +13,13 @@
     "settings": "设置",
     "provenance": "溯源"
   },
+  "rail": {
+    "pin": "固定导航栏",
+    "unpin": "取消固定导航栏",
+    "modeCollapsed": "导航栏模式：折叠",
+    "modeHover": "导航栏模式：悬停显示",
+    "modeExpanded": "导航栏模式：展开"
+  },
   "sessions": {
     "title": "会话",
     "new": "新会话",

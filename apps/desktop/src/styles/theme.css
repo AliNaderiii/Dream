@@ -213,13 +213,29 @@
     contain-intrinsic-block-size: auto 7rem;
   }
 
+  /* Kernel-missing / status banner. Containment contract: the text column
+     shrinks and wraps inside its own box (never under the action), and the
+     action stays pinned to the inline-end edge. If a single unbreakable token
+     would overflow, the action wraps to its own line instead of overlapping. */
   .bridge-banner {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-start;
-    gap: var(--space-3);
+    gap: var(--space-2) var(--space-3);
     padding: var(--space-3) var(--space-4);
     border-block-end: 0.0625rem solid var(--ds-border-subtle);
     background-color: var(--ds-surface-subtle);
+  }
+
+  .bridge-banner .bridge-banner-text {
+    flex: 1 1 0%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .bridge-banner .bridge-banner-action {
+    margin-inline-start: auto;
+    flex-shrink: 0;
   }
 
   /* Persistent warning for the security engine's `off` mode (SEC Stage B):

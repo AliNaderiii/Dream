@@ -13,6 +13,13 @@
     "settings": "설정",
     "provenance": "출처"
   },
+  "rail": {
+    "pin": "레일 고정",
+    "unpin": "레일 고정 해제",
+    "modeCollapsed": "레일 모드: 접힘",
+    "modeHover": "레일 모드: 호버 표시",
+    "modeExpanded": "레일 모드: 펼침"
+  },
   "sessions": {
     "title": "세션",
     "new": "새 세션",

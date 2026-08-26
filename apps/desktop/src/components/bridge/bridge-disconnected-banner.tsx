@@ -26,11 +26,18 @@ export function BridgeDisconnectedBanner() {
   return (
     <div role="status" aria-live="polite" className="bridge-banner">
       <PlugZap className="mt-0.5 size-4 shrink-0 text-danger-fg" aria-hidden />
-      <div className="min-w-0 flex-1">
-        <p className="text-body font-medium text-fg-primary">{t('bridgeKernelMissing')}</p>
+      <div className="bridge-banner-text">
+        <p className="break-words text-body font-medium text-fg-primary">
+          {t('bridgeKernelMissing')}
+        </p>
         <p className="mt-0.5 break-words text-caption text-fg-secondary">{t('bridgeKernelHelp')}</p>
       </div>
-      <Button variant="primary" size="sm" className="shrink-0" onClick={() => reconnect()}>
+      <Button
+        variant="primary"
+        size="sm"
+        className="bridge-banner-action"
+        onClick={() => reconnect()}
+      >
         {tc('error.retry')}
       </Button>
     </div>

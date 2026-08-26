@@ -33,8 +33,23 @@ fn app_state_defaults_to_idle_and_quit_on_close() {
     assert_eq!(snapshot.agent_status, AgentStatus::Idle);
     assert_eq!(snapshot.pending_approvals, 0);
     assert!(snapshot.workspace_root.is_none());
+    // Default snapshot: closing the window quits the process for real
+    // (destroying the tray icon and killing the sidecar) — it must never
+    // default to hide-to-tray, which is how ghost tray icons accumulated.
     assert!(!snapshot.close_to_tray);
     assert!(!snapshot.minimize_to_tray);
+}
+
+#[test]
+fn close_to_tray_preference_round_trips_through_app_state() {
+    let state = AppState::default();
+    assert!(!state.lock().close_to_tray);
+
+    state.lock().close_to_tray = true;
+    assert!(state.snapshot().close_to_tray);
+
+    state.lock().close_to_tray = false;
+    assert!(!state.snapshot().close_to_tray);
 }
 
 #[test]

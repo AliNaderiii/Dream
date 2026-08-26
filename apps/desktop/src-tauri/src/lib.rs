@@ -6,6 +6,7 @@
 
 pub mod commands;
 pub mod error;
+mod single_instance;
 pub mod state;
 
 // The Python sidecar bridge is desktop-only: mobile platforms cannot spawn the
@@ -15,7 +16,7 @@ pub mod bridge;
 #[cfg(test)]
 mod tests;
 
-use tauri::{Manager, WindowEvent};
+use tauri::{Manager, Runtime, WindowEvent};
 
 use crate::commands::notifications::NotificationLog;
 use crate::commands::{dialogs, notifications, tray, window};
@@ -98,17 +99,49 @@ pub fn run() {
         .setup(|app| {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
-                tray::init(app.handle())?;
-                // Spawn the Python sidecar and begin supervision. The frontend
-                // learns the connection state via `bridge://state` events.
-                bridge::init(app.handle());
+                // Single instance: a second launch focuses the running window
+                // and exits instead of creating a second process (and with it a
+                // second tray icon — the observed "two icons per cycle" leak).
+                let Ok(app_data_dir) = app.path().app_data_dir() else {
+                    log::warn!(
+                        "single-instance: app data dir unavailable — skipping \
+                         single-instance protection"
+                    );
+                    tray::init(app.handle())?;
+                    bridge::init(app.handle());
+                    return Ok(());
+                };
+                match single_instance::acquire(&app_data_dir) {
+                    single_instance::AcquireOutcome::Primary => {
+                        single_instance::spawn_focus_watcher(app.handle().clone(), app_data_dir);
+                        tray::init(app.handle())?;
+                        // Spawn the Python sidecar and begin supervision. The
+                        // frontend learns the connection state via
+                        // `bridge://state` events.
+                        bridge::init(app.handle());
+                    }
+                    single_instance::AcquireOutcome::Secondary => {
+                        single_instance::request_focus(&app_data_dir);
+                        // Hide the briefly-created window so the handoff looks
+                        // like a plain "bring to front", then exit. `app` here
+                        // is the builder's &mut App; the AppHandle owns exit().
+                        if let Some(window) = app.get_webview_window(window::MAIN_WINDOW) {
+                            let _ = window.hide();
+                        }
+                        app.handle().exit(0);
+                    }
+                }
             }
 
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Closing the main window hides it to the tray by default, matching
-            // comparable agent apps; secondary windows really close.
+            // Closing the main window honours the `closeToTray` preference;
+            // secondary windows really close. When not hiding to tray, the
+            // close is a real quit: the tray icon is destroyed first (a tray
+            // icon keeps the process alive on Windows — the root cause of the
+            // ghost-icon accumulation), the sidecar is killed, then the event
+            // loop exits.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == window::MAIN_WINDOW {
                     let close_to_tray =
@@ -118,10 +151,36 @@ pub fn run() {
                         if let Err(error) = window.hide() {
                             log::warn!("failed to hide Dream window to tray: {error}");
                         }
+                    } else {
+                        teardown_and_exit(window.app_handle(), 0);
                     }
                 }
             }
         })
         .run(tauri::generate_context!())
         .expect("error while running Dream desktop application");
+}
+
+/// Full application teardown shared by every quit path (window close with
+/// `close_to_tray == false`, tray-menu Quit):
+///
+/// 1. destroy the tray icon — a lingering tray icon is what kept old processes
+///    alive and stacked duplicate icons in the notification area;
+/// 2. kill the sidecar so no Python child outlives the shell;
+/// 3. clean single-instance markers so the next launch starts fresh;
+/// 4. exit the event loop (the window-state plugin saves geometry on the way).
+pub fn teardown_and_exit<R: Runtime>(app: &tauri::AppHandle<R>, code: i32) {
+    // `remove_tray_by_id` returns `Option<TrayIcon<R>>` (None when the tray
+    // was already gone or never created), not a Result.
+    if app.remove_tray_by_id(tray::TRAY_ID).is_some() {
+        log::info!("teardown: tray icon removed");
+    } else {
+        log::debug!("teardown: no tray icon present");
+    }
+    crate::bridge::kill_bridge_on_quit(app);
+    if let Ok(app_data_dir) = app.path().app_data_dir() {
+        single_instance::cleanup_markers(&app_data_dir);
+    }
+    log::info!("teardown: exiting with code {code}");
+    app.exit(code);
 }
