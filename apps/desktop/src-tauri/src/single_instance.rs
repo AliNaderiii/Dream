@@ -284,9 +284,11 @@ fn is_pid_alive(pid: u32) -> bool {
     std::io::Error::last_os_error().raw_os_error() == Some(1) // EPERM: exists, not ours
 }
 
-/// POSIX kill(2), declared at module scope so the `#[link]` attribute sits on
-/// a top-level extern block. Only compiled on non-Windows targets (Windows
-/// uses the named mutex, never the lockfile).
+// POSIX kill(2), declared at module scope so the `#[link]` attribute sits on
+// a top-level extern block. Only compiled on non-Windows targets (Windows
+// uses the named mutex, never the lockfile). Plain comments, not `///`:
+// doc comments on extern blocks trigger `unused_doc_comments` under
+// `-D warnings`.
 #[cfg(not(windows))]
 #[link(name = "c")]
 extern "C" {

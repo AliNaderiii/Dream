@@ -123,11 +123,12 @@ pub fn run() {
                     single_instance::AcquireOutcome::Secondary => {
                         single_instance::request_focus(&app_data_dir);
                         // Hide the briefly-created window so the handoff looks
-                        // like a plain "bring to front", then exit.
+                        // like a plain "bring to front", then exit. `app` here
+                        // is the builder's &mut App; the AppHandle owns exit().
                         if let Some(window) = app.get_webview_window(window::MAIN_WINDOW) {
                             let _ = window.hide();
                         }
-                        app.exit(0);
+                        app.handle().exit(0);
                     }
                 }
             }
@@ -169,10 +170,12 @@ pub fn run() {
 /// 3. clean single-instance markers so the next launch starts fresh;
 /// 4. exit the event loop (the window-state plugin saves geometry on the way).
 pub fn teardown_and_exit<R: Runtime>(app: &tauri::AppHandle<R>, code: i32) {
-    match app.remove_tray_by_id(tray::TRAY_ID) {
-        Ok(Some(_)) => log::info!("teardown: tray icon removed"),
-        Ok(None) => log::debug!("teardown: no tray icon present"),
-        Err(err) => log::warn!("teardown: failed to remove tray icon: {err}"),
+    // `remove_tray_by_id` returns `Option<TrayIcon<R>>` (None when the tray
+    // was already gone or never created), not a Result.
+    if app.remove_tray_by_id(tray::TRAY_ID).is_some() {
+        log::info!("teardown: tray icon removed");
+    } else {
+        log::debug!("teardown: no tray icon present");
     }
     crate::bridge::kill_bridge_on_quit(app);
     if let Ok(app_data_dir) = app.path().app_data_dir() {
