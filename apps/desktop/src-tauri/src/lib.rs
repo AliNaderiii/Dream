@@ -6,7 +6,6 @@
 
 pub mod commands;
 pub mod error;
-mod single_instance;
 pub mod state;
 
 // The Python sidecar bridge is desktop-only: mobile platforms cannot spawn the
@@ -99,37 +98,10 @@ pub fn run() {
         .setup(|app| {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
-                // Single instance: a second launch focuses the running window
-                // and exits instead of creating a second process (and with it a
-                // second tray icon — the observed "two icons per cycle" leak).
-                let Ok(app_data_dir) = app.path().app_data_dir() else {
-                    log::warn!(
-                        "single-instance: app data dir unavailable — skipping \
-                         single-instance protection"
-                    );
-                    tray::init(app.handle())?;
-                    bridge::init(app.handle());
-                    return Ok(());
-                };
-                match single_instance::acquire(&app_data_dir) {
-                    single_instance::AcquireOutcome::Primary => {
-                        single_instance::spawn_focus_watcher(app.handle().clone(), app_data_dir);
-                        tray::init(app.handle())?;
-                        // Spawn the Python sidecar and begin supervision. The
-                        // frontend learns the connection state via
-                        // `bridge://state` events.
-                        bridge::init(app.handle());
-                    }
-                    single_instance::AcquireOutcome::Secondary => {
-                        single_instance::request_focus(&app_data_dir);
-                        // Hide the briefly-created window so the handoff looks
-                        // like a plain "bring to front", then exit.
-                        if let Some(window) = app.get_webview_window(window::MAIN_WINDOW) {
-                            let _ = window.hide();
-                        }
-                        app.exit(0);
-                    }
-                }
+                tray::init(app.handle())?;
+                // Spawn the Python sidecar and begin supervision. The frontend
+                // learns the connection state via `bridge://state` events.
+                bridge::init(app.handle());
             }
 
             Ok(())
@@ -175,9 +147,6 @@ pub fn teardown_and_exit<R: Runtime>(app: &tauri::AppHandle<R>, code: i32) {
         Err(err) => log::warn!("teardown: failed to remove tray icon: {err}"),
     }
     crate::bridge::kill_bridge_on_quit(app);
-    if let Ok(app_data_dir) = app.path().app_data_dir() {
-        single_instance::cleanup_markers(&app_data_dir);
-    }
     log::info!("teardown: exiting with code {code}");
     app.exit(code);
 }
