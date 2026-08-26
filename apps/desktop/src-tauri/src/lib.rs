@@ -102,17 +102,14 @@ pub fn run() {
                 // Single instance: a second launch focuses the running window
                 // and exits instead of creating a second process (and with it a
                 // second tray icon — the observed "two icons per cycle" leak).
-                let app_data_dir = match app.path().app_data_dir() {
-                    Ok(dir) => dir,
-                    Err(err) => {
-                        log::warn!(
-                            "single-instance: app data dir unavailable ({err}); \
-                             skipping single-instance protection"
-                        );
-                        tray::init(app.handle())?;
-                        bridge::init(app.handle());
-                        return Ok(());
-                    }
+                let Ok(app_data_dir) = app.path().app_data_dir() else {
+                    log::warn!(
+                        "single-instance: app data dir unavailable — skipping \
+                         single-instance protection"
+                    );
+                    tray::init(app.handle())?;
+                    bridge::init(app.handle());
+                    return Ok(());
                 };
                 match single_instance::acquire(&app_data_dir) {
                     single_instance::AcquireOutcome::Primary => {
