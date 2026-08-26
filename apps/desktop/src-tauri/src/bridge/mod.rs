@@ -259,3 +259,13 @@ pub fn bridge_kill<R: Runtime>(app: AppHandle<R>) -> Result<(), BridgeError> {
     bridge(&app)?.kill();
     Ok(())
 }
+
+/// Best-effort kill of the bridge used by quit teardown (window close with
+/// `close_to_tray == false`, tray-menu Quit). A missing bridge is not an
+/// error — teardown must never panic on the way out.
+pub fn kill_bridge_on_quit<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(state) = app.try_state::<Arc<Bridge<R>>>() {
+        state.kill();
+        log::info!("bridge: killed on quit — sidecar will not be restarted");
+    }
+}

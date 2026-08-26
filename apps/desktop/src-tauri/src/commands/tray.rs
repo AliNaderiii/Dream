@@ -122,9 +122,13 @@ fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
             let _ = set_agent_status(app, AgentStatus::Idle);
         }
         "quit" => {
-            // Give the frontend a chance to flush state, then exit.
+            // Give the frontend a chance to flush state, then run the full
+            // teardown — the same path as closing the window with
+            // `close_to_tray == false`: destroy the tray icon first (a bare
+            // exit() leaves a ghost icon in the notification area), kill the
+            // sidecar, clean single-instance markers, then exit.
             let _ = app.emit("tray://quit", ());
-            app.exit(0);
+            crate::teardown_and_exit(&app, 0);
         }
         _ => {}
     }
