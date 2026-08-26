@@ -132,6 +132,45 @@ def test_timeout_returns_persian_refusal_instead_of_raising(
     assert tools.NETWORK_REFUSAL_MESSAGE in tools.search_web("anything")
 
 
+def test_empty_instant_answer_is_not_reported_as_no_internet(
+    monkeypatch: pytest.MonkeyPatch, network_enabled: None
+) -> None:
+    body = b'{"AbstractText":"","RelatedTopics":[]}'
+    monkeypatch.setattr(
+        tools,
+        "_open_network_request",
+        lambda request, timeout: FakeResponse(body, request.full_url),
+    )
+
+    result = tools.search_web("capital of France")
+
+    assert tools.NETWORK_EMPTY_MESSAGE in result
+    assert tools.NETWORK_REFUSAL_MESSAGE not in result
+    assert tools.NETWORK_DISABLED_MESSAGE not in result
+
+
+def test_wikipedia_fallback_when_instant_answer_is_empty(
+    monkeypatch: pytest.MonkeyPatch, network_enabled: None
+) -> None:
+    instant = b'{"AbstractText":"","RelatedTopics":[]}'
+    wiki = (
+        b'["q", ["Paris"], [""], ["https://en.wikipedia.org/wiki/Paris"]]'
+    )
+
+    def opener(request: Request, _timeout: float) -> FakeResponse:
+        url = request.full_url
+        payload = wiki if "wikipedia.org" in url else instant
+        return FakeResponse(payload, url)
+
+    monkeypatch.setattr(tools, "_open_network_request", opener)
+
+    result = tools.search_web("capital of France")
+
+    assert "Paris" in result
+    assert "https://en.wikipedia.org/wiki/Paris" in result
+    assert tools.NETWORK_REFUSAL_MESSAGE not in result
+
+
 def test_setting_off_refuses_both_tools_without_touching_dns_or_network(
     monkeypatch: pytest.MonkeyPatch
 ) -> None:
