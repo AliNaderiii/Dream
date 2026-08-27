@@ -1,5 +1,16 @@
 # Status
 
+## 0.4.5 — Bots, groups, browse HITL, workroom — CUT
+
+**What shipped.** Version **0.4.5** (bots #105, Allow once #106, forest #107,
+experience #108, groups #109, browse #110, workroom #111 plus this bump).
+Start Menu installer includes the named roster, Allow once, skill drafts,
+three-round groups, HITL page reads, and the company workroom.
+
+**What is next.** Owner installs `Dream_0.4.5_x64-setup.exe`. Daily use.
+YOLO, signed-in Chrome, and computer-use of the Windows desktop stay off.
+
+
 ## 0.4.4 — Honest search and Google Workspace read-only — CUT
 
 **What shipped.** Version **0.4.4** (search honesty #102, GWS OAuth #103 plus

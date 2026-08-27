@@ -1,7 +1,7 @@
 {
   "name": "@dream/desktop",
   "private": true,
-  "version": "0.4.4",
+  "version": "0.4.5",
   "type": "module",
   "description": "Dream desktop shell — Tauri 2 + React 19 + Tailwind CSS v4",
   "license": "MIT",
