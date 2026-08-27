@@ -1,0 +1,19 @@
+{
+  "title": "مرور",
+  "subtitle": "یک صفحهٔ http(s) عمومی را در صف بگذارید. تا Allow once چیزی واکشی نمی‌شود. YOLO خاموش است. پروفایل Chrome نیست.",
+  "proposeTitle": "پیشنهاد نشانی",
+  "proposeHelp": "فقط http یا https عمومی. localhost، اعتبارنامه، و Chrome لاگین‌شده رد است.",
+  "url": "نشانی",
+  "propose": "پیشنهاد",
+  "queue": "صف",
+  "queueHelp": "Allow once صفحه را متن ساده می‌خواند. رد یعنی هیچ واکشی نیست.",
+  "empty": "پیشنویسی نیست",
+  "approve": "فقط همین‌بار",
+  "deny": "رد",
+  "yolo": "YOLO خاموش است",
+  "chrome": "بدون پروفایل Chrome",
+  "once": "فقط همین‌بار",
+  "excerptHelp": "فقط متن ساده. اسکریپت و computer-use خاموش است.",
+  "links": "پیوندهای استخراج‌شده",
+  "follow": "پیشنهاد پیوند"
+}

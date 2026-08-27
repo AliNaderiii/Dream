@@ -1,0 +1,19 @@
+{
+  "title": "Browse",
+  "subtitle": "Queue a public http(s) page. Nothing is fetched until you Allow once. YOLO is off. No Chrome profile.",
+  "proposeTitle": "Propose URL",
+  "proposeHelp": "Public http or https only. Localhost, credentials, and signed-in Chrome are refused.",
+  "url": "URL",
+  "propose": "Propose",
+  "queue": "Queue",
+  "queueHelp": "Allow once fetches the page as plain text. Deny fetches nothing.",
+  "empty": "No drafts",
+  "approve": "Allow once",
+  "deny": "Deny",
+  "yolo": "YOLO is off",
+  "chrome": "No Chrome profile",
+  "once": "Allow once",
+  "excerptHelp": "Plain text only. Scripts and computer-use are off.",
+  "links": "Extracted links",
+  "follow": "Propose link"
+}
