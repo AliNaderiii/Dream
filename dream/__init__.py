@@ -17,7 +17,7 @@ from dream.memory import KINDS, Memory, MemoryStore, normalize_fa
 from dream.normalization import normalize_importance, normalize_kind
 from dream.tools import REGISTRY, anthropic_schemas, execute, openai_schemas, tool
 
-__version__ = "0.4.4"
+__version__ = "0.4.5"
 
 __all__ = [
     "ApprovalPolicy",

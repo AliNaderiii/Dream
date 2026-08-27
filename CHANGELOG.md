@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.4.5] - 2026-08-27
+
+Named Space bots, Allow once, forest accent, skill drafts, bot groups,
+HITL page reads, and a company workroom on top of 0.4.4.
+
+### Added
+
+- **Space bots (B1).** Named roster with geometric avatars, isolated memory,
+  and no YOLO.
+- **Allow once (B2).** Chat approval is Allow once or Deny. Always Allow is
+  refused.
+- **Forest accent (B3).** Default desktop accent is forest.
+- **Experience drafts (B4).** Capture a skill draft from a bot turn. Nothing
+  is written until you approve.
+- **Bot groups (B5).** Two to six Space bots, hard cap of three rounds.
+- **Browse HITL (B6).** Queue a public http(s) URL. Fetch only after Allow
+  once. Localhost, credentials, Chrome profiles, and computer-use are refused.
+- **Workroom (C1).** Company room with up to eight seats. VIP is a label.
+  Drafts never send.
+
+### Known notes
+
+- Live hosted role turns are not wired; use the chat pane.
+- Live gold prices are not Instant Answer.
+- Bridge protocol version stays `0.1.0`.
+- The Windows installer is unsigned — SmartScreen warns.
+- WebView2 may download during install.
+- YOLO, signed-in Chrome, and computer-use of the Windows desktop stay off.
+
 ## [0.4.4] - 2026-08-27
 
 Honest web search fallback and read-only Google Workspace OAuth on top of 0.4.3.
