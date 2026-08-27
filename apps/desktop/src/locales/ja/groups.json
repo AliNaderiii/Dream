@@ -1,0 +1,18 @@
+{
+  "title": "Group",
+  "subtitle": "Two to six Space bots speak in turn. Hard cap: 3 rounds. YOLO is off.",
+  "space": "Space",
+  "spaceHelp": "Pick the Space that owns the bots.",
+  "bots": "Bots (2–6)",
+  "botsHelp": "Select two to six named bots. Each keeps its own memory.",
+  "question": "Question",
+  "run": "Run group",
+  "empty": "Create a Space first.",
+  "emptyBots": "Create bots on Space first.",
+  "transcript": "Transcript",
+  "cap": "Hard cap: 3 rounds",
+  "yolo": "YOLO is off",
+  "rounds": "Rounds",
+  "stopped": "Stopped",
+  "round": "Round"
+}
