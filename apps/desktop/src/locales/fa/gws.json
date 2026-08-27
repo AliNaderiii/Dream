@@ -1,0 +1,15 @@
+{
+  "title": "گوگل",
+  "subtitle": "حساب گوگل را برای جیمیل، تقویم و درایو فقط‌خواندنی وصل کنید. ارسال دست انسان می‌ماند.",
+  "statusTitle": "اتصال",
+  "statusHelp": "توکن در keychain سیستم می‌ماند. دریم آن را در پرامپت نمی‌گذارد.",
+  "connected": "وصل",
+  "disconnected": "وصل نیست",
+  "readonlyNote": "در این برش فقط خواندن. ارسال، حذف و اشتراک رد می‌شود.",
+  "connectTitle": "OAuth",
+  "connectHelp": "DREAM_GOOGLE_CLIENT_ID را بگذارید. URL را باز کنید، بعد redirect لوپ‌بک یا کد را بچسبانید.",
+  "begin": "شروع ورود گوگل",
+  "code": "نشانی redirect یا کد",
+  "complete": "اتمام اتصال",
+  "disconnect": "قطع اتصال"
+}
