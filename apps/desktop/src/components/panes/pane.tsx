@@ -266,8 +266,6 @@ function PaneChat({ pane }: { pane: PaneState }) {
   const finishStream = usePaneChatStore((state) => state.finishStream);
   const failStream = usePaneChatStore((state) => state.failStream);
   const setPendingApproval = usePaneChatStore((state) => state.setPendingApproval);
-  const alwaysAllowTool = usePaneChatStore((state) => state.alwaysAllowTool);
-  const isAlwaysAllowed = usePaneChatStore((state) => state.isAlwaysAllowed);
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -332,8 +330,8 @@ function PaneChat({ pane }: { pane: PaneState }) {
    * Execute a conversation.send with approval-retry support (S07).
    *
    * When the bridge returns APPROVAL_REQUIRED, we show the dialog; once the
-   * user decides, we resolve the approval on the bridge. "Always allow" is
-   * tracked per-pane, per-session.
+   * user decides, we resolve the approval on the bridge. Only Allow once
+   * proceeds. Always Allow / YOLO are refused.
    */
   const sendWithApproval = async (
     sessionId: string,
@@ -370,14 +368,6 @@ function PaneChat({ pane }: { pane: PaneState }) {
         const argsSummary = typeof rawSummary === 'string' ? rawSummary : '';
         const risk = typeof rawRisk === 'string' ? rawRisk : 'dangerous';
 
-        // If user already said "always allow" for this tool, resolve and retry.
-        if (isAlwaysAllowed(pane.id, toolName)) {
-          void client
-            .call('approval.resolve', { approval_id: approvalId, allowed: true })
-            .catch(() => {});
-          continue;
-        }
-
         // Show the approval dialog and wait for a decision.
         const decision = await new Promise<ApprovalDecision>((resolve) => {
           setPendingApproval(pane.id, {
@@ -391,10 +381,8 @@ function PaneChat({ pane }: { pane: PaneState }) {
         });
         setPendingApproval(pane.id, null);
 
-        if (decision === 'deny') {
-          // Resolve the approval as denied on the bridge.
-          void resolveApprovalOnBridge(client, approvalId, decision).catch(() => {});
-          // Record a blocked tool card.
+        if (decision !== 'allow_once') {
+          void resolveApprovalOnBridge(client, approvalId, 'deny').catch(() => {});
           const blockedCard: ToolCardEntry = {
             id: `tc-blocked-${Date.now()}`,
             name: toolName,
@@ -412,11 +400,6 @@ function PaneChat({ pane }: { pane: PaneState }) {
           throw new Error('Tool call denied by user');
         }
 
-        if (decision === 'allow_always_session') {
-          alwaysAllowTool(pane.id, toolName);
-        }
-
-        // Resolve the chosen approval policy as allowed, then retry the send.
         void resolveApprovalOnBridge(client, approvalId, decision).catch(() => {});
       }
     }

@@ -7,7 +7,7 @@ import type { ApprovalDecision } from '@/types';
 describe('approval bridge policy', () => {
   it.each<[ApprovalDecision, boolean]>([
     ['allow_once', true],
-    ['allow_always_session', true],
+    ['allow_always_session', false],
     ['deny', false],
   ])('wires %s to approval.resolve allowed=%s', async (decision, allowed) => {
     const call = vi.fn().mockResolvedValue({});
