@@ -49,7 +49,11 @@ def _client_secret() -> str:
 class GoogleOAuth:
     """One in-memory PKCE attempt plus keychain tokens."""
 
-    def __init__(self, credentials: KeychainCredentialStore | None = None, opener: Any = None) -> None:
+    def __init__(
+        self,
+        credentials: KeychainCredentialStore | None = None,
+        opener: Any = None,
+    ) -> None:
         self.credentials = credentials or KeychainCredentialStore()
         self._opener = opener
         self._pending: dict[str, dict[str, Any]] = {}

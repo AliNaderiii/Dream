@@ -7,6 +7,7 @@ from typing import Any
 from dream.bridge.errors import BridgeError, invalid_params
 from dream.gws.errors import GwsError, GwsSecurityError
 from dream.gws.service import get_service, reset_service
+from dream.model_providers import CredentialStoreUnavailable
 
 __all__ = ["HANDLERS", "reset_service"]
 
@@ -22,7 +23,7 @@ def _params(params: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
 def _wrap(call):  # type: ignore[no-untyped-def]
     try:
         return call()
-    except (GwsSecurityError, GwsError) as exc:
+    except (GwsSecurityError, GwsError, CredentialStoreUnavailable) as exc:
         raise invalid_params(str(exc)) from None
     except BridgeError:
         raise

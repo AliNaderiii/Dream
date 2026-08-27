@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-from io import BytesIO
 from urllib.request import Request
 
 import pytest
 
-from dream.gws.errors import GwsSecurityError
 from dream.gws.service import GoogleWorkspaceService
 from dream.model_providers import KeychainCredentialStore
 
