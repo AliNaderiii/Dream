@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.4.6] - 2026-08-27
+
+Non-streaming chat completions so local OpenAI-compatible gateways that
+default to SSE work with the desktop pane.
+
+### Fixed
+
+- **Chat completions.** Requests send `stream: false` and expect one JSON
+  object with `choices[0].message`. Streaming `chunk` bodies no longer
+  surface as an unexpected error.
+
+### Known notes
+
+- Bridge protocol version stays `0.1.0`.
+- The Windows installer is unsigned — SmartScreen warns.
+- YOLO, signed-in Chrome, and computer-use of the Windows desktop stay off.
+
 ## [0.4.5] - 2026-08-27
 
 Named Space bots, Allow once, forest accent, skill drafts, bot groups,

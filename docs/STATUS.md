@@ -1,5 +1,15 @@
 # Status
 
+## 0.4.6 — Non-streaming chat completions — CUT
+
+**What shipped.** Version **0.4.6** (non-streaming chat #113 plus this bump).
+Start Menu installer asks hosted OpenAI-compatible endpoints for one JSON
+completion, not an SSE stream.
+
+**What is next.** Owner installs `Dream_0.4.6_x64-setup.exe`. Point a local
+gateway at `/v1` with `auto/chat` if using that path. Daily use.
+
+
 ## 0.4.5 — Bots, groups, browse HITL, workroom — CUT
 
 **What shipped.** Version **0.4.5** (bots #105, Allow once #106, forest #107,
