@@ -1,10 +1,12 @@
 import { Check, Plus, Send, ShieldAlert, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { BotAvatar } from '@/components/bots/bot-avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
+import { botsCreate, botsList, type BotRecord } from '@/lib/bridge/bots';
 import { useBridge } from '@/lib/bridge/hooks';
 import {
   spaceApproveDraft,
@@ -22,8 +24,11 @@ import { useTranslation } from '@/lib/i18n';
 
 export default function SpaceRoute() {
   const { t } = useTranslation('space');
+  const { t: tb } = useTranslation('bots');
   const { client } = useBridge();
   const [spaces, setSpaces] = useState<SpaceRecord[]>([]);
+  const [bots, setBots] = useState<BotRecord[]>([]);
+  const [botName, setBotName] = useState('Scribe');
   const [active, setActive] = useState<SpaceRecord | null>(null);
   const [name, setName] = useState('Studio');
   const [folder, setFolder] = useState('');
@@ -44,6 +49,12 @@ export default function SpaceRoute() {
     const next = rows.find((row) => row.space_id === spaceId) ?? rows[0] ?? null;
     setActive(next);
     if (next?.instruction?.text) setInstruction(next.instruction.text);
+    if (next) {
+      const roster = await botsList(client, next.space_id);
+      setBots(roster.bots ?? []);
+    } else {
+      setBots([]);
+    }
   };
 
   useEffect(() => {
@@ -70,6 +81,17 @@ export default function SpaceRoute() {
     try {
       const created = await spaceCreate(client, name);
       await refresh(created.space_id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  const onCreateBot = async () => {
+    if (!active) return;
+    setError(null);
+    try {
+      await botsCreate(client, active.space_id, botName, roleId, 'echo');
+      await refresh(active.space_id);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
@@ -181,6 +203,34 @@ export default function SpaceRoute() {
 
       {active && (
         <div className="grid gap-4 xl:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <h2 className="text-h3 font-semibold">{tb('title')}</h2>
+              <CardDescription>{tb('help')}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <Input
+                label={tb('name')}
+                value={botName}
+                onChange={(event) => setBotName(event.target.value)}
+              />
+              <Button onClick={() => void onCreateBot()} disabled={!botName.trim()}>
+                {tb('create')}
+              </Button>
+              <ul className="flex flex-col gap-2">
+                {bots.length === 0 && <li className="text-caption text-fg-muted">{tb('empty')}</li>}
+                {bots.map((bot) => (
+                  <li key={bot.bot_id} className="flex items-center gap-2 text-caption">
+                    <BotAvatar shape={bot.avatar.shape} hue={bot.avatar.hue} />
+                    <span>
+                      {bot.name} · {bot.role_id} · {bot.model}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <h2 className="text-h3 font-semibold">{t('folderTitle')}</h2>

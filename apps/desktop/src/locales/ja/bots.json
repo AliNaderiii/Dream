@@ -1,0 +1,8 @@
+{
+  "title": "Bots",
+  "help": "Named specialists on this Space. Each has its own memory. YOLO is off.",
+  "name": "Bot name",
+  "create": "Create bot",
+  "empty": "No bots yet",
+  "model": "echo"
+}
