@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.4.4] - 2026-08-27
+
+Honest web search fallback and read-only Google Workspace OAuth on top of 0.4.3.
+
+### Added
+
+- **Google Workspace (P12).** Owner OAuth for read-only Gmail, Calendar, and
+  Drive. Tokens stay in the OS keychain. Sending mail is refused. Loopback
+  redirect only; WAN hosts are allow-listed.
+
+### Fixed
+
+- **Search honesty.** An empty DuckDuckGo Instant Answer is no longer reported
+  as a network outage. Wikipedia public opensearch is used when Instant Answer
+  is empty. `DREAM_ALLOW_NETWORK` is still required.
+
+### Known notes
+
+- Live hosted role turns are not wired; use the chat pane.
+- Live gold prices are not Instant Answer; use a public URL with `read_page`
+  or a later browser cut.
+- Bridge protocol version stays `0.1.0`.
+- The Windows installer is unsigned — SmartScreen warns.
+- WebView2 may download during install.
+
 ## [0.4.3] - 2026-08-26
 
 Space, loopback remote gateway, and Live loops on top of the 0.4.2 sidecar hotfix.
