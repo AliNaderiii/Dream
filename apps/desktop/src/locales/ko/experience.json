@@ -1,0 +1,9 @@
+{
+  "title": "Experience",
+  "help": "Capture a skill draft from a bot turn. Nothing is written until you approve.",
+  "question": "What should this skill remember?",
+  "capture": "Capture draft",
+  "approve": "Approve",
+  "deny": "Deny",
+  "empty": "No drafts"
+}
