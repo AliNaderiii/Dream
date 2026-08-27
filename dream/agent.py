@@ -273,6 +273,7 @@ class OpenAIBackend:
             "model": self.model,
             "messages": messages,
             "temperature": self.temperature,
+            "stream": False,
         }
         if tools:
             payload["tools"] = tools
