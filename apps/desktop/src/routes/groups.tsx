@@ -43,8 +43,6 @@ export default function GroupsRoute() {
   useEffect(() => {
     let cancelled = false;
     if (!spaceId) {
-      setBots([]);
-      setSelected([]);
       return;
     }
     void botsList(client, spaceId)
