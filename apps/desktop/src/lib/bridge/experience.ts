@@ -35,12 +35,10 @@ export function experienceList(client: BridgeClient, botId?: string) {
 }
 
 export function experienceApprove(client: BridgeClient, draftId: string) {
-  return echoOr(
-    client,
-    () => echo.echoExperienceApprove(draftId, true),
-    'experience.approve',
-    { draft_id: draftId, approved: true },
-  );
+  return echoOr(client, () => echo.echoExperienceApprove(draftId, true), 'experience.approve', {
+    draft_id: draftId,
+    approved: true,
+  });
 }
 
 export function experienceDeny(client: BridgeClient, draftId: string) {

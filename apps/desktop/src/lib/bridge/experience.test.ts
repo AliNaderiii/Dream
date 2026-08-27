@@ -2,12 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { getBridgeClient, resetBridgeClient } from './client';
 import { resetEchoExperience } from './echo-experience';
-import {
-  experienceApprove,
-  experienceCapture,
-  experienceDeny,
-  experienceList,
-} from './experience';
+import { experienceApprove, experienceCapture, experienceDeny, experienceList } from './experience';
 
 describe('experience wrappers', () => {
   beforeEach(() => {
