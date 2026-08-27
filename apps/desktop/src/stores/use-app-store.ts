@@ -112,7 +112,7 @@ export function migrateAppState(persisted: unknown): PersistedAppState {
     locale: (value['locale'] as Locale | undefined) ?? 'en',
     direction: (value['direction'] as Direction | undefined) ?? 'ltr',
     density: density === 'dense' ? 'dense' : 'comfortable',
-    accent: (value['accent'] as Accent | undefined) ?? 'violet',
+    accent: (value['accent'] as Accent | undefined) ?? 'forest',
     zoom: Math.min(MAX_UI_ZOOM, Math.max(MIN_UI_ZOOM, Math.round(rawZoom))),
     reduceMotion: value['reduceMotion'] === true,
     numerals: value['numerals'] === 'persian' ? 'persian' : 'latin',

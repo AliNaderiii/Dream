@@ -115,13 +115,13 @@
   --ds-elevation-overlay: 0 0.5rem 1.5rem -0.25rem rgb(16 24 40 / 0.1);
   --ds-elevation-modal: 0 1.25rem 3rem -0.5rem rgb(16 24 40 / 0.16);
 
-  /* Violet is the default accent. */
-  --ds-accent-solid: #5b4bc4;
-  --ds-accent-hover: #493ba5;
-  --ds-accent-soft: #ece9ff;
-  --ds-accent-text: #493ba5;
+  /* Forest (Persian teal) is the default accent — not a copied Hermes blue. */
+  --ds-accent-solid: #087a5b;
+  --ds-accent-hover: #06684d;
+  --ds-accent-soft: #ddf7ec;
+  --ds-accent-text: #087a5b;
   --ds-accent-fg: #ffffff;
-  --ds-focus-ring: #5b4bc4;
+  --ds-focus-ring: #087a5b;
 }
 
 [data-theme='light'] {
@@ -180,6 +180,25 @@
   --ds-elevation-raised: 0 0.125rem 0.5rem -0.125rem rgb(0 0 0 / 0.22);
   --ds-elevation-overlay: 0 0.75rem 2rem -0.375rem rgb(0 0 0 / 0.44);
   --ds-elevation-modal: 0 1.5rem 3.5rem -0.5rem rgb(0 0 0 / 0.56);
+  --ds-accent-solid: #56d6ac;
+  --ds-accent-hover: #7ae2c0;
+  --ds-accent-soft: #093d31;
+  --ds-accent-text: #56d6ac;
+  --ds-accent-fg: #071d16;
+  --ds-focus-ring: #56d6ac;
+}
+
+/* Accent sets are independent of theme. Dark values use a low-luminance foreground. */
+[data-theme='light'][data-accent='violet'],
+[data-theme='warm'][data-accent='violet'] {
+  --ds-accent-solid: #5b4bc4;
+  --ds-accent-hover: #493ba5;
+  --ds-accent-soft: #ece9ff;
+  --ds-accent-text: #493ba5;
+  --ds-accent-fg: #ffffff;
+  --ds-focus-ring: #5b4bc4;
+}
+[data-theme='dark'][data-accent='violet'] {
   --ds-accent-solid: #a99af5;
   --ds-accent-hover: #c8beff;
   --ds-accent-soft: #241d52;
@@ -187,8 +206,6 @@
   --ds-accent-fg: #171228;
   --ds-focus-ring: #a99af5;
 }
-
-/* Accent sets are independent of theme. Dark values use a low-luminance foreground. */
 [data-theme='light'][data-accent='ocean'],
 [data-theme='warm'][data-accent='ocean'] {
   --ds-accent-solid: #0566c2;
