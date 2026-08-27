@@ -86,6 +86,17 @@ export default function SpaceRoute() {
     }
   };
 
+  const onCreateBot = async () => {
+    if (!active) return;
+    setError(null);
+    try {
+      await botsCreate(client, active.space_id, botName, roleId, 'echo');
+      await refresh(active.space_id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
   const onAttach = async () => {
     if (!active) return;
     setError(null);
