@@ -49,7 +49,7 @@ function Row({
 }
 
 const THEMES: ThemeMode[] = ['light', 'warm', 'dark', 'system'];
-const ACCENTS: Accent[] = ['violet', 'ocean', 'forest', 'ember'];
+const ACCENTS: Accent[] = ['forest', 'ocean', 'ember', 'violet'];
 const DENSITIES: Density[] = ['comfortable', 'dense'];
 const NUMERAL_STYLES: NumeralStyle[] = ['latin', 'persian'];
 

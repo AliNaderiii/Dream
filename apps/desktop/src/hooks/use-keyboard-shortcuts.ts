@@ -71,7 +71,7 @@ const ROUTES: readonly RouteCommand[] = [
 ] as const;
 
 const THEMES: ThemeMode[] = ['light', 'warm', 'dark', 'system'];
-const ACCENTS: Accent[] = ['violet', 'ocean', 'forest', 'ember'];
+const ACCENTS: Accent[] = ['forest', 'ocean', 'ember', 'violet'];
 const DENSITIES: Density[] = ['comfortable', 'dense'];
 const ZOOM_STOPS = [80, 100, 125, 150];
 
