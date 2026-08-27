@@ -1,9 +1,7 @@
 /**
  * Tests for the ApprovalDialog component (S07).
  *
- * Covers the three decisions: allow_once, allow_always_session, deny.
- * Also verifies fail-closed behaviour: without an explicit approver the
- * dialog blocks (no auto-approve).
+ * Covers Allow once and Deny. Always Allow / YOLO are refused.
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -32,7 +30,7 @@ describe('ApprovalDialog', () => {
   it('renders locale-backed button labels (English)', () => {
     render(<ApprovalDialog approval={approval} onDecision={vi.fn()} />);
     expect(screen.getByText('Allow once')).toBeDefined();
-    expect(screen.getByText('Always allow this tool this session')).toBeDefined();
+    expect(screen.queryByText('Always allow this tool this session')).toBeNull();
     expect(screen.getByText('Deny')).toBeDefined();
   });
 
@@ -41,13 +39,6 @@ describe('ApprovalDialog', () => {
     render(<ApprovalDialog approval={approval} onDecision={onDecision} />);
     fireEvent.click(screen.getByText('Allow once'));
     expect(onDecision).toHaveBeenCalledWith('allow_once');
-  });
-
-  it('calls onDecision("allow_always_session") when Always allow is clicked', () => {
-    const onDecision = vi.fn();
-    render(<ApprovalDialog approval={approval} onDecision={onDecision} />);
-    fireEvent.click(screen.getByText('Always allow this tool this session'));
-    expect(onDecision).toHaveBeenCalledWith('allow_always_session');
   });
 
   it('calls onDecision("deny") when Deny is clicked', () => {
@@ -68,7 +59,7 @@ describe('ApprovalDialog', () => {
     await i18n.changeLanguage('fa');
     const view = render(<ApprovalDialog approval={approval} onDecision={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'یک‌بار اجازه بده' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'همیشه اجازه بده (این نشست)' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'همیشه اجازه بده (این نشست)' })).toBeNull();
     expect(screen.getByRole('button', { name: 'رد کردن' })).toBeInTheDocument();
     view.unmount();
     await i18n.changeLanguage('en');

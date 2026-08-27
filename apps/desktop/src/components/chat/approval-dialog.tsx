@@ -72,9 +72,6 @@ export function ApprovalDialog({ approval, onDecision }: ApprovalDialogProps) {
           <Button variant="ghost" onClick={() => onDecision('deny')}>
             {t('approval.deny')}
           </Button>
-          <Button variant="secondary" onClick={() => onDecision('allow_always_session')}>
-            {t('approval.alwaysAllow')}
-          </Button>
           <Button ref={allowOnceRef} variant="primary" onClick={() => onDecision('allow_once')}>
             {t('approval.allowOnce')}
           </Button>
