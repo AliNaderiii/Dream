@@ -1,5 +1,15 @@
 # Status
 
+## 0.4.4 — Honest search and Google Workspace read-only — CUT
+
+**What shipped.** Version **0.4.4** (search honesty #102, GWS OAuth #103 plus
+this bump). Start Menu installer includes Wikipedia search fallback and
+read-only Gmail / Calendar / Drive after owner OAuth.
+
+**What is next.** Owner installs `Dream_0.4.4_x64-setup.exe`. Set
+`DREAM_ALLOW_NETWORK` and `DREAM_GOOGLE_CLIENT_ID` for those tools.
+
+
 ## 0.4.3 — Space, remotegw, live loops — CUT
 
 **What shipped.** Version **0.4.3** (P10 #98, P9 #99, P11 #100 plus this bump).

@@ -41,7 +41,7 @@ def request_json(
 ) -> dict[str, Any]:
     """GET/POST JSON on an allowlisted Google host."""
     _require_host(address)
-    headers = {"Accept": "application/json", "User-Agent": "dream-assistant/0.4.3"}
+    headers = {"Accept": "application/json", "User-Agent": "dream-assistant/0.4.4"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     if data is not None:

@@ -50,7 +50,7 @@ Requires `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `patchelf`, and `rpm`.
    version, not the product version.
 2. Update `CHANGELOG.md` and prepend a short note to `docs/STATUS.md`.
 3. Land the bump on `main` through a pull request. Then tag **that** commit:
-   `git tag v0.4.3 && git push origin v0.4.3`.
+   `git tag v0.4.4 && git push origin v0.4.4`.
 4. The workflow publishes a **public** GitHub Release (not a draft) and
    attaches the installers. Each runner also uploads a `SHA256SUMS-*.txt`
    asset. A human still sanity-checks the artefacts before daily use.
