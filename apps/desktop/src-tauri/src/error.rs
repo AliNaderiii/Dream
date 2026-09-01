@@ -11,6 +11,7 @@
 //! taxonomy (`src/lib/bridge/errors.ts`). Neither payload includes secrets,
 //! API keys, command arguments, or raw filesystem paths.
 
+use std::fmt;
 use std::time::Duration;
 
 use serde::{Serialize, Serializer};
@@ -77,12 +78,11 @@ const RPC_AUTH_ERROR: i32 = -32002;
 /// is the fallback for internal coordination failures (closed oneshot, missing
 /// writer) that do not fit a more specific variant; its message must never
 /// include secrets or filesystem paths.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum BridgeError {
     /// An I/O operation failed. Only the operation name and [`std::io::ErrorKind`]
     /// are retained so the original `Display` (which often embeds local paths)
     /// never reaches the frontend.
-    #[error("I/O error during {operation}: {kind:?}")]
     Io {
         /// Short name of the failed operation (`spawn sidecar`, `write stdin`, …).
         operation: &'static str,
@@ -91,37 +91,29 @@ pub enum BridgeError {
     },
 
     /// JSON serialisation or deserialisation failed.
-    #[error("JSON error: {0}")]
-    Serde(#[from] serde_json::Error),
+    Serde(serde_json::Error),
 
     /// A required process or interpreter could not be found.
-    #[error("process not found: {0}")]
     ProcessNotFound(String),
 
     /// The sidecar process exited, lost its pipes, or otherwise became unusable.
-    #[error("sidecar crashed: {0}")]
     SidecarCrashed(String),
 
     /// A caller-supplied argument was invalid (duplicate request id, …).
-    #[error("invalid argument: {0}")]
     InvalidArgument(String),
 
     /// An operation exceeded its deadline.
-    #[error("operation timed out after {0:?}")]
     Timeout(Duration),
 
     /// The OS denied an operation (spawn, create directory, …).
-    #[error("permission denied: {0}")]
     PermissionDenied(String),
 
     /// The sidecar is not connected, or the stdin writer channel is gone.
-    #[error("bridge is not connected")]
     NotReady,
 
     /// Structured JSON-RPC error forwarded from the sidecar. `data` is passed
     /// through unchanged (the Python core owns that object); Rust-constructed
     /// errors always set `data` to `None`.
-    #[error("RPC error {code}: {message}")]
     Rpc {
         /// JSON-RPC error code.
         code: i32,
@@ -134,11 +126,9 @@ pub enum BridgeError {
     /// A newline-delimited frame was empty, not an object, missing required
     /// JSON-RPC fields, or not valid UTF-8. The stored string is a reason, never
     /// the raw frame (frames may contain conversation content).
-    #[error("malformed frame: {0}")]
     MalformedFrame(String),
 
     /// A single frame exceeded [`crate::bridge::framing::MAX_FRAME_BYTES`].
-    #[error("frame of {size} bytes exceeds the {max} byte limit")]
     FrameTooLarge {
         /// Observed frame size in bytes.
         size: usize,
@@ -150,8 +140,39 @@ pub enum BridgeError {
     /// variant. Justified because oneshot/channel closures and unexpected
     /// supervisor states are real, recoverable conditions, but they are not I/O,
     /// JSON, or process-lifecycle errors. Messages must stay free of secrets.
-    #[error("bridge error: {0}")]
     Other(String),
+}
+
+impl fmt::Display for BridgeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io { operation, kind } => {
+                write!(f, "I/O error during {operation}: {kind:?}")
+            }
+            Self::Serde(err) => write!(f, "JSON error: {err}"),
+            Self::ProcessNotFound(name) => write!(f, "process not found: {name}"),
+            Self::SidecarCrashed(reason) => write!(f, "sidecar crashed: {reason}"),
+            Self::InvalidArgument(reason) => write!(f, "invalid argument: {reason}"),
+            Self::Timeout(duration) => write!(f, "operation timed out after {duration:?}"),
+            Self::PermissionDenied(reason) => write!(f, "permission denied: {reason}"),
+            Self::NotReady => write!(f, "bridge is not connected"),
+            Self::Rpc { code, message, .. } => write!(f, "RPC error {code}: {message}"),
+            Self::MalformedFrame(reason) => write!(f, "malformed frame: {reason}"),
+            Self::FrameTooLarge { size, max } => {
+                write!(f, "frame of {size} bytes exceeds the {max} byte limit")
+            }
+            Self::Other(reason) => write!(f, "bridge error: {reason}"),
+        }
+    }
+}
+
+impl std::error::Error for BridgeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Serde(err) => Some(err),
+            _ => None,
+        }
+    }
 }
 
 impl BridgeError {
@@ -226,6 +247,12 @@ impl BridgeError {
 impl From<std::io::Error> for BridgeError {
     fn from(err: std::io::Error) -> Self {
         Self::io("bridge I/O", err)
+    }
+}
+
+impl From<serde_json::Error> for BridgeError {
+    fn from(err: serde_json::Error) -> Self {
+        Self::Serde(err)
     }
 }
 

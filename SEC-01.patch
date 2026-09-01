@@ -902,10 +902,10 @@ index d6d9283..3381928 100644
 +    }
  }
 diff --git a/apps/desktop/src-tauri/src/error.rs b/apps/desktop/src-tauri/src/error.rs
-index e738ba5..a72c223 100644
+index e738ba5..b05b99b 100644
 --- a/apps/desktop/src-tauri/src/error.rs
 +++ b/apps/desktop/src-tauri/src/error.rs
-@@ -1,11 +1,20 @@
+@@ -1,11 +1,21 @@
 -//! Error type shared by every Tauri command in the desktop shell.
 +//! Error types shared by the desktop shell and the Python sidecar bridge.
  //!
@@ -924,6 +924,7 @@ index e738ba5..a72c223 100644
 +//! taxonomy (`src/lib/bridge/errors.ts`). Neither payload includes secrets,
 +//! API keys, command arguments, or raw filesystem paths.
 +
++use std::fmt;
 +use std::time::Duration;
  
  use serde::{Serialize, Serializer};
@@ -931,7 +932,7 @@ index e738ba5..a72c223 100644
  
  /// Every failure mode a Dream desktop command can surface to the frontend.
  #[derive(Debug, thiserror::Error)]
-@@ -48,5 +57,339 @@ impl Serialize for Error {
+@@ -48,5 +58,365 @@ impl Serialize for Error {
      }
  }
  
@@ -956,12 +957,11 @@ index e738ba5..a72c223 100644
 +/// is the fallback for internal coordination failures (closed oneshot, missing
 +/// writer) that do not fit a more specific variant; its message must never
 +/// include secrets or filesystem paths.
-+#[derive(Debug, thiserror::Error)]
++#[derive(Debug)]
 +pub enum BridgeError {
 +    /// An I/O operation failed. Only the operation name and [`std::io::ErrorKind`]
 +    /// are retained so the original `Display` (which often embeds local paths)
 +    /// never reaches the frontend.
-+    #[error("I/O error during {operation}: {kind:?}")]
 +    Io {
 +        /// Short name of the failed operation (`spawn sidecar`, `write stdin`, …).
 +        operation: &'static str,
@@ -970,37 +970,29 @@ index e738ba5..a72c223 100644
 +    },
 +
 +    /// JSON serialisation or deserialisation failed.
-+    #[error("JSON error: {0}")]
-+    Serde(#[from] serde_json::Error),
++    Serde(serde_json::Error),
 +
 +    /// A required process or interpreter could not be found.
-+    #[error("process not found: {0}")]
 +    ProcessNotFound(String),
 +
 +    /// The sidecar process exited, lost its pipes, or otherwise became unusable.
-+    #[error("sidecar crashed: {0}")]
 +    SidecarCrashed(String),
 +
 +    /// A caller-supplied argument was invalid (duplicate request id, …).
-+    #[error("invalid argument: {0}")]
 +    InvalidArgument(String),
 +
 +    /// An operation exceeded its deadline.
-+    #[error("operation timed out after {0:?}")]
 +    Timeout(Duration),
 +
 +    /// The OS denied an operation (spawn, create directory, …).
-+    #[error("permission denied: {0}")]
 +    PermissionDenied(String),
 +
 +    /// The sidecar is not connected, or the stdin writer channel is gone.
-+    #[error("bridge is not connected")]
 +    NotReady,
 +
 +    /// Structured JSON-RPC error forwarded from the sidecar. `data` is passed
 +    /// through unchanged (the Python core owns that object); Rust-constructed
 +    /// errors always set `data` to `None`.
-+    #[error("RPC error {code}: {message}")]
 +    Rpc {
 +        /// JSON-RPC error code.
 +        code: i32,
@@ -1013,11 +1005,9 @@ index e738ba5..a72c223 100644
 +    /// A newline-delimited frame was empty, not an object, missing required
 +    /// JSON-RPC fields, or not valid UTF-8. The stored string is a reason, never
 +    /// the raw frame (frames may contain conversation content).
-+    #[error("malformed frame: {0}")]
 +    MalformedFrame(String),
 +
 +    /// A single frame exceeded [`crate::bridge::framing::MAX_FRAME_BYTES`].
-+    #[error("frame of {size} bytes exceeds the {max} byte limit")]
 +    FrameTooLarge {
 +        /// Observed frame size in bytes.
 +        size: usize,
@@ -1029,8 +1019,39 @@ index e738ba5..a72c223 100644
 +    /// variant. Justified because oneshot/channel closures and unexpected
 +    /// supervisor states are real, recoverable conditions, but they are not I/O,
 +    /// JSON, or process-lifecycle errors. Messages must stay free of secrets.
-+    #[error("bridge error: {0}")]
 +    Other(String),
++}
++
++impl fmt::Display for BridgeError {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        match self {
++            Self::Io { operation, kind } => {
++                write!(f, "I/O error during {operation}: {kind:?}")
++            }
++            Self::Serde(err) => write!(f, "JSON error: {err}"),
++            Self::ProcessNotFound(name) => write!(f, "process not found: {name}"),
++            Self::SidecarCrashed(reason) => write!(f, "sidecar crashed: {reason}"),
++            Self::InvalidArgument(reason) => write!(f, "invalid argument: {reason}"),
++            Self::Timeout(duration) => write!(f, "operation timed out after {duration:?}"),
++            Self::PermissionDenied(reason) => write!(f, "permission denied: {reason}"),
++            Self::NotReady => write!(f, "bridge is not connected"),
++            Self::Rpc { code, message, .. } => write!(f, "RPC error {code}: {message}"),
++            Self::MalformedFrame(reason) => write!(f, "malformed frame: {reason}"),
++            Self::FrameTooLarge { size, max } => {
++                write!(f, "frame of {size} bytes exceeds the {max} byte limit")
++            }
++            Self::Other(reason) => write!(f, "bridge error: {reason}"),
++        }
++    }
++}
++
++impl std::error::Error for BridgeError {
++    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
++        match self {
++            Self::Serde(err) => Some(err),
++            _ => None,
++        }
++    }
 +}
 +
 +impl BridgeError {
@@ -1105,6 +1126,12 @@ index e738ba5..a72c223 100644
 +impl From<std::io::Error> for BridgeError {
 +    fn from(err: std::io::Error) -> Self {
 +        Self::io("bridge I/O", err)
++    }
++}
++
++impl From<serde_json::Error> for BridgeError {
++    fn from(err: serde_json::Error) -> Self {
++        Self::Serde(err)
 +    }
 +}
 +
@@ -1273,18 +1300,10 @@ index e738ba5..a72c223 100644
 +    }
 +}
 diff --git a/apps/desktop/src-tauri/src/lib.rs b/apps/desktop/src-tauri/src/lib.rs
-index dc57f6a..c3e189a 100644
+index dc57f6a..03f68f1 100644
 --- a/apps/desktop/src-tauri/src/lib.rs
 +++ b/apps/desktop/src-tauri/src/lib.rs
-@@ -3,6 +3,7 @@
- //! Layering: `lib.rs` wires plugins, state, tray and window behaviour; the modules
- //! in [`commands`] implement the callable surface. Nothing here talks to the
- //! Python core — that bridge arrives in P-02.
-+#![allow(clippy::all)]
- 
- pub mod commands;
- pub mod error;
-@@ -24,9 +25,9 @@ use crate::state::AppState;
+@@ -24,9 +24,9 @@ use crate::state::AppState;
  
  /// Builds and runs the Tauri application.
  ///
@@ -1297,7 +1316,7 @@ index dc57f6a..c3e189a 100644
  #[cfg_attr(mobile, tauri::mobile_entry_point)]
  pub fn run() {
      #[allow(unused_mut)]
-@@ -54,7 +55,7 @@ pub fn run() {
+@@ -54,7 +54,7 @@ pub fn run() {
              );
      }
  
@@ -1306,7 +1325,7 @@ index dc57f6a..c3e189a 100644
          .plugin(tauri_plugin_os::init())
          .plugin(tauri_plugin_process::init())
          .plugin(tauri_plugin_shell::init())
-@@ -158,7 +159,11 @@ pub fn run() {
+@@ -158,7 +158,11 @@ pub fn run() {
              }
          })
          .run(tauri::generate_context!())
