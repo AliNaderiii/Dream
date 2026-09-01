@@ -115,7 +115,7 @@ impl<R: Runtime> Bridge<R> {
         id: u64,
         method: String,
         params: Value,
-    ) -> Result<Value, BridgeError> {
+    ) -> std::result::Result<Value, BridgeError> {
         if self.state.get() != ConnectionState::Ready {
             return Err(BridgeError::not_ready());
         }
@@ -185,7 +185,7 @@ impl<R: Runtime> Bridge<R> {
 /// Look up the managed bridge and clone the `Arc` out. Returns `not_ready`
 /// when the bridge has not been initialised (e.g. on mobile, or before
 /// `init`), instead of panicking.
-fn bridge<R: Runtime>(app: &AppHandle<R>) -> Result<Arc<Bridge<R>>, BridgeError> {
+fn bridge<R: Runtime>(app: &AppHandle<R>) -> std::result::Result<Arc<Bridge<R>>, BridgeError> {
     app.try_state::<Arc<Bridge<R>>>()
         .map(|state| state.inner().clone())
         .ok_or_else(BridgeError::not_ready)
@@ -201,20 +201,22 @@ pub async fn bridge_send<R: Runtime>(
     id: u64,
     method: String,
     params: Value,
-) -> Result<Value, BridgeError> {
+) -> std::result::Result<Value, BridgeError> {
     let bridge = bridge(&app)?;
     bridge.send_request(id, method, params).await
 }
 
 /// Read the current connection state.
 #[tauri::command]
-pub fn bridge_status<R: Runtime>(app: AppHandle<R>) -> Result<ConnectionState, BridgeError> {
+pub fn bridge_status<R: Runtime>(
+    app: AppHandle<R>,
+) -> std::result::Result<ConnectionState, BridgeError> {
     Ok(bridge(&app)?.status())
 }
 
 /// Restart the sidecar.
 #[tauri::command]
-pub async fn bridge_restart<R: Runtime>(app: AppHandle<R>) -> Result<(), BridgeError> {
+pub async fn bridge_restart<R: Runtime>(app: AppHandle<R>) -> std::result::Result<(), BridgeError> {
     bridge(&app)?.restart().await;
     Ok(())
 }

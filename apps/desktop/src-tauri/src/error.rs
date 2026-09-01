@@ -256,26 +256,21 @@ impl From<serde_json::Error> for BridgeError {
     }
 }
 
-/// Wire shape expected by `src/lib/bridge/errors.ts` (`toBridgeError`).
-#[derive(Serialize)]
-struct BridgeErrorWire<'a> {
-    code: i32,
-    message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    data: Option<&'a Value>,
-}
-
 impl Serialize for BridgeError {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        BridgeErrorWire {
-            code: self.rpc_code(),
-            message: self.rpc_message(),
-            data: self.rpc_data(),
+        use serde::ser::SerializeStruct;
+        let data = self.rpc_data();
+        let field_count = if data.is_some() { 3 } else { 2 };
+        let mut state = serializer.serialize_struct("BridgeError", field_count)?;
+        state.serialize_field("code", &self.rpc_code())?;
+        state.serialize_field("message", &self.rpc_message())?;
+        if let Some(data) = data {
+            state.serialize_field("data", data)?;
         }
-        .serialize(serializer)
+        state.end()
     }
 }
 

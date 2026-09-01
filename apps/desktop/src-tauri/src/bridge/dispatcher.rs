@@ -43,7 +43,7 @@ impl Dispatcher {
     /// Reserve *id*. Returns [`BridgeError::InvalidArgument`] if it is already
     /// in flight (the bridge increments ids monotonically; a duplicate is a
     /// caller error, not a reason to take the process down).
-    pub fn register(&mut self, id: u64) -> Result<RequestChannels, BridgeError> {
+    pub fn register(&mut self, id: u64) -> std::result::Result<RequestChannels, BridgeError> {
         if self.pending.contains_key(&id) {
             return Err(BridgeError::InvalidArgument(format!(
                 "duplicate bridge request id {id}"

@@ -215,7 +215,7 @@ index 0000000..8999a56
 +
 +`Cargo.toml` / `Cargo.lock` were not changed.
 diff --git a/apps/desktop/src-tauri/src/bridge/dispatcher.rs b/apps/desktop/src-tauri/src/bridge/dispatcher.rs
-index 4efd8a2..49fde02 100644
+index 4efd8a2..e72e603 100644
 --- a/apps/desktop/src-tauri/src/bridge/dispatcher.rs
 +++ b/apps/desktop/src-tauri/src/bridge/dispatcher.rs
 @@ -10,6 +10,7 @@ use std::collections::HashMap;
@@ -236,7 +236,7 @@ index 4efd8a2..49fde02 100644
 +    /// Reserve *id*. Returns [`BridgeError::InvalidArgument`] if it is already
 +    /// in flight (the bridge increments ids monotonically; a duplicate is a
 +    /// caller error, not a reason to take the process down).
-+    pub fn register(&mut self, id: u64) -> Result<RequestChannels, BridgeError> {
++    pub fn register(&mut self, id: u64) -> std::result::Result<RequestChannels, BridgeError> {
 +        if self.pending.contains_key(&id) {
 +            return Err(BridgeError::InvalidArgument(format!(
 +                "duplicate bridge request id {id}"
@@ -320,7 +320,7 @@ index 4efd8a2..49fde02 100644
 +    }
  }
 diff --git a/apps/desktop/src-tauri/src/bridge/framing.rs b/apps/desktop/src-tauri/src/bridge/framing.rs
-index 24a52af..d45674f 100644
+index 24a52af..ad0f790 100644
 --- a/apps/desktop/src-tauri/src/bridge/framing.rs
 +++ b/apps/desktop/src-tauri/src/bridge/framing.rs
 @@ -7,6 +7,16 @@
@@ -354,7 +354,7 @@ index 24a52af..d45674f 100644
 +/// and protocol headers return a [`BridgeError`] with a reason — never the raw
 +/// line, which may contain conversation content. Valid messages keep the same
 +/// shape they always did.
-+pub fn parse(line: &str) -> Result<ParsedMessage, BridgeError> {
++pub fn parse(line: &str) -> std::result::Result<ParsedMessage, BridgeError> {
      let trimmed = line.trim();
 -    if trimmed.is_empty() {
 -        return None;
@@ -364,7 +364,7 @@ index 24a52af..d45674f 100644
 +}
 +
 +/// Parse a raw byte slice, rejecting invalid UTF-8 before JSON classification.
-+pub fn parse_bytes(bytes: &[u8]) -> Result<ParsedMessage, BridgeError> {
++pub fn parse_bytes(bytes: &[u8]) -> std::result::Result<ParsedMessage, BridgeError> {
 +    if bytes.len() > MAX_FRAME_BYTES {
 +        return Err(BridgeError::FrameTooLarge {
 +            size: bytes.len(),
@@ -379,7 +379,7 @@ index 24a52af..d45674f 100644
  
 -    // The protocol header line is emitted before JSON messages; skip it.
 +/// Reject empty, oversized, or protocol-header frames before JSON parsing.
-+fn validate_frame(trimmed: &str) -> Result<(), BridgeError> {
++fn validate_frame(trimmed: &str) -> std::result::Result<(), BridgeError> {
 +    if trimmed.is_empty() {
 +        return Err(BridgeError::MalformedFrame("empty frame".into()));
 +    }
@@ -401,7 +401,7 @@ index 24a52af..d45674f 100644
 +
 +/// Classify a decoded JSON value as a response or a notification.
 +#[allow(clippy::too_many_lines)] // result / error / notification branches
-+fn classify_message(value: Value) -> Result<ParsedMessage, BridgeError> {
++fn classify_message(value: Value) -> std::result::Result<ParsedMessage, BridgeError> {
 +    let obj = value
 +        .as_object()
 +        .ok_or_else(|| BridgeError::MalformedFrame("JSON-RPC frame must be an object".into()))?;
@@ -548,7 +548,7 @@ index 24a52af..d45674f 100644
      }
  }
 diff --git a/apps/desktop/src-tauri/src/bridge/mod.rs b/apps/desktop/src-tauri/src/bridge/mod.rs
-index 248d773..b8a4266 100644
+index 248d773..cae5dff 100644
 --- a/apps/desktop/src-tauri/src/bridge/mod.rs
 +++ b/apps/desktop/src-tauri/src/bridge/mod.rs
 @@ -15,7 +15,6 @@ use std::path::Path;
@@ -621,6 +621,15 @@ index 248d773..b8a4266 100644
  /// Owns the shared bridge components and exposes the operations the commands
  /// need. Managed directly as `Arc<Bridge<R>>` (it is `Send + Sync`).
  pub struct Bridge<R: Runtime> {
+@@ -159,7 +115,7 @@ impl<R: Runtime> Bridge<R> {
+         id: u64,
+         method: String,
+         params: Value,
+-    ) -> Result<Value, BridgeError> {
++    ) -> std::result::Result<Value, BridgeError> {
+         if self.state.get() != ConnectionState::Ready {
+             return Err(BridgeError::not_ready());
+         }
 @@ -167,7 +123,7 @@ impl<R: Runtime> Bridge<R> {
          let RequestChannels {
              final_rx,
@@ -630,8 +639,43 @@ index 248d773..b8a4266 100644
  
          // Forward stream chunks to the frontend as they arrive.
          let app = self.app.clone();
+@@ -229,7 +185,7 @@ impl<R: Runtime> Bridge<R> {
+ /// Look up the managed bridge and clone the `Arc` out. Returns `not_ready`
+ /// when the bridge has not been initialised (e.g. on mobile, or before
+ /// `init`), instead of panicking.
+-fn bridge<R: Runtime>(app: &AppHandle<R>) -> Result<Arc<Bridge<R>>, BridgeError> {
++fn bridge<R: Runtime>(app: &AppHandle<R>) -> std::result::Result<Arc<Bridge<R>>, BridgeError> {
+     app.try_state::<Arc<Bridge<R>>>()
+         .map(|state| state.inner().clone())
+         .ok_or_else(BridgeError::not_ready)
+@@ -245,20 +201,22 @@ pub async fn bridge_send<R: Runtime>(
+     id: u64,
+     method: String,
+     params: Value,
+-) -> Result<Value, BridgeError> {
++) -> std::result::Result<Value, BridgeError> {
+     let bridge = bridge(&app)?;
+     bridge.send_request(id, method, params).await
+ }
+ 
+ /// Read the current connection state.
+ #[tauri::command]
+-pub fn bridge_status<R: Runtime>(app: AppHandle<R>) -> Result<ConnectionState, BridgeError> {
++pub fn bridge_status<R: Runtime>(
++    app: AppHandle<R>,
++) -> std::result::Result<ConnectionState, BridgeError> {
+     Ok(bridge(&app)?.status())
+ }
+ 
+ /// Restart the sidecar.
+ #[tauri::command]
+-pub async fn bridge_restart<R: Runtime>(app: AppHandle<R>) -> Result<(), BridgeError> {
++pub async fn bridge_restart<R: Runtime>(app: AppHandle<R>) -> std::result::Result<(), BridgeError> {
+     bridge(&app)?.restart().await;
+     Ok(())
+ }
 diff --git a/apps/desktop/src-tauri/src/bridge/process.rs b/apps/desktop/src-tauri/src/bridge/process.rs
-index d6d9283..3381928 100644
+index d6d9283..5f9bbea 100644
 --- a/apps/desktop/src-tauri/src/bridge/process.rs
 +++ b/apps/desktop/src-tauri/src/bridge/process.rs
 @@ -25,6 +25,7 @@ use tokio::sync::{mpsc, Mutex};
@@ -648,21 +692,91 @@ index d6d9283..3381928 100644
  /// Create `{root}` and `{root}/data`, then return `root`.
 -pub(crate) fn ensure_sidecar_data_root(root: &Path) -> std::io::Result<PathBuf> {
 -    std::fs::create_dir_all(root.join("data"))?;
-+pub(crate) fn ensure_sidecar_data_root(root: &Path) -> Result<PathBuf, BridgeError> {
++pub(crate) fn ensure_sidecar_data_root(root: &Path) -> std::result::Result<PathBuf, BridgeError> {
 +    std::fs::create_dir_all(root.join("data"))
 +        .map_err(|err| BridgeError::io("create sidecar data root", err))?;
      log::info!("bridge: sidecar data root {}", root.display());
      Ok(root.to_path_buf())
  }
-@@ -326,6 +328,7 @@ enum InstanceOutcome {
- /// without `dream` installed), is skipped in favour of the next one. Only an
- /// instance that completed the handshake counts as a real sidecar, so its
- /// death goes through the restart/backoff path.
-+#[allow(clippy::too_many_lines)] // spawn, stdio, writer, and teardown are one instance lifetime
- async fn start_instance<R: Runtime>(
-     app: &tauri::AppHandle<R>,
-     state: &Arc<SharedState>,
-@@ -346,8 +349,25 @@ async fn start_instance<R: Runtime>(
+@@ -318,6 +320,77 @@ enum InstanceOutcome {
+     Hung,
+ }
+ 
++/// Log an I/O failure without embedding OS paths (see [`BridgeError::io`]).
++fn warn_bridge_io(context: &str, operation: &'static str, err: std::io::Error) {
++    log::warn!("bridge: {context}: {}", BridgeError::io(operation, err));
++}
++
++/// Kill a child we cannot use as a sidecar and wait so the PID is reaped.
++async fn abandon_child(child: &mut Child, exe: &str) {
++    if let Err(err) = child.start_kill() {
++        warn_bridge_io(
++            &format!("killing `{exe}` after stdio failure"),
++            "kill sidecar",
++            err,
++        );
++    }
++    if let Err(err) = child.wait().await {
++        warn_bridge_io(
++            &format!("waiting for `{exe}` after stdio failure"),
++            "wait for sidecar",
++            err,
++        );
++    }
++}
++
++/// Drain request lines onto sidecar stdin until the channel closes.
++async fn write_stdin_loop(mut stdin: tokio::process::ChildStdin, mut rx: mpsc::Receiver<String>) {
++    while let Some(line) = rx.recv().await {
++        if let Err(err) = stdin.write_all(line.as_bytes()).await {
++            warn_bridge_io(
++                "writing to sidecar stdin failed",
++                "write sidecar stdin",
++                err,
++            );
++            break;
++        }
++        if let Err(err) = stdin.write_all(b"\n").await {
++            warn_bridge_io(
++                "writing newline to sidecar stdin failed",
++                "write sidecar stdin newline",
++                err,
++            );
++            break;
++        }
++        if let Err(err) = stdin.flush().await {
++            warn_bridge_io("flushing sidecar stdin failed", "flush sidecar stdin", err);
++            break;
++        }
++    }
++    // Closing stdin signals EOF to the sidecar → graceful shutdown.
++    if let Err(err) = stdin.shutdown().await {
++        warn_bridge_io(
++            "shutting down sidecar stdin failed",
++            "shutdown sidecar stdin",
++            err,
++        );
++    }
++}
++
++/// Drop the stdin writer and reap the child after the reader ends.
++async fn reap_instance(child: &mut Child, writer_tx: &Arc<Mutex<Option<mpsc::Sender<String>>>>) {
++    {
++        let mut guard = writer_tx.lock().await;
++        *guard = None;
++    }
++    if let Err(err) = child.start_kill() {
++        warn_bridge_io("killing sidecar failed", "kill sidecar", err);
++    }
++    if let Err(err) = child.wait().await {
++        warn_bridge_io("waiting for sidecar exit failed", "wait for sidecar", err);
++    }
++}
++
+ /// Spawn one sidecar instance and supervise it until it ends or hangs.
+ ///
+ /// Discovery: every interpreter candidate is tried in order. A candidate that
+@@ -346,42 +419,29 @@ async fn start_instance<R: Runtime>(
          // this one stopped.
          remaining = &remaining[index + 1..];
  
@@ -672,86 +786,53 @@ index d6d9283..3381928 100644
 +            Ok(pair) => pair,
 +            Err(err) => {
 +                log::error!("bridge: `{exe}` cannot be used as a sidecar: {err}");
-+                if let Err(kill_err) = child.start_kill() {
-+                    log::warn!(
-+                        "bridge: killing `{exe}` after stdio failure: {}",
-+                        BridgeError::io("kill sidecar", kill_err)
-+                    );
-+                }
-+                if let Err(wait_err) = child.wait().await {
-+                    log::warn!(
-+                        "bridge: waiting for `{exe}` after stdio failure: {}",
-+                        BridgeError::io("wait for sidecar", wait_err)
-+                    );
-+                }
++                abandon_child(&mut child, exe).await;
 +                continue;
 +            }
 +        };
  
          // Writer task: drains the request channel and writes newline-framed lines.
-         let (tx, mut rx) = mpsc::channel::<String>(64);
-@@ -358,16 +378,35 @@ async fn start_instance<R: Runtime>(
-         let writer = tauri::async_runtime::spawn(async move {
-             let mut stdin = stdin;
-             while let Some(line) = rx.recv().await {
+-        let (tx, mut rx) = mpsc::channel::<String>(64);
++        let (tx, rx) = mpsc::channel::<String>(64);
+         {
+             let mut guard = writer_tx.lock().await;
+             *guard = Some(tx);
+         }
+-        let writer = tauri::async_runtime::spawn(async move {
+-            let mut stdin = stdin;
+-            while let Some(line) = rx.recv().await {
 -                if stdin.write_all(line.as_bytes()).await.is_err() {
-+                if let Err(err) = stdin.write_all(line.as_bytes()).await {
-+                    log::warn!(
-+                        "bridge: writing to sidecar stdin failed: {}",
-+                        BridgeError::io("write sidecar stdin", err)
-+                    );
-+                    break;
-+                }
-+                if let Err(err) = stdin.write_all(b"\n").await {
-+                    log::warn!(
-+                        "bridge: writing newline to sidecar stdin failed: {}",
-+                        BridgeError::io("write sidecar stdin newline", err)
-+                    );
-                     break;
-                 }
+-                    break;
+-                }
 -                if stdin.write_all(b"\n").await.is_err() {
-+                if let Err(err) = stdin.flush().await {
-+                    log::warn!(
-+                        "bridge: flushing sidecar stdin failed: {}",
-+                        BridgeError::io("flush sidecar stdin", err)
-+                    );
-                     break;
-                 }
+-                    break;
+-                }
 -                let _ = stdin.flush().await;
-             }
-             // Closing stdin signals EOF to the sidecar → graceful shutdown.
+-            }
+-            // Closing stdin signals EOF to the sidecar → graceful shutdown.
 -            let _ = stdin.shutdown().await;
-+            if let Err(err) = stdin.shutdown().await {
-+                log::warn!(
-+                    "bridge: shutting down sidecar stdin failed: {}",
-+                    BridgeError::io("shutdown sidecar stdin", err)
-+                );
-+            }
-         });
+-        });
++        let writer = tauri::async_runtime::spawn(write_stdin_loop(stdin, rx));
  
          let last_activity = Arc::new(Mutex::new(Instant::now()));
-@@ -380,8 +419,18 @@ async fn start_instance<R: Runtime>(
-             *guard = None;
-         }
+-        let instance = supervise_reader(app, state, dispatcher, writer_tx, stdout, &last_activity);
+-        let (outcome, reached_ready) = instance.await;
++        let (outcome, reached_ready) =
++            supervise_reader(app, state, dispatcher, writer_tx, stdout, &last_activity).await;
+ 
+-        // Tear down: kill the child if still running and drop the writer sender.
+-        {
+-            let mut guard = writer_tx.lock().await;
+-            *guard = None;
+-        }
          writer.abort();
 -        let _ = child.start_kill();
 -        let _ = child.wait().await;
-+        if let Err(err) = child.start_kill() {
-+            log::warn!(
-+                "bridge: killing sidecar failed: {}",
-+                BridgeError::io("kill sidecar", err)
-+            );
-+        }
-+        if let Err(err) = child.wait().await {
-+            log::warn!(
-+                "bridge: waiting for sidecar exit failed: {}",
-+                BridgeError::io("wait for sidecar", err)
-+            );
-+        }
++        reap_instance(&mut child, writer_tx).await;
  
          if reached_ready {
              log::info!("bridge: instance running under `{exe}` ended ({outcome:?})");
-@@ -403,15 +452,45 @@ where
+@@ -403,12 +463,102 @@ where
      for (index, candidate) in candidates.iter().enumerate() {
          match probe(candidate) {
              Ok(item) => return Some((index, candidate.as_str(), item)),
@@ -773,7 +854,7 @@ index d6d9283..3381928 100644
 +/// interpreter.
 +pub(crate) fn take_piped_stdio(
 +    child: &mut Child,
-+) -> Result<(tokio::process::ChildStdin, ChildStdout), BridgeError> {
++) -> std::result::Result<(tokio::process::ChildStdin, ChildStdout), BridgeError> {
 +    require_piped_stdio(child.stdin.take(), child.stdout.take())
 +}
 +
@@ -782,7 +863,7 @@ index d6d9283..3381928 100644
 +pub(crate) fn require_piped_stdio<I, O>(
 +    stdin: Option<I>,
 +    stdout: Option<O>,
-+) -> Result<(I, O), BridgeError> {
++) -> std::result::Result<(I, O), BridgeError> {
 +    let stdin = stdin
 +        .ok_or_else(|| BridgeError::SidecarCrashed("sidecar spawned without piped stdin".into()))?;
 +    let stdout = stdout.ok_or_else(|| {
@@ -791,17 +872,105 @@ index d6d9283..3381928 100644
 +    Ok((stdin, stdout))
 +}
 +
++/// Heartbeat watchdog: ping every 5 s; if no traffic for 15 s, flag a hang.
++async fn heartbeat_watchdog(
++    writer_tx: Arc<Mutex<Option<mpsc::Sender<String>>>>,
++    last_activity: Arc<Mutex<Instant>>,
++    hung: Arc<std::sync::atomic::AtomicBool>,
++) {
++    let mut seq: u64 = 1_000_000; // heartbeat ids live above frontend ids
++    loop {
++        tokio::time::sleep(HEARTBEAT_INTERVAL).await;
++        // Send a ping through the writer. The ping id is not registered with
++        // the dispatcher, so its response is dropped — but reading it still
++        // refreshes `last_activity`, proving the sidecar is responsive.
++        // Clone the sender out of the guard before awaiting the send.
++        let tx = writer_tx.lock().await.as_ref().cloned();
++        if let Some(tx) = tx {
++            let line = framing::request_line(seq, "health.check", &json!({}));
++            let _ = tx.send(line).await;
++            seq += 1;
++        }
++        let stale = {
++            let last = *last_activity.lock().await;
++            last.elapsed() > HEARTBEAT_TIMEOUT
++        };
++        if stale {
++            hung.store(true, std::sync::atomic::Ordering::Release);
++            return;
++        }
++    }
++}
++
++/// Route one stdout line: handshake, JSON-RPC response, or stream chunk.
++async fn handle_stdout_line<R: Runtime>(
++    app: &tauri::AppHandle<R>,
++    state: &Arc<SharedState>,
++    dispatcher: &Arc<Mutex<Dispatcher>>,
++    line: &str,
++    reached_ready: &mut bool,
++) {
++    if line.starts_with("DREAM-PROTOCOL:") {
++        set_state(app, state, ConnectionState::Ready);
++        *reached_ready = true;
++        return;
++    }
++
++    match framing::parse(line) {
++        Ok(ParsedMessage::Response { id, outcome }) => {
++            dispatcher.lock().await.resolve(id, outcome);
++        }
++        Ok(ParsedMessage::Notification { method, params }) => {
++            if method == "stream.chunk" {
++                if let Some(id) = params.get("id").and_then(|v| v.as_u64()) {
++                    dispatcher.lock().await.route_stream(id, params);
++                }
++            }
++        }
++        Err(err) => {
++            log::debug!("bridge: skipping unparseable line: {err}");
++        }
++    }
++}
++
  /// Read stdout until EOF, routing messages to the dispatcher. Returns `Hung`
  /// if the heartbeat watchdog fired (it kills the child via the returned signal),
  /// plus whether the protocol handshake (`DREAM-PROTOCOL:`) was ever seen.
-+#[allow(clippy::too_many_lines)] // heartbeat watchdog plus the stdout read/classify loop
- async fn supervise_reader<R: Runtime>(
-     app: &tauri::AppHandle<R>,
-     state: &Arc<SharedState>,
-@@ -453,31 +532,44 @@ async fn supervise_reader<R: Runtime>(
-         }
-     });
+@@ -422,61 +572,27 @@ async fn supervise_reader<R: Runtime>(
+ ) -> (InstanceOutcome, bool) {
+     let mut reader = BufReader::new(stdout).lines();
+     let hung = Arc::new(std::sync::atomic::AtomicBool::new(false));
+-    let hung_clone = Arc::clone(&hung);
+     let mut reached_ready = false;
  
+-    // Heartbeat watchdog: ping every 5 s; if no traffic for 15 s, flag a hang.
+-    let writer_hb = Arc::clone(writer_tx);
+-    let last_hb = Arc::clone(last_activity);
+-    let heartbeat = tauri::async_runtime::spawn(async move {
+-        let mut seq: u64 = 1_000_000; // heartbeat ids live above frontend ids
+-        loop {
+-            tokio::time::sleep(HEARTBEAT_INTERVAL).await;
+-            // Send a ping through the writer. The ping id is not registered with
+-            // the dispatcher, so its response is dropped — but reading it still
+-            // refreshes `last_activity`, proving the sidecar is responsive.
+-            // Clone the sender out of the guard before awaiting the send.
+-            let tx = writer_hb.lock().await.as_ref().cloned();
+-            if let Some(tx) = tx {
+-                let line = framing::request_line(seq, "health.check", &json!({}));
+-                let _ = tx.send(line).await;
+-                seq += 1;
+-            }
+-            let stale = {
+-                let last = *last_hb.lock().await;
+-                last.elapsed() > HEARTBEAT_TIMEOUT
+-            };
+-            if stale {
+-                hung_clone.store(true, std::sync::atomic::Ordering::Release);
+-                return;
+-            }
+-        }
+-    });
+-
 -    // Reader loop.
 -    while let Ok(Some(line)) = reader.next_line().await {
 -        *last_activity.lock().await = Instant::now();
@@ -811,19 +980,11 @@ index d6d9283..3381928 100644
 -            reached_ready = true;
 -            continue;
 -        }
-+    // Reader loop. I/O and UTF-8 failures are logged and treated as instance
-+    // death (the supervisor restarts); malformed JSON-RPC is skipped with
-+    // context so a single bad line cannot take the sidecar down.
-+    loop {
-+        match reader.next_line().await {
-+            Ok(Some(line)) => {
-+                *last_activity.lock().await = Instant::now();
-+
-+                if line.starts_with("DREAM-PROTOCOL:") {
-+                    set_state(app, state, ConnectionState::Ready);
-+                    reached_ready = true;
-+                    continue;
-+                }
++    let heartbeat = tauri::async_runtime::spawn(heartbeat_watchdog(
++        Arc::clone(writer_tx),
++        Arc::clone(last_activity),
++        Arc::clone(&hung),
++    ));
  
 -        let Some(parsed) = framing::parse(&line) else {
 -            log::debug!("bridge: skipping unparseable line");
@@ -832,39 +993,29 @@ index d6d9283..3381928 100644
 -        match parsed {
 -            ParsedMessage::Response { id, outcome } => {
 -                dispatcher.lock().await.resolve(id, outcome);
--            }
++    // Reader loop. I/O and UTF-8 failures are logged and treated as instance
++    // death (the supervisor restarts); malformed JSON-RPC is skipped with
++    // context so a single bad line cannot take the sidecar down.
++    loop {
++        match reader.next_line().await {
++            Ok(Some(line)) => {
++                *last_activity.lock().await = Instant::now();
++                handle_stdout_line(app, state, dispatcher, &line, &mut reached_ready).await;
+             }
 -            ParsedMessage::Notification { method, params } => {
 -                if method == "stream.chunk" {
 -                    if let Some(id) = params.get("id").and_then(|v| v.as_u64()) {
 -                        dispatcher.lock().await.route_stream(id, params);
-+                match framing::parse(&line) {
-+                    Ok(ParsedMessage::Response { id, outcome }) => {
-+                        dispatcher.lock().await.resolve(id, outcome);
-+                    }
-+                    Ok(ParsedMessage::Notification { method, params }) => {
-+                        if method == "stream.chunk" {
-+                            if let Some(id) = params.get("id").and_then(|v| v.as_u64()) {
-+                                dispatcher.lock().await.route_stream(id, params);
-+                            }
-+                        }
-+                    }
-+                    Err(err) => {
-+                        log::debug!("bridge: skipping unparseable line: {err}");
-                     }
-                 }
-             }
+-                    }
+-                }
 +            Ok(None) => break,
 +            Err(err) => {
-+                log::warn!(
-+                    "bridge: failed reading sidecar stdout: {}",
-+                    BridgeError::io("read sidecar stdout", err)
-+                );
++                warn_bridge_io("failed reading sidecar stdout", "read sidecar stdout", err);
 +                break;
-+            }
+             }
          }
      }
- 
-@@ -543,7 +635,12 @@ fn spawn(config: &SidecarConfig, exe: &str) -> std::io::Result<Child> {
+@@ -543,7 +659,12 @@ fn spawn(config: &SidecarConfig, exe: &str) -> std::io::Result<Child> {
          cmd.env(key, value);
      }
      if let Some(root) = &config.data_root {
@@ -878,7 +1029,7 @@ index d6d9283..3381928 100644
          cmd.current_dir(root);
      }
      cmd.spawn()
-@@ -927,4 +1024,22 @@ mod tests {
+@@ -927,4 +1048,22 @@ mod tests {
          assert_eq!(got, root);
          assert!(root.join("data").is_dir());
      }
@@ -902,7 +1053,7 @@ index d6d9283..3381928 100644
 +    }
  }
 diff --git a/apps/desktop/src-tauri/src/error.rs b/apps/desktop/src-tauri/src/error.rs
-index e738ba5..b05b99b 100644
+index e738ba5..518d2cb 100644
 --- a/apps/desktop/src-tauri/src/error.rs
 +++ b/apps/desktop/src-tauri/src/error.rs
 @@ -1,11 +1,21 @@
@@ -932,7 +1083,7 @@ index e738ba5..b05b99b 100644
  
  /// Every failure mode a Dream desktop command can surface to the frontend.
  #[derive(Debug, thiserror::Error)]
-@@ -48,5 +58,365 @@ impl Serialize for Error {
+@@ -48,5 +58,360 @@ impl Serialize for Error {
      }
  }
  
@@ -1135,26 +1286,21 @@ index e738ba5..b05b99b 100644
 +    }
 +}
 +
-+/// Wire shape expected by `src/lib/bridge/errors.ts` (`toBridgeError`).
-+#[derive(Serialize)]
-+struct BridgeErrorWire<'a> {
-+    code: i32,
-+    message: String,
-+    #[serde(skip_serializing_if = "Option::is_none")]
-+    data: Option<&'a Value>,
-+}
-+
 +impl Serialize for BridgeError {
-+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
++    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
 +    where
 +        S: Serializer,
 +    {
-+        BridgeErrorWire {
-+            code: self.rpc_code(),
-+            message: self.rpc_message(),
-+            data: self.rpc_data(),
++        use serde::ser::SerializeStruct;
++        let data = self.rpc_data();
++        let field_count = if data.is_some() { 3 } else { 2 };
++        let mut state = serializer.serialize_struct("BridgeError", field_count)?;
++        state.serialize_field("code", &self.rpc_code())?;
++        state.serialize_field("message", &self.rpc_message())?;
++        if let Some(data) = data {
++            state.serialize_field("data", data)?;
 +        }
-+        .serialize(serializer)
++        state.end()
 +    }
 +}
 +

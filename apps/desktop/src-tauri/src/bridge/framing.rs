@@ -78,7 +78,7 @@ pub fn error_response(id: Option<u64>, code: i32, message: &str, data: Option<Va
 /// and protocol headers return a [`BridgeError`] with a reason — never the raw
 /// line, which may contain conversation content. Valid messages keep the same
 /// shape they always did.
-pub fn parse(line: &str) -> Result<ParsedMessage, BridgeError> {
+pub fn parse(line: &str) -> std::result::Result<ParsedMessage, BridgeError> {
     let trimmed = line.trim();
     validate_frame(trimmed)?;
     let value: Value = serde_json::from_str(trimmed)?;
@@ -86,7 +86,7 @@ pub fn parse(line: &str) -> Result<ParsedMessage, BridgeError> {
 }
 
 /// Parse a raw byte slice, rejecting invalid UTF-8 before JSON classification.
-pub fn parse_bytes(bytes: &[u8]) -> Result<ParsedMessage, BridgeError> {
+pub fn parse_bytes(bytes: &[u8]) -> std::result::Result<ParsedMessage, BridgeError> {
     if bytes.len() > MAX_FRAME_BYTES {
         return Err(BridgeError::FrameTooLarge {
             size: bytes.len(),
@@ -99,7 +99,7 @@ pub fn parse_bytes(bytes: &[u8]) -> Result<ParsedMessage, BridgeError> {
 }
 
 /// Reject empty, oversized, or protocol-header frames before JSON parsing.
-fn validate_frame(trimmed: &str) -> Result<(), BridgeError> {
+fn validate_frame(trimmed: &str) -> std::result::Result<(), BridgeError> {
     if trimmed.is_empty() {
         return Err(BridgeError::MalformedFrame("empty frame".into()));
     }
@@ -119,7 +119,7 @@ fn validate_frame(trimmed: &str) -> Result<(), BridgeError> {
 
 /// Classify a decoded JSON value as a response or a notification.
 #[allow(clippy::too_many_lines)] // result / error / notification branches
-fn classify_message(value: Value) -> Result<ParsedMessage, BridgeError> {
+fn classify_message(value: Value) -> std::result::Result<ParsedMessage, BridgeError> {
     let obj = value
         .as_object()
         .ok_or_else(|| BridgeError::MalformedFrame("JSON-RPC frame must be an object".into()))?;
