@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::bridge::framing::Outcome;
+use crate::error::BridgeError;
 
 /// One in-flight request: a oneshot for its final outcome and a sink for
 /// `stream.chunk` notifications addressed to it.
@@ -26,6 +27,7 @@ pub struct Dispatcher {
 }
 
 /// What `register` returns: the receiver ends the caller awaits.
+#[derive(Debug)]
 pub struct RequestChannels {
     /// Resolves with the final result or structured error.
     pub final_rx: oneshot::Receiver<Outcome>,
@@ -39,23 +41,26 @@ impl Dispatcher {
         Self::default()
     }
 
-    /// Reserve *id*. Panics if it is already in flight (the bridge guarantees
-    /// unique ids; a duplicate is a programmer error worth surfacing loudly).
-    pub fn register(&mut self, id: u64) -> RequestChannels {
+    /// Reserve *id*. Returns [`BridgeError::invalid_argument`] if it is already
+    /// in flight (the bridge increments ids monotonically; a duplicate is a
+    /// caller error, not a reason to take the process down).
+    pub fn register(&mut self, id: u64) -> std::result::Result<RequestChannels, BridgeError> {
+        if self.pending.contains_key(&id) {
+            return Err(BridgeError::invalid_argument(format!(
+                "duplicate bridge request id {id}"
+            )));
+        }
         let (final_tx, final_rx) = oneshot::channel();
         let (stream_tx, stream_rx) = mpsc::unbounded_channel();
         let request = PendingRequest {
             final_tx: Some(final_tx),
             stream_tx: Some(stream_tx),
         };
-        if self.pending.insert(id, request).is_some() {
-            // Re-insert would be a logic bug; the bridge increments ids monotonically.
-            panic!("duplicate bridge request id {id}");
-        }
-        RequestChannels {
+        self.pending.insert(id, request);
+        Ok(RequestChannels {
             final_rx,
             stream_rx,
-        }
+        })
     }
 
     /// Deliver a stream chunk to the request with this id, if any. Returns
@@ -122,7 +127,7 @@ mod tests {
         let RequestChannels {
             final_rx,
             mut stream_rx,
-        } = d.register(1);
+        } = d.register(1).expect("register");
         assert!(d.route_stream(1, json!({"token": "hi"})));
         // The chunk is buffered and readable.
         assert_eq!(stream_rx.recv().await.unwrap()["token"], "hi");
@@ -153,7 +158,7 @@ mod tests {
         let RequestChannels {
             final_rx,
             mut stream_rx,
-        } = d.register(7);
+        } = d.register(7).expect("register");
         drop(final_rx);
         d.resolve(7, Outcome::Result(json!(null)));
         // After resolve, the stream sender is dropped → recv returns None.
@@ -163,8 +168,8 @@ mod tests {
     #[test]
     fn register_tracks_count() {
         let mut d = Dispatcher::new();
-        let _ = d.register(1);
-        let _ = d.register(2);
+        d.register(1).expect("register 1");
+        d.register(2).expect("register 2");
         assert_eq!(d.len(), 2);
         d.resolve(1, Outcome::Result(json!(null)));
         assert_eq!(d.len(), 1);
@@ -173,8 +178,8 @@ mod tests {
     #[tokio::test]
     async fn fail_all_rejects_every_pending_request() {
         let mut d = Dispatcher::new();
-        let RequestChannels { final_rx: r1, .. } = d.register(1);
-        let RequestChannels { final_rx: r2, .. } = d.register(2);
+        let RequestChannels { final_rx: r1, .. } = d.register(1).expect("register 1");
+        let RequestChannels { final_rx: r2, .. } = d.register(2).expect("register 2");
         d.fail_all(code::INTERNAL_ERROR, "sidecar restarted");
         for rx in [r1, r2] {
             match rx.await.unwrap() {
@@ -183,5 +188,17 @@ mod tests {
             }
         }
         assert!(d.is_empty());
+    }
+
+    #[test]
+    fn register_duplicate_id_returns_error_instead_of_panicking() {
+        let mut d = Dispatcher::new();
+        d.register(1).expect("first register");
+        let err = d.register(1).expect_err("duplicate id must fail");
+        assert!(
+            err.message.contains("duplicate"),
+            "expected invalid-argument duplicate, got {err:?}"
+        );
+        assert_eq!(d.len(), 1, "the original registration must stay in place");
     }
 }

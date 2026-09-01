@@ -7,6 +7,16 @@
 
 use serde_json::{json, Value};
 
+use crate::error::BridgeError;
+
+/// Maximum accepted size of a single newline-delimited frame, in bytes.
+///
+/// Oversized frames are rejected rather than parsed so a runaway sidecar
+/// cannot force unbounded allocation in the shell. 16 MiB comfortably covers
+/// conversation payloads and tool results without accepting multi-hundred-MB
+/// blobs.
+pub const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
+
 /// Numeric error codes, kept in lock-step with `dream/bridge/errors.py`.
 pub mod code {
     pub const PARSE_ERROR: i32 = -32700;
@@ -62,43 +72,74 @@ pub fn error_response(id: Option<u64>, code: i32, message: &str, data: Option<Va
     json!({"jsonrpc": "2.0", "id": id, "error": error})
 }
 
-/// Parse one stdout line into a [`ParsedMessage`], or `None` if it is not a
-/// recognised JSON-RPC 2.0 message (the caller logs and skips it).
-#[allow(clippy::too_many_lines)] // classification is inherently branchy
-pub fn parse(line: &str) -> Option<ParsedMessage> {
+/// Parse one stdout line into a [`ParsedMessage`].
+///
+/// Malformed frames, invalid JSON, missing JSON-RPC fields, oversized messages
+/// and protocol headers return a [`BridgeError`] with a reason — never the raw
+/// line, which may contain conversation content. Valid messages keep the same
+/// shape they always did.
+pub fn parse(line: &str) -> std::result::Result<ParsedMessage, BridgeError> {
     let trimmed = line.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    let value: Value = serde_json::from_str(trimmed).ok()?;
+    validate_frame(trimmed)?;
+    let value: Value = serde_json::from_str(trimmed)?;
+    classify_message(value)
+}
 
-    // The protocol header line is emitted before JSON messages; skip it.
-    if trimmed.starts_with("DREAM-PROTOCOL:") {
-        return None;
+/// Parse a raw byte slice, rejecting invalid UTF-8 before JSON classification.
+pub fn parse_bytes(bytes: &[u8]) -> std::result::Result<ParsedMessage, BridgeError> {
+    if bytes.len() > MAX_FRAME_BYTES {
+        return Err(BridgeError::frame_too_large(bytes.len(), MAX_FRAME_BYTES));
     }
-    let obj = value.as_object()?;
+    let line = std::str::from_utf8(bytes)
+        .map_err(|_| BridgeError::malformed("frame is not valid UTF-8"))?;
+    parse(line)
+}
+
+/// Reject empty, oversized, or protocol-header frames before JSON parsing.
+fn validate_frame(trimmed: &str) -> std::result::Result<(), BridgeError> {
+    if trimmed.is_empty() {
+        return Err(BridgeError::malformed("empty frame"));
+    }
+    if trimmed.len() > MAX_FRAME_BYTES {
+        return Err(BridgeError::frame_too_large(trimmed.len(), MAX_FRAME_BYTES));
+    }
+    if trimmed.starts_with("DREAM-PROTOCOL:") {
+        return Err(BridgeError::malformed(
+            "protocol header is not a JSON-RPC message",
+        ));
+    }
+    Ok(())
+}
+
+/// Classify a decoded JSON value as a response or a notification.
+#[allow(clippy::too_many_lines)] // result / error / notification branches
+fn classify_message(value: Value) -> std::result::Result<ParsedMessage, BridgeError> {
+    let obj = value
+        .as_object()
+        .ok_or_else(|| BridgeError::malformed("JSON-RPC frame must be an object"))?;
 
     let id = obj.get("id").and_then(id_as_u64);
 
     // A response carries a result or an error alongside an id.
     if let Some(result) = obj.get("result").cloned() {
-        let id = id?;
-        return Some(ParsedMessage::Response {
+        let id = id.ok_or_else(|| BridgeError::malformed("response is missing a numeric id"))?;
+        return Ok(ParsedMessage::Response {
             id,
             outcome: Outcome::Result(result),
         });
     }
     if let Some(error) = obj.get("error").cloned() {
-        let id = id?;
+        let id =
+            id.ok_or_else(|| BridgeError::malformed("error response is missing a numeric id"))?;
         let err_code = error.get("code").and_then(Value::as_i64);
-        let err_code = err_code.unwrap_or(code::INTERNAL_ERROR as i64) as i32;
+        let err_code = err_code.unwrap_or(i64::from(code::INTERNAL_ERROR)) as i32;
         let message = error
             .get("message")
             .and_then(Value::as_str)
             .unwrap_or("error")
             .to_string();
         let data = error.get("data").cloned();
-        return Some(ParsedMessage::Response {
+        return Ok(ParsedMessage::Response {
             id,
             outcome: Outcome::Error {
                 code: err_code,
@@ -109,9 +150,13 @@ pub fn parse(line: &str) -> Option<ParsedMessage> {
     }
 
     // Otherwise it must be a notification: a `method` with optional `params`.
-    let method = obj.get("method").and_then(Value::as_str)?.to_string();
-    let params = obj.get("params").cloned().unwrap_or(Value::Null);
-    Some(ParsedMessage::Notification { method, params })
+    let method = obj
+        .get("method")
+        .and_then(Value::as_str)
+        .ok_or_else(|| BridgeError::malformed("message is missing result, error, or method"))?
+        .to_string();
+    let params = obj.get("params").cloned().unwrap_or_default();
+    Ok(ParsedMessage::Notification { method, params })
 }
 
 /// Coerce a JSON id (number or string) into a `u64`, if possible.
@@ -180,12 +225,27 @@ mod tests {
     }
 
     #[test]
-    fn parse_skips_header_blank_and_garbage() {
-        assert!(parse("DREAM-PROTOCOL: 1.0").is_none());
-        assert!(parse("").is_none());
-        assert!(parse("   ").is_none());
-        assert!(parse("not json").is_none());
-        assert!(parse(r#"{"no":"method"}"#).is_none());
+    fn parse_rejects_header_blank_and_garbage() {
+        assert!(parse("DREAM-PROTOCOL: 1.0").is_err());
+        assert!(parse("").is_err());
+        assert!(parse("   ").is_err());
+        assert!(parse("not json").is_err());
+        assert!(parse(r#"{"no":"method"}"#).is_err());
+        let empty = parse("").unwrap_err();
+        assert!(
+            empty.message.contains("empty"),
+            "expected empty-frame error, got {empty:?}"
+        );
+        let garbage = parse("not json").unwrap_err();
+        assert!(
+            garbage.message.starts_with("JSON error:"),
+            "incomplete JSON must surface as JSON error, got {garbage:?}"
+        );
+        let missing = parse(r#"{"no":"method"}"#).unwrap_err();
+        assert!(
+            missing.message.contains("malformed frame"),
+            "expected malformed frame, got {missing:?}"
+        );
     }
 
     #[test]
@@ -201,7 +261,56 @@ mod tests {
 
     #[test]
     fn parse_drops_non_numeric_string_id() {
-        // A non-numeric id cannot be matched to a pending request, so it is dropped.
-        assert!(parse(r#"{"jsonrpc":"2.0","id":"abc","result":1}"#).is_none());
+        // A non-numeric id cannot be matched to a pending request.
+        let err = parse(r#"{"jsonrpc":"2.0","id":"abc","result":1}"#).unwrap_err();
+        assert!(
+            err.message.contains("numeric id"),
+            "expected missing-numeric-id error, got {err}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_invalid_json_with_serde_error() {
+        let err = parse("{\"jsonrpc\":").unwrap_err();
+        assert!(
+            err.message.starts_with("JSON error:"),
+            "incomplete JSON must surface as JSON error, got {err:?}"
+        );
+        assert!(err.to_string().starts_with("JSON error:"));
+        // The reason must not echo the raw (possibly sensitive) frame.
+        assert!(!err.to_string().contains("jsonrpc"));
+    }
+
+    #[test]
+    fn parse_rejects_oversized_frame() {
+        let oversized = "x".repeat(MAX_FRAME_BYTES + 1);
+        let err = parse(&oversized).unwrap_err();
+        assert_eq!(err.code, code::PARSE_ERROR);
+        assert!(
+            err.message.contains(&(MAX_FRAME_BYTES + 1).to_string()),
+            "oversize message should mention the observed size, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_bytes_rejects_invalid_utf8() {
+        let err = parse_bytes(&[0xff, 0xfe, 0xfd]).unwrap_err();
+        assert!(
+            err.message.contains("UTF-8"),
+            "expected UTF-8 error, got {err}"
+        );
+    }
+
+    #[test]
+    fn parse_bytes_accepts_valid_response() {
+        let line = br#"{"jsonrpc":"2.0","id":1,"result":true}"#;
+        let msg = parse_bytes(line).unwrap();
+        match msg {
+            ParsedMessage::Response { id, outcome } => {
+                assert_eq!(id, 1);
+                assert!(matches!(outcome, Outcome::Result(Value::Bool(true))));
+            }
+            _ => panic!("expected response"),
+        }
     }
 }

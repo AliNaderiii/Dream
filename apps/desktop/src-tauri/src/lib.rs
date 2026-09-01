@@ -24,9 +24,9 @@ use crate::state::AppState;
 
 /// Builds and runs the Tauri application.
 ///
-/// # Panics
-/// Panics only if the Tauri context itself cannot be initialised, which indicates
-/// a corrupt bundle rather than a recoverable runtime condition.
+/// If the Tauri context cannot be initialised (a corrupt bundle rather than a
+/// recoverable runtime condition) the process prints the error and exits with
+/// status 1 instead of panicking.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[allow(unused_mut)]
@@ -54,7 +54,7 @@ pub fn run() {
             );
     }
 
-    builder
+    if let Err(error) = builder
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
@@ -158,7 +158,11 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running Dream desktop application");
+    {
+        // The log plugin may not be alive if initialisation itself failed.
+        eprintln!("error while running Dream desktop application: {error}");
+        std::process::exit(1);
+    }
 }
 
 /// Full application teardown shared by every quit path (window close with

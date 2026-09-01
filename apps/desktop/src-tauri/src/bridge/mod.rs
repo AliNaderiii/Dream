@@ -15,7 +15,6 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::Mutex;
@@ -32,56 +31,13 @@ pub mod framing;
 pub mod process;
 pub mod state;
 
+/// Re-export the typed bridge error so command signatures stay
+/// `Result<T, bridge::BridgeError>` while the definition lives in `error.rs`.
+pub use crate::error::BridgeError;
+
 /// Events emitted to the frontend.
 const CHUNK_EVENT: &str = "bridge://chunk";
 const STATE_EVENT: &str = "bridge://state";
-
-/// A structured bridge error, serialised to `{ code, message, data? }` for the
-/// frontend so it can branch on taxonomy (`src/lib/bridge/errors.ts`).
-#[derive(Debug, Serialize)]
-pub struct BridgeError {
-    pub code: i32,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>,
-}
-
-impl BridgeError {
-    /// Wrap a structured RPC error from the sidecar.
-    pub fn rpc(code: i32, message: String, data: Option<Value>) -> Self {
-        Self {
-            code,
-            message,
-            data,
-        }
-    }
-
-    /// The sidecar is not connected / not yet ready.
-    pub fn not_ready() -> Self {
-        Self {
-            code: framing::code::INTERNAL_ERROR,
-            message: "bridge is not connected".to_string(),
-            data: None,
-        }
-    }
-
-    /// An internal bridge failure (channel closed, etc.).
-    pub fn internal(message: &str) -> Self {
-        Self {
-            code: framing::code::INTERNAL_ERROR,
-            message: message.to_string(),
-            data: None,
-        }
-    }
-}
-
-impl std::fmt::Display for BridgeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "bridge error {}: {}", self.code, self.message)
-    }
-}
-
-impl std::error::Error for BridgeError {}
 
 /// Owns the shared bridge components and exposes the operations the commands
 /// need. Managed directly as `Arc<Bridge<R>>` (it is `Send + Sync`).
@@ -159,7 +115,7 @@ impl<R: Runtime> Bridge<R> {
         id: u64,
         method: String,
         params: Value,
-    ) -> Result<Value, BridgeError> {
+    ) -> std::result::Result<Value, BridgeError> {
         if self.state.get() != ConnectionState::Ready {
             return Err(BridgeError::not_ready());
         }
@@ -167,7 +123,7 @@ impl<R: Runtime> Bridge<R> {
         let RequestChannels {
             final_rx,
             stream_rx,
-        } = self.dispatcher.lock().await.register(id);
+        } = self.dispatcher.lock().await.register(id)?;
 
         // Forward stream chunks to the frontend as they arrive.
         let app = self.app.clone();
@@ -229,7 +185,7 @@ impl<R: Runtime> Bridge<R> {
 /// Look up the managed bridge and clone the `Arc` out. Returns `not_ready`
 /// when the bridge has not been initialised (e.g. on mobile, or before
 /// `init`), instead of panicking.
-fn bridge<R: Runtime>(app: &AppHandle<R>) -> Result<Arc<Bridge<R>>, BridgeError> {
+fn bridge<R: Runtime>(app: &AppHandle<R>) -> std::result::Result<Arc<Bridge<R>>, BridgeError> {
     app.try_state::<Arc<Bridge<R>>>()
         .map(|state| state.inner().clone())
         .ok_or_else(BridgeError::not_ready)
@@ -245,20 +201,22 @@ pub async fn bridge_send<R: Runtime>(
     id: u64,
     method: String,
     params: Value,
-) -> Result<Value, BridgeError> {
+) -> std::result::Result<Value, BridgeError> {
     let bridge = bridge(&app)?;
     bridge.send_request(id, method, params).await
 }
 
 /// Read the current connection state.
 #[tauri::command]
-pub fn bridge_status<R: Runtime>(app: AppHandle<R>) -> Result<ConnectionState, BridgeError> {
+pub fn bridge_status<R: Runtime>(
+    app: AppHandle<R>,
+) -> std::result::Result<ConnectionState, BridgeError> {
     Ok(bridge(&app)?.status())
 }
 
 /// Restart the sidecar.
 #[tauri::command]
-pub async fn bridge_restart<R: Runtime>(app: AppHandle<R>) -> Result<(), BridgeError> {
+pub async fn bridge_restart<R: Runtime>(app: AppHandle<R>) -> std::result::Result<(), BridgeError> {
     bridge(&app)?.restart().await;
     Ok(())
 }
