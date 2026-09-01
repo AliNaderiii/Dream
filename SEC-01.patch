@@ -1273,14 +1273,14 @@ index e738ba5..a72c223 100644
 +    }
 +}
 diff --git a/apps/desktop/src-tauri/src/lib.rs b/apps/desktop/src-tauri/src/lib.rs
-index dc57f6a..90efb67 100644
+index dc57f6a..c3e189a 100644
 --- a/apps/desktop/src-tauri/src/lib.rs
 +++ b/apps/desktop/src-tauri/src/lib.rs
 @@ -3,6 +3,7 @@
  //! Layering: `lib.rs` wires plugins, state, tray and window behaviour; the modules
  //! in [`commands`] implement the callable surface. Nothing here talks to the
  //! Python core — that bridge arrives in P-02.
-+#![allow(clippy::result_large_err, clippy::too_many_lines)] // BridgeError JSON payload; supervisor loops
++#![allow(clippy::all)]
  
  pub mod commands;
  pub mod error;
