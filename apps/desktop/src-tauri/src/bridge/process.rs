@@ -25,6 +25,7 @@ use tokio::sync::{mpsc, Mutex};
 use crate::bridge::dispatcher::Dispatcher;
 use crate::bridge::framing::{self, code, ParsedMessage};
 use crate::bridge::state::{ConnectionState, SharedState};
+use crate::error::BridgeError;
 
 /// How the sidecar binary is launched.
 #[derive(Clone, Debug)]
@@ -240,8 +241,9 @@ pub(crate) fn sidecar_data_root() -> PathBuf {
 }
 
 /// Create `{root}` and `{root}/data`, then return `root`.
-pub(crate) fn ensure_sidecar_data_root(root: &Path) -> std::io::Result<PathBuf> {
-    std::fs::create_dir_all(root.join("data"))?;
+pub(crate) fn ensure_sidecar_data_root(root: &Path) -> Result<PathBuf, BridgeError> {
+    std::fs::create_dir_all(root.join("data"))
+        .map_err(|err| BridgeError::io("create sidecar data root", err))?;
     log::info!("bridge: sidecar data root {}", root.display());
     Ok(root.to_path_buf())
 }
@@ -346,8 +348,25 @@ async fn start_instance<R: Runtime>(
         // this one stopped.
         remaining = &remaining[index + 1..];
 
-        let stdin = child.stdin.take().expect("piped stdin");
-        let stdout = child.stdout.take().expect("piped stdout");
+        let (stdin, stdout) = match take_piped_stdio(&mut child) {
+            Ok(pair) => pair,
+            Err(err) => {
+                log::error!("bridge: `{exe}` cannot be used as a sidecar: {err}");
+                if let Err(kill_err) = child.start_kill() {
+                    log::warn!(
+                        "bridge: killing `{exe}` after stdio failure: {}",
+                        BridgeError::io("kill sidecar", kill_err)
+                    );
+                }
+                if let Err(wait_err) = child.wait().await {
+                    log::warn!(
+                        "bridge: waiting for `{exe}` after stdio failure: {}",
+                        BridgeError::io("wait for sidecar", wait_err)
+                    );
+                }
+                continue;
+            }
+        };
 
         // Writer task: drains the request channel and writes newline-framed lines.
         let (tx, mut rx) = mpsc::channel::<String>(64);
@@ -358,16 +377,35 @@ async fn start_instance<R: Runtime>(
         let writer = tauri::async_runtime::spawn(async move {
             let mut stdin = stdin;
             while let Some(line) = rx.recv().await {
-                if stdin.write_all(line.as_bytes()).await.is_err() {
+                if let Err(err) = stdin.write_all(line.as_bytes()).await {
+                    log::warn!(
+                        "bridge: writing to sidecar stdin failed: {}",
+                        BridgeError::io("write sidecar stdin", err)
+                    );
                     break;
                 }
-                if stdin.write_all(b"\n").await.is_err() {
+                if let Err(err) = stdin.write_all(b"\n").await {
+                    log::warn!(
+                        "bridge: writing newline to sidecar stdin failed: {}",
+                        BridgeError::io("write sidecar stdin newline", err)
+                    );
                     break;
                 }
-                let _ = stdin.flush().await;
+                if let Err(err) = stdin.flush().await {
+                    log::warn!(
+                        "bridge: flushing sidecar stdin failed: {}",
+                        BridgeError::io("flush sidecar stdin", err)
+                    );
+                    break;
+                }
             }
             // Closing stdin signals EOF to the sidecar → graceful shutdown.
-            let _ = stdin.shutdown().await;
+            if let Err(err) = stdin.shutdown().await {
+                log::warn!(
+                    "bridge: shutting down sidecar stdin failed: {}",
+                    BridgeError::io("shutdown sidecar stdin", err)
+                );
+            }
         });
 
         let last_activity = Arc::new(Mutex::new(Instant::now()));
@@ -380,8 +418,18 @@ async fn start_instance<R: Runtime>(
             *guard = None;
         }
         writer.abort();
-        let _ = child.start_kill();
-        let _ = child.wait().await;
+        if let Err(err) = child.start_kill() {
+            log::warn!(
+                "bridge: killing sidecar failed: {}",
+                BridgeError::io("kill sidecar", err)
+            );
+        }
+        if let Err(err) = child.wait().await {
+            log::warn!(
+                "bridge: waiting for sidecar exit failed: {}",
+                BridgeError::io("wait for sidecar", err)
+            );
+        }
 
         if reached_ready {
             log::info!("bridge: instance running under `{exe}` ended ({outcome:?})");
@@ -403,10 +451,39 @@ where
     for (index, candidate) in candidates.iter().enumerate() {
         match probe(candidate) {
             Ok(item) => return Some((index, candidate.as_str(), item)),
-            Err(err) => log::warn!("bridge: failed to spawn `{candidate}`: {err}"),
+            Err(err) => log::warn!(
+                "bridge: failed to spawn `{candidate}`: {}",
+                BridgeError::io("spawn sidecar", err)
+            ),
         }
     }
     None
+}
+
+/// Take the piped stdin/stdout handles from a just-spawned child.
+///
+/// `Command` is constructed with `Stdio::piped()`, so both handles should be
+/// present. If they are missing the child is unusable as a sidecar; return a
+/// typed error instead of panicking so the supervisor can try the next
+/// interpreter.
+pub(crate) fn take_piped_stdio(
+    child: &mut Child,
+) -> Result<(tokio::process::ChildStdin, ChildStdout), BridgeError> {
+    require_piped_stdio(child.stdin.take(), child.stdout.take())
+}
+
+/// Map optional stdio handles to a typed error. Extracted so the missing-pipe
+/// path can be unit-tested without spawning a process.
+pub(crate) fn require_piped_stdio<I, O>(
+    stdin: Option<I>,
+    stdout: Option<O>,
+) -> Result<(I, O), BridgeError> {
+    let stdin = stdin
+        .ok_or_else(|| BridgeError::SidecarCrashed("sidecar spawned without piped stdin".into()))?;
+    let stdout = stdout.ok_or_else(|| {
+        BridgeError::SidecarCrashed("sidecar spawned without piped stdout".into())
+    })?;
+    Ok((stdin, stdout))
 }
 
 /// Read stdout until EOF, routing messages to the dispatcher. Returns `Hung`
@@ -453,30 +530,43 @@ async fn supervise_reader<R: Runtime>(
         }
     });
 
-    // Reader loop.
-    while let Ok(Some(line)) = reader.next_line().await {
-        *last_activity.lock().await = Instant::now();
+    // Reader loop. I/O and UTF-8 failures are logged and treated as instance
+    // death (the supervisor restarts); malformed JSON-RPC is skipped with
+    // context so a single bad line cannot take the sidecar down.
+    loop {
+        match reader.next_line().await {
+            Ok(Some(line)) => {
+                *last_activity.lock().await = Instant::now();
 
-        if line.starts_with("DREAM-PROTOCOL:") {
-            set_state(app, state, ConnectionState::Ready);
-            reached_ready = true;
-            continue;
-        }
+                if line.starts_with("DREAM-PROTOCOL:") {
+                    set_state(app, state, ConnectionState::Ready);
+                    reached_ready = true;
+                    continue;
+                }
 
-        let Some(parsed) = framing::parse(&line) else {
-            log::debug!("bridge: skipping unparseable line");
-            continue;
-        };
-        match parsed {
-            ParsedMessage::Response { id, outcome } => {
-                dispatcher.lock().await.resolve(id, outcome);
-            }
-            ParsedMessage::Notification { method, params } => {
-                if method == "stream.chunk" {
-                    if let Some(id) = params.get("id").and_then(|v| v.as_u64()) {
-                        dispatcher.lock().await.route_stream(id, params);
+                match framing::parse(&line) {
+                    Ok(ParsedMessage::Response { id, outcome }) => {
+                        dispatcher.lock().await.resolve(id, outcome);
+                    }
+                    Ok(ParsedMessage::Notification { method, params }) => {
+                        if method == "stream.chunk" {
+                            if let Some(id) = params.get("id").and_then(|v| v.as_u64()) {
+                                dispatcher.lock().await.route_stream(id, params);
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        log::debug!("bridge: skipping unparseable line: {err}");
                     }
                 }
+            }
+            Ok(None) => break,
+            Err(err) => {
+                log::warn!(
+                    "bridge: failed reading sidecar stdout: {}",
+                    BridgeError::io("read sidecar stdout", err)
+                );
+                break;
             }
         }
     }
@@ -543,7 +633,12 @@ fn spawn(config: &SidecarConfig, exe: &str) -> std::io::Result<Child> {
         cmd.env(key, value);
     }
     if let Some(root) = &config.data_root {
-        let _ = std::fs::create_dir_all(root.join("data"));
+        if let Err(err) = std::fs::create_dir_all(root.join("data")) {
+            log::warn!(
+                "bridge: could not create sidecar data directory: {}",
+                BridgeError::io("create sidecar data root", err)
+            );
+        }
         cmd.current_dir(root);
     }
     cmd.spawn()
@@ -926,5 +1021,23 @@ mod tests {
         let got = ensure_sidecar_data_root(&root).expect("create");
         assert_eq!(got, root);
         assert!(root.join("data").is_dir());
+    }
+
+    #[test]
+    fn missing_piped_stdio_returns_error_instead_of_panicking() {
+        let err = require_piped_stdio::<i32, i32>(None, Some(1)).expect_err("stdin");
+        assert!(
+            matches!(err, BridgeError::SidecarCrashed(ref msg) if msg.contains("stdin")),
+            "expected SidecarCrashed for missing stdin, got {err:?}"
+        );
+
+        let err = require_piped_stdio::<i32, i32>(Some(1), None).expect_err("stdout");
+        assert!(
+            matches!(err, BridgeError::SidecarCrashed(ref msg) if msg.contains("stdout")),
+            "expected SidecarCrashed for missing stdout, got {err:?}"
+        );
+
+        let (stdin, stdout) = require_piped_stdio(Some(1), Some(2)).expect("both present");
+        assert_eq!((stdin, stdout), (1, 2));
     }
 }

@@ -15,7 +15,6 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::Mutex;
@@ -32,56 +31,13 @@ pub mod framing;
 pub mod process;
 pub mod state;
 
+/// Re-export the typed bridge error so command signatures stay
+/// `Result<T, bridge::BridgeError>` while the definition lives in `error.rs`.
+pub use crate::error::BridgeError;
+
 /// Events emitted to the frontend.
 const CHUNK_EVENT: &str = "bridge://chunk";
 const STATE_EVENT: &str = "bridge://state";
-
-/// A structured bridge error, serialised to `{ code, message, data? }` for the
-/// frontend so it can branch on taxonomy (`src/lib/bridge/errors.ts`).
-#[derive(Debug, Serialize)]
-pub struct BridgeError {
-    pub code: i32,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>,
-}
-
-impl BridgeError {
-    /// Wrap a structured RPC error from the sidecar.
-    pub fn rpc(code: i32, message: String, data: Option<Value>) -> Self {
-        Self {
-            code,
-            message,
-            data,
-        }
-    }
-
-    /// The sidecar is not connected / not yet ready.
-    pub fn not_ready() -> Self {
-        Self {
-            code: framing::code::INTERNAL_ERROR,
-            message: "bridge is not connected".to_string(),
-            data: None,
-        }
-    }
-
-    /// An internal bridge failure (channel closed, etc.).
-    pub fn internal(message: &str) -> Self {
-        Self {
-            code: framing::code::INTERNAL_ERROR,
-            message: message.to_string(),
-            data: None,
-        }
-    }
-}
-
-impl std::fmt::Display for BridgeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "bridge error {}: {}", self.code, self.message)
-    }
-}
-
-impl std::error::Error for BridgeError {}
 
 /// Owns the shared bridge components and exposes the operations the commands
 /// need. Managed directly as `Arc<Bridge<R>>` (it is `Send + Sync`).
@@ -167,7 +123,7 @@ impl<R: Runtime> Bridge<R> {
         let RequestChannels {
             final_rx,
             stream_rx,
-        } = self.dispatcher.lock().await.register(id);
+        } = self.dispatcher.lock().await.register(id)?;
 
         // Forward stream chunks to the frontend as they arrive.
         let app = self.app.clone();
