@@ -40,12 +40,12 @@ impl Dispatcher {
         Self::default()
     }
 
-    /// Reserve *id*. Returns [`BridgeError::InvalidArgument`] if it is already
+    /// Reserve *id*. Returns [`BridgeError::invalid_argument`] if it is already
     /// in flight (the bridge increments ids monotonically; a duplicate is a
     /// caller error, not a reason to take the process down).
     pub fn register(&mut self, id: u64) -> std::result::Result<RequestChannels, BridgeError> {
         if self.pending.contains_key(&id) {
-            return Err(BridgeError::InvalidArgument(format!(
+            return Err(BridgeError::invalid_argument(format!(
                 "duplicate bridge request id {id}"
             )));
         }
@@ -195,8 +195,8 @@ mod tests {
         d.register(1).expect("first register");
         let err = d.register(1).expect_err("duplicate id must fail");
         assert!(
-            matches!(err, BridgeError::InvalidArgument(ref msg) if msg.contains("duplicate")),
-            "expected InvalidArgument, got {err:?}"
+            err.message.contains("duplicate"),
+            "expected invalid-argument duplicate, got {err:?}"
         );
         assert_eq!(d.len(), 1, "the original registration must stay in place");
     }

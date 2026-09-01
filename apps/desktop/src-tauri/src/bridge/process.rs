@@ -490,11 +490,10 @@ pub(crate) fn require_piped_stdio<I, O>(
     stdin: Option<I>,
     stdout: Option<O>,
 ) -> std::result::Result<(I, O), BridgeError> {
-    let stdin = stdin
-        .ok_or_else(|| BridgeError::SidecarCrashed("sidecar spawned without piped stdin".into()))?;
-    let stdout = stdout.ok_or_else(|| {
-        BridgeError::SidecarCrashed("sidecar spawned without piped stdout".into())
-    })?;
+    let stdin =
+        stdin.ok_or_else(|| BridgeError::sidecar_crashed("sidecar spawned without piped stdin"))?;
+    let stdout = stdout
+        .ok_or_else(|| BridgeError::sidecar_crashed("sidecar spawned without piped stdout"))?;
     Ok((stdin, stdout))
 }
 
@@ -1053,14 +1052,14 @@ mod tests {
     fn missing_piped_stdio_returns_error_instead_of_panicking() {
         let err = require_piped_stdio::<i32, i32>(None, Some(1)).expect_err("stdin");
         assert!(
-            matches!(err, BridgeError::SidecarCrashed(ref msg) if msg.contains("stdin")),
-            "expected SidecarCrashed for missing stdin, got {err:?}"
+            err.message.contains("stdin"),
+            "expected missing-stdin crash, got {err:?}"
         );
 
         let err = require_piped_stdio::<i32, i32>(Some(1), None).expect_err("stdout");
         assert!(
-            matches!(err, BridgeError::SidecarCrashed(ref msg) if msg.contains("stdout")),
-            "expected SidecarCrashed for missing stdout, got {err:?}"
+            err.message.contains("stdout"),
+            "expected missing-stdout crash, got {err:?}"
         );
 
         let (stdin, stdout) = require_piped_stdio(Some(1), Some(2)).expect("both present");

@@ -50,7 +50,7 @@ pub enum Error {
 }
 
 impl Serialize for Error {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -70,115 +70,35 @@ const RPC_INTERNAL_ERROR: i32 = -32603;
 /// Dream `auth error`.
 const RPC_AUTH_ERROR: i32 = -32002;
 
-/// Typed failure for every recoverable bridge/sidecar operation.
+/// Structured failure for every recoverable bridge/sidecar operation.
 ///
-/// Variants are chosen to match the actual failure classes of the stdio
-/// supervisor: I/O on pipes, JSON framing, missing interpreters, crashed
-/// children, bad arguments, timeouts, and permission failures. [`Self::Other`]
-/// is the fallback for internal coordination failures (closed oneshot, missing
-/// writer) that do not fit a more specific variant; its message must never
-/// include secrets or filesystem paths.
-#[derive(Debug)]
-pub enum BridgeError {
-    /// An I/O operation failed. Only the operation name and [`std::io::ErrorKind`]
-    /// are retained so the original `Display` (which often embeds local paths)
-    /// never reaches the frontend.
-    Io {
-        /// Short name of the failed operation (`spawn sidecar`, `write stdin`, …).
-        operation: &'static str,
-        /// OS error class without path or argument details.
-        kind: std::io::ErrorKind,
-    },
-
-    /// JSON serialisation or deserialisation failed.
-    Serde(serde_json::Error),
-
-    /// A required process or interpreter could not be found.
-    ProcessNotFound(String),
-
-    /// The sidecar process exited, lost its pipes, or otherwise became unusable.
-    SidecarCrashed(String),
-
-    /// A caller-supplied argument was invalid (duplicate request id, …).
-    InvalidArgument(String),
-
-    /// An operation exceeded its deadline.
-    Timeout(Duration),
-
-    /// The OS denied an operation (spawn, create directory, …).
-    PermissionDenied(String),
-
-    /// The sidecar is not connected, or the stdin writer channel is gone.
-    NotReady,
-
-    /// Structured JSON-RPC error forwarded from the sidecar. `data` is passed
-    /// through unchanged (the Python core owns that object); Rust-constructed
-    /// errors always set `data` to `None`.
-    Rpc {
-        /// JSON-RPC error code.
-        code: i32,
-        /// Human-readable message from the sidecar.
-        message: String,
-        /// Optional structured payload (`approval_id`, …).
-        data: Option<Value>,
-    },
-
-    /// A newline-delimited frame was empty, not an object, missing required
-    /// JSON-RPC fields, or not valid UTF-8. The stored string is a reason, never
-    /// the raw frame (frames may contain conversation content).
-    MalformedFrame(String),
-
-    /// A single frame exceeded [`crate::bridge::framing::MAX_FRAME_BYTES`].
-    FrameTooLarge {
-        /// Observed frame size in bytes.
-        size: usize,
-        /// Configured maximum.
-        max: usize,
-    },
-
-    /// Catch-all for internal bridge failures that do not fit a more specific
-    /// variant. Justified because oneshot/channel closures and unexpected
-    /// supervisor states are real, recoverable conditions, but they are not I/O,
-    /// JSON, or process-lifecycle errors. Messages must stay free of secrets.
-    Other(String),
+/// Constructors map I/O, JSON, process, argument, timeout and permission
+/// failures onto JSON-RPC `{ code, message, data? }` so the frontend can keep
+/// branching in `src/lib/bridge/errors.ts`. Messages never include secrets,
+/// API keys, command arguments, or raw filesystem paths.
+#[derive(Debug, Serialize)]
+pub struct BridgeError {
+    /// JSON-RPC error code.
+    pub code: i32,
+    /// Human-readable message. Rust-constructed values never embed paths.
+    pub message: String,
+    /// Optional structured payload (`approval_id`, …). Omitted when `None`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<Value>,
 }
 
 impl fmt::Display for BridgeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io { operation, kind } => {
-                write!(f, "I/O error during {operation}: {kind:?}")
-            }
-            Self::Serde(err) => write!(f, "JSON error: {err}"),
-            Self::ProcessNotFound(name) => write!(f, "process not found: {name}"),
-            Self::SidecarCrashed(reason) => write!(f, "sidecar crashed: {reason}"),
-            Self::InvalidArgument(reason) => write!(f, "invalid argument: {reason}"),
-            Self::Timeout(duration) => write!(f, "operation timed out after {duration:?}"),
-            Self::PermissionDenied(reason) => write!(f, "permission denied: {reason}"),
-            Self::NotReady => write!(f, "bridge is not connected"),
-            Self::Rpc { code, message, .. } => write!(f, "RPC error {code}: {message}"),
-            Self::MalformedFrame(reason) => write!(f, "malformed frame: {reason}"),
-            Self::FrameTooLarge { size, max } => {
-                write!(f, "frame of {size} bytes exceeds the {max} byte limit")
-            }
-            Self::Other(reason) => write!(f, "bridge error: {reason}"),
-        }
+        write!(f, "{}", self.message)
     }
 }
 
-impl std::error::Error for BridgeError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Serde(err) => Some(err),
-            _ => None,
-        }
-    }
-}
+impl std::error::Error for BridgeError {}
 
 impl BridgeError {
     /// Wrap a structured RPC error from the sidecar.
     pub fn rpc(code: i32, message: String, data: Option<Value>) -> Self {
-        Self::Rpc {
+        Self {
             code,
             message,
             data,
@@ -187,60 +107,91 @@ impl BridgeError {
 
     /// The sidecar is not connected / not yet ready.
     pub fn not_ready() -> Self {
-        Self::NotReady
+        Self {
+            code: RPC_INTERNAL_ERROR,
+            message: "bridge is not connected".to_string(),
+            data: None,
+        }
     }
 
     /// An internal bridge failure (channel closed, etc.).
     pub fn internal(message: &str) -> Self {
-        Self::Other(message.to_string())
+        Self {
+            code: RPC_INTERNAL_ERROR,
+            message: message.to_string(),
+            data: None,
+        }
     }
 
     /// Convert an I/O error for a named operation without embedding paths.
     pub fn io(operation: &'static str, err: std::io::Error) -> Self {
         match err.kind() {
-            std::io::ErrorKind::NotFound => Self::ProcessNotFound(operation.to_string()),
-            std::io::ErrorKind::PermissionDenied => Self::PermissionDenied(operation.to_string()),
-            kind => Self::Io { operation, kind },
+            std::io::ErrorKind::NotFound => Self {
+                code: RPC_INTERNAL_ERROR,
+                message: format!("process not found: {operation}"),
+                data: None,
+            },
+            std::io::ErrorKind::PermissionDenied => Self {
+                code: RPC_AUTH_ERROR,
+                message: format!("permission denied: {operation}"),
+                data: None,
+            },
+            kind => Self {
+                code: RPC_INTERNAL_ERROR,
+                message: format!("I/O error during {operation}: {kind:?}"),
+                data: None,
+            },
+        }
+    }
+
+    /// Missing pipes / unusable child.
+    pub fn sidecar_crashed(reason: impl Into<String>) -> Self {
+        Self {
+            code: RPC_INTERNAL_ERROR,
+            message: format!("sidecar crashed: {}", reason.into()),
+            data: None,
+        }
+    }
+
+    /// Duplicate request id or other caller error.
+    pub fn invalid_argument(reason: impl Into<String>) -> Self {
+        Self {
+            code: RPC_INVALID_PARAMS,
+            message: format!("invalid argument: {}", reason.into()),
+            data: None,
+        }
+    }
+
+    /// Framing reason only — never the raw frame.
+    pub fn malformed(reason: impl Into<String>) -> Self {
+        Self {
+            code: RPC_PARSE_ERROR,
+            message: format!("malformed frame: {}", reason.into()),
+            data: None,
+        }
+    }
+
+    /// A single frame exceeded [`crate::bridge::framing::MAX_FRAME_BYTES`].
+    pub fn frame_too_large(size: usize, max: usize) -> Self {
+        Self {
+            code: RPC_PARSE_ERROR,
+            message: format!("frame of {size} bytes exceeds the {max} byte limit"),
+            data: None,
+        }
+    }
+
+    /// Explicit deadline (heartbeat still restarts the sidecar).
+    pub fn timeout(duration: Duration) -> Self {
+        Self {
+            code: RPC_INTERNAL_ERROR,
+            message: format!("operation timed out after {duration:?}"),
+            data: None,
         }
     }
 
     /// JSON-RPC numeric code used when this error crosses the Tauri boundary.
     pub fn rpc_code(&self) -> i32 {
-        match self {
-            Self::Rpc { code, .. } => *code,
-            Self::Serde(_) | Self::MalformedFrame(_) | Self::FrameTooLarge { .. } => {
-                RPC_PARSE_ERROR
-            }
-            Self::InvalidArgument(_) => RPC_INVALID_PARAMS,
-            Self::PermissionDenied(_) => RPC_AUTH_ERROR,
-            Self::NotReady
-            | Self::Io { .. }
-            | Self::ProcessNotFound(_)
-            | Self::SidecarCrashed(_)
-            | Self::Timeout(_)
-            | Self::Other(_) => RPC_INTERNAL_ERROR,
-        }
-    }
-
-    /// Frontend-facing message. RPC errors keep the sidecar text; other
-    /// variants use their [`Display`] form, except [`Self::Other`] which
-    /// preserves the inner string so existing `internal(...)` payloads stay
-    /// stable (`"sidecar closed"`, not `"bridge error: sidecar closed"`).
-    pub fn rpc_message(&self) -> String {
-        match self {
-            Self::Rpc { message, .. } => message.clone(),
-            Self::Other(message) => message.clone(),
-            Self::NotReady => "bridge is not connected".to_string(),
-            other => other.to_string(),
-        }
-    }
-
-    /// Optional structured payload. Only sidecar RPC errors carry `data`.
-    pub fn rpc_data(&self) -> Option<&Value> {
-        match self {
-            Self::Rpc { data, .. } => data.as_ref(),
-            _ => None,
-        }
+        self.code
     }
 }
 
@@ -252,25 +203,11 @@ impl From<std::io::Error> for BridgeError {
 
 impl From<serde_json::Error> for BridgeError {
     fn from(err: serde_json::Error) -> Self {
-        Self::Serde(err)
-    }
-}
-
-impl Serialize for BridgeError {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let data = self.rpc_data();
-        let field_count = if data.is_some() { 3 } else { 2 };
-        let mut state = serializer.serialize_struct("BridgeError", field_count)?;
-        state.serialize_field("code", &self.rpc_code())?;
-        state.serialize_field("message", &self.rpc_message())?;
-        if let Some(data) = data {
-            state.serialize_field("data", data)?;
+        Self {
+            code: RPC_PARSE_ERROR,
+            message: format!("JSON error: {err}"),
+            data: None,
         }
-        state.end()
     }
 }
 
@@ -282,26 +219,35 @@ mod tests {
     #[test]
     fn display_representative_variants() {
         assert_eq!(
-            BridgeError::ProcessNotFound("python3".into()).to_string(),
+            BridgeError {
+                code: RPC_INTERNAL_ERROR,
+                message: "process not found: python3".into(),
+                data: None,
+            }
+            .to_string(),
             "process not found: python3"
         );
         assert_eq!(
-            BridgeError::SidecarCrashed("missing piped stdin".into()).to_string(),
+            BridgeError::sidecar_crashed("missing piped stdin").to_string(),
             "sidecar crashed: missing piped stdin"
         );
         assert_eq!(
-            BridgeError::InvalidArgument("duplicate bridge request id 7".into()).to_string(),
+            BridgeError::invalid_argument("duplicate bridge request id 7").to_string(),
             "invalid argument: duplicate bridge request id 7"
         );
         assert_eq!(
-            BridgeError::PermissionDenied("create sidecar data root".into()).to_string(),
+            BridgeError::io(
+                "create sidecar data root",
+                std::io::Error::new(std::io::ErrorKind::PermissionDenied, "/etc/shadow"),
+            )
+            .to_string(),
             "permission denied: create sidecar data root"
         );
         assert_eq!(
             BridgeError::not_ready().to_string(),
             "bridge is not connected"
         );
-        let timed_out = BridgeError::Timeout(Duration::from_secs(15)).to_string();
+        let timed_out = BridgeError::timeout(Duration::from_secs(15)).to_string();
         assert!(
             timed_out.contains("timed out"),
             "timeout display should mention the condition, got {timed_out}"
@@ -320,14 +266,12 @@ mod tests {
         );
         let err = BridgeError::from(io);
         let displayed = err.to_string();
-        match err {
-            BridgeError::Io { operation, kind } => {
-                assert_eq!(operation, "bridge I/O");
-                assert_eq!(kind, std::io::ErrorKind::BrokenPipe);
-            }
-            other => panic!("expected Io variant, got {other:?}"),
-        }
+        assert_eq!(err.code, RPC_INTERNAL_ERROR);
         assert!(displayed.contains("BrokenPipe") || displayed.contains("broken pipe"));
+        assert!(
+            displayed.contains("bridge I/O"),
+            "I/O display should name the operation, got {displayed}"
+        );
         assert!(
             !displayed.contains("alice"),
             "I/O display must not leak a home-directory path: {displayed}"
@@ -344,17 +288,14 @@ mod tests {
             "spawn sidecar",
             std::io::Error::new(std::io::ErrorKind::NotFound, "/usr/bin/python3"),
         );
-        assert!(matches!(
-            missing,
-            BridgeError::ProcessNotFound(ref op) if op == "spawn sidecar"
-        ));
+        assert_eq!(missing.message, "process not found: spawn sidecar");
         assert!(!missing.to_string().contains("/usr/bin"));
 
         let denied = BridgeError::from(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
             "/etc/shadow",
         ));
-        assert!(matches!(denied, BridgeError::PermissionDenied(_)));
+        assert_eq!(denied.code, RPC_AUTH_ERROR);
         assert!(!denied.to_string().contains("shadow"));
         assert_eq!(denied.rpc_code(), RPC_AUTH_ERROR);
     }
@@ -363,10 +304,7 @@ mod tests {
     fn from_serde_json_error() {
         let serde_err = serde_json::from_str::<Value>("{\"oops\":").unwrap_err();
         let err = BridgeError::from(serde_err);
-        assert!(
-            matches!(err, BridgeError::Serde(_)),
-            "expected Serde variant, got {err:?}"
-        );
+        assert_eq!(err.code, RPC_PARSE_ERROR);
         let displayed = err.to_string();
         assert!(
             displayed.starts_with("JSON error:"),
@@ -401,11 +339,11 @@ mod tests {
 
     #[test]
     fn malformed_and_oversize_frames_use_parse_error_code() {
-        let malformed = BridgeError::MalformedFrame("empty frame".into());
+        let malformed = BridgeError::malformed("empty frame");
         assert_eq!(malformed.rpc_code(), RPC_PARSE_ERROR);
         assert!(malformed.to_string().contains("empty frame"));
 
-        let oversized = BridgeError::FrameTooLarge { size: 99, max: 10 };
+        let oversized = BridgeError::frame_too_large(99, 10);
         assert_eq!(oversized.rpc_code(), RPC_PARSE_ERROR);
         let json = serde_json::to_value(&oversized).expect("serialize frame too large");
         assert_eq!(json["code"], RPC_PARSE_ERROR);

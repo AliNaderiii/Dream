@@ -88,30 +88,24 @@ pub fn parse(line: &str) -> std::result::Result<ParsedMessage, BridgeError> {
 /// Parse a raw byte slice, rejecting invalid UTF-8 before JSON classification.
 pub fn parse_bytes(bytes: &[u8]) -> std::result::Result<ParsedMessage, BridgeError> {
     if bytes.len() > MAX_FRAME_BYTES {
-        return Err(BridgeError::FrameTooLarge {
-            size: bytes.len(),
-            max: MAX_FRAME_BYTES,
-        });
+        return Err(BridgeError::frame_too_large(bytes.len(), MAX_FRAME_BYTES));
     }
     let line = std::str::from_utf8(bytes)
-        .map_err(|_| BridgeError::MalformedFrame("frame is not valid UTF-8".into()))?;
+        .map_err(|_| BridgeError::malformed("frame is not valid UTF-8"))?;
     parse(line)
 }
 
 /// Reject empty, oversized, or protocol-header frames before JSON parsing.
 fn validate_frame(trimmed: &str) -> std::result::Result<(), BridgeError> {
     if trimmed.is_empty() {
-        return Err(BridgeError::MalformedFrame("empty frame".into()));
+        return Err(BridgeError::malformed("empty frame"));
     }
     if trimmed.len() > MAX_FRAME_BYTES {
-        return Err(BridgeError::FrameTooLarge {
-            size: trimmed.len(),
-            max: MAX_FRAME_BYTES,
-        });
+        return Err(BridgeError::frame_too_large(trimmed.len(), MAX_FRAME_BYTES));
     }
     if trimmed.starts_with("DREAM-PROTOCOL:") {
-        return Err(BridgeError::MalformedFrame(
-            "protocol header is not a JSON-RPC message".into(),
+        return Err(BridgeError::malformed(
+            "protocol header is not a JSON-RPC message",
         ));
     }
     Ok(())
@@ -122,24 +116,21 @@ fn validate_frame(trimmed: &str) -> std::result::Result<(), BridgeError> {
 fn classify_message(value: Value) -> std::result::Result<ParsedMessage, BridgeError> {
     let obj = value
         .as_object()
-        .ok_or_else(|| BridgeError::MalformedFrame("JSON-RPC frame must be an object".into()))?;
+        .ok_or_else(|| BridgeError::malformed("JSON-RPC frame must be an object"))?;
 
     let id = obj.get("id").and_then(id_as_u64);
 
     // A response carries a result or an error alongside an id.
     if let Some(result) = obj.get("result").cloned() {
-        let id = id.ok_or_else(|| {
-            BridgeError::MalformedFrame("response is missing a numeric id".into())
-        })?;
+        let id = id.ok_or_else(|| BridgeError::malformed("response is missing a numeric id"))?;
         return Ok(ParsedMessage::Response {
             id,
             outcome: Outcome::Result(result),
         });
     }
     if let Some(error) = obj.get("error").cloned() {
-        let id = id.ok_or_else(|| {
-            BridgeError::MalformedFrame("error response is missing a numeric id".into())
-        })?;
+        let id =
+            id.ok_or_else(|| BridgeError::malformed("error response is missing a numeric id"))?;
         let err_code = error.get("code").and_then(Value::as_i64);
         let err_code = err_code.unwrap_or(i64::from(code::INTERNAL_ERROR)) as i32;
         let message = error
@@ -162,9 +153,7 @@ fn classify_message(value: Value) -> std::result::Result<ParsedMessage, BridgeEr
     let method = obj
         .get("method")
         .and_then(Value::as_str)
-        .ok_or_else(|| {
-            BridgeError::MalformedFrame("message is missing result, error, or method".into())
-        })?
+        .ok_or_else(|| BridgeError::malformed("message is missing result, error, or method"))?
         .to_string();
     let params = obj.get("params").cloned().unwrap_or_default();
     Ok(ParsedMessage::Notification { method, params })
@@ -242,15 +231,21 @@ mod tests {
         assert!(parse("   ").is_err());
         assert!(parse("not json").is_err());
         assert!(parse(r#"{"no":"method"}"#).is_err());
-        assert!(matches!(
-            parse(""),
-            Err(BridgeError::MalformedFrame(ref reason)) if reason.contains("empty")
-        ));
-        assert!(matches!(parse("not json"), Err(BridgeError::Serde(_))));
-        assert!(matches!(
-            parse(r#"{"no":"method"}"#),
-            Err(BridgeError::MalformedFrame(_))
-        ));
+        let empty = parse("").unwrap_err();
+        assert!(
+            empty.message.contains("empty"),
+            "expected empty-frame error, got {empty:?}"
+        );
+        let garbage = parse("not json").unwrap_err();
+        assert!(
+            garbage.message.starts_with("JSON error:"),
+            "incomplete JSON must surface as JSON error, got {garbage:?}"
+        );
+        let missing = parse(r#"{"no":"method"}"#).unwrap_err();
+        assert!(
+            missing.message.contains("malformed frame"),
+            "expected malformed frame, got {missing:?}"
+        );
     }
 
     #[test]
@@ -269,7 +264,7 @@ mod tests {
         // A non-numeric id cannot be matched to a pending request.
         let err = parse(r#"{"jsonrpc":"2.0","id":"abc","result":1}"#).unwrap_err();
         assert!(
-            matches!(err, BridgeError::MalformedFrame(ref reason) if reason.contains("numeric id")),
+            err.message.contains("numeric id"),
             "expected missing-numeric-id error, got {err}"
         );
     }
@@ -278,8 +273,8 @@ mod tests {
     fn parse_rejects_invalid_json_with_serde_error() {
         let err = parse("{\"jsonrpc\":").unwrap_err();
         assert!(
-            matches!(err, BridgeError::Serde(_)),
-            "incomplete JSON must surface as Serde, got {err:?}"
+            err.message.starts_with("JSON error:"),
+            "incomplete JSON must surface as JSON error, got {err:?}"
         );
         assert!(err.to_string().starts_with("JSON error:"));
         // The reason must not echo the raw (possibly sensitive) frame.
@@ -290,20 +285,18 @@ mod tests {
     fn parse_rejects_oversized_frame() {
         let oversized = "x".repeat(MAX_FRAME_BYTES + 1);
         let err = parse(&oversized).unwrap_err();
-        match err {
-            BridgeError::FrameTooLarge { size, max } => {
-                assert_eq!(size, MAX_FRAME_BYTES + 1);
-                assert_eq!(max, MAX_FRAME_BYTES);
-            }
-            other => panic!("expected FrameTooLarge, got {other:?}"),
-        }
+        assert_eq!(err.code, code::PARSE_ERROR);
+        assert!(
+            err.message.contains(&(MAX_FRAME_BYTES + 1).to_string()),
+            "oversize message should mention the observed size, got {err:?}"
+        );
     }
 
     #[test]
     fn parse_bytes_rejects_invalid_utf8() {
         let err = parse_bytes(&[0xff, 0xfe, 0xfd]).unwrap_err();
         assert!(
-            matches!(err, BridgeError::MalformedFrame(ref reason) if reason.contains("UTF-8")),
+            err.message.contains("UTF-8"),
             "expected UTF-8 error, got {err}"
         );
     }
