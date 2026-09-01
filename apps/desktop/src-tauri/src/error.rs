@@ -82,7 +82,7 @@ pub enum BridgeError {
     /// An I/O operation failed. Only the operation name and [`std::io::ErrorKind`]
     /// are retained so the original `Display` (which often embeds local paths)
     /// never reaches the frontend.
-    #[error("I/O error during {operation}: {kind}")]
+    #[error("I/O error during {operation}: {kind:?}")]
     Io {
         /// Short name of the failed operation (`spawn sidecar`, `write stdin`, …).
         operation: &'static str,

@@ -888,7 +888,7 @@ index d6d9283..52d38e3 100644
 +    }
  }
 diff --git a/apps/desktop/src-tauri/src/error.rs b/apps/desktop/src-tauri/src/error.rs
-index e738ba5..96fd4a8 100644
+index e738ba5..ce01848 100644
 --- a/apps/desktop/src-tauri/src/error.rs
 +++ b/apps/desktop/src-tauri/src/error.rs
 @@ -1,11 +1,20 @@
@@ -947,7 +947,7 @@ index e738ba5..96fd4a8 100644
 +    /// An I/O operation failed. Only the operation name and [`std::io::ErrorKind`]
 +    /// are retained so the original `Display` (which often embeds local paths)
 +    /// never reaches the frontend.
-+    #[error("I/O error during {operation}: {kind}")]
++    #[error("I/O error during {operation}: {kind:?}")]
 +    Io {
 +        /// Short name of the failed operation (`spawn sidecar`, `write stdin`, …).
 +        operation: &'static str,
