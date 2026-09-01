@@ -11,6 +11,7 @@ import { RotateCcw, TriangleAlert } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { i18n } from '@/lib/i18n';
+import { log } from '@/lib/logger';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -30,8 +31,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
-    // Forwarded to the Rust log plugin via the console bridge.
-    console.error('[dream] render error:', error, info.componentStack);
+    // The component stack is truncated and redacted by the logger before it
+    // reaches the console sink.
+    log.error('render error', error, { componentStack: info.componentStack });
   }
 
   private reset = (): void => {
