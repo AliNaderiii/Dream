@@ -146,21 +146,41 @@ rg -n 'panic!|unimplemented!' src -g '*.rs'
 
 **Result:** every remaining match is inside `#[cfg(test)]` modules or `src/tests.rs`. Production-only classification of the same patterns: **0 matches**. `unimplemented!()` : **0 matches** anywhere.
 
+### Clippy exit 101 — exact rustc diagnostic
+
+Desktop CI run `33561282985` on `c16e21d` failed Clippy on Ubuntu/macOS/Windows (exit 101) after `rustfmt` passed. GitHub Actions job logs were not downloadable here (Azure blob TLS EOF); check-run annotations only showed `Process completed with exit code 101`.
+
+The same rustc error was reproduced locally by `cargo check --tests` of `error.rs` + `framing.rs` + `dispatcher.rs` against serde_json 1.0.151 and tokio 1.53.1 (Tauri crate not required for this module):
+
+```text
+error[E0277]: `dispatcher::RequestChannels` doesn't implement `Debug`
+   --> src/dispatcher.rs:196:33
+    |
+196 |         let err = d.register(1).expect_err("duplicate id must fail");
+    |                                 ^^^^^^^^^^ `dispatcher::RequestChannels` cannot be formatted using `{:?}`
+    |
+    = help: the trait `Debug` is not implemented for `dispatcher::RequestChannels`
+note: required by a bound in `std::result::Result::<T, E>::expect_err`
+```
+
+**Root cause:** SEC-01 changed `Dispatcher::register` from returning `RequestChannels` to `Result<RequestChannels, BridgeError>` and added `register_duplicate_id_returns_error_instead_of_panicking`, which calls `.expect_err(...)`. `Result::expect_err` requires the `Ok` type (`RequestChannels`) to implement `Debug` so a mistaken `Ok` can be formatted in the panic message. `RequestChannels` had no `Debug` impl. `cargo clippy --all-targets` compiles tests, so this is a hard compile error (exit 101), not a Clippy lint — which is why `#![allow(clippy::all)]` never greened the job.
+
+**Fix:** `#[derive(Debug)]` on `RequestChannels`. After that change, the same local `cargo check --tests` with `RUSTFLAGS='-D warnings'` finishes cleanly for `error` / `framing` / `dispatcher`.
+
 ### Rust checks
 
 `rustfmt` 1.8.0-stable was run against every changed `.rs` file in `apps/desktop/src-tauri` (edition 2021, `max_width = 100`, matching `rustfmt.toml`). `rustfmt --check` exits 0 on that tree.
 
-A full `cargo` / `clippy` toolchain for the Tauri crate (GTK / WebKit) is **not** available in this environment, so `cargo check` / `test` / `clippy` were **not run locally** and are **not claimed as passing**. Desktop CI on earlier SHAs of this PR (`2975cf1` … `21b6267`) failed the Clippy step with exit 101 on macOS/Ubuntu/Windows **after** `rustfmt` had already passed. Job logs were not downloadable from this environment (Azure blob TLS EOF). `#![allow(clippy::all)]` on `bea3b66` did **not** green the step, which indicates a **rustc compile error** rather than a Clippy lint. This revision restores the original `Serialize` struct for `BridgeError` (the type that compiled on `c038d9d`) while keeping the panic replacements, so CI can compile the crate.
+A full `cargo` / `clippy` toolchain for the Tauri crate (GTK / WebKit) is **not** available in this environment, so in-tree `cargo check` / `test` / `clippy` of `dream-desktop` were **not run** and are **not claimed as passing**. GitHub Actions on this revision is the source of truth for those commands.
 
 | Command | Result |
 |---|---|
 | `rustfmt --check` (edition 2021, `max_width=100`) | **PASS** on changed crate `.rs` files |
 | `cargo fmt --all -- --check` | **NOT RUN** as `cargo` (equivalent `rustfmt --check` passed) |
-| `cargo check --all-targets` | **NOT RUN** locally |
-| `cargo test --lib` | **NOT RUN** locally |
-| `cargo clippy --all-targets -- -D warnings` | **NOT RUN** locally; previous PR SHAs **FAIL** on GitHub Actions Clippy (exit 101) |
-
-Re-run `cargo check` / `test` / `clippy` from `apps/desktop/src-tauri` once CI has this revision.
+| `cargo check --tests` (offline crate: `error`+`framing`+`dispatcher`) | **PASS** after `RequestChannels: Debug`; previously **E0277** as quoted above |
+| `cargo check --all-targets` (`dream-desktop`) | **NOT RUN** locally |
+| `cargo test --lib` (`dream-desktop`) | **NOT RUN** locally |
+| `cargo clippy --all-targets -- -D warnings` | **NOT RUN** locally; `c16e21d` **FAIL** on GitHub Actions Clippy (exit 101) with the diagnostic above |
 
 ## Scope check
 

@@ -27,6 +27,7 @@ pub struct Dispatcher {
 }
 
 /// What `register` returns: the receiver ends the caller awaits.
+#[derive(Debug)]
 pub struct RequestChannels {
     /// Resolves with the final result or structured error.
     pub final_rx: oneshot::Receiver<Outcome>,
