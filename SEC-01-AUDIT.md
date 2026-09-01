@@ -171,16 +171,18 @@ note: required by a bound in `std::result::Result::<T, E>::expect_err`
 
 `rustfmt` 1.8.0-stable was run against every changed `.rs` file in `apps/desktop/src-tauri` (edition 2021, `max_width = 100`, matching `rustfmt.toml`). `rustfmt --check` exits 0 on that tree.
 
-A full `cargo` / `clippy` toolchain for the Tauri crate (GTK / WebKit) is **not** available in this environment, so in-tree `cargo check` / `test` / `clippy` of `dream-desktop` were **not run** and are **not claimed as passing**. GitHub Actions on this revision is the source of truth for those commands.
+A full `cargo` / `clippy` toolchain for the Tauri crate (GTK / WebKit) is **not** available in this environment, so in-tree `cargo check` / `test` / `clippy` of `dream-desktop` were **not run locally**. GitHub Actions on `94ba5da673e9b9d4d1a5d35f4122893680cb31e3` is the source of truth.
 
 | Command | Result |
 |---|---|
-| `rustfmt --check` (edition 2021, `max_width=100`) | **PASS** on changed crate `.rs` files |
-| `cargo fmt --all -- --check` | **NOT RUN** as `cargo` (equivalent `rustfmt --check` passed) |
+| `rustfmt --check` (edition 2021, `max_width=100`) | **PASS** locally on changed crate `.rs` files |
+| `cargo fmt --all -- --check` | **PASS** on GitHub Actions (Ubuntu / macOS / Windows) |
 | `cargo check --tests` (offline crate: `error`+`framing`+`dispatcher`) | **PASS** after `RequestChannels: Debug`; previously **E0277** as quoted above |
-| `cargo check --all-targets` (`dream-desktop`) | **NOT RUN** locally |
-| `cargo test --lib` (`dream-desktop`) | **NOT RUN** locally |
-| `cargo clippy --all-targets -- -D warnings` | **NOT RUN** locally; `c16e21d` **FAIL** on GitHub Actions Clippy (exit 101) with the diagnostic above |
+| `cargo clippy --all-targets -- -D warnings` | **PASS** on GitHub Actions Ubuntu, macOS, and Windows (`Desktop CI` run `33564501189`) |
+| `cargo build` | **PASS** on GitHub Actions Ubuntu, macOS, and Windows |
+| `cargo test` | **PASS** on GitHub Actions Ubuntu and macOS; skipped on Windows (existing workflow: tauri-winres / ComCtl32) |
+
+Python `CI` run on the same SHA: **PASS**. No temporary `desktop-ci.yml` diagnostic steps were pushed; `.github/workflows/` is unchanged versus `c038d9d`. `SEC-01.patch` is not in the tree.
 
 ## Scope check
 
