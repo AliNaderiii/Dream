@@ -328,6 +328,7 @@ enum InstanceOutcome {
 /// without `dream` installed), is skipped in favour of the next one. Only an
 /// instance that completed the handshake counts as a real sidecar, so its
 /// death goes through the restart/backoff path.
+#[allow(clippy::too_many_lines)] // spawn, stdio, writer, and teardown are one instance lifetime
 async fn start_instance<R: Runtime>(
     app: &tauri::AppHandle<R>,
     state: &Arc<SharedState>,
@@ -489,6 +490,7 @@ pub(crate) fn require_piped_stdio<I, O>(
 /// Read stdout until EOF, routing messages to the dispatcher. Returns `Hung`
 /// if the heartbeat watchdog fired (it kills the child via the returned signal),
 /// plus whether the protocol handshake (`DREAM-PROTOCOL:`) was ever seen.
+#[allow(clippy::too_many_lines)] // heartbeat watchdog plus the stdout read/classify loop
 async fn supervise_reader<R: Runtime>(
     app: &tauri::AppHandle<R>,
     state: &Arc<SharedState>,

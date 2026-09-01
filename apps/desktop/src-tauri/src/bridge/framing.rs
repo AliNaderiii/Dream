@@ -118,6 +118,7 @@ fn validate_frame(trimmed: &str) -> Result<(), BridgeError> {
 }
 
 /// Classify a decoded JSON value as a response or a notification.
+#[allow(clippy::too_many_lines)] // result / error / notification branches
 fn classify_message(value: Value) -> Result<ParsedMessage, BridgeError> {
     let obj = value
         .as_object()
@@ -165,7 +166,7 @@ fn classify_message(value: Value) -> Result<ParsedMessage, BridgeError> {
             BridgeError::MalformedFrame("message is missing result, error, or method".into())
         })?
         .to_string();
-    let params = obj.get("params").cloned().unwrap_or(Value::Null);
+    let params = obj.get("params").cloned().unwrap_or_default();
     Ok(ParsedMessage::Notification { method, params })
 }
 

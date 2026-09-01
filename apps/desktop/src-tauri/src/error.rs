@@ -252,9 +252,6 @@ impl Serialize for BridgeError {
     }
 }
 
-/// Convenience alias for bridge operations.
-pub type BridgeResult<T> = std::result::Result<T, BridgeError>;
-
 #[cfg(test)]
 mod tests {
     use super::*;

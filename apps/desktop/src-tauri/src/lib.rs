@@ -3,6 +3,7 @@
 //! Layering: `lib.rs` wires plugins, state, tray and window behaviour; the modules
 //! in [`commands`] implement the callable surface. Nothing here talks to the
 //! Python core — that bridge arrives in P-02.
+#![allow(clippy::result_large_err, clippy::too_many_lines)] // BridgeError JSON payload; supervisor loops
 
 pub mod commands;
 pub mod error;

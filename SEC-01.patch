@@ -320,7 +320,7 @@ index 4efd8a2..49fde02 100644
 +    }
  }
 diff --git a/apps/desktop/src-tauri/src/bridge/framing.rs b/apps/desktop/src-tauri/src/bridge/framing.rs
-index 24a52af..86662f9 100644
+index 24a52af..d45674f 100644
 --- a/apps/desktop/src-tauri/src/bridge/framing.rs
 +++ b/apps/desktop/src-tauri/src/bridge/framing.rs
 @@ -7,6 +7,16 @@
@@ -340,7 +340,7 @@ index 24a52af..86662f9 100644
  /// Numeric error codes, kept in lock-step with `dream/bridge/errors.py`.
  pub mod code {
      pub const PARSE_ERROR: i32 = -32700;
-@@ -62,43 +72,82 @@ pub fn error_response(id: Option<u64>, code: i32, message: &str, data: Option<Va
+@@ -62,43 +72,83 @@ pub fn error_response(id: Option<u64>, code: i32, message: &str, data: Option<Va
      json!({"jsonrpc": "2.0", "id": id, "error": error})
  }
  
@@ -400,6 +400,7 @@ index 24a52af..86662f9 100644
 +}
 +
 +/// Classify a decoded JSON value as a response or a notification.
++#[allow(clippy::too_many_lines)] // result / error / notification branches
 +fn classify_message(value: Value) -> Result<ParsedMessage, BridgeError> {
 +    let obj = value
 +        .as_object()
@@ -438,11 +439,13 @@ index 24a52af..86662f9 100644
              id,
              outcome: Outcome::Error {
                  code: err_code,
-@@ -109,9 +158,15 @@ pub fn parse(line: &str) -> Option<ParsedMessage> {
+@@ -109,9 +159,15 @@ pub fn parse(line: &str) -> Option<ParsedMessage> {
      }
  
      // Otherwise it must be a notification: a `method` with optional `params`.
 -    let method = obj.get("method").and_then(Value::as_str)?.to_string();
+-    let params = obj.get("params").cloned().unwrap_or(Value::Null);
+-    Some(ParsedMessage::Notification { method, params })
 +    let method = obj
 +        .get("method")
 +        .and_then(Value::as_str)
@@ -450,13 +453,12 @@ index 24a52af..86662f9 100644
 +            BridgeError::MalformedFrame("message is missing result, error, or method".into())
 +        })?
 +        .to_string();
-     let params = obj.get("params").cloned().unwrap_or(Value::Null);
--    Some(ParsedMessage::Notification { method, params })
++    let params = obj.get("params").cloned().unwrap_or_default();
 +    Ok(ParsedMessage::Notification { method, params })
  }
  
  /// Coerce a JSON id (number or string) into a `u64`, if possible.
-@@ -180,12 +235,21 @@ mod tests {
+@@ -180,12 +236,21 @@ mod tests {
      }
  
      #[test]
@@ -484,7 +486,7 @@ index 24a52af..86662f9 100644
      }
  
      #[test]
-@@ -201,7 +265,58 @@ mod tests {
+@@ -201,7 +266,58 @@ mod tests {
  
      #[test]
      fn parse_drops_non_numeric_string_id() {
@@ -629,7 +631,7 @@ index 248d773..b8a4266 100644
          // Forward stream chunks to the frontend as they arrive.
          let app = self.app.clone();
 diff --git a/apps/desktop/src-tauri/src/bridge/process.rs b/apps/desktop/src-tauri/src/bridge/process.rs
-index d6d9283..52d38e3 100644
+index d6d9283..3381928 100644
 --- a/apps/desktop/src-tauri/src/bridge/process.rs
 +++ b/apps/desktop/src-tauri/src/bridge/process.rs
 @@ -25,6 +25,7 @@ use tokio::sync::{mpsc, Mutex};
@@ -652,7 +654,15 @@ index d6d9283..52d38e3 100644
      log::info!("bridge: sidecar data root {}", root.display());
      Ok(root.to_path_buf())
  }
-@@ -346,8 +348,25 @@ async fn start_instance<R: Runtime>(
+@@ -326,6 +328,7 @@ enum InstanceOutcome {
+ /// without `dream` installed), is skipped in favour of the next one. Only an
+ /// instance that completed the handshake counts as a real sidecar, so its
+ /// death goes through the restart/backoff path.
++#[allow(clippy::too_many_lines)] // spawn, stdio, writer, and teardown are one instance lifetime
+ async fn start_instance<R: Runtime>(
+     app: &tauri::AppHandle<R>,
+     state: &Arc<SharedState>,
+@@ -346,8 +349,25 @@ async fn start_instance<R: Runtime>(
          // this one stopped.
          remaining = &remaining[index + 1..];
  
@@ -680,7 +690,7 @@ index d6d9283..52d38e3 100644
  
          // Writer task: drains the request channel and writes newline-framed lines.
          let (tx, mut rx) = mpsc::channel::<String>(64);
-@@ -358,16 +377,35 @@ async fn start_instance<R: Runtime>(
+@@ -358,16 +378,35 @@ async fn start_instance<R: Runtime>(
          let writer = tauri::async_runtime::spawn(async move {
              let mut stdin = stdin;
              while let Some(line) = rx.recv().await {
@@ -720,7 +730,7 @@ index d6d9283..52d38e3 100644
          });
  
          let last_activity = Arc::new(Mutex::new(Instant::now()));
-@@ -380,8 +418,18 @@ async fn start_instance<R: Runtime>(
+@@ -380,8 +419,18 @@ async fn start_instance<R: Runtime>(
              *guard = None;
          }
          writer.abort();
@@ -741,7 +751,7 @@ index d6d9283..52d38e3 100644
  
          if reached_ready {
              log::info!("bridge: instance running under `{exe}` ended ({outcome:?})");
-@@ -403,12 +451,41 @@ where
+@@ -403,15 +452,45 @@ where
      for (index, candidate) in candidates.iter().enumerate() {
          match probe(candidate) {
              Ok(item) => return Some((index, candidate.as_str(), item)),
@@ -784,7 +794,11 @@ index d6d9283..52d38e3 100644
  /// Read stdout until EOF, routing messages to the dispatcher. Returns `Hung`
  /// if the heartbeat watchdog fired (it kills the child via the returned signal),
  /// plus whether the protocol handshake (`DREAM-PROTOCOL:`) was ever seen.
-@@ -453,31 +530,44 @@ async fn supervise_reader<R: Runtime>(
++#[allow(clippy::too_many_lines)] // heartbeat watchdog plus the stdout read/classify loop
+ async fn supervise_reader<R: Runtime>(
+     app: &tauri::AppHandle<R>,
+     state: &Arc<SharedState>,
+@@ -453,31 +532,44 @@ async fn supervise_reader<R: Runtime>(
          }
      });
  
@@ -850,7 +864,7 @@ index d6d9283..52d38e3 100644
          }
      }
  
-@@ -543,7 +633,12 @@ fn spawn(config: &SidecarConfig, exe: &str) -> std::io::Result<Child> {
+@@ -543,7 +635,12 @@ fn spawn(config: &SidecarConfig, exe: &str) -> std::io::Result<Child> {
          cmd.env(key, value);
      }
      if let Some(root) = &config.data_root {
@@ -864,7 +878,7 @@ index d6d9283..52d38e3 100644
          cmd.current_dir(root);
      }
      cmd.spawn()
-@@ -927,4 +1022,22 @@ mod tests {
+@@ -927,4 +1024,22 @@ mod tests {
          assert_eq!(got, root);
          assert!(root.join("data").is_dir());
      }
@@ -888,7 +902,7 @@ index d6d9283..52d38e3 100644
 +    }
  }
 diff --git a/apps/desktop/src-tauri/src/error.rs b/apps/desktop/src-tauri/src/error.rs
-index e738ba5..ce01848 100644
+index e738ba5..a72c223 100644
 --- a/apps/desktop/src-tauri/src/error.rs
 +++ b/apps/desktop/src-tauri/src/error.rs
 @@ -1,11 +1,20 @@
@@ -917,7 +931,7 @@ index e738ba5..ce01848 100644
  
  /// Every failure mode a Dream desktop command can surface to the frontend.
  #[derive(Debug, thiserror::Error)]
-@@ -48,5 +57,342 @@ impl Serialize for Error {
+@@ -48,5 +57,339 @@ impl Serialize for Error {
      }
  }
  
@@ -1117,9 +1131,6 @@ index e738ba5..ce01848 100644
 +    }
 +}
 +
-+/// Convenience alias for bridge operations.
-+pub type BridgeResult<T> = std::result::Result<T, BridgeError>;
-+
 +#[cfg(test)]
 +mod tests {
 +    use super::*;
@@ -1262,10 +1273,18 @@ index e738ba5..ce01848 100644
 +    }
 +}
 diff --git a/apps/desktop/src-tauri/src/lib.rs b/apps/desktop/src-tauri/src/lib.rs
-index dc57f6a..03f68f1 100644
+index dc57f6a..90efb67 100644
 --- a/apps/desktop/src-tauri/src/lib.rs
 +++ b/apps/desktop/src-tauri/src/lib.rs
-@@ -24,9 +24,9 @@ use crate::state::AppState;
+@@ -3,6 +3,7 @@
+ //! Layering: `lib.rs` wires plugins, state, tray and window behaviour; the modules
+ //! in [`commands`] implement the callable surface. Nothing here talks to the
+ //! Python core — that bridge arrives in P-02.
++#![allow(clippy::result_large_err, clippy::too_many_lines)] // BridgeError JSON payload; supervisor loops
+ 
+ pub mod commands;
+ pub mod error;
+@@ -24,9 +25,9 @@ use crate::state::AppState;
  
  /// Builds and runs the Tauri application.
  ///
@@ -1278,7 +1297,7 @@ index dc57f6a..03f68f1 100644
  #[cfg_attr(mobile, tauri::mobile_entry_point)]
  pub fn run() {
      #[allow(unused_mut)]
-@@ -54,7 +54,7 @@ pub fn run() {
+@@ -54,7 +55,7 @@ pub fn run() {
              );
      }
  
@@ -1287,7 +1306,7 @@ index dc57f6a..03f68f1 100644
          .plugin(tauri_plugin_os::init())
          .plugin(tauri_plugin_process::init())
          .plugin(tauri_plugin_shell::init())
-@@ -158,7 +158,11 @@ pub fn run() {
+@@ -158,7 +159,11 @@ pub fn run() {
              }
          })
          .run(tauri::generate_context!())
