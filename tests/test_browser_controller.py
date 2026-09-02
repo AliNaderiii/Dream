@@ -594,22 +594,35 @@ def test_blocklist_handles_entry_with_port(tmp_path: Path) -> None:
     assert "evil.com" in result
 
 
-def test_malformed_blocklist_entry_skipped_safely(tmp_path: Path) -> None:
-    """Malformed entries (e.g. with shell-special chars) are skipped, not crash."""
-    from dream.browser_controller import _load_blocklist
+def test_malformed_blocklist_entry_raises_parse_error(tmp_path: Path) -> None:
+    """Fail-closed: a malformed entry raises BlocklistParseError (SEC-03).
+
+    No malformed entry is silently skipped — the whole blocklist is rejected
+    so that an operator typo cannot accidentally leave a domain unblocked.
+    """
+    from dream.browser_controller import BlocklistParseError, _load_blocklist
 
     bl_file = tmp_path / "blocked_domains.txt"
     bl_file.write_text(
         "good.com\n"
-        "<evil>  \n"  # invalid chars
-        "[::1]\n"     # IPv6 (not a valid hostname entry)
+        "<evil>\n"  # invalid chars — must raise, not skip
         "good2.com\n"
     )
-    result = _load_blocklist(paths=(str(bl_file),))
-    assert "good.com" in result
-    assert "good2.com" in result
-    # Malformed entries must not be added.
-    assert "<evil>" not in result
+    with pytest.raises(BlocklistParseError) as exc_info:
+        _load_blocklist(paths=(str(bl_file),))
+    # Must report the file and line number so the operator can fix it.
+    assert exc_info.value.lineno == 2
+    assert str(bl_file) in exc_info.value.path
+
+
+def test_malformed_ipv6_entry_raises_parse_error(tmp_path: Path) -> None:
+    """[::1] is not a valid hostname-only blocklist entry — raises BlocklistParseError."""
+    from dream.browser_controller import BlocklistParseError, _load_blocklist
+
+    bl_file = tmp_path / "blocked_domains.txt"
+    bl_file.write_text("good.com\n[::1]\n")
+    with pytest.raises(BlocklistParseError):
+        _load_blocklist(paths=(str(bl_file),))
 
 
 def test_blocklist_uses_first_path_then_second(tmp_path: Path) -> None:
@@ -695,6 +708,272 @@ def test_is_blocked_empty_blocklist() -> None:
     from dream.browser_controller import _is_blocked
 
     assert _is_blocked("anything.com", frozenset()) is False
+
+
+# ---------------------------------------------------------------------------
+# SEC-03: Port validation in blocklist entries (_parse_blocklist_entry)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_blocklist_entry_valid_port() -> None:
+    """A valid port is accepted and stripped from the returned hostname."""
+    from dream.browser_controller import _parse_blocklist_entry
+
+    assert _parse_blocklist_entry("evil.com:8080") == "evil.com"
+    assert _parse_blocklist_entry("evil.com:1") == "evil.com"
+    assert _parse_blocklist_entry("evil.com:65535") == "evil.com"
+
+
+def test_parse_blocklist_entry_no_port() -> None:
+    """An entry with no port is accepted as-is."""
+    from dream.browser_controller import _parse_blocklist_entry
+
+    assert _parse_blocklist_entry("evil.com") == "evil.com"
+
+
+def test_parse_blocklist_entry_empty_port_raises() -> None:
+    """'evil.com:' (empty port after colon) raises BlocklistParseError."""
+    from dream.browser_controller import BlocklistParseError, _parse_blocklist_entry
+
+    with pytest.raises(BlocklistParseError):
+        _parse_blocklist_entry("evil.com:")
+
+
+def test_parse_blocklist_entry_non_numeric_port_raises() -> None:
+    """A non-numeric port string raises BlocklistParseError."""
+    from dream.browser_controller import BlocklistParseError, _parse_blocklist_entry
+
+    with pytest.raises(BlocklistParseError):
+        _parse_blocklist_entry("evil.com:NOTAPORT")
+
+
+def test_parse_blocklist_entry_negative_port_raises() -> None:
+    """A negative port raises BlocklistParseError (isdigit rejects '-')."""
+    from dream.browser_controller import BlocklistParseError, _parse_blocklist_entry
+
+    with pytest.raises(BlocklistParseError):
+        _parse_blocklist_entry("evil.com:-1")
+
+
+def test_parse_blocklist_entry_zero_port_raises() -> None:
+    """Port 0 is out of range [1, 65535] and raises BlocklistParseError."""
+    from dream.browser_controller import BlocklistParseError, _parse_blocklist_entry
+
+    with pytest.raises(BlocklistParseError):
+        _parse_blocklist_entry("evil.com:0")
+
+
+def test_parse_blocklist_entry_port_too_large_raises() -> None:
+    """Port > 65535 raises BlocklistParseError."""
+    from dream.browser_controller import BlocklistParseError, _parse_blocklist_entry
+
+    with pytest.raises(BlocklistParseError):
+        _parse_blocklist_entry("evil.com:65536")
+    with pytest.raises(BlocklistParseError):
+        _parse_blocklist_entry("evil.com:99999")
+
+
+def test_parse_blocklist_entry_multiple_colons_raises() -> None:
+    """More than one colon (after scheme/path stripping) raises BlocklistParseError."""
+    from dream.browser_controller import BlocklistParseError, _parse_blocklist_entry
+
+    with pytest.raises(BlocklistParseError):
+        _parse_blocklist_entry("evil.com:80:extra")
+
+
+def test_parse_blocklist_entry_ipv6_raises() -> None:
+    """IPv6 bracketed address raises BlocklistParseError."""
+    from dream.browser_controller import BlocklistParseError, _parse_blocklist_entry
+
+    with pytest.raises(BlocklistParseError):
+        _parse_blocklist_entry("[::1]")
+
+
+def test_parse_blocklist_entry_invalid_chars_raises() -> None:
+    """Shell-special characters in hostname raise BlocklistParseError."""
+    from dream.browser_controller import BlocklistParseError, _parse_blocklist_entry
+
+    with pytest.raises(BlocklistParseError):
+        _parse_blocklist_entry("<evil>")
+
+
+def test_parse_blocklist_entry_empty_raises() -> None:
+    """Empty or whitespace-only entry raises BlocklistParseError."""
+    from dream.browser_controller import BlocklistParseError, _parse_blocklist_entry
+
+    with pytest.raises(BlocklistParseError):
+        _parse_blocklist_entry("")
+
+
+def test_parse_blocklist_entry_strips_scheme() -> None:
+    """Scheme prefix is stripped before parsing."""
+    from dream.browser_controller import _parse_blocklist_entry
+
+    assert _parse_blocklist_entry("https://evil.com") == "evil.com"
+    assert _parse_blocklist_entry("http://evil.com:8080") == "evil.com"
+
+
+def test_parse_blocklist_entry_trailing_dot_stripped() -> None:
+    """Trailing dots are normalised away."""
+    from dream.browser_controller import _parse_blocklist_entry
+
+    assert _parse_blocklist_entry("evil.com.") == "evil.com"
+
+
+def test_parse_blocklist_entry_case_normalised() -> None:
+    """Hostnames are lowercased."""
+    from dream.browser_controller import _parse_blocklist_entry
+
+    assert _parse_blocklist_entry("EVIL.COM") == "evil.com"
+
+
+# ---------------------------------------------------------------------------
+# SEC-03: Fail-closed blocklist — controller state
+# ---------------------------------------------------------------------------
+
+
+def test_controller_enters_fail_closed_on_malformed_blocklist(
+    tmp_path: Path,
+) -> None:
+    """Controller sets _blocklist_error=True and refuses all navigation."""
+    from dream.browser_controller import BrowserController, BrowserSecurityError
+
+    bl_file = tmp_path / "blocked.txt"
+    bl_file.write_text("good.com\nevil.com:NOTAPORT\nbad.org\n")
+
+    import dream.browser_controller as _mod
+
+    original = _mod._load_blocklist
+
+    def patched_load(paths=None):  # type: ignore[no-untyped-def]
+        return original(paths=(str(bl_file),))
+
+    _mod._load_blocklist = patched_load
+    try:
+        bc = BrowserController(_blocklist=None)
+        with pytest.raises(BrowserSecurityError) as exc_info:
+            bc._check_blocked("safe.com")
+        assert exc_info.value.reason == "blocklist_error"
+        assert bc._blocklist_error is True
+    finally:
+        _mod._load_blocklist = original
+
+
+def test_controller_fail_closed_persists_across_calls(
+    tmp_path: Path,
+) -> None:
+    """Once in error state, all subsequent _check_blocked calls also fail."""
+    from dream.browser_controller import BrowserController, BrowserSecurityError
+
+    bl_file = tmp_path / "blocked.txt"
+    bl_file.write_text("evil.com:NOTAPORT\n")
+
+    import dream.browser_controller as _mod
+
+    original = _mod._load_blocklist
+
+    def patched_load(paths=None):  # type: ignore[no-untyped-def]
+        return original(paths=(str(bl_file),))
+
+    _mod._load_blocklist = patched_load
+    try:
+        bc = BrowserController(_blocklist=None)
+        # First call — enters fail-closed.
+        with pytest.raises(BrowserSecurityError):
+            bc._check_blocked("a.com")
+        # Second call — stays fail-closed without re-reading the file.
+        with pytest.raises(BrowserSecurityError) as exc_info:
+            bc._check_blocked("b.com")
+        assert exc_info.value.reason == "blocklist_error"
+    finally:
+        _mod._load_blocklist = original
+
+
+def test_blocklist_error_blocks_navigate_before_network(
+    tmp_path: Path,
+) -> None:
+    """When blocklist is malformed, navigate() must block before any network call."""
+    from unittest.mock import AsyncMock
+
+    from dream.browser_controller import BrowserController, BrowserSecurityError
+
+    bl_file = tmp_path / "blocked.txt"
+    bl_file.write_text("evil.com:BADPORT\n")
+
+    import dream.browser_controller as _mod
+
+    original = _mod._load_blocklist
+
+    def patched_load(paths=None):  # type: ignore[no-untyped-def]
+        return original(paths=(str(bl_file),))
+
+    _mod._load_blocklist = patched_load
+    try:
+        bc = BrowserController(_blocklist=None)
+        bc._page = _fake_page()
+
+        network_called: list[bool] = []
+        bc._page.goto = AsyncMock(side_effect=lambda *a, **k: network_called.append(True))
+
+        with pytest.raises(BrowserSecurityError) as exc_info:
+            asyncio.run(bc.navigate("https://safe.com"))
+        assert exc_info.value.reason == "blocklist_error"
+        assert not network_called, "Network must not be called when blocklist is malformed"
+    finally:
+        _mod._load_blocklist = original
+
+
+def test_blocklist_error_blocks_request_approval(
+    tmp_path: Path,
+) -> None:
+    """request_approval() refuses with blocklist_error when blocklist is malformed."""
+    from dream.browser_controller import BrowserController, BrowserSecurityError
+
+    bl_file = tmp_path / "blocked.txt"
+    bl_file.write_text("evil.com:\n")  # empty port — malformed
+
+    import dream.browser_controller as _mod
+
+    original = _mod._load_blocklist
+
+    def patched_load(paths=None):  # type: ignore[no-untyped-def]
+        return original(paths=(str(bl_file),))
+
+    _mod._load_blocklist = patched_load
+    try:
+        bc = BrowserController(_blocklist=None)
+        with pytest.raises(BrowserSecurityError) as exc_info:
+            bc.request_approval("https://safe.com", "Test")
+        assert exc_info.value.reason == "blocklist_error"
+    finally:
+        _mod._load_blocklist = original
+
+
+def test_valid_blocklist_with_port_is_not_fail_closed(tmp_path: Path) -> None:
+    """A blocklist file with valid ports loads correctly — no fail-closed state."""
+    from dream.browser_controller import BrowserController
+
+    bl_file = tmp_path / "blocked.txt"
+    bl_file.write_text("evil.com:8080\nbad.org:443\ngood.net\n")
+
+    import dream.browser_controller as _mod
+
+    original = _mod._load_blocklist
+
+    def patched_load(paths=None):  # type: ignore[no-untyped-def]
+        return original(paths=(str(bl_file),))
+
+    _mod._load_blocklist = patched_load
+    try:
+        bc = BrowserController(_blocklist=None)
+        # Should not raise.
+        bl = bc._get_blocklist()
+        assert "evil.com" in bl
+        assert "bad.org" in bl
+        assert "good.net" in bl
+        assert bc._blocklist_error is False
+    finally:
+        _mod._load_blocklist = original
 
 
 # ---------------------------------------------------------------------------

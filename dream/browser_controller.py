@@ -18,8 +18,37 @@ Security model (SEC-03)
   ``data/blocked_domains.txt`` relative to the repository root) is checked before
   any approval or network access.  Blocklist rejection cannot be bypassed by an
   approval flag.
+* **Fail-closed blocklist policy**: any non-empty, non-comment blocklist entry
+  that cannot be safely parsed raises :exc:`BlocklistParseError`.  The controller
+  catches this and enters a *blocked* state — all navigation is refused until the
+  blocklist file is corrected and the controller is re-instantiated.  No malformed
+  entry is silently dropped in a way that could leave an intended domain unblocked.
 * Full URLs containing query parameters, credentials, or tokens are never logged.
   Only scheme+host information appears in log messages.
+
+Blocklist entry parsing rules
+------------------------------
+Each non-blank, non-comment line is one entry.  After stripping any inline
+``#`` comment, the remaining text must match the grammar::
+
+    entry = hostname [ ":" port ]
+    hostname = label *( "." label )   (simplified; IDN allowed)
+    port = 1*DIGIT                    ; value in [1, 65535]
+
+Violations that cause :exc:`BlocklistParseError` (fail-closed):
+
+* An IPv6 bracketed address ``[…]`` — not a valid hostname-only entry.
+* More than one ``:`` in the host:port part after stripping scheme/path
+  (unless it is an IPv6 address, which is already rejected above).
+* A port field that is empty, non-numeric, negative, zero, or > 65535.
+* Any hostname character that is not a letter, digit, hyphen, dot,
+  or a unicode code-point above U+007F (to allow IDN hostnames in
+  their un-encoded UTF-8 form).
+* An empty hostname after stripping.
+
+Violations that are silently skipped (safe to ignore — not a domain entry):
+
+* A line that is entirely blank or a comment — these are not entries at all.
 """
 
 from __future__ import annotations
@@ -28,6 +57,7 @@ import asyncio
 import logging
 import os
 import platform
+import re
 import shutil
 import tempfile
 import time
@@ -52,6 +82,19 @@ DEFAULT_MAX_FETCHES: int = 20
 _BLOCKLIST_PATHS: tuple[str, ...] = (
     os.path.expanduser("~/.dream/blocked_domains.txt"),
     str(Path(__file__).parent.parent / "data" / "blocked_domains.txt"),
+)
+
+# ---------------------------------------------------------------------------
+# Hostname validation
+# ---------------------------------------------------------------------------
+
+# Characters explicitly forbidden in the hostname portion of a blocklist entry.
+# We allow letters, digits, hyphen, dot, and any Unicode above U+007F (IDN).
+# Everything else — shell metacharacters, whitespace, brackets, etc. — is banned.
+_HOSTNAME_FORBIDDEN_RE = re.compile(
+    r"[^a-z0-9\-."
+    r"\u0080-\uFFFF"  # Unicode extension for IDN
+    r"]"
 )
 
 # ---------------------------------------------------------------------------
@@ -114,6 +157,8 @@ class BrowserSecurityError(RuntimeError):
     * ``"approval_expired"`` — previously granted approval has expired (TTL).
     * ``"quota_exceeded"`` — session fetch quota reached.
     * ``"blocked_domain"`` — domain appears in the blocklist.
+    * ``"blocklist_error"`` — the blocklist file contains a malformed entry;
+      all navigation is blocked until the file is corrected (fail-closed).
     * ``"invalid_url"`` — URL fails scheme or format validation.
     """
 
@@ -122,24 +167,182 @@ class BrowserSecurityError(RuntimeError):
         self.reason = reason
 
 
+class BlocklistParseError(ValueError):
+    """Raised by :func:`_load_blocklist` when an entry cannot be safely parsed.
+
+    The controller catches this and enters a fail-closed state where all
+    navigation is refused — no malformed entry is silently skipped in a way
+    that could leave an intended domain unblocked.
+
+    Attributes:
+        path: Filesystem path of the blocklist file containing the error.
+        lineno: 1-based line number of the malformed entry.
+        raw_entry: The entry text as it appeared (after comment-stripping),
+            safe to include in a log message because it is the operator's own
+            configuration file content, not user-supplied network data.
+    """
+
+    def __init__(self, message: str, *, path: str, lineno: int, raw_entry: str) -> None:
+        super().__init__(message)
+        self.path = path
+        self.lineno = lineno
+        self.raw_entry = raw_entry
+
+
 # ---------------------------------------------------------------------------
-# Domain blocklist
+# Domain blocklist helpers
 # ---------------------------------------------------------------------------
+
+
+def _parse_blocklist_entry(entry: str) -> str:
+    """Parse one blocklist entry and return the normalised hostname.
+
+    The entry has already had its inline comment stripped and been stripped
+    of leading/trailing whitespace by the caller.
+
+    Port-handling rules:
+    * If no ``:`` is present, the whole entry is a hostname.
+    * If exactly one ``:`` is present, the part before it is the hostname
+      and the part after must be a valid integer in ``[1, 65535]``.
+    * If more than one ``:`` is present (excluding IPv6, which is caught
+      first), the entry is malformed — raise :exc:`BlocklistParseError`.
+
+    Raises:
+        BlocklistParseError: immediately when the entry cannot be safely
+            parsed.  The ``path`` and ``lineno`` fields are filled in by
+            the caller (:func:`_load_blocklist`).
+    """
+    # Strip scheme if accidentally included (e.g. "https://evil.com").
+    for prefix in ("https://", "http://", "ftp://"):
+        if entry.lower().startswith(prefix):
+            entry = entry[len(prefix):]
+
+    # Strip path component.
+    entry = entry.split("/", 1)[0]
+
+    # Reject IPv6 addresses (bracketed notation).
+    if entry.startswith("["):
+        raise BlocklistParseError(
+            "IPv6 bracketed addresses are not valid blocklist entries; "
+            "use the corresponding hostname instead.",
+            path="",
+            lineno=0,
+            raw_entry=entry,
+        )
+
+    # Split hostname and optional port — there must be AT MOST one colon.
+    colon_count = entry.count(":")
+    if colon_count == 0:
+        hostname_raw = entry
+    elif colon_count == 1:
+        hostname_raw, port_str = entry.split(":", 1)
+        # Validate the port field strictly.
+        if not port_str:
+            raise BlocklistParseError(
+                "Port field is empty; omit the colon or supply a valid port "
+                "in range [1, 65535].",
+                path="",
+                lineno=0,
+                raw_entry=entry,
+            )
+        if not port_str.isdigit():
+            # isdigit() rejects leading '-', '+', and non-digit chars.
+            raise BlocklistParseError(
+                f"Port {port_str!r} is not a valid integer; "
+                "port must be a positive integer in range [1, 65535].",
+                path="",
+                lineno=0,
+                raw_entry=entry,
+            )
+        port_val = int(port_str)
+        if port_val < 1 or port_val > 65535:
+            raise BlocklistParseError(
+                f"Port {port_val} is out of range [1, 65535].",
+                path="",
+                lineno=0,
+                raw_entry=entry,
+            )
+        # Port is valid; we use only the hostname (domain-level blocking).
+    else:
+        raise BlocklistParseError(
+            f"Entry contains {colon_count} colons; only a single "
+            "hostname:port colon is permitted.",
+            path="",
+            lineno=0,
+            raw_entry=entry,
+        )
+
+    # Normalise the hostname: lowercase and strip trailing dot.
+    normalised = hostname_raw.lower().rstrip(".")
+
+    if not normalised:
+        raise BlocklistParseError(
+            "Hostname part of blocklist entry is empty.",
+            path="",
+            lineno=0,
+            raw_entry=entry,
+        )
+
+    # Validate hostname characters.  We allow:
+    #   * ASCII letters, digits, hyphen, dot (hostname labels)
+    #   * Unicode code-points U+0080–U+FFFF (IDN hostnames in UTF-8)
+    # Everything else is rejected.
+    if _HOSTNAME_FORBIDDEN_RE.search(normalised):
+        raise BlocklistParseError(
+            "Hostname contains characters that are not permitted in a "
+            "domain name.",
+            path="",
+            lineno=0,
+            raw_entry=entry,
+        )
+
+    return normalised
+
+
+def _normalise_hostname(raw: str) -> str | None:
+    """Thin compatibility wrapper around :func:`_parse_blocklist_entry`.
+
+    Returns:
+        The normalised hostname, or ``None`` if *raw* is malformed.
+
+    .. note::
+        This function exists so that tests written against the older
+        ``_normalise_hostname`` API continue to work.  New code should call
+        :func:`_parse_blocklist_entry` directly (which raises on error rather
+        than returning ``None``) so that the fail-closed policy is enforced.
+    """
+    if not raw or not raw.strip():
+        return None
+    try:
+        return _parse_blocklist_entry(raw.strip())
+    except BlocklistParseError:
+        return None
 
 
 def _load_blocklist(paths: tuple[str, ...] = _BLOCKLIST_PATHS) -> frozenset[str]:
     """Load and return the set of blocked normalised hostnames.
 
-    Rules:
-    * Each non-blank, non-comment line is one entry.
-    * Comments begin with ``#``.
-    * Entries are normalised to lower-case, with trailing dots removed.
-    * Entries that contain characters invalid for a hostname (after normalisation)
-      are silently skipped with a warning (fail-safe, not fail-open).
-    * Missing files are silently ignored.
+    Fail-closed policy
+    ------------------
+    Any non-empty, non-comment entry that cannot be safely parsed raises
+    :exc:`BlocklistParseError` immediately.  The exception propagates to
+    the caller (:meth:`BrowserController._get_blocklist`), which records
+    the error and refuses all navigation (:attr:`BrowserController._blocklist_error`).
+
+    No malformed entry is silently discarded in a way that could leave a
+    domain the operator intended to block still reachable.
+
+    Ignored without error (safe)
+    ----------------------------
+    * Lines that are entirely blank.
+    * Lines whose first non-whitespace character is ``#`` (comments).
+    * Missing or unreadable files (logged at WARNING level).
 
     Returns:
         A frozenset of lowercase, dot-stripped hostnames.
+
+    Raises:
+        BlocklistParseError: If any non-empty entry is malformed.
     """
     blocked: set[str] = set()
     for path in paths:
@@ -159,49 +362,15 @@ def _load_blocklist(paths: tuple[str, ...] = _BLOCKLIST_PATHS) -> frozenset[str]
             entry = line.split("#", 1)[0].strip()
             if not entry:
                 continue
-            normalised = _normalise_hostname(entry)
-            if normalised is None:
-                logger.warning(
-                    "blocklist: skipping malformed entry at %s:%d", p, lineno
-                )
-                continue
+            try:
+                normalised = _parse_blocklist_entry(entry)
+            except BlocklistParseError as exc:
+                # Fill in the file-level context before re-raising.
+                exc.path = str(p)
+                exc.lineno = lineno
+                raise
             blocked.add(normalised)
     return frozenset(blocked)
-
-
-def _normalise_hostname(raw: str) -> str | None:
-    """Normalise a raw hostname string to a comparable form.
-
-    Returns:
-        The normalised hostname (lowercase, no trailing dot, no port), or
-        ``None`` if the entry is clearly malformed.
-    """
-    # Strip scheme if accidentally included.
-    for prefix in ("https://", "http://", "ftp://"):
-        if raw.lower().startswith(prefix):
-            raw = raw[len(prefix):]
-    # Strip path.
-    raw = raw.split("/", 1)[0]
-    # Strip port.
-    # Handle IPv6 bracketed addresses — not a valid blocklist entry, skip.
-    if raw.startswith("["):
-        return None
-    raw = raw.rsplit(":", 1)[0] if ":" in raw else raw
-    # Lowercase and strip trailing dot.
-    normalised = raw.lower().rstrip(".")
-    if not normalised:
-        return None
-    # Reject entries that look like they contain spaces or control characters —
-    # these cannot be valid hostnames.
-    if any(c in normalised for c in (" ", "\t", "\r", "\n")):
-        return None
-    # Basic hostname character check: labels may contain letters, digits, hyphens.
-    # We are lenient to support IDN (will be lowercase ASCII after punycode encode
-    # for common cases), but we reject anything with shell-special characters.
-    invalid_chars = set('<>(){}|\\^`\'"')
-    if any(c in invalid_chars for c in normalised):
-        return None
-    return normalised
 
 
 def _is_blocked(hostname: str, blocklist: frozenset[str]) -> bool:
@@ -213,14 +382,17 @@ def _is_blocked(hostname: str, blocklist: frozenset[str]) -> bool:
       ``sub.example.com``, ``a.b.example.com`` etc., but **not**
       ``badexample.com`` or ``notexample.com``.
 
+    The check uses a label-boundary suffix so that ``example.com`` does
+    not match ``badexample.com`` via substring.
+
     Args:
         hostname: The normalised (lowercase, no trailing dot) hostname to test.
         blocklist: The loaded blocklist (from :func:`_load_blocklist`).
     """
     if hostname in blocklist:
         return True
-    # Check if any blocked entry is a parent domain of the hostname.
-    # We require the match to be at a label boundary.
+    # Check if any blocked entry is an ancestor domain of the hostname,
+    # matched at a label boundary (dot-prefix).
     for entry in blocklist:
         if hostname.endswith("." + entry):
             return True
@@ -247,6 +419,10 @@ class BrowserController:
     * A per-session fetch quota (``max_fetches``, default 20) limits the number
       of navigations.  Both successful and failed fetch attempts count.
     * A domain blocklist is consulted before any approval or network access.
+    * **Fail-closed blocklist**: if the blocklist file contains a malformed
+      entry, ``_blocklist_error`` is set to ``True`` and *all* navigation is
+      refused with ``reason="blocklist_error"`` until the controller is
+      re-instantiated with a corrected file.
     * ``always_allow`` / ``always_allow_domain`` have been **removed** — there
       is no production bypass of the approval requirement.
     * Screenshots are saved locally only.
@@ -274,6 +450,7 @@ class BrowserController:
                 Defaults to ``time.monotonic``.  Inject a fake for tests.
             _blocklist: Optional pre-loaded blocklist set.  If ``None``,
                 the blocklist is loaded from the standard paths on first use.
+                Pass an explicit ``frozenset`` to bypass file loading in tests.
         """
         self._playwright: Any = None
         self._browser: Any = None
@@ -291,8 +468,12 @@ class BrowserController:
         self._max_fetches: int = max_fetches
         self._clock: Any = _clock if _clock is not None else time.monotonic
 
-        # Blocklist: lazy-loaded unless injected.
+        # Blocklist state.
+        # _blocklist is None when it has not been loaded yet (lazy).
+        # _blocklist is a frozenset when loaded successfully.
+        # _blocklist_error is True when loading failed (fail-closed state).
         self._blocklist: frozenset[str] | None = _blocklist
+        self._blocklist_error: bool = False
 
         # Session approval tracking.
         self._current_session: BrowserSession | None = None
@@ -307,23 +488,56 @@ class BrowserController:
     # -- blocklist -------------------------------------------------------- #
 
     def _get_blocklist(self) -> frozenset[str]:
-        """Return the loaded blocklist, loading it lazily on first call."""
+        """Return the loaded blocklist, loading it lazily on first call.
+
+        If loading fails due to a malformed entry, sets ``_blocklist_error``
+        to ``True`` and raises :exc:`BrowserSecurityError` with
+        ``reason="blocklist_error"``.  The error state persists — subsequent
+        calls also raise immediately without re-reading the file.
+        """
+        if self._blocklist_error:
+            # Already in fail-closed state.
+            raise BrowserSecurityError(
+                "The domain blocklist contains a malformed entry and cannot "
+                "be used safely. All navigation is refused until the blocklist "
+                "file is corrected and the browser controller is restarted.",
+                reason="blocklist_error",
+            )
         if self._blocklist is None:
-            self._blocklist = _load_blocklist()
+            try:
+                self._blocklist = _load_blocklist()
+            except BlocklistParseError as exc:
+                self._blocklist_error = True
+                logger.error(
+                    "blocklist: parse error at %s:%d — all navigation blocked. "
+                    "Fix the blocklist file and restart the controller.",
+                    exc.path,
+                    exc.lineno,
+                )
+                raise BrowserSecurityError(
+                    "The domain blocklist contains a malformed entry and cannot "
+                    "be used safely. All navigation is refused until the blocklist "
+                    "file is corrected and the browser controller is restarted.",
+                    reason="blocklist_error",
+                ) from exc
         return self._blocklist
 
     def _check_blocked(self, hostname: str) -> None:
-        """Raise :exc:`BrowserSecurityError` if *hostname* is blocked.
+        """Raise :exc:`BrowserSecurityError` if *hostname* is blocked or the
+        blocklist is in an error state.
 
         Args:
             hostname: Normalised (lowercase, no port, no trailing dot) hostname.
 
         Raises:
-            BrowserSecurityError: If the domain or any of its parents appears
-                in the blocklist.  The error message does **not** reveal which
-                blocklist entry matched.
+            BrowserSecurityError: With ``reason="blocklist_error"`` if the
+                blocklist file is malformed (fail-closed), or with
+                ``reason="blocked_domain"`` if the hostname matches an entry.
+                The error message does **not** reveal which blocklist entry
+                matched (for ``blocked_domain``).
         """
-        if _is_blocked(hostname, self._get_blocklist()):
+        bl = self._get_blocklist()  # may raise blocklist_error
+        if _is_blocked(hostname, bl):
             raise BrowserSecurityError(
                 "Navigation to that domain is not permitted.",
                 reason="blocked_domain",
@@ -440,7 +654,8 @@ class BrowserController:
 
         Security checks (in order):
         1. URL scheme and format validation.
-        2. Domain blocklist check (cannot be bypassed by approval).
+        2. Domain blocklist check — also fails closed if the blocklist is
+           malformed (cannot be bypassed by approval).
         3. Session fetch quota check.
         4. Approval existence and TTL check.
 
@@ -481,6 +696,7 @@ class BrowserController:
         domain_clean = domain.split(":")[0].rstrip(".")
 
         # 1. Blocklist check — must happen before approval and network access.
+        #    Also fails closed if the blocklist is malformed.
         self._check_blocked(domain_clean)
 
         # 2. Quota check — count the attempt regardless of outcome below.
@@ -658,7 +874,8 @@ class BrowserController:
         """Create an approval request for a browser navigation.
 
         The domain blocklist is checked here before registering the request —
-        blocked domains never receive a pending session.
+        blocked domains never receive a pending session.  If the blocklist is
+        malformed, the request is also refused (fail-closed).
 
         Returns:
             A :class:`BrowserSession` with ``status="pending"``.
@@ -667,8 +884,8 @@ class BrowserController:
         either :meth:`approve_session` or :meth:`deny_session`.
 
         Raises:
-            BrowserSecurityError: If the domain is on the blocklist or the URL
-                is invalid.
+            BrowserSecurityError: If the domain is on the blocklist, the
+                blocklist is malformed, or the URL is invalid.
         """
         from urllib.parse import urlparse
 
@@ -683,7 +900,7 @@ class BrowserController:
 
         domain = parsed.netloc.lower().split(":")[0].rstrip(".")
 
-        # Blocklist check happens before creating the pending session.
+        # Blocklist check (including fail-closed error state) before the session.
         self._check_blocked(domain)
 
         session_id = f"browser-{uuid.uuid4().hex[:12]}"
@@ -741,6 +958,7 @@ class BrowserController:
             "session_fetch_count": self._session_fetch_count,
             "max_fetches": self._max_fetches,
             "approval_ttl_seconds": self._approval_ttl,
+            "blocklist_error": self._blocklist_error,
             "current_session": {
                 "id": self._current_session.id,
                 "url": self._current_session.url,
@@ -872,6 +1090,7 @@ class BrowserController:
 
 
 __all__ = [
+    "BlocklistParseError",
     "BrowserController",
     "BrowserSecurityError",
     "BrowserSession",
@@ -883,4 +1102,5 @@ __all__ = [
     "_is_blocked",
     "_load_blocklist",
     "_normalise_hostname",
+    "_parse_blocklist_entry",
 ]

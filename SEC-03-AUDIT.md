@@ -112,20 +112,64 @@
 1. `~/.dream/blocked_domains.txt` — user-level; takes effect for all Dream instances run by this user.
 2. `data/blocked_domains.txt` (relative to the repository root) — project-level default. Note: `/data/` is listed in `.gitignore`; use `git add -f data/blocked_domains.txt` to track it in git if desired.
 
-### Entry format
+### Entry grammar
+
+```
+entry   = hostname [ ":" port ]
+hostname = label *( "." label )   # simplified; Unicode IDN allowed
+port    = 1*DIGIT                  # integer in [1, 65535]
+```
 
 ```
 # This is a comment
 evil.com        # inline comment also allowed
-bad.org
+bad.org:443     # valid port — stripped; bad.org is blocked
 ```
 
-- One hostname per line.
-- Comments begin with `#` (line-level or inline).
-- Blank lines and whitespace-only lines are ignored.
-- Entries are normalised: lowercase, trailing dots stripped, ports stripped, scheme stripped if accidentally included.
+- One entry per line.
+- Comments begin with `#` (line-level or inline after the entry).
+- Blank lines and whitespace-only lines are **ignored without error**.
+- Entries are normalised: lowercase, trailing dots stripped, port stripped after validation.
+- A scheme prefix (`http://`, `https://`, `ftp://`) is stripped before parsing.
 - Missing files are silently ignored (safe default).
-- Malformed entries (containing `<>(){}|\^` `'"`, IPv6 `[...]`, or whitespace in the hostname part) are skipped with a `WARNING` log; they do not cause a crash.
+
+### Fail-closed malformed-entry policy (SEC-03 hardening, v2)
+
+**Any non-empty, non-comment entry that cannot be safely parsed raises `BlocklistParseError`.**
+
+The `BrowserController` catches this exception on first blocklist access, sets `_blocklist_error = True`, and **refuses all navigation with `reason="blocklist_error"`** until the file is corrected and the controller is re-instantiated.
+
+No malformed entry is silently skipped in a way that could leave a domain the operator intended to block still reachable.
+
+#### Port validation (strict)
+
+| Port field | Treatment |
+|------------|-----------|
+| Absent (no colon) | Accepted — plain hostname |
+| Non-empty string of ASCII digits, value in [1, 65535] | Accepted — port stripped, hostname used |
+| Empty string (`evil.com:`) | **`BlocklistParseError`** |
+| Non-digit characters (`evil.com:NOTAPORT`, `evil.com:80abc`) | **`BlocklistParseError`** |
+| Negative sign or plus (`evil.com:-1`, `evil.com:+80`) | **`BlocklistParseError`** — `str.isdigit()` rejects these |
+| Port 0 | **`BlocklistParseError`** — out of range [1, 65535] |
+| Port > 65535 (`evil.com:65536`, `evil.com:99999`) | **`BlocklistParseError`** |
+| Multiple colons (`evil.com:80:extra`) | **`BlocklistParseError`** — more than one colon |
+
+#### Other rejections (all `BlocklistParseError`)
+
+| Entry | Reason |
+|-------|--------|
+| `[::1]` | IPv6 bracketed address — not a hostname-only entry |
+| `<evil>` | Forbidden hostname characters |
+| `evil com` | Space in hostname |
+| Empty hostname part | Empty string after stripping |
+
+#### `BlocklistParseError` attributes
+
+| Attribute | Content |
+|-----------|---------|
+| `path` | Filesystem path of the blocklist file |
+| `lineno` | 1-based line number of the malformed entry |
+| `raw_entry` | The entry text as it appeared in the file (safe for logs) |
 
 ### Matching rules
 
@@ -142,17 +186,43 @@ The subdomain check uses suffix + label boundary: `hostname.endswith("." + entry
 
 ### Application order
 
-Blocklist → Quota → Approval → Network
+Blocklist (including fail-closed error state) → Quota → Approval → Network
 
 The blocklist is consulted **first**, before any approval check and before any network access. An approval flag cannot override it.
 
 ### Privacy
 
-Error messages for blocked domains do **not** reveal which blocklist entry matched, only a generic "Navigation to that domain is not permitted." message.
+Error messages for blocked domains do **not** reveal which blocklist entry matched, only a generic "Navigation to that domain is not permitted." message.  Error messages for `blocklist_error` do not reveal blocklist file contents.
 
 ---
 
 ## Threat model and security considerations
+
+| Threat | Mitigation |
+|--------|-----------|
+| Agent navigates to an unauthorised domain without user consent | Explicit approval required; no bypass. |
+| Stale approval grants indefinite access | TTL of 900 s enforced via monotonic clock. |
+| Approval re-used across session resets | Counter and session reset together on new browser session. |
+| Retry loops exhaust resources | Quota of 20 fetches per session; failed requests count too. |
+| Operator types bad port in blocklist, intended domain silently unblocked | Fail-closed: `BlocklistParseError` → all navigation refused until fixed. |
+| Malformed blocklist entry silently skipped, intended domain reachable | Fail-closed: any parse error poisons the entire blocklist. |
+| Invalid port text silently stripped, wrong hostname in blocklist | Strict port validation: only integer in [1, 65535] accepted. |
+| Multiple-colon entry (`evil.com:80:extra`) creates wrong hostname via `rsplit` | Detected as >1 colon → `BlocklistParseError`. |
+| Operator blocklist bypassed via approval | Blocklist check precedes approval; approval cannot override it. |
+| Blocklist contents leaked in errors | Error messages generic; entry that matched is not disclosed. |
+| URL query params (tokens, API keys) leaked in logs | `logger.warning` logs only `reason=…`; never the URL. |
+| Substring domain spoofing (`badexample.com` allowed by `example.com` block) | Label-boundary suffix check prevents this. |
+| Old client sends `always_allow=True` | Silently ignored; `TypeError` if passed as keyword arg to `approve_session()`. |
+| IPv6 / punycode blocklist entries | IPv6 brackets rejected as `BlocklistParseError`; lowercase normalisation handles punycode. |
+| Missing blocklist file causes crash | Missing files silently ignored; safe default. |
+
+### Residual risks / known limitations
+
+1. **No persistent approval store.** Approvals live in memory only. Restarting the bridge loses all approvals; the next request needs fresh approval.
+2. **No per-domain quota.** The 20-fetch quota is per browser session, not per domain.
+3. **Blocklist is loaded at first use, not reloaded.** Changes to the blocklist file take effect only on the next `BrowserController` instantiation. The fail-closed state also persists for the controller's lifetime — restart required to recover from a parse error.
+4. **`always_allow` removed from RPC contract.** Old clients must be updated to work within the TTL window.
+5. **Cookie/credential exposure via `get_cookies()`.** The `browser_get_cookies` endpoint is unchanged; it returns all cookies. Frontend callers should be mindful of cookie sensitivity.
 
 | Threat | Mitigation |
 |--------|-----------|
@@ -253,9 +323,29 @@ Error messages for blocked domains do **not** reveal which blocklist entry match
 | `test_blocklist_ignores_comments_and_blank_lines` | Comments/blanks ignored |
 | `test_blocklist_normalises_case` | Entries lowercased |
 | `test_blocklist_normalises_trailing_dot` | Trailing dots stripped |
-| `test_blocklist_handles_entry_with_port` | Port stripped from entries |
-| `test_malformed_blocklist_entry_skipped_safely` | Bad entries skipped, good ones kept |
+| `test_blocklist_handles_entry_with_port` | Valid port (e.g. `:443`) is stripped; hostname is matched |
+| `test_malformed_blocklist_entry_raises_parse_error` | Invalid chars (`<evil>`) → `BlocklistParseError` with path+lineno (fail-closed, v2) |
+| `test_malformed_ipv6_entry_raises_parse_error` | `[::1]` → `BlocklistParseError` (fail-closed) |
 | `test_blocklist_uses_first_path_then_second` | Both files merged |
+| `test_parse_blocklist_entry_valid_port` | Ports 1, 8080, 65535 accepted and stripped |
+| `test_parse_blocklist_entry_no_port` | Entry without port accepted as-is |
+| `test_parse_blocklist_entry_empty_port_raises` | `evil.com:` → `BlocklistParseError` |
+| `test_parse_blocklist_entry_non_numeric_port_raises` | `evil.com:NOTAPORT` → `BlocklistParseError` |
+| `test_parse_blocklist_entry_negative_port_raises` | `evil.com:-1` → `BlocklistParseError` |
+| `test_parse_blocklist_entry_zero_port_raises` | `evil.com:0` → `BlocklistParseError` |
+| `test_parse_blocklist_entry_port_too_large_raises` | `evil.com:65536`, `evil.com:99999` → `BlocklistParseError` |
+| `test_parse_blocklist_entry_multiple_colons_raises` | `evil.com:80:extra` → `BlocklistParseError` |
+| `test_parse_blocklist_entry_ipv6_raises` | `[::1]` → `BlocklistParseError` |
+| `test_parse_blocklist_entry_invalid_chars_raises` | `<evil>` → `BlocklistParseError` |
+| `test_parse_blocklist_entry_empty_raises` | Empty string → `BlocklistParseError` |
+| `test_parse_blocklist_entry_strips_scheme` | `https://evil.com:8080` → `evil.com` |
+| `test_parse_blocklist_entry_trailing_dot_stripped` | `evil.com.` → `evil.com` |
+| `test_parse_blocklist_entry_case_normalised` | `EVIL.COM` → `evil.com` |
+| `test_controller_enters_fail_closed_on_malformed_blocklist` | Malformed blocklist → `_blocklist_error=True`, all nav refused |
+| `test_controller_fail_closed_persists_across_calls` | Error state persists across multiple calls |
+| `test_blocklist_error_blocks_navigate_before_network` | `blocklist_error` blocks before any network call |
+| `test_blocklist_error_blocks_request_approval` | `request_approval()` also refuses when blocklist is malformed |
+| `test_valid_blocklist_with_port_is_not_fail_closed` | Valid port entries load normally, no fail-closed |
 | `test_normalise_hostname_lowercase` | Case normalisation |
 | `test_normalise_hostname_strips_trailing_dot` | Trailing dot stripped |
 | `test_normalise_hostname_strips_port` | Port stripped |
@@ -286,17 +376,17 @@ rg -n "always_allow|always_allow_domain|BrowserSession|BrowserController|approve
 Found `always_allow_domain` in `dream/browser_controller.py:51` and `tests/test_browser_controller.py:67,97-104`.
 Found `always_allow` in `dream/browser_controller.py:391,397,408-410` and `dream/bridge/methods.py:2749-2753`.
 
-### Tests (after change)
+### Tests (after SEC-03 v1 initial change + v2 fail-closed hardening)
 
 ```
 pytest tests/test_browse.py tests/test_browse_security.py tests/test_browser_controller.py -v
 ```
-**71 passed** (3 browse + 68 controller)
+**91 passed** (3 browse + 88 controller)
 
 ```
 pytest -q
 ```
-**3010 passed, 14 skipped** in 124.79s
+**3030 passed, 14 skipped** in 119.42s
 
 ### Ruff (after change)
 
