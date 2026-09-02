@@ -1590,11 +1590,6 @@ class Dream:
             result = extract_facts(self._extraction_backend(), message)
         except (KeyboardInterrupt, SystemExit):
             raise
-        except Exception as exc:  # defensive; extract_facts catches most of these
-            exc_message = _safe_log_message(f"{type(exc).__name__}: {exc}")
-            result = ExtractionResult(
-                facts=[], status=STATUS_ERROR, raw_text=exc_message
-            )
         # Redact raw_text after extract_facts returns (extract_facts may have
         # set raw_text directly; this ensures sensitive data is always bounded).
         result.raw_text = _safe_log_message(result.raw_text)
@@ -1622,13 +1617,6 @@ class Dream:
                 # A real storage failure (locked database, full disk, broken
                 # constraint, ...). Never silent: record it for the CLI, count
                 # it, and log it redacted.
-                _record_store_failure(errors, exc)
-            except Exception as exc:
-                # Final integration boundary over third-party store helpers
-                # (non-sqlite exceptions from normalization/formatting). Treated
-                # exactly like a storage failure: recorded, counted, logged —
-                # never silent. System and cancellation exceptions re-raise
-                # above rather than being swallowed.
                 _record_store_failure(errors, exc)
         outcome.result = result
         outcome.errors = errors
