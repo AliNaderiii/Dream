@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import os
 import re
+import sqlite3
 import sys
 import threading
 import time
@@ -27,7 +29,12 @@ from dream.compaction import (
 )
 from dream.extraction import (
     STATUS_ABANDONED,
+    STATUS_DISABLED,
     STATUS_ERROR,
+    STATUS_FACTS_FOUND,
+    STATUS_NO_FACTS,
+    STATUS_TOO_SHORT,
+    STATUS_UNPARSEABLE,
     ExtractionResult,
     extract_facts,
 )
@@ -40,6 +47,16 @@ from dream.memory_stores import (
     TARGET_USER,
     BoundedMemory,
     BoundedSnapshot,
+)
+from dream.metrics import (
+    METRIC_EXTRACTION_ABANDONED,
+    METRIC_EXTRACTION_ERROR,
+    METRIC_EXTRACTION_NO_FACTS,
+    METRIC_EXTRACTION_PARSE_ERROR,
+    METRIC_EXTRACTION_SKIPPED,
+    METRIC_EXTRACTION_STORE_ERROR,
+    METRIC_EXTRACTION_SUCCESS,
+    metrics,
 )
 from dream.normalization import normalize_importance, normalize_kind
 from dream.providers import BuiltInMemoryProvider, ProviderManager
@@ -81,6 +98,96 @@ DEFAULT_RETRY_BACKOFF_SECONDS = 1.0
 # reply goes out anyway. Five seconds keeps typical extractions reported while
 # bounding the damage of a provider that never answers.
 DEFAULT_EXTRACTION_TIMEOUT_SECONDS = 5.0
+
+# The structured logger used by the agent and its background extraction worker.
+# Extraction log records carry only safe metadata (status, exception class, a
+# short redacted message) — never the extraction prompt, raw model output, full
+# user content, API credentials, or filesystem/database paths.
+log = logging.getLogger("dream.agent")
+
+# Extraction-pass status -> metric name. Every completed pass increments
+# exactly one of these from the single call site that finalizes a turn's
+# extraction result, so a pass is never double-counted across the background
+# worker and the turn that waits on it. ``store_error`` is intentionally absent
+# here: storage failures are recorded per fact-write inside the worker against
+# ``METRIC_EXTRACTION_STORE_ERROR`` while the pass status stays ``facts_found``
+# (extraction itself succeeded; the CLI still surfaces the lost writes).
+_EXTRACTION_STATUS_METRIC: dict[str, str] = {
+    STATUS_FACTS_FOUND: METRIC_EXTRACTION_SUCCESS,
+    STATUS_NO_FACTS: METRIC_EXTRACTION_NO_FACTS,
+    STATUS_DISABLED: METRIC_EXTRACTION_SKIPPED,
+    STATUS_TOO_SHORT: METRIC_EXTRACTION_SKIPPED,
+    STATUS_UNPARSEABLE: METRIC_EXTRACTION_PARSE_ERROR,
+    STATUS_ERROR: METRIC_EXTRACTION_ERROR,
+    STATUS_ABANDONED: METRIC_EXTRACTION_ABANDONED,
+}
+
+# Which extraction statuses are worth a WARNING-level record. Benign or
+# expected outcomes (facts found, none found, disabled, too short) stay quiet
+# at DEBUG so the default WARNING root level does not spam a terminal.
+_EXTRACTION_WARNING_STATUSES: frozenset[str] = frozenset(
+    {STATUS_UNPARSEABLE, STATUS_ERROR, STATUS_ABANDONED}
+)
+
+# Cap and collapse free-form exception messages before they can reach a log,
+# so a verbose or multiline provider/store message cannot bloat or leak.
+_LOG_MESSAGE_LIMIT = 200
+
+
+def _safe_log_message(raw: str) -> str:
+    """Collapse whitespace and truncate an error message for logging.
+
+    Log records must never carry the full extraction prompt, raw model output,
+    user content, credentials, or filesystem paths. A whitespace-collapsed,
+    length-capped message keeps the diagnostic readable without echoing
+    anything verbose or sensitive verbatim.
+    """
+    collapsed = " ".join(raw.split())
+    if len(collapsed) <= _LOG_MESSAGE_LIMIT:
+        return collapsed
+    return collapsed[:_LOG_MESSAGE_LIMIT] + "..."
+
+
+def _record_extraction_status(result: ExtractionResult) -> None:
+    """Increment the metric and emit the log for one finalized extraction pass.
+
+    Called exactly once per turn from the single place that finalizes the turn's
+    extraction result (successful completion, abandoned, or a synthetic error),
+    so a pass is never double-counted. Only safe metadata is logged.
+    """
+    metric = _EXTRACTION_STATUS_METRIC.get(result.status)
+    if metric is not None:
+        metrics.incr(metric)
+    if result.status in _EXTRACTION_WARNING_STATUSES:
+        log.warning(
+            "extraction pass failed",
+            extra={"extraction_status": result.status},
+        )
+    else:
+        log.debug(
+            "extraction pass completed",
+            extra={"extraction_status": result.status, "facts": len(result.facts)},
+        )
+
+
+def _record_store_failure(errors: list[str], exc: Exception) -> None:
+    """Record one persistence failure during extraction, visibly and safely.
+
+    Appends a diagnostic for the CLI (as before), increments the store-error
+    metric, and emits a redacted warning. Storage failures are never silent,
+    but the pass status itself stays ``facts_found`` — extraction succeeded and
+    only the write to durable memory failed.
+    """
+    errors.append(f"{type(exc).__name__}: {exc}")
+    metrics.incr(METRIC_EXTRACTION_STORE_ERROR)
+    log.warning(
+        "extraction store failure",
+        extra={
+            "extraction_status": "store_error",
+            "exception_type": type(exc).__name__,
+            "error": _safe_log_message(str(exc)),
+        },
+    )
 
 
 # Tools Dream registers as per-instance closures bound to the owning
@@ -1462,12 +1569,17 @@ class Dream:
     ) -> None:
         """Run the extraction pass and store any facts it finds.
 
-        Runs on a worker thread so the reply is never delayed by it. Every
-        exception is contained here: a broken provider, store, or fact must
-        never escape into the turn that already produced its reply.
+        Runs on a worker thread so the reply is never delayed by it. A broken
+        provider or fact must never escape into the turn that already produced
+        its reply: extract_facts returns a typed ExtractionResult for every
+        failure class it knows, and the two bounded catches below only guard
+        the unexpected. Cancellation and system exits are always re-raised —
+        they are never flattened into a fake result.
         """
         try:
             result = extract_facts(self._extraction_backend(), message)
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as exc:  # defensive; extract_facts catches most of these
             result = ExtractionResult(
                 facts=[], status=STATUS_ERROR, raw_text=f"{type(exc).__name__}: {exc}"
@@ -1488,11 +1600,22 @@ class Dream:
             except ValueError:
                 # The one expected case: an unusable fact (e.g. empty content).
                 # Skip it and keep the rest of the batch.
+                log.debug("extraction store rejected an unusable fact")
                 continue
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except sqlite3.Error as exc:
+                # A real storage failure (locked database, full disk, broken
+                # constraint, ...). Never silent: record it for the CLI, count
+                # it, and log it redacted.
+                _record_store_failure(errors, exc)
             except Exception as exc:
-                # A store failure (locked database, full disk, ...) must never
-                # pass silently: record it so the CLI can print what was lost.
-                errors.append(f"{type(exc).__name__}: {exc}")
+                # Final integration boundary over third-party store helpers
+                # (non-sqlite exceptions from normalization/formatting). Treated
+                # exactly like a storage failure: recorded, counted, logged —
+                # never silent. System and cancellation exceptions re-raise
+                # above rather than being swallowed.
+                _record_store_failure(errors, exc)
         outcome.result = result
         outcome.errors = errors
 
@@ -1504,7 +1627,8 @@ class Dream:
         store and are reported on the turn, exactly as before. When it does
         not — the provider hangs — the turn is marked abandoned and the reply
         is returned anyway; the worker keeps running and stores the facts
-        when the provider finally answers.
+        when the provider finally answers. The finalized status is recorded
+        (metric + structured log) exactly once per turn.
         """
         outcome = _ExtractionOutcome()
         worker = threading.Thread(
@@ -1513,23 +1637,24 @@ class Dream:
         worker.start()
         worker.join(timeout=self.extraction_timeout_seconds)
         if worker.is_alive():
-            return (
-                ExtractionResult(
-                    facts=[],
-                    status=STATUS_ABANDONED,
-                    raw_text=(
-                        "did not finish within "
-                        f"{self.extraction_timeout_seconds:.1f}s"
-                    ),
-                ),
-                [],
-            )
-        result = outcome.result
-        if result is None:
             result = ExtractionResult(
-                facts=[], status=STATUS_ERROR, raw_text="extraction produced no result"
+                facts=[],
+                status=STATUS_ABANDONED,
+                raw_text=(
+                    "did not finish within "
+                    f"{self.extraction_timeout_seconds:.1f}s"
+                ),
             )
-        return result, outcome.errors
+            errors: list[str] = []
+        else:
+            result = outcome.result
+            if result is None:
+                result = ExtractionResult(
+                    facts=[], status=STATUS_ERROR, raw_text="extraction produced no result"
+                )
+            errors = outcome.errors
+        _record_extraction_status(result)
+        return result, errors
 
 
 def _relative_age(timestamp: float) -> str:
