@@ -17,6 +17,7 @@ import type {
   NotificationRequest,
   SendOutcome,
 } from '@/types';
+import { log } from '@/lib/logger';
 import { isTauri } from '@/utils/platform';
 
 /** Invokes a Rust command, returning `fallback` when not running under Tauri. */
@@ -35,7 +36,9 @@ async function invoke<T>(
   try {
     return await tauriInvoke<T>(cmd, args);
   } catch (error) {
-    console.error(`[dream] command \`${cmd}\` failed:`, error);
+    // Logged, not swallowed: the command payload itself stays out of the record
+    // because `args` can carry workspace paths or message content.
+    log.error('tauri command failed', error, { command: cmd });
     throw error;
   }
 }
