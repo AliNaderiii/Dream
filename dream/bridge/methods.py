@@ -2740,17 +2740,24 @@ class BridgeMethods:
         }
 
     def browser_approve(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Approve a pending browser navigation."""
+        """Approve a pending browser navigation.
+
+        SEC-03: The ``always_allow`` parameter has been removed from the
+        production contract.  If a legacy client sends it, it is silently
+        ignored — it does **not** grant permanent domain access.  Approvals
+        expire after the configured TTL (default 900 s).
+        """
         params = params or {}
         bc = self._require_browser()
         session_id = params.get("session_id")
         if not isinstance(session_id, str) or not session_id:
             raise invalid_params("session_id must be a non-empty string")
-        always_allow = bool(params.get("always_allow", False))
-        session = bc.approve_session(session_id, always_allow=always_allow)
+        # ``always_allow`` is intentionally NOT consumed here — any value sent
+        # by an old client is ignored without granting permanent access.
+        session = bc.approve_session(session_id)
         if session is None:
             raise invalid_params(f"No pending session with id {session_id!r}")
-        return {"approved": True, "session_id": session_id, "always_allow": always_allow}
+        return {"approved": True, "session_id": session_id}
 
     def browser_deny(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Deny a pending browser navigation."""
@@ -2765,7 +2772,18 @@ class BridgeMethods:
         return {"denied": True, "session_id": session_id}
 
     async def browser_navigate(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Navigate to a URL and return page content."""
+        """Navigate to a URL and return page content.
+
+        SEC-03: Security outcomes are distinguished in the ``reason`` field of
+        the error data payload:
+        * ``"approval_required"`` — no valid approval for this domain/session.
+        * ``"approval_expired"`` — a previous approval has expired (TTL).
+        * ``"quota_exceeded"`` — session fetch quota exhausted.
+        * ``"blocked_domain"`` — domain appears in the blocklist.
+        * ``"invalid_url"`` — scheme or format is invalid.
+
+        Full URLs are never logged to avoid leaking query-string secrets.
+        """
         params = params or {}
         bc = self._require_browser()
         url = params.get("url")
@@ -2776,8 +2794,6 @@ class BridgeMethods:
         timeout = int(params.get("timeout", 30))
 
         try:
-            # If the domain is not approved, this raises BrowserSecurityError
-            # with enough info for the frontend to show an approval dialog.
             content = await bc.navigate(
                 url, purpose=purpose, wait_until=wait_until, timeout=timeout
             )
@@ -2789,21 +2805,30 @@ class BridgeMethods:
                 "tables": content.tables,
             }
         except BrowserSecurityError as exc:
-            # Return the approval-required info for the frontend.
-            # The browser controller has registered a pending session.
+            # Determine the structured reason for the security failure.
+            reason = getattr(exc, "reason", "")
             status = bc.get_status()
             pending = status.get("current_session", {})
+            error_data: dict[str, Any] = {"reason": reason}
+            if reason in ("approval_required", "approval_expired"):
+                error_data["approval_required"] = True
+                if pending:
+                    error_data["session_id"] = pending.get("id")
+            elif reason == "quota_exceeded":
+                error_data["quota_exceeded"] = True
+            elif reason == "blocked_domain":
+                error_data["blocked_domain"] = True
+            # Never log full URL (may contain query secrets); log scheme+reason.
+            logger.warning(
+                "browser_navigate: security check failed reason=%s", reason
+            )
             raise BridgeError(
                 -32013,
                 str(exc),
-                data={
-                    "approval_required": True,
-                    "url": url,
-                    "session_id": pending.get("id") if pending else None,
-                },
+                data=error_data,
             ) from exc
         except Exception as exc:
-            raise BridgeError(-32014, f"Navigation failed: {exc}") from exc
+            raise BridgeError(-32014, "Navigation failed.") from exc
 
     async def browser_get_content(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get the content of the current page."""
