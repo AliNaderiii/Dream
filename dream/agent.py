@@ -137,12 +137,22 @@ _LOG_MESSAGE_LIMIT = 200
 def _safe_log_message(raw: str) -> str:
     """Collapse whitespace and truncate an error message for logging.
 
-    Log records must never carry the full extraction prompt, raw model output,
-    user content, credentials, or filesystem paths. A whitespace-collapsed,
-    length-capped message keeps the diagnostic readable without echoing
-    anything verbose or sensitive verbatim.
+    Log records and ExtractionResult.raw_text must never carry the full
+    extraction prompt, raw model output, user content, credentials, or
+    filesystem paths. A whitespace-collapsed, length-capped message keeps
+    the diagnostic readable without echoing anything verbose or sensitive
+    verbatim.
+
+    Also masks token-like patterns (8+ chars of alphanumerics, hyphens,
+    underscores) with ``***`` so API keys and bearer tokens in exception
+    messages are not exposed verbatim.
     """
+    import re
     collapsed = " ".join(raw.split())
+
+    # Mask token-like patterns: 8+ chars of alphanumerics, hyphens, underscores
+    collapsed = re.sub(r"[A-Za-z0-9_-]{8,}", "***", collapsed)
+
     if len(collapsed) <= _LOG_MESSAGE_LIMIT:
         return collapsed
     return collapsed[:_LOG_MESSAGE_LIMIT] + "..."
@@ -1581,9 +1591,13 @@ class Dream:
         except (KeyboardInterrupt, SystemExit):
             raise
         except Exception as exc:  # defensive; extract_facts catches most of these
+            exc_message = _safe_log_message(f"{type(exc).__name__}: {exc}")
             result = ExtractionResult(
-                facts=[], status=STATUS_ERROR, raw_text=f"{type(exc).__name__}: {exc}"
+                facts=[], status=STATUS_ERROR, raw_text=exc_message
             )
+        # Redact raw_text after extract_facts returns (extract_facts may have
+        # set raw_text directly; this ensures sensitive data is always bounded).
+        result.raw_text = _safe_log_message(result.raw_text)
         errors: list[str] = []
         for fact in result.facts:
             try:

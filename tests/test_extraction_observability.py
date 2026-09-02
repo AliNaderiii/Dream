@@ -247,3 +247,25 @@ def test_failure_logs_never_contain_user_content(store, monkeypatch, caplog):
     joined = "\n".join(r.getMessage() for r in records)
     assert _SECRET not in joined
     assert "نادری" not in joined
+
+
+def test_extraction_result_raw_text_redacted(store, monkeypatch, caplog):
+    """Exception text stored in ExtractionResult.raw_text must not expose
+    API keys, tokens, prompts, or database paths."""
+    caplog.set_level(logging.WARNING, logger="dream.agent")
+    _SECRET = "super-secret-token-9f3a"
+
+    # Use the same pattern as test_failure_logs_never_contain_user_content
+    message = f"اسم کامل من علیرضا نادری است {_SECRET}"
+    backend = _TurnBackend("سلام", RuntimeError(f"boom for {_SECRET}"))
+    turn = Dream(store, backend).run(message)
+
+    raw = turn.extraction.raw_text
+    # Secret should be masked in raw_text
+    assert _SECRET not in raw, f"Secret found in raw_text: {raw!r}"
+    # Should contain the exception type but sanitized message
+    assert "RuntimeError" in raw or "boom" in raw.lower()
+
+    # Log records should also be redacted
+    records = _log_records(caplog)
+    assert not any(_SECRET in (r.getMessage() or "") for r in records)

@@ -103,6 +103,7 @@ New logger: `log = logging.getLogger("dream.agent")` (no duplicate metrics/log s
 
 Policy:
 - Only safe metadata is logged: `extraction_status`, `exception_type`, and a whitespace-collapsed, length-capped (`_LOG_MESSAGE_LIMIT = 200`) error message via `_safe_log_message`.
+- `_safe_log_message` also masks token-like patterns (8+ alphanumeric/hyphen/underscore chars → `***`) so API keys and bearer tokens in exception messages are not exposed verbatim.
 - Benign outcomes (`facts_found`, `no_facts`, `disabled`, `too_short`, unusable-fact skip) log at DEBUG.
 - Failures (`unparseable`, `error`, `abandoned`, `store_error`) log at WARNING.
 - **Never** logged: the extraction prompt, raw model output (`ExtractionResult.raw_text` is deliberately not written to the log), full user content, fact content, API keys/credentials, or filesystem/database paths.
@@ -156,7 +157,7 @@ $ python -m pytest tests/test_extraction_observability.py -q
 11 passed
 
 $ python -m pytest -q
-3041 passed, 14 skipped in 115.42s
+3041 passed, 14 skipped in 114.17s
 
 $ git diff --check          # clean
 $ rg -n "extract_facts|except Exception|except:" dream/agent.py   # reviewed, see §9
