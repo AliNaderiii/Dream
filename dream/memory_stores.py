@@ -17,12 +17,19 @@ user profile (target ``user``).  The design follows three rules:
   same turn instead of silently losing a tail.  Every error message is
   bilingual (Persian first, matching the kernel's agent-facing convention)
   and says exactly that.
-* **One writer per store.**  All mutations run the read-check-write cycle
-  inside one re-entrant thread lock and one ``BEGIN IMMEDIATE`` transaction,
-  so threads serialize in-process and writers serialize across processes
+* **One writer per store.**  All mutations run the check-plus-mutate cycle
+  as one ``BEGIN IMMEDIATE`` transaction under one re-entrant thread lock,
+  and the SQLite handle is private to the store, so no caller can reach the
+  mutable backend without synchronization. Threads serialize in-process on
+  the lock and writers serialize across processes on SQLite's file lock
   (with ``busy_timeout`` so a concurrent writer waits instead of erroring).
-  Reads (:meth:`BoundedStore.snapshot`) take the same lock and are budgeted
-  at < 5 ms — the store is at most a few thousand characters by construction.
+  Any failure — a domain error, a constraint failure, or a keyboard
+  interrupt — rolls the transaction back before it propagates, so a failed
+  or interrupted write is invisible and never leaks an open transaction.
+  Reads (:meth:`BoundedStore.snapshot`) take the same lock and return a
+  detached immutable snapshot, budgeted at < 5 ms — the store is at most a
+  few thousand characters by construction. No callback or external code
+  ever runs under the lock.
 
 Tool surface (registered by :class:`dream.agent.Dream`, not here): ``add``,
 ``replace``, ``remove`` with unique-substring matching.  There is no ``read``
@@ -43,10 +50,12 @@ Standard library only: ``sqlite3``, ``threading``, ``dataclasses``.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sqlite3
 import threading
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -324,12 +333,21 @@ def _excerpt(text: str) -> str:
 class BoundedStore:
     """One bounded, ordered, character-budgeted store behind SQLite.
 
-    Thread safety mirrors :class:`dream.memory.MemoryStore`: the connection is
-    opened with ``check_same_thread=False`` and every access runs under one
-    re-entrant lock. Writes additionally run inside ``BEGIN IMMEDIATE`` (the
-    connection is in autocommit mode), so the capacity check and the write are
-    one atomic unit — a second writer, in this process or another, cannot slip
-    an entry between the check and the insert and overflow the budget.
+    Thread safety mirrors :class:`dream.memory.MemoryStore` and extends it:
+    the SQLite handle is **private** (``_conn``, opened with
+    ``check_same_thread=False``) and every access to it — read or write —
+    runs under one re-entrant lock, so callers can never reach the mutable
+    backend without synchronization. Every write (``add`` / ``replace`` /
+    ``remove``) is one ``BEGIN IMMEDIATE`` … ``COMMIT`` transaction inside
+    that lock (:meth:`_locked_write`): the capacity/match check and the
+    mutation are one atomic unit, a second writer — in this process or
+    another — cannot slip a write between check and mutation, and any
+    exception (including a keyboard interrupt) rolls the transaction back
+    before it propagates. Reads (:meth:`snapshot`) take the same lock and
+    build a detached, immutable :class:`BoundedSnapshot` (a fresh tuple of
+    immutable strings) budgeted at < 5 ms. No callback or external code
+    ever runs under the lock, so the lock can never be held across
+    user-controlled execution.
     """
 
     def __init__(
@@ -363,20 +381,23 @@ class BoundedStore:
         if self.path != ":memory:":
             parent = os.path.dirname(os.path.abspath(self.path))
             os.makedirs(parent, exist_ok=True)
-        self.conn = sqlite3.connect(
+        # Private on purpose: a public handle would let a caller run SQL
+        # outside the lock and corrupt the capacity invariant.
+        self._conn = sqlite3.connect(
             self.path, check_same_thread=False, isolation_level=None
         )
-        self.conn.row_factory = sqlite3.Row
-        self.conn.execute("PRAGMA journal_mode=WAL")
-        self.conn.execute(f"PRAGMA busy_timeout={_BUSY_TIMEOUT_MS}")
-        self.conn.execute("PRAGMA foreign_keys=ON")
-        self.conn.executescript(_SCHEMA)
+        self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute(f"PRAGMA busy_timeout={_BUSY_TIMEOUT_MS}")
+        self._conn.execute("PRAGMA foreign_keys=ON")
+        self._conn.executescript(_SCHEMA)
 
     # -- lifecycle ---------------------------------------------------------
 
     def close(self) -> None:
+        """Release the private handle under the lock. Idempotent."""
         with self._lock:
-            self.conn.close()
+            self._conn.close()
 
     def __enter__(self) -> BoundedStore:
         return self
@@ -384,10 +405,41 @@ class BoundedStore:
     def __exit__(self, *exc: object) -> None:
         self.close()
 
+    # -- synchronization boundaries ----------------------------------------
+
+    @contextlib.contextmanager
+    def _locked_write(self) -> Iterator[None]:
+        """Run one write as one atomic ``BEGIN IMMEDIATE`` … ``COMMIT`` unit.
+
+        Holds the store lock for the whole unit (and only for it), so
+        in-process writers serialize on the lock and cross-process writers
+        on SQLite's file lock (``busy_timeout`` absorbs the wait). On any
+        exception — a domain error, a constraint failure, or a keyboard
+        interrupt — the transaction is rolled back before the exception
+        propagates, so the connection never carries a leaked write
+        transaction and a failed write is invisible. ``BaseException`` (not
+        just ``Exception``) is caught because a Ctrl-C inside the unit must
+        roll back too: otherwise the leaked ``BEGIN IMMEDIATE`` bricks every
+        later write with "cannot start a transaction within a transaction".
+        The rollback is gated on ``in_transaction`` instead of swallowing an
+        expected no-op ``OperationalError``; a rollback that fails for a real
+        reason propagates instead of being hidden.
+        """
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+            except BaseException:
+                if self._conn.in_transaction:
+                    self._conn.execute("ROLLBACK")
+                raise
+            self._conn.execute("COMMIT")
+
     # -- reads -------------------------------------------------------------
 
     def _entries_locked(self) -> tuple[str, ...]:
-        rows = self.conn.execute(
+        """Rows in display order. Must run with the store lock held."""
+        rows = self._conn.execute(
             "SELECT text FROM bounded_entries WHERE user_id = ? AND target = ?"
             " ORDER BY pos",
             (self.user_id, self.target),
@@ -395,7 +447,14 @@ class BoundedStore:
         return tuple(str(row["text"]) for row in rows)
 
     def snapshot(self) -> BoundedSnapshot:
-        """Build the frozen snapshot. Bounded by the capacity budget (< 5 ms)."""
+        """Build the frozen snapshot. Bounded by the capacity budget (< 5 ms).
+
+        Runs under the store lock and returns a **detached** snapshot: a
+        fresh tuple of immutable strings inside a frozen dataclass, so a
+        snapshot handed to one thread can never be altered by a later write
+        (or by a caller, which the frozen dataclass refuses) and never
+        exposes the store's live state.
+        """
         with self._lock:
             return BoundedSnapshot(
                 target=self.target,
@@ -409,57 +468,52 @@ class BoundedStore:
     def add(self, text: str) -> BoundedSnapshot:
         """Append one entry; raise :class:`StoreCapacityError` on overflow.
 
-        The whole check-plus-insert cycle is one ``BEGIN IMMEDIATE``
-        transaction, so an overflow leaves the store untouched and a success
-        is durably committed before the new snapshot is built.
+        Synchronization boundary: the row-position check, capacity check,
+        insert, and commit run as one ``BEGIN IMMEDIATE`` transaction under
+        the store lock (:meth:`_locked_write`), so a concurrent add — in
+        this process or another — is serialized completely before or after
+        this one: no overflow, no lost row, no duplicated row. Duplicate
+        *values* are allowed and appended like any other entry; there is no
+        value-level deduplication in the contract. The returned snapshot is
+        built under the lock after the commit.
         """
         if not isinstance(text, str):
             raise ValueError("text must be a string")
         entry = text.strip()
         if not entry:
             raise BoundedStoreError(_ERR_EMPTY_ADD_FA + " Entry text must not be empty.")
-        with self._lock:
-            self.conn.execute("BEGIN IMMEDIATE")
-            try:
-                entries = self._entries_locked()
-                used = _used_chars(entries, self.separator)
-                needed = len(entry) + (len(self.separator) if entries else 0)
-                if used + needed > self.capacity:
-                    over_by = used + needed - self.capacity
-                    self.conn.execute("ROLLBACK")
-                    raise self._capacity_error(over_by)
-                next_pos = 1
-                if entries:
-                    row = self.conn.execute(
-                        "SELECT MAX(pos) AS p FROM bounded_entries"
-                        " WHERE user_id = ? AND target = ?",
-                        (self.user_id, self.target),
-                    ).fetchone()
-                    next_pos = int(row["p"]) + 1
-                self.conn.execute(
-                    "INSERT INTO bounded_entries (user_id, target, pos, text, updated_at)"
-                    " VALUES (?, ?, ?, ?, ?)",
-                    (self.user_id, self.target, next_pos, entry, time.time()),
-                )
-                self.conn.execute("COMMIT")
-            except Exception:
-                # Every failure path — overflow, constraint, crash — leaves no
-                # transaction open. A domain error raised above already rolled
-                # back; this suppresses the no-op rollback in that case.
-                try:
-                    self.conn.execute("ROLLBACK")
-                except sqlite3.OperationalError:
-                    pass
-                raise
+        with self._locked_write():
+            entries = self._entries_locked()
+            used = _used_chars(entries, self.separator)
+            needed = len(entry) + (len(self.separator) if entries else 0)
+            if used + needed > self.capacity:
+                raise self._capacity_error(used + needed - self.capacity)
+            next_pos = 1
+            if entries:
+                row = self._conn.execute(
+                    "SELECT MAX(pos) AS p FROM bounded_entries"
+                    " WHERE user_id = ? AND target = ?",
+                    (self.user_id, self.target),
+                ).fetchone()
+                next_pos = int(row["p"]) + 1
+            self._conn.execute(
+                "INSERT INTO bounded_entries (user_id, target, pos, text, updated_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (self.user_id, self.target, next_pos, entry, time.time()),
+            )
         return self.snapshot()
 
     def _match_locked(self, old: str) -> tuple[int, str]:
         """Resolve a unique-substring fragment to ``(pos, entry)``.
 
-        Matching is normalized: the fragment and every entry pass through
-        :func:`normalize_fa` first, so Arabic and Farsi spellings of the same
-        word are interchangeable. Zero matches and multiple matches are both
-        errors — the caller must disambiguate, the store must not guess.
+        Must run with the store lock held (and, for ``replace``/``remove``,
+        inside the write transaction, so the match and the mutation are one
+        atomic unit — a concurrent writer cannot change what the fragment
+        matches between check and update). Matching is normalized: the
+        fragment and every entry pass through :func:`normalize_fa` first, so
+        Arabic and Farsi spellings of the same word are interchangeable.
+        Zero matches and multiple matches are both errors — the caller must
+        disambiguate, the store must not guess.
         """
         if not isinstance(old, str) or not old.strip():
             raise BoundedStoreError(
@@ -470,7 +524,7 @@ class BoundedStore:
             raise BoundedStoreError(
                 _ERR_EMPTY_OLD_FA + _ERR_EMPTY_OLD_EN, target=self.target
             )
-        rows = self.conn.execute(
+        rows = self._conn.execute(
             "SELECT pos, text FROM bounded_entries WHERE user_id = ? AND target = ?"
             " ORDER BY pos",
             (self.user_id, self.target),
@@ -499,6 +553,9 @@ class BoundedStore:
         return matches[0]
 
     def _capacity_error(self, over_by: int) -> StoreCapacityError:
+        # ``snapshot`` re-enters the RLock (same thread — safe) and may run
+        # inside the open write transaction; no write has happened yet, so
+        # the header reflects exactly the committed state the caller sees.
         snapshot = self.snapshot()
         message = (
             _ERR_CAPACITY_FA.format(header=snapshot.header, over=over_by)
@@ -518,6 +575,13 @@ class BoundedStore:
     def replace(self, old: str, new: str) -> BoundedSnapshot:
         """Replace the single entry containing ``old`` (normalized substring).
 
+        Synchronization boundary: the unique-substring match, the capacity
+        check, and the update run as one ``BEGIN IMMEDIATE`` transaction
+        under the store lock (:meth:`_locked_write`). A concurrent add or
+        replace therefore cannot change what ``old`` matches between the
+        check and the update (no lost update, no torn replacement), and a
+        capacity overflow or a non-unique match rolls everything back.
+
         Raises :class:`EntryNotFoundError` / :class:`AmbiguousEntryError` when
         the fragment is not unique, and :class:`StoreCapacityError` when the
         replacement would overflow — in every failure case the store is
@@ -528,49 +592,35 @@ class BoundedStore:
         entry = new.strip()
         if not entry:
             raise BoundedStoreError(_ERR_EMPTY_ADD_FA + " Entry text must not be empty.")
-        with self._lock:
-            self.conn.execute("BEGIN IMMEDIATE")
-            try:
-                pos, current = self._match_locked(old)
-                entries = self._entries_locked()
-                used = _used_chars(entries, self.separator)
-                delta = len(entry) - len(current)
-                if used + delta > self.capacity:
-                    over_by = used + delta - self.capacity
-                    self.conn.execute("ROLLBACK")
-                    raise self._capacity_error(over_by)
-                self.conn.execute(
-                    "UPDATE bounded_entries SET text = ?, updated_at = ?"
-                    " WHERE user_id = ? AND target = ? AND pos = ?",
-                    (entry, time.time(), self.user_id, self.target, pos),
-                )
-                self.conn.execute("COMMIT")
-            except Exception:
-                try:
-                    self.conn.execute("ROLLBACK")
-                except sqlite3.OperationalError:
-                    pass
-                raise
+        with self._locked_write():
+            pos, current = self._match_locked(old)
+            entries = self._entries_locked()
+            used = _used_chars(entries, self.separator)
+            delta = len(entry) - len(current)
+            if used + delta > self.capacity:
+                raise self._capacity_error(used + delta - self.capacity)
+            self._conn.execute(
+                "UPDATE bounded_entries SET text = ?, updated_at = ?"
+                " WHERE user_id = ? AND target = ? AND pos = ?",
+                (entry, time.time(), self.user_id, self.target, pos),
+            )
         return self.snapshot()
 
     def remove(self, old: str) -> BoundedSnapshot:
-        """Remove the single entry containing ``old`` (normalized substring)."""
-        with self._lock:
-            self.conn.execute("BEGIN IMMEDIATE")
-            try:
-                pos, _current = self._match_locked(old)
-                self.conn.execute(
-                    "DELETE FROM bounded_entries"
-                    " WHERE user_id = ? AND target = ? AND pos = ?",
-                    (self.user_id, self.target, pos),
-                )
-                self.conn.execute("COMMIT")
-            except Exception:
-                try:
-                    self.conn.execute("ROLLBACK")
-                except sqlite3.OperationalError:
-                    pass
-                raise
+        """Remove the single entry containing ``old`` (normalized substring).
+
+        The match and the delete are one ``BEGIN IMMEDIATE`` transaction
+        under the store lock (:meth:`_locked_write`), so a concurrent writer
+        cannot change what the fragment matches between check and delete,
+        and a non-unique or missing match leaves the store untouched.
+        """
+        with self._locked_write():
+            pos, _current = self._match_locked(old)
+            self._conn.execute(
+                "DELETE FROM bounded_entries"
+                " WHERE user_id = ? AND target = ? AND pos = ?",
+                (self.user_id, self.target, pos),
+            )
         return self.snapshot()
 
 
@@ -604,7 +654,14 @@ class BoundedMemory:
         return cls(os.environ.get("DREAM_BOUNDED_DB", DEFAULT_DB_PATH), user=user)
 
     def snapshots(self) -> dict[str, BoundedSnapshot]:
-        """Frozen snapshots of both stores, keyed by target."""
+        """Frozen snapshots of both stores, keyed by target.
+
+        Consistency boundary: each per-store snapshot is atomic under that
+        store's lock, but the two stores take their locks in sequence (notes
+        first), so the pair is *individually* consistent — not a single
+        global instant. The session-start contract only ever needs the
+        per-store form, so no cross-store transaction is added.
+        """
         return {
             TARGET_MEMORY: self.notes.snapshot(),
             TARGET_USER: self.profile.snapshot(),
