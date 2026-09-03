@@ -24,6 +24,8 @@ from urllib.request import Request, urlopen
 from dream.connectivity.base import OnMessage, PlatformAdapter
 from dream.connectivity.models import IncomingMessage
 from dream.connectivity.websocket import WebSocketClosed, WebSocketError, connect
+from dream.reliability.cancel import CancelToken
+from dream.reliability.sleep import ainterruptible_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +168,7 @@ class SlackAdapter(PlatformAdapter):
 
     async def _run(self) -> None:
         api = self._build_api()
+        cancel = CancelToken.from_async_event(self._stop_event, name="slack.poll")
         while not self._stop_event.is_set():
             try:
                 opened = await asyncio.to_thread(api.connections_open)
@@ -183,10 +186,10 @@ class SlackAdapter(PlatformAdapter):
             except (WebSocketClosed, WebSocketError, SlackError) as exc:
                 self._mark_error(str(exc), running=True)
                 self._status.connected = False
-                await asyncio.sleep(5.0)
+                await ainterruptible_sleep(5.0, cancel=cancel)
             except Exception as exc:
                 self._mark_error(f"{type(exc).__name__}: {exc}", running=True)
-                await asyncio.sleep(5.0)
+                await ainterruptible_sleep(5.0, cancel=cancel)
 
     async def _handle_envelope(self, envelope: dict[str, Any]) -> None:
         envelope_type = str(envelope.get("type") or "")

@@ -126,6 +126,13 @@ class CancelToken:
         if self.is_cancelled():
             event.set()
 
+    def link_async_event(self, event: Any) -> None:
+        """Compose with an ``asyncio.Event`` used as an async stop flag."""
+        with self._lock:
+            self._linked.append(event)
+        if self.is_cancelled() and hasattr(event, "set"):
+            event.set()
+
     def link_agentmodes(self, token: Any) -> None:
         """Compose with P4 ``dream.agentmodes.cancel.CancellationToken``."""
         with self._lock:
@@ -168,6 +175,11 @@ class CancelToken:
         for item in linked:
             if isinstance(item, threading.Event):
                 item.set()
+            elif hasattr(item, "set"):
+                try:
+                    item.set()
+                except Exception:
+                    pass
             elif hasattr(item, "cancel"):
                 try:
                     item.cancel()
@@ -190,6 +202,10 @@ class CancelToken:
             return True
         for item in list(self._linked):
             if isinstance(item, threading.Event) and item.is_set():
+                self.cancel(reason="linked event")
+                return True
+            is_set = getattr(item, "is_set", None)
+            if callable(is_set) and is_set():
                 self.cancel(reason="linked event")
                 return True
             checker = getattr(item, "is_cancelled", None)
@@ -262,6 +278,13 @@ class CancelToken:
         """Wrap a P1 research ``cancelled`` Event without modifying research."""
         out = cls(name=name)
         out.link_event(event)
+        return out
+
+    @classmethod
+    def from_async_event(cls, event: Any, *, name: str = "async.stop") -> CancelToken:
+        """Wrap an ``asyncio.Event`` used as an async stop flag."""
+        out = cls(name=name)
+        out.link_async_event(event)
         return out
 
     @classmethod

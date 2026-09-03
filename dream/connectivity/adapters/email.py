@@ -29,6 +29,8 @@ from typing import Any
 
 from dream.connectivity.base import OnMessage, PlatformAdapter
 from dream.connectivity.models import Attachment, IncomingMessage, utc_now
+from dream.reliability.cancel import CancelToken
+from dream.reliability.sleep import ainterruptible_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -396,6 +398,7 @@ class EmailAdapter(PlatformAdapter):
                 supports = False
         else:
             supports = False
+        cancel = CancelToken.from_async_event(self._stop_event, name="email.poll")
         while not self._stop_event.is_set():
             try:
                 if supports:
@@ -405,7 +408,7 @@ class EmailAdapter(PlatformAdapter):
                     if arrived:
                         await self._process_unseen()
                 else:
-                    await asyncio.sleep(self._poll_seconds())
+                    await ainterruptible_sleep(self._poll_seconds(), cancel=cancel)
                     await self._process_unseen()
             except asyncio.CancelledError:
                 raise
@@ -418,7 +421,7 @@ class EmailAdapter(PlatformAdapter):
                 try:
                     await asyncio.to_thread(imap.connect)
                 except (EmailError, OSError):
-                    await asyncio.sleep(5.0)
+                    await ainterruptible_sleep(5.0, cancel=cancel)
 
     async def _process_unseen(self) -> None:
         imap = self._build_imap()

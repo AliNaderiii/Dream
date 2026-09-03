@@ -21,6 +21,8 @@ from typing import Any
 
 from dream.connectivity.base import OnMessage, PlatformAdapter
 from dream.connectivity.models import IncomingMessage, utc_now
+from dream.reliability.cancel import CancelToken
+from dream.reliability.sleep import ainterruptible_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +215,7 @@ class SignalAdapter(PlatformAdapter):
 
     async def _receive_loop(self) -> None:
         cli = self._build_cli()
+        cancel = CancelToken.from_async_event(self._stop_event, name="signal.poll")
         while not self._stop_event.is_set():
             try:
                 raw = await asyncio.to_thread(cli.receive_json, RECEIVE_TIMEOUT_SECONDS)
@@ -220,11 +223,11 @@ class SignalAdapter(PlatformAdapter):
                 raise
             except SignalCliError as exc:
                 self._mark_error(str(exc), running=True)
-                await asyncio.sleep(5.0)
+                await ainterruptible_sleep(5.0, cancel=cancel)
                 continue
             for envelope in _parse_envelopes(raw):
                 await self._handle_envelope(envelope)
-            await asyncio.sleep(RECEIVE_CYCLE_SLEEP)
+            await ainterruptible_sleep(RECEIVE_CYCLE_SLEEP, cancel=cancel)
 
     async def _handle_envelope(self, envelope: dict[str, Any]) -> None:
         inner = envelope.get(ENVELOPE_KEY, envelope) if isinstance(envelope, dict) else {}

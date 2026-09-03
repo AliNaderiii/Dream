@@ -36,6 +36,7 @@ from typing import Any
 
 from dream.bridge.errors import BridgeError, invalid_params
 from dream.bridge.streams import Stream
+from dream.reliability.sleep import ainterruptible_sleep
 from dream.research.errors import ResearchError, ResearchSecurityError
 
 logger = logging.getLogger("dream.bridge.research")
@@ -277,7 +278,9 @@ async def research_stream(params: Any = None, **kwargs: Any) -> Stream:
             terminal = session.record.status in ("COMPLETE", "FAILED", "CANCELLED")
             if not follow or terminal or time.monotonic() >= deadline:
                 return
-            await asyncio.sleep(_STREAM_POLL_SECONDS)
+            # Follow mode has no per-session cancellation token today; the
+            # helper keeps the 50 ms event-loop yield without a bare sleep.
+            await ainterruptible_sleep(_STREAM_POLL_SECONDS)
 
     return Stream(final=_summary(session), chunks=chunks())
 

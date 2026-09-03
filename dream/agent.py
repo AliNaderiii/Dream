@@ -60,6 +60,7 @@ from dream.metrics import (
 )
 from dream.normalization import normalize_importance, normalize_kind
 from dream.providers import BuiltInMemoryProvider, ProviderManager
+from dream.reliability.sleep import interruptible_sleep
 from dream.reminders import (
     Reminder,
     format_jalali,
@@ -377,7 +378,10 @@ class OpenAIBackend:
                 return data
             rate_limited = status == 429
             if rate_limited and attempt < retries:
-                time.sleep(self.retry_backoff_seconds * (2**attempt))
+                # The OpenAIBackend call is synchronous and has no cancellation
+                # token today; the helper is still used so future callers can
+                # wire one without re-introducing blocking time.sleep.
+                interruptible_sleep(self.retry_backoff_seconds * (2**attempt))
                 continue
             return self._failure(status, _failure_text(data, attempt + 1))
 
