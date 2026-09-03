@@ -3,6 +3,7 @@
 - **Repository:** Dream v0.4.6 baseline (target release v0.4.7)
 - **Base commit:** `b4d62bc6f439308c6b53bf1d42a8de4ed47ffe2d` (`fix(memory): make BoundedStore operations thread-safe (SEC-08)` — tip of `main` with SEC-01 … SEC-08 merged)
 - **Working branch:** `arena/01a06749-dream` (the Arena environment fixes this branch name; the brief's `fix/p0-security-stability` could not be used — see §8 Coordination)
+- **Audited code commit:** `e7f4e33138eb5b90cf906a80cd245dda42b045df` — every CI result in §7 corresponds to exactly this SHA. This audit text itself ships as a docs-only follow-up commit on the same branch; that commit changes no compiled artifact, so `git diff e7f4e33..HEAD` is limited to this file.
 - **Scope actually touched:** `apps/desktop/src-tauri/src/bridge/process.rs`, `apps/desktop/src-tauri/Cargo.toml`, `apps/desktop/src-tauri/Cargo.lock` (dependency sync only), `docs/dev/how-to/sidecar-lifecycle.md` (new), `SEC-09-AUDIT.md` (this file). Nothing else — no Python, frontend, workflow, or other Rust changes; `bridge/mod.rs` needed no edit because the whole supervision loop lives in `process.rs`.
 
 ## 1. Lifecycle inventory (audited before editing)
@@ -71,32 +72,53 @@ All tests are bounded (explicit deadlines: 20 s helper start, 10 s death-poll), 
 | `windows_containment_setup_reports_typed_error_for_dead_pid` | `cfg(windows)` | no | typed establishment error for a reserved-miss pid, no leaked job (partial `JobHandle` Drop-closed) |
 | discovery tests (`spawn_first` probes, `sidecar_creation_flags`, `require_piped_stdio`, env tables) | all | no | existing tests retyped for the `SpawnedSidecar` return — semantics asserted unchanged |
 
-Skips / platform notes: none of the assertions above are skipped where they run; the three Windows tests are `#[cfg(windows)]` (Job Objects have no POSIX analogue) and the four Unix tests `#[cfg(unix)]` (process groups have no Win32 equivalent) — each platform gets real, platform-native coverage rather than cross-platform mockups. CI executes `cargo test --lib` on Linux and macOS only; **Windows CI skips `cargo test`** (pre-existing tauri-winres/ComCtl32 link failure, tauri-apps/tauri#13419, documented in `apps/desktop/.github/workflows/desktop-ci.yml`), but it still *compiles* the Windows tests via `cargo check --all-targets` and lints them via `clippy --all-targets`; execution is expected on Windows dev machines (`cargo test --lib`). No Linux-only mechanism (e.g. PDEATHSIG) was adopted, so there is nothing else to skip.
+Skips / platform notes: none of the assertions above are skipped where they run; the three Windows tests are `#[cfg(windows)]` (Job Objects have no POSIX analogue) and the four Unix tests `#[cfg(unix)]` (process groups have no Win32 equivalent) — each platform gets real, platform-native coverage rather than cross-platform mockups. CI runs the full `cargo test --verbose` on Linux and macOS; the **Windows job skips `cargo test`** (pre-existing tauri-winres/ComCtl32 test-binary link failure, tauri-apps/tauri#13419, documented inline in `.github/workflows/desktop-ci.yml`), but the Windows job still type-checks and lints the Windows test code through its `cargo clippy --all-targets -- -D warnings` step and builds the library containing the containment implementation. Execution is expected on Windows dev machines (`cargo test` in `apps/desktop/src-tauri`). No Linux-only mechanism (e.g. PDEATHSIG) was adopted, so there is nothing else to skip.
 
 ## 7. Commands and results
 
-Local environment for this task had **no Rust toolchain and no network** to install one, so the full verification suite runs in CI (all three OSes) and is authoritative:
+The local environment for this task had **no Rust toolchain and no network** to install one, so the full verification suite runs in CI (all three OSes) and is authoritative. Each `Desktop CI` Rust job executes, in order (`.github/workflows/desktop-ci.yml`, working directory `apps/desktop/src-tauri`):
 
 ```bash
-# CI (apps/desktop/.github/workflows/desktop-ci.yml, per OS ubuntu/macos-14/windows-latest):
 cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings   # ubuntu job
-cargo check --all-targets
-cargo test -p dream-desktop --lib           # skipped on windows, see §6
-# root workflow: python test suite, ruff, tools/check_commit.py
+cargo clippy --all-targets -- -D warnings
+cargo build --verbose
+cargo test --verbose            # if: runner.os != 'Windows' (tauri-apps/tauri#13419 — see §6)
+# Root CI (.github/workflows/ci.yml): Python suite on 3.10–3.13, plus tools/check_commit.py on commits
 ```
 
-Locally verified before pushing:
+Locally verified before each push:
 
 | Command | Result |
 |---|---|
 | `git diff --check` | clean (no whitespace errors) |
 | `git status --short` | exactly the five in-scope paths |
 | `rg -n "\.unwrap\(\)\|\.expect\(" src/bridge/process.rs` | matches only inside `#[cfg(test)]` code |
-| structural scan (braces/parens/brackets balanced, no line >100 except 3 pre-existing macro string literals) | balanced ✓ |
-| `python3 tools/check_commit.py <rev>` | pending after commit |
+| structural scan (braces/parens/brackets balanced, no line >100 except pre-existing long string literals in untouched tests) | balanced ✓ |
+| `python3 tools/check_commit.py HEAD` | PASS for every pushed commit (author/trailer rules) |
 
-CI results (recorded once green): PENDING — this section is amended with check names, run URLs and the commit SHA after the PR checks complete.
+**Final CI results — audited code commit `e7f4e33138eb5b90cf906a80cd245dda42b045df` (all green):**
+
+| Check | Result | Notes |
+|---|---|---|
+| `Rust (ubuntu-22.04)` | PASS (2m44s) | fmt, clippy `-D warnings`, build, and `cargo test` executed: all four real Unix lifecycle tests (group kill, idempotent teardown, containment-failure reaping, restart sequencing) ran green alongside the pre-existing suite |
+| `Rust (macos-latest)` | PASS (2m42s) | same step list; Unix tests executed |
+| `Rust (windows-latest)` | PASS (10m21s) | fmt, clippy `--all-targets -D warnings` (type-checks the Job Object code **and** the Windows tests), full build; test *execution* skipped by the pre-existing workflow rule (§6), pending upstream tauri#13419 |
+| `Frontend checks` | PASS (3m5s) | zero frontend files touched on this branch |
+| `test (3.10)` … `test (3.13)` | PASS | root Python suite unaffected |
+
+Run URLs for the audited SHA: `Desktop CI` runs [33769506573](https://github.com/AliNaderiii/Dream/actions/runs/33769506573) (ubuntu, windows, Frontend) and [33769503529](https://github.com/AliNaderiii/Dream/actions/runs/33769503529) (macOS — the single push triggered two identical-head runs; both passed) and root `CI` run [33769506550](https://github.com/AliNaderiii/Dream/actions/runs/33769506550). The results above are exactly the checks GitHub reports on that head SHA (verified via `gh pr checks 123` ⇄ `gh pr view --json headRefOid`).
+
+**Iteration history that led to `e7f4e33`** (each row a force-push onto this PR branch — kept for auditability):
+
+| SHA | Outcome | Diagnosis / fix |
+|---|---|---|
+| `2236bd2` | `cargo fmt --check` diff on all 3 OSes | hand-wrapped lines ≠ canonical rustfmt; applied CI-reported hunks verbatim |
+| `a31315d` | Windows: `E0308` + 34 windows-sys shape errors | FFI written against wrong API generation (0.59 newtypes vs pinned 0.52 bare ints); rewrote to compiler-verified shapes |
+| `af8f84b` | Ubuntu+macOS **green** (Unix tests executed); Windows: single `E0432: no CreateJobObjectW in Win32::System::Threading`; Frontend: FAIL once | windows-sys 0.52 exposes every Job Object operation *except* job creation — absent from both `Win32::System::JobObjects` and `Win32::System::Threading` (two CI probes) |
+| `36330b0`, `a99e451` | `cargo fmt` regressions (compile never reached) | extern-fn signature must wrap one-arg-per-line (joined length 101 > 100); 3-item `Threading` import is canonical as a multi-line list, not joined |
+| `e7f4e33` | **all green** | fix: module-local `#[link(name = "kernel32")] extern "system" { fn CreateJobObjectW(lpjobattributes: *const core::ffi::c_void, lpname: *const u16) -> HANDLE; }` — same ABI as the SDK signature (`SECURITY_ATTRIBUTES*`, `PCWSTR`), null arguments only; version-agnostic, no windows-sys bump (0.53+ would flip BOOL/HANDLE to newtypes and churn unrelated code) |
+
+Frontend flake triage: the single `Frontend checks` failure at `af8f84b` was the known `app-shell.test.tsx` timing assertion (1200 ms budget vs `waitFor` interval/offset). It passed at `36330b0`, `a99e451` and `e7f4e33` with **zero frontend-file changes** — `git diff --name-only b4d62bc..HEAD` lists only the five in-scope paths (three under `apps/desktop/src-tauri/`, two docs at `docs/` and repo root), nothing under `apps/desktop/src/` or `apps/desktop/tests/` — classified as transient per the brief; no rerun was even needed on the final SHA.
 
 ## 8. Coordination / remaining risks
 
@@ -104,4 +126,4 @@ CI results (recorded once green): PENDING — this section is amended with check
 - **Windows CI cannot execute the new tests** (upstream tauri#13419 link skip, pre-existing). Coverage is compile+lint in CI and execution on dev machines; recorded in the how-to. If the project later vendors a workaround for the winres link issue, remove the CI `if:` skip and these tests run there automatically.
 - Python side (`dream/bridge`) and `tauri-plugin-shell` were **not touched**; the sidecar's EOF-graceful exit contract it already implements is the load-bearing piece for parent-death on Unix, so any future change to sidecar stdin handling must keep EOF ⇒ exit (docs/bridge/protocol.md).
 - The supervisor's pre-existing quirk that a sidecar whose stdout never closes is only reclaimed through the **heartbeat → Hung** route (not a reader timeout) was preserved unchanged.
-- `Cargo.lock` was updated by hand to match `Cargo.toml` (libc 0.2 unix, windows-sys 0.52 + the three needed Win32 features — versions selected to reuse entries already present in the lock from existing deps); `cargo` will regenerate identical entries; `--locked` CI runs will confirm.
+- `Cargo.lock` was updated by hand to match `Cargo.toml` (libc 0.2 unix, windows-sys 0.52 + the three needed Win32 features — versions selected to reuse entries already present in the lock from existing deps); CI consumed the hand-synced lock without any dependency-resolution churn on all three OSes (final-SHA table in §7), confirming cargo regenerates/accepts it as-is.
