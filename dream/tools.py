@@ -12,6 +12,7 @@ import inspect
 import ipaddress
 import json
 import logging
+import math
 import os
 import socket
 import subprocess
@@ -26,6 +27,15 @@ from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from dream.limits import (
+    MAX_LIST_ITEMS,
+    MAX_MAPPING_KEYS,
+    MAX_NESTING_DEPTH,
+    MAX_SERIALIZED_INPUT_SIZE,
+    MAX_TOOL_INPUT_CHARS,
+    NUMERIC_RANGES,
+    get_parameter_category,
+)
 from dream.memory import normalize_fa
 from dream.security.blocklist import scan as _floor_scan
 from dream.security.engine import SHELL_COMMAND_TOOLS as _FLOOR_COMMAND_TOOLS
@@ -122,6 +132,314 @@ def _json_type(annotation: Any) -> dict[str, Any]:
     return {"type": types.get(annotation, "string")}
 
 
+def _allows_none(annotation: Any, default: Any) -> bool:
+    """Whether a parameter annotation or default allows None."""
+    if default is not inspect.Parameter.empty and default is None:
+        return True
+    origin = get_origin(annotation)
+    if origin is Union or origin is UnionType:
+        return type(None) in get_args(annotation)
+    return False
+
+
+def _check_cycles(value: Any, seen: set[int]) -> None:
+    """Pre-check for circular references in input structures using active-path tracking."""
+    if isinstance(value, (dict, list, tuple)):
+        obj_id = id(value)
+        if obj_id in seen:
+            raise ValueError("circular reference detected")
+        seen.add(obj_id)
+        try:
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    _check_cycles(k, seen)
+                    _check_cycles(v, seen)
+            else:
+                for item in value:
+                    _check_cycles(item, seen)
+        finally:
+            seen.remove(obj_id)
+
+
+def _validate_value(
+    tool_name: str,
+    param_name: str,
+    value: Any,
+    annotation: Any,
+    depth: int,
+    seen: set[int],
+    is_optional: bool,
+) -> None:
+    """Recursively validate a tool argument against its type and boundary limits."""
+    if depth > MAX_NESTING_DEPTH:
+        raise ValueError(
+            f"Parameter {param_name!r} exceeds maximum nesting depth of {MAX_NESTING_DEPTH}"
+        )
+
+    if value is None:
+        if is_optional:
+            return
+        raise ValueError(f"Parameter {param_name!r} cannot be None")
+
+    if isinstance(value, (set, frozenset, bytes, bytearray)):
+        raise ValueError(
+            f"Parameter {param_name!r} contains unsupported type {type(value).__name__}"
+        )
+
+    is_container = isinstance(value, (dict, list, tuple))
+    obj_id = id(value) if is_container else None
+    if is_container:
+        if obj_id in seen:
+            raise ValueError(f"Parameter {param_name!r} contains a circular reference")
+        seen.add(obj_id)
+
+    try:
+        origin = get_origin(annotation)
+        args = get_args(annotation)
+        if origin is Union or origin is UnionType:
+            non_none_args = [arg for arg in args if arg is not type(None)]
+            if len(non_none_args) == 1:
+                annotation = non_none_args[0]
+            else:
+                matched = False
+                for sub_annot in non_none_args:
+                    try:
+                        _validate_value(
+                            tool_name,
+                            param_name,
+                            value,
+                            sub_annot,
+                            depth,
+                            seen,
+                            is_optional=True,
+                        )
+                        matched = True
+                        break
+                    except ValueError:
+                        continue
+                if not matched:
+                    raise ValueError(
+                        f"Parameter {param_name!r} value does not match allowed union types"
+                    )
+                return
+
+        if annotation is int:
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise ValueError(f"Parameter {param_name!r} must be an integer")
+            if param_name in NUMERIC_RANGES:
+                min_val, max_val = NUMERIC_RANGES[param_name]
+                if not (min_val <= value <= max_val):
+                    raise ValueError(
+                        f"Parameter {param_name!r} value {value} "
+                        f"is out of range [{min_val}, {max_val}]"
+                    )
+        elif annotation is float:
+            if tool_name == "remember_fact" and param_name == "importance":
+                if isinstance(value, str):
+                    pass
+                elif not isinstance(value, (float, int)) or isinstance(value, bool):
+                    raise ValueError(f"Parameter {param_name!r} must be a number")
+                else:
+                    fval = float(value)
+                    if not math.isfinite(fval):
+                        raise ValueError(
+                            f"Parameter {param_name!r} contains non-finite float value"
+                        )
+                    if param_name in NUMERIC_RANGES:
+                        min_val, max_val = NUMERIC_RANGES[param_name]
+                        if not (min_val <= fval <= max_val):
+                            raise ValueError(
+                                f"Parameter {param_name!r} value {fval} "
+                                f"is out of range [{min_val}, {max_val}]"
+                            )
+            else:
+                if isinstance(value, str):
+                    raise ValueError(f"Parameter {param_name!r} must be a number, got str")
+                if not isinstance(value, (float, int)) or isinstance(value, bool):
+                    raise ValueError(f"Parameter {param_name!r} must be a number")
+                fval = float(value)
+                if not math.isfinite(fval):
+                    raise ValueError(
+                        f"Parameter {param_name!r} contains non-finite float value"
+                    )
+                if param_name in NUMERIC_RANGES:
+                    min_val, max_val = NUMERIC_RANGES[param_name]
+                    if not (min_val <= fval <= max_val):
+                        raise ValueError(
+                            f"Parameter {param_name!r} value {fval} "
+                            f"is out of range [{min_val}, {max_val}]"
+                        )
+        elif annotation is bool:
+            if not isinstance(value, bool):
+                raise ValueError(f"Parameter {param_name!r} must be a boolean")
+        elif annotation is str:
+            if not isinstance(value, str):
+                raise ValueError(
+                    f"Parameter {param_name!r} must be of type str, got {type(value).__name__}"
+                )
+            mandatory_non_empty = param_name in {
+                "filename",
+                "path",
+                "address",
+                "url",
+                "query",
+                "expression",
+                "date",
+                "name",
+                "proposal_id",
+                "timezone_name",
+                "to",
+                "command",
+                "subject",
+            }
+            if mandatory_non_empty and not value.strip():
+                raise ValueError(f"Parameter {param_name!r} cannot be empty")
+
+            category = get_parameter_category(tool_name, param_name)
+            max_len = MAX_TOOL_INPUT_CHARS.get(category, MAX_TOOL_INPUT_CHARS["default"])
+            if len(value) > max_len:
+                raise ValueError(
+                    f"Parameter {param_name!r} exceeds maximum length of {max_len} characters"
+                )
+        elif annotation is list or origin is list:
+            if not isinstance(value, list):
+                raise ValueError(f"Parameter {param_name!r} must be a list")
+            if len(value) > MAX_LIST_ITEMS:
+                raise ValueError(
+                    f"Parameter {param_name!r} exceeds maximum list items limit of {MAX_LIST_ITEMS}"
+                )
+            item_annot = args[0] if args else Any
+            for idx, item in enumerate(value):
+                _validate_value(
+                    tool_name,
+                    f"{param_name}[{idx}]",
+                    item,
+                    item_annot,
+                    depth + 1,
+                    seen,
+                    is_optional=False,
+                )
+        elif annotation is dict or origin is dict:
+            if not isinstance(value, dict):
+                raise ValueError(f"Parameter {param_name!r} must be a mapping")
+            if len(value) > MAX_MAPPING_KEYS:
+                raise ValueError(
+                    f"Parameter {param_name!r} exceeds maximum mapping keys limit "
+                    f"of {MAX_MAPPING_KEYS}"
+                )
+            for k, v in value.items():
+                if not isinstance(k, str):
+                    raise ValueError(f"Parameter {param_name!r} mapping keys must be strings")
+                _validate_value(
+                    tool_name,
+                    f"{param_name}.{k}",
+                    v,
+                    Any,
+                    depth + 1,
+                    seen,
+                    is_optional=True,
+                )
+        else:
+            if isinstance(value, str):
+                mandatory_non_empty = param_name in {
+                    "filename",
+                    "path",
+                    "address",
+                    "url",
+                    "query",
+                    "expression",
+                    "date",
+                    "name",
+                    "proposal_id",
+                    "timezone_name",
+                    "to",
+                    "command",
+                    "subject",
+                }
+                if mandatory_non_empty and not value.strip():
+                    raise ValueError(f"Parameter {param_name!r} cannot be empty")
+                category = get_parameter_category(tool_name, param_name)
+                max_len = MAX_TOOL_INPUT_CHARS.get(category, MAX_TOOL_INPUT_CHARS["default"])
+                if len(value) > max_len:
+                    raise ValueError(
+                        f"Parameter {param_name!r} exceeds maximum length of {max_len} characters"
+                    )
+            elif isinstance(value, list):
+                if len(value) > MAX_LIST_ITEMS:
+                    raise ValueError(
+                        f"Parameter {param_name!r} exceeds maximum "
+                        f"list items limit of {MAX_LIST_ITEMS}"
+                    )
+                for idx, item in enumerate(value):
+                    _validate_value(
+                        tool_name,
+                        f"{param_name}[{idx}]",
+                        item,
+                        Any,
+                        depth + 1,
+                        seen,
+                        is_optional=False,
+                    )
+            elif isinstance(value, dict):
+                if len(value) > MAX_MAPPING_KEYS:
+                    raise ValueError(
+                        f"Parameter {param_name!r} exceeds maximum mapping keys limit "
+                        f"of {MAX_MAPPING_KEYS}"
+                    )
+                for k, v in value.items():
+                    if not isinstance(k, str):
+                        raise ValueError(f"Parameter {param_name!r} mapping keys must be strings")
+                    _validate_value(
+                        tool_name,
+                        f"{param_name}.{k}",
+                        v,
+                        Any,
+                        depth + 1,
+                        seen,
+                        is_optional=True,
+                    )
+    finally:
+        if is_container:
+            seen.remove(obj_id)
+
+
+def _validate_tool_arguments(
+    tool_name: str,
+    signature: inspect.Signature,
+    hints: dict[str, Any],
+    arguments: dict[str, Any],
+) -> None:
+    """Validate all bound arguments before tool execution."""
+    for val in arguments.values():
+        _check_cycles(val, set())
+
+    try:
+        serialized = json.dumps(arguments)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Tool input arguments for {tool_name} are not JSON-serializable"
+        ) from exc
+
+    if len(serialized.encode("utf-8")) > MAX_SERIALIZED_INPUT_SIZE:
+        raise ValueError(f"Tool input arguments for {tool_name} exceed maximum serialized size")
+
+    for param_name, value in arguments.items():
+        parameter = signature.parameters.get(param_name)
+        if parameter is None:
+            continue
+        annotation = hints.get(param_name, parameter.annotation)
+        is_optional = _allows_none(annotation, parameter.default)
+        _validate_value(
+            tool_name,
+            param_name,
+            value,
+            annotation,
+            depth=0,
+            seen=set(),
+            is_optional=is_optional,
+        )
+
+
 def tool(*, risk: str = "safe") -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Register a function and derive its input schema from type hints."""
     if risk not in RISKS:
@@ -145,14 +463,27 @@ def tool(*, risk: str = "safe") -> Callable[[Callable[..., Any]], Callable[..., 
         schema: dict[str, Any] = {"type": "object", "properties": properties}
         if required:
             schema["required"] = required
-        REGISTRY[function.__name__] = Tool(
-            name=function.__name__,
-            function=function,
+
+        tool_name = function.__name__
+
+        def validate_and_call(*args: Any, **kwargs: Any) -> Any:
+            bound = signature.bind(*args, **kwargs)
+            bound.apply_defaults()
+            _validate_tool_arguments(tool_name, signature, hints, bound.arguments)
+            return function(*args, **kwargs)
+
+        validate_and_call.__name__ = function.__name__
+        validate_and_call.__doc__ = function.__doc__
+        validate_and_call.__signature__ = signature  # type: ignore
+
+        REGISTRY[tool_name] = Tool(
+            name=tool_name,
+            function=validate_and_call,
             description=inspect.cleandoc(function.__doc__ or "").split("\n\n", 1)[0],
             schema=schema,
             risk=risk,
         )
-        return function
+        return validate_and_call
 
     return register
 
@@ -295,7 +626,7 @@ NETWORK_DISABLED_MESSAGE = (
     "\u0646\u06a9\u0631\u062f\u0647 \u0627\u0633\u062a."
 )
 NETWORK_REFUSAL_MESSAGE = (
-    "\u0627\u0645\u06a9\u0627\u0646 \u062f\u0631\u06cc\u0627\u0641\u062a "
+    "\u0627\u0645\u0627\u0646 \u062f\u0631\u06cc\u0627\u0641\u062a "
     "\u0627\u06cc\u0646\u062a\u0631\u0646\u062a\u06cc \u0646\u06cc\u0633\u062a."
 )
 NETWORK_EMPTY_MESSAGE = (
