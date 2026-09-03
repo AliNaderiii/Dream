@@ -3,7 +3,7 @@
 - **Repository:** Dream v0.4.6 baseline (target release v0.4.7)
 - **Base commit:** `b4d62bc6f439308c6b53bf1d42a8de4ed47ffe2d` (`fix(memory): make BoundedStore operations thread-safe (SEC-08)` — tip of `main` with SEC-01 … SEC-08 merged)
 - **Working branch:** `arena/01a06749-dream` (the Arena environment fixes this branch name; the brief's `fix/p0-security-stability` could not be used — see §8 Coordination)
-- **Audited code commit:** `e7f4e33138eb5b90cf906a80cd245dda42b045df` — every CI result in §7 corresponds to exactly this SHA. This audit text itself ships as a docs-only follow-up commit on the same branch; that commit changes no compiled artifact, so `git diff e7f4e33..HEAD` is limited to this file.
+- **Audited code commit:** `6939861495dfd9444c92c8aad496f3ae33c45039` (supersedes `e7f4e33…`: adds the `CREATE_SUSPENDED` → assign → `ResumeThread` ordering that closes the Windows setup race — see §2) — every CI result in §7 corresponds to exactly this SHA. This audit text itself ships as a docs-only follow-up commit on the same branch; that commit changes no compiled artifact, so `git diff 6939861..HEAD` is limited to this file.
 - **Scope actually touched:** `apps/desktop/src-tauri/src/bridge/process.rs`, `apps/desktop/src-tauri/Cargo.toml`, `apps/desktop/src-tauri/Cargo.lock` (dependency sync only), `docs/dev/how-to/sidecar-lifecycle.md` (new), `SEC-09-AUDIT.md` (this file). Nothing else — no Python, frontend, workflow, or other Rust changes; `bridge/mod.rs` needed no edit because the whole supervision loop lives in `process.rs`.
 
 ## 1. Lifecycle inventory (audited before editing)
@@ -162,3 +162,23 @@ Frontend flake triage: the known `app-shell.test.tsx` timing assertion (a 100 ms
 - Python side (`dream/bridge`) and `tauri-plugin-shell` were **not touched**; the sidecar's EOF-graceful exit contract it already implements is the load-bearing piece for parent-death on Unix, so any future change to sidecar stdin handling must keep EOF ⇒ exit (docs/bridge/protocol.md).
 - The supervisor's pre-existing quirk that a sidecar whose stdout never closes is only reclaimed through the **heartbeat → Hung** route (not a reader timeout) was preserved unchanged.
 - `Cargo.lock` was updated by hand to match `Cargo.toml` (libc 0.2 unix, windows-sys 0.52 + the three needed Win32 features — versions selected to reuse entries already present in the lock from existing deps); CI consumed the hand-synced lock without any dependency-resolution churn on all three OSes (final-SHA table in §7), confirming cargo regenerates/accepts it as-is.
+
+## 9. Verification of the suspended-spawn fix (review round 2)
+
+Review finding: with the original spawn → create-job → open → assign ordering the child ran freely during steps 2–4 and could have produced a descendant outside the job before assignment; the failure fallback (`start_kill`/`kill_on_drop`) only reaches the leader, so such a descendant could be orphaned.
+
+Fix: `sidecar_creation_flags()` now returns `CREATE_NO_WINDOW | CREATE_SUSPENDED`, and `SidecarContainment::release_startup_suspension()` resumes the primary thread **after** `AssignProcessToJobObject` succeeds. Design rationale, race proof and the per-step cleanup matrix are in §2; the alternative designs (raw `CreateProcessW` with `STARTUPINFOEX`/`PROC_THREAD_ATTRIBUTE_JOB_LIST`) were rejected because `tokio::process::Child` cannot be built from a raw `HANDLE`, which would have forced a re-implementation of pipe creation, environment block, cwd, quoting, async stdio registration and reaping — far more behavioural risk than the one-flag-plus-resume change, for the same guarantee.
+
+Preserved unchanged: interpreter selection/discovery order, environment, working directory, piped stdio, `kill_on_drop`, restart/backoff, heartbeat, teardown escalation and all timeouts. Unix is untouched (`process_group(0)` before `exec` was already race-free); `release_startup_suspension` is a no-op there.
+
+CI on `6939861495dfd9444c92c8aad496f3ae33c45039`:
+
+| Check | Result | Duration | Run |
+|---|---|---|---|
+| Rust (ubuntu-22.04) | pass | 2m21s | [33774243076](https://github.com/AliNaderiii/Dream/actions/runs/33774243076) |
+| Rust (macos-latest) | pass | 3m8s | [33774249566](https://github.com/AliNaderiii/Dream/actions/runs/33774249566) |
+| Rust (windows-latest) | pass | 3m24s | [33774249566](https://github.com/AliNaderiii/Dream/actions/runs/33774249566) |
+| test (3.10 / 3.11 / 3.12 / 3.13) | pass | 3m33s / 2m56s / 3m18s / 3m11s | [33774249647](https://github.com/AliNaderiii/Dream/actions/runs/33774249647) |
+| Frontend checks | fail → re-triggered | 2m53s | [33774249566](https://github.com/AliNaderiii/Dream/actions/runs/33774249566) |
+
+The frontend failure is the recurring timing flake already tracked in §8, verbatim from the job annotation: `AssertionError: expected 116.77653100000134 to be less than 100` at `src/components/layout/app-shell.test.tsx:163:21`. No frontend file is touched by this branch (`git diff --name-only b4d62bc..HEAD` lists only the SEC-09 paths), and the same commit's render budget passed on earlier heads; the docs-only follow-up commit re-runs the identical code as the only rerun mechanism available (the Actions rerun API returns 403 for this token).
