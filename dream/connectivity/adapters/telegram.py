@@ -18,6 +18,8 @@ from urllib.request import Request, urlopen
 
 from dream.connectivity.base import OnMessage, PlatformAdapter
 from dream.connectivity.models import IncomingMessage, utc_now
+from dream.reliability.cancel import CancelToken
+from dream.reliability.sleep import ainterruptible_sleep
 from dream.telegram import (
     _TOKEN_FULL_RE,
     _resolve_api_base_url,
@@ -176,6 +178,7 @@ class TelegramAdapter(PlatformAdapter):
     async def _poll_loop(self) -> None:
         failures = 0
         transport = self._build_transport()
+        cancel = CancelToken.from_async_event(self._stop_event, name="telegram.poll")
         while not self._stop_event.is_set():
             try:
                 updates = await asyncio.to_thread(transport.get_updates, self._offset)
@@ -185,10 +188,12 @@ class TelegramAdapter(PlatformAdapter):
             except Exception as exc:
                 failures += 1
                 self._mark_error(redact_token(str(exc)), running=True)
-                await asyncio.sleep(min(BACKOFF_MAX, 2 ** min(failures, 5)))
+                await ainterruptible_sleep(
+                    min(BACKOFF_MAX, 2 ** min(failures, 5)), cancel=cancel
+                )
                 continue
             failures = 0
-            await asyncio.sleep(self._poll_interval())
+            await ainterruptible_sleep(self._poll_interval(), cancel=cancel)
 
     async def _process_updates(self, updates: list[dict[str, Any]]) -> None:
         """Deliver in order and acknowledge each update only after success."""

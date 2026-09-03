@@ -75,6 +75,7 @@ from dream.provenance import (
     ProvenanceTracker,
     ReproducibilityExporter,
 )
+from dream.reliability.sleep import ainterruptible_sleep
 from dream.scheduler import Schedule, run_to_dict, schedule_to_dict
 from dream.session_search import SessionSearchIndex
 from dream.skills import SKILL_SUFFIX, parse_skill_text
@@ -2340,7 +2341,9 @@ class BridgeMethods:
         )
         approval.decision = None
         while approval.decision is None:
-            await asyncio.sleep(0.05)
+            # Approval wait has no cancellation token today; the helper still
+            # cooperatively yields and keeps the existing 50 ms polling cadence.
+            await ainterruptible_sleep(0.05)
         return bool(approval.decision)
 
     def schedule_approve(self, params: dict[str, Any] | None = None) -> dict[str, Any]:

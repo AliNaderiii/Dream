@@ -31,6 +31,8 @@ from cli import dispatch_command
 from dream.agent import Dream, Turn, build_backend
 from dream.memory import MemoryStore
 from dream.providers import BuiltInMemoryProvider, ProviderManager
+from dream.reliability.cancel import CancelToken, OperationCancelled
+from dream.reliability.sleep import interruptible_sleep
 
 # Telegram holds getUpdates open for POLL_TIMEOUT seconds. The HTTP timeout
 # needs ten seconds of transport headroom or every healthy long poll times out
@@ -428,6 +430,21 @@ class TelegramBot:
             self._conversations[chat_id] = conversation
         return conversation
 
+    def _interruptible_sleep(self, seconds: float) -> None:
+        """Sleep the injected backoff, or use the cooperative helper by default.
+
+        Tests inject a synchronous callback through the ``sleep`` constructor
+        seam; that injection must continue to receive the exact requested
+        delay.  When the default ``time.sleep`` seam is used, the helper is
+        passed the bot's ``_stopping`` event token so shutdown breaks the
+        backoff promptly.
+        """
+        if self._sleep is not time.sleep:
+            self._sleep(seconds)
+            return
+        token = CancelToken.from_research_stop(self._stopping, name="telegram.bot.stop")
+        interruptible_sleep(seconds, cancel=token)
+
     def _ensure_paired_chats_table(self) -> None:
         """Create or idempotently migrate the local pairing table."""
         with self.memory_store._lock:
@@ -804,8 +821,8 @@ class TelegramBot:
                     continue
                 delay = _poll_backoff(failures)
                 try:
-                    self._sleep(delay)
-                except KeyboardInterrupt:
+                    self._interruptible_sleep(delay)
+                except (KeyboardInterrupt, OperationCancelled):
                     self.stop()
         finally:
             if installed_handler:

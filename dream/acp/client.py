@@ -10,6 +10,8 @@ import urllib.request
 from collections.abc import AsyncIterator
 from typing import Any
 
+from dream.reliability.sleep import ainterruptible_sleep
+
 
 class ACPClientError(Exception):
     """Raised when an ACP client call fails."""
@@ -144,10 +146,12 @@ class ACPClient:
         """Send a message and yield streaming chunks."""
         res = await self.send_message(session_id, message, stream=False)
         reply = res.get("reply", "")
-        # Tokenize and yield chunks
+        # Tokenize and yield chunks. The ACP client has no cancellation token
+        # today, so the helper keeps the pacing without introducing a sleep
+        # that cannot be interrupted by a future owner.
         for token in reply.split(" "):
             yield token + " "
-            await asyncio.sleep(0.01)
+            await ainterruptible_sleep(0.01)
 
     async def replay_history(
         self,

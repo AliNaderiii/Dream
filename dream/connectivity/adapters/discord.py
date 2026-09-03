@@ -24,6 +24,8 @@ from urllib.request import Request, urlopen
 from dream.connectivity.base import OnMessage, PlatformAdapter
 from dream.connectivity.models import Attachment, IncomingMessage
 from dream.connectivity.websocket import WebSocketClosed, WebSocketError, connect
+from dream.reliability.cancel import CancelToken, OperationCancelled
+from dream.reliability.sleep import ainterruptible_sleep
 
 logger = logging.getLogger(__name__)
 
@@ -272,26 +274,31 @@ class DiscordAdapter(PlatformAdapter):
     # -- gateway session --------------------------------------------------- #
 
     async def _run(self) -> None:
+        cancel = CancelToken.from_async_event(self._stop_event, name="discord.poll")
         while not self._stop_event.is_set():
             try:
                 ws = await self._ws_connect(GATEWAY_URL)
                 self._ws = ws
                 self._status.connected = True
                 await self._session(ws)
+            except OperationCancelled:
+                raise
             except asyncio.CancelledError:
                 raise
             except (WebSocketClosed, WebSocketError, DiscordError) as exc:
                 self._mark_error(str(exc), running=True)
                 self._status.connected = False
-                await asyncio.sleep(min(15.0, 1.0 + self._backoff()))
+                await ainterruptible_sleep(
+                    min(15.0, 1.0 + self._backoff()), cancel=cancel
+                )
             except Exception as exc:
                 self._mark_error(f"{type(exc).__name__}: {exc}", running=True)
-                await asyncio.sleep(5.0)
+                await ainterruptible_sleep(5.0, cancel=cancel)
             finally:
                 self._status.connected = False
                 self._ws = None
                 if not self._stop_event.is_set():
-                    await asyncio.sleep(1.0)
+                    await ainterruptible_sleep(1.0, cancel=cancel)
 
     _backoff_failures = 0
 
@@ -329,13 +336,14 @@ class DiscordAdapter(PlatformAdapter):
             heartbeat.cancel()
             try:
                 await heartbeat
-            except asyncio.CancelledError:
+            except (asyncio.CancelledError, OperationCancelled):
                 pass
 
     async def _heartbeat_loop(self, ws: Any, interval: float) -> None:
         sequence = 0
+        cancel = CancelToken.from_async_event(self._stop_event, name="discord.heartbeat")
         while not self._stop_event.is_set():
-            await asyncio.sleep(interval)
+            await ainterruptible_sleep(interval, cancel=cancel)
             self._heartbeat_ack.clear()
             await ws.send_json({"op": OP_HEARTBEAT, "d": sequence})
             try:
