@@ -13,13 +13,25 @@ All of this lives in `apps/desktop/src-tauri/src/bridge/process.rs`.
 
 | Platform | Containment | Established | Torn down |
 | --- | --- | --- | --- |
-| Windows | Private Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` | after spawn: `CreateJobObjectW` → set limits → `OpenProcess(SET_QUOTA\|TERMINATE)` → `AssignProcessToJobObject` | `TerminateJobObject`, then `CloseHandle` (kill-on-close sweeps any survivor) |
+| Windows | Private Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` | spawn with `CREATE_SUSPENDED` → `CreateJobObjectW` → set limits → `OpenProcess(SET_QUOTA\|TERMINATE)` → `AssignProcessToJobObject` → `ResumeThread` (child runs only once contained) | `TerminateJobObject`, then `CloseHandle` (kill-on-close sweeps any survivor) |
 | Unix-like (Linux, macOS) | Dedicated process group, `process_group(0)` applied before `exec` | in the `Command` configuration; verified right after spawn via `getpgid(pid) == pid` | `killpg(SIGTERM)` → bounded wait → `killpg(SIGKILL)` → final sweep on close |
 | Other Unix-less/Windows-less targets | none compiled in; leader-only semantics | — | `Child` kill only |
 
-Windows has no way to pre-configure a `Command`, so the job object is attached
-immediately after spawn. Any process the sidecar later starts **inherits** the
-job, so the whole tree stays covered. On Unix the group is created *before*
+Windows has no way to pre-configure a `Command` with a job, so the job object is
+attached immediately after spawn — but the child is created with
+`CREATE_SUSPENDED`, so it has executed **no instruction at all** while the job
+is created, configured and assigned. A process that has executed nothing cannot
+have called `CreateProcess`, so no descendant can exist outside the job: the
+setup window is provably descendant-free rather than merely short. The primary
+thread is resumed (`ResumeThread`, threads selected by owner pid from a
+`TH32CS_SNAPTHREAD` snapshot — never by name) only after assignment succeeds, so
+the first instruction the sidecar ever runs is a job member's. Any process the
+sidecar later starts **inherits** the job, so the whole tree stays covered.
+
+If *any* step between spawn and the resume fails, the only process in existence
+is the still-suspended leader: the containment is closed (kill-on-close
+terminates it even though it never ran) and the `Child` is additionally killed
+and dropped. Orphaning is therefore impossible on every setup-failure path. On Unix the group is created *before*
 `exec` (inside the forked child by the kernel), which survives interpreter
 changes and has no parent/child race — the safe `std` equivalent of
 `setpgid(0, 0)` in a `pre_exec` hook, so no `unsafe` is involved at spawn time.

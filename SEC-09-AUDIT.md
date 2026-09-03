@@ -26,6 +26,25 @@
 
 ## 2. Windows implementation (Job Object)
 
+**Ordering (race-free by construction).** The sidecar is spawned with
+`CREATE_NO_WINDOW | CREATE_SUSPENDED`. A `CREATE_SUSPENDED` process is created
+with its primary thread suspended and has executed **zero instructions** — not
+even loader code — so it cannot have called `CreateProcess` and cannot own any
+descendant while containment is being set up. Only after a successful
+`AssignProcessToJobObject` does `SidecarContainment::release_startup_suspension`
+resume the primary thread, so the first instruction the sidecar ever executes is
+executed as a job member and every descendant inherits the job. This closes the
+"child may spawn descendants between spawn and assignment" race: the window is
+not merely short, it is provably empty.
+
+Resume implementation: a `TH32CS_SNAPTHREAD` snapshot is walked and every thread
+whose `th32OwnerProcessID` equals the leader pid is `OpenThread(THREAD_SUSPEND_RESUME)`
++ `ResumeThread`d (a suspended process has exactly one thread, so this is exact,
+not a heuristic). Selection is by owner pid only — **no process/thread name
+matching and no broad termination anywhere**. Snapshot and thread handles are
+closed on every path. If no thread is found the child was killed externally
+while frozen; a typed error is returned and the instance discarded.
+
 `SidecarContainment::establish` → `windows_job::contain_pid(pid)`:
 
 1. `CreateJobObjectW(null, null)` — unnamed private job (no object name, so no cross-process namespace and no collision with other apps);
@@ -34,6 +53,19 @@
 4. `AssignProcessToJobObject(job, process)` — the child **and every process it later spawns** are inside; `GetLastError` captured before `CloseHandle` can clobber it.
 
 Teardown: `TerminateJobObject(job, 0)` (ERROR_NOT_FOUND = empty job → `Ok`), then `CloseHandle` — kill-on-close guarantees survivors die with the last handle even if termination is skipped (crash, abort). `JobHandle` is `Send` (unsafe impl justified in-code comment: one private, non-thread-affine handle, never aliased), `Drop`-closed, and `close()` takes the option so double-close is impossible. No `taskkill` anywhere. Failure at any step → the partially-built job is closed and `spawn()` discards the uncontained child (never runs uncontained).
+
+**Setup-failure cleanup matrix (Windows).** In every row the child is still suspended, so terminating the leader is provably complete — there is no descendant to orphan:
+
+| Failing step | Job handle | Process/thread handles | Child |
+|---|---|---|---|
+| `Command::spawn` | never created | none | no process exists |
+| `CreateJobObjectW` | not created (returns `0`) | none | `discard_uncontained_child` (`start_kill` works on suspended processes) |
+| `SetInformationJobObject` | `JobHandle::close()` before returning | none | `discard_uncontained_child` |
+| `OpenProcess` | closed by `contain_pid`'s error path | none opened | `discard_uncontained_child` |
+| `AssignProcessToJobObject` | closed by `contain_pid`'s error path | process handle closed before the error is returned | `discard_uncontained_child` |
+| snapshot / `OpenThread` / `ResumeThread` (post-assignment) | `containment.close()` — kill-on-close terminates the assigned, never-run leader | snapshot + thread handles closed on every branch | `discard_uncontained_child` as a second net |
+
+Every path is additionally covered by `JobHandle::Drop` (close-once, kill-on-close) and the child's `kill_on_drop`, and repeated `close()`/teardown stays idempotent because the handle is `Option::take`n.
 
 ## 3. Unix implementation (process group)
 
@@ -67,12 +99,13 @@ All tests are bounded (explicit deadlines: 20 s helper start, 10 s death-poll), 
 | `unix_teardown_is_idempotent_and_safe_after_natural_exit` | `cfg(unix)` | yes | already-exited child → clean no-op; double teardown → `Ok` |
 | `unix_containment_setup_failure_does_not_leave_an_orphan` | `cfg(unix)` | yes | `discard_uncontained_child` policy: killed + reaped promptly |
 | `unix_restart_tears_down_old_group_before_new_instance` | `cfg(unix)` | yes | old group dead before new instance leads a *different* fresh group; old leader stays dead |
-| `windows_job_object_contains_child_and_descendants` | `cfg(windows)` | yes (powershell + `Start-Process ping.exe`) | `IsProcessInJob` for child **and** grandchild; teardown kills the whole tree |
+| `windows_job_object_contains_child_and_descendants` | `cfg(windows)` | yes (powershell + `Start-Process ping.exe`) | suspended-spawn → assign → resume ordering (asserts the child has no descendant pre-resume); `IsProcessInJob` for child **and** grandchild; teardown kills the whole tree |
 | `windows_teardown_is_idempotent_and_safe_after_natural_exit` | `cfg(windows)` | yes | job-path idempotence incl. exited-child case |
+| `windows_setup_failure_before_resume_leaves_nothing_running` | `cfg(windows)` | yes (suspended powershell) | pre-resume state is contained + descendant-free (`TH32CS_SNAPPROCESS` parent scan); the failure-path teardown (`close()` + `discard_uncontained_child`) kills the never-run leader and leaves no descendant |
 | `windows_containment_setup_reports_typed_error_for_dead_pid` | `cfg(windows)` | no | typed establishment error for a reserved-miss pid, no leaked job (partial `JobHandle` Drop-closed) |
 | discovery tests (`spawn_first` probes, `sidecar_creation_flags`, `require_piped_stdio`, env tables) | all | no | existing tests retyped for the `SpawnedSidecar` return — semantics asserted unchanged |
 
-Skips / platform notes: none of the assertions above are skipped where they run; the three Windows tests are `#[cfg(windows)]` (Job Objects have no POSIX analogue) and the four Unix tests `#[cfg(unix)]` (process groups have no Win32 equivalent) — each platform gets real, platform-native coverage rather than cross-platform mockups. CI runs the full `cargo test --verbose` on Linux and macOS; the **Windows job skips `cargo test`** (pre-existing tauri-winres/ComCtl32 test-binary link failure, tauri-apps/tauri#13419, documented inline in `.github/workflows/desktop-ci.yml`), but the Windows job still type-checks and lints the Windows test code through its `cargo clippy --all-targets -- -D warnings` step and builds the library containing the containment implementation. Execution is expected on Windows dev machines (`cargo test` in `apps/desktop/src-tauri`). No Linux-only mechanism (e.g. PDEATHSIG) was adopted, so there is nothing else to skip.
+Skips / platform notes: none of the assertions above are skipped where they run; the four Windows tests are `#[cfg(windows)]` (Job Objects have no POSIX analogue) and the four Unix tests `#[cfg(unix)]` (process groups have no Win32 equivalent) — each platform gets real, platform-native coverage rather than cross-platform mockups. CI runs the full `cargo test --verbose` on Linux and macOS; the **Windows job skips `cargo test`** (pre-existing tauri-winres/ComCtl32 test-binary link failure, tauri-apps/tauri#13419, documented inline in `.github/workflows/desktop-ci.yml`), but the Windows job still type-checks and lints the Windows test code through its `cargo clippy --all-targets -- -D warnings` step and builds the library containing the containment implementation. Execution is expected on Windows dev machines (`cargo test` in `apps/desktop/src-tauri`). No Linux-only mechanism (e.g. PDEATHSIG) was adopted, so there is nothing else to skip.
 
 ## 7. Commands and results
 

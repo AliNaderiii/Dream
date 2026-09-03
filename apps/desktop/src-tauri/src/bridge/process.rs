@@ -747,17 +747,32 @@ async fn supervise_reader<R: Runtime>(
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+/// Windows `CREATE_SUSPENDED` (0x00000004): the new process is created with its
+/// primary thread suspended and therefore executes *no* instruction — not even
+/// loader code — until [`SidecarContainment::release_startup_suspension`]
+/// resumes it.
+///
+/// This is what makes Job Object containment race-free (SEC-09): assignment to
+/// the job happens while the child is frozen, so the child cannot have created
+/// a single descendant before it is contained, and every instruction it ever
+/// runs is executed as a job member.
+#[cfg(windows)]
+const CREATE_SUSPENDED: u32 = 0x0000_0004;
+
 /// Creation flags for the sidecar process on the host platform.
 ///
-/// On Windows we hide the console window (CREATE_NO_WINDOW); on POSIX there is
-/// no such flag and the function returns 0. The POSIX variant is only compiled
-/// in test builds to avoid a `dead_code` lint on the lib target.
+/// On Windows we hide the console window (CREATE_NO_WINDOW) and start the child
+/// suspended (CREATE_SUSPENDED) so containment can be attached before it runs;
+/// on POSIX there is no such flag and the function returns 0 (the process group
+/// is applied by the kernel inside the forked child, which is already
+/// race-free). The POSIX variant is only compiled in test builds to avoid a
+/// `dead_code` lint on the lib target.
 ///
 /// The function is pure and cfg-gated so it can be unit-tested without spawning
 /// a real process.
 #[cfg(windows)]
 pub(crate) fn sidecar_creation_flags() -> u32 {
-    CREATE_NO_WINDOW
+    CREATE_NO_WINDOW | CREATE_SUSPENDED
 }
 
 /// POSIX stub — only compiled in test builds so `cargo clippy --lib` does not
@@ -851,6 +866,14 @@ fn sidecar_command(config: &SidecarConfig, exe: &str) -> tokio::process::Command
 /// instead of being handed back uncontained — the supervisor must never run a
 /// sidecar whose descendants nobody can sweep. Reaping of a discarded child is
 /// completed by its `kill_on_drop` configuration, so this stays non-blocking.
+///
+/// Windows ordering is what makes containment race-free (SEC-09): the child is
+/// created *suspended*, so it has executed no instruction and cannot have
+/// created any descendant while the Job Object is created, configured and
+/// assigned. Only after successful assignment is the primary thread resumed,
+/// which means every instruction the sidecar ever executes runs inside the job.
+/// If any step before the resume fails, the only process in existence is the
+/// still-suspended leader, and terminating it is provably complete.
 fn spawn(config: &SidecarConfig, exe: &str) -> std::result::Result<SpawnedSidecar, BridgeError> {
     let mut cmd = sidecar_command(config, exe);
     let mut child = match cmd.spawn() {
@@ -860,7 +883,7 @@ fn spawn(config: &SidecarConfig, exe: &str) -> std::result::Result<SpawnedSideca
     if let Some(pid) = child.id() {
         log::info!("bridge: sidecar spawned (pid {pid})");
     }
-    let containment = match SidecarContainment::establish(&child) {
+    let mut containment = match SidecarContainment::establish(&child) {
         Ok(containment) => containment,
         Err(err) => {
             log::error!(
@@ -871,6 +894,19 @@ fn spawn(config: &SidecarConfig, exe: &str) -> std::result::Result<SpawnedSideca
             return Err(err);
         }
     };
+    // Windows: the child is only allowed to start running now that it is a job
+    // member. On failure the containment is closed first (kill-on-close kills
+    // the assigned, still-suspended leader) and the child handle is discarded
+    // as a second safety net.
+    if let Err(err) = containment.release_startup_suspension() {
+        log::error!(
+            "bridge: could not start the contained sidecar — tearing down the contained \
+             child ({err})"
+        );
+        let _ = containment.close();
+        discard_uncontained_child(&mut child);
+        return Err(err);
+    }
     log::info!(
         "bridge: containment established for pid {}: {}",
         containment.leader_pid,
@@ -946,6 +982,31 @@ impl SidecarContainment {
             // supported matrix hits this path); leader-only semantics apply.
             Ok(Self { leader_pid: pid })
         }
+    }
+
+    /// Let a contained child start executing.
+    ///
+    /// Windows: the sidecar is created with `CREATE_SUSPENDED` (see
+    /// [`sidecar_creation_flags`]) precisely so that the window between process
+    /// creation and Job Object assignment contains *no* executed child
+    /// instruction — and therefore no descendant that could escape the job.
+    /// This resumes the primary thread once assignment has succeeded, so the
+    /// first instruction the child runs is already a job member's.
+    ///
+    /// Unix: the process group is applied by the kernel inside the forked child
+    /// before `exec`, which is already race-free, so there is nothing to
+    /// release and this is a no-op.
+    ///
+    /// Idempotency: resuming an already-running thread is a documented no-op
+    /// (`ResumeThread` just decrements a zero suspend count and reports it), so
+    /// a repeated call cannot corrupt the child.
+    fn release_startup_suspension(&mut self) -> std::result::Result<(), BridgeError> {
+        #[cfg(windows)]
+        {
+            windows_job::resume_process(self.leader_pid)
+                .map_err(|err| BridgeError::io("resume contained sidecar", err))?;
+        }
+        Ok(())
     }
 
     /// Human-readable mechanism for lifecycle logs (never contains paths or
@@ -1079,14 +1140,18 @@ pub(crate) mod windows_job {
     // `IsProcessInJob`, `AssignProcessToJobObject` and the limit structs live
     // under `JobObjects`, `OpenProcess` under `Threading`, and `HANDLE`/`BOOL`
     // are plain `isize`/`i32` aliases whose null/failure sentinel is `0`.
-    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
+    };
     use windows_sys::Win32::System::JobObjects::{
         AssignProcessToJobObject, JobObjectExtendedLimitInformation, SetInformationJobObject,
         TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
         JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     };
     use windows_sys::Win32::System::Threading::{
-        OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
+        OpenProcess, OpenThread, ResumeThread, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
+        THREAD_SUSPEND_RESUME,
     };
 
     // `windows-sys` 0.52 exposes every Job Object operation *except* job
@@ -1224,6 +1289,90 @@ pub(crate) mod windows_job {
             return Err(err);
         }
         Ok(job_handle)
+    }
+
+    /// `ResumeThread` failure sentinel (`(DWORD) -1`, per the Win32 docs).
+    const RESUME_THREAD_FAILED: u32 = u32::MAX;
+
+    /// Resume the primary thread of the suspended process `pid`.
+    ///
+    /// Called only after the process has been assigned to its Job Object, so
+    /// the child begins executing as a job member and no descendant can ever be
+    /// created outside containment (SEC-09).
+    ///
+    /// A `CREATE_SUSPENDED` process has exactly one thread — it has executed no
+    /// instruction, so it cannot have created another — which is why resuming
+    /// every thread owned by `pid` is precise, not a heuristic. Threads are
+    /// selected by owner pid from a snapshot; no process/thread name is ever
+    /// matched and nothing outside this pid is touched.
+    pub(crate) fn resume_process(pid: u32) -> io::Result<()> {
+        // SAFETY: a thread-only snapshot of the whole system; the `0` pid
+        // argument is ignored for `TH32CS_SNAPTHREAD` (Win32 documented).
+        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
+        if snapshot == INVALID_HANDLE_VALUE {
+            return Err(io::Error::last_os_error());
+        }
+        let result = resume_threads_of(snapshot, pid);
+        // SAFETY: closing the snapshot handle opened above, on every path.
+        unsafe { CloseHandle(snapshot) };
+        result
+    }
+
+    /// Walk `snapshot` and resume every thread whose owner is `pid`.
+    ///
+    /// Split out so the snapshot handle above is closed on all paths, including
+    /// early returns from here.
+    fn resume_threads_of(snapshot: HANDLE, pid: u32) -> io::Result<()> {
+        // SAFETY: `THREADENTRY32` is plain data; the API requires `dwSize` to
+        // be pre-filled with the struct size.
+        let mut entry: THREADENTRY32 = unsafe { core::mem::zeroed() };
+        entry.dwSize = core::mem::size_of::<THREADENTRY32>() as u32;
+        // SAFETY: `snapshot` is a valid thread snapshot; `entry` is a live
+        // out-param sized above.
+        let mut more = unsafe { Thread32First(snapshot, &mut entry) };
+        let mut resumed = 0usize;
+        while more != 0 {
+            if entry.th32OwnerProcessID == pid {
+                resume_thread(entry.th32ThreadID)?;
+                resumed += 1;
+            }
+            // SAFETY: same contract as `Thread32First`.
+            more = unsafe { Thread32Next(snapshot, &mut entry) };
+        }
+        if resumed == 0 {
+            // The child vanished between assignment and resume (it was
+            // suspended, so this means an external kill). Nothing is running
+            // and nothing can be orphaned; report it so the caller discards the
+            // instance instead of supervising a dead sidecar.
+            return Err(io::Error::other(
+                "the suspended sidecar had no thread left to resume",
+            ));
+        }
+        Ok(())
+    }
+
+    /// `OpenThread` + `ResumeThread` for one thread id, closing the handle on
+    /// every path.
+    fn resume_thread(tid: u32) -> io::Result<()> {
+        // SAFETY: plain integer arguments; `0` is the non-inheritable flag.
+        let thread = unsafe { OpenThread(THREAD_SUSPEND_RESUME, 0, tid) };
+        if thread == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `thread` is the handle opened directly above.
+        let previous = unsafe { ResumeThread(thread) };
+        // Capture the error before `CloseHandle` can clobber `GetLastError`.
+        let err = if previous == RESUME_THREAD_FAILED {
+            Some(io::Error::last_os_error())
+        } else {
+            None
+        };
+        // SAFETY: closing the handle this function opened, in every branch.
+        unsafe { CloseHandle(thread) };
+        match err {
+            None => Ok(()),
+            Some(err) => Err(err),
+        }
     }
 
     fn assign_process(job: &mut JobHandle, pid: u32) -> io::Result<()> {
@@ -1388,6 +1537,14 @@ mod tests {
             sidecar_creation_flags() & CREATE_NO_WINDOW,
             0,
             "Windows sidecar must set CREATE_NO_WINDOW"
+        );
+        // SEC-09: without CREATE_SUSPENDED the child could run — and spawn
+        // descendants — before it is assigned to the Job Object.
+        #[cfg(windows)]
+        assert_ne!(
+            sidecar_creation_flags() & CREATE_SUSPENDED,
+            0,
+            "Windows sidecar must start suspended so containment precedes execution"
         );
         #[cfg(not(windows))]
         assert_eq!(
@@ -1980,8 +2137,54 @@ mod tests {
         let child = cmd
             .spawn()
             .expect("spawn powershell helper (present on every Windows install)");
-        let containment = SidecarContainment::establish(&child).expect("job object containment");
+        let mut containment =
+            SidecarContainment::establish(&child).expect("job object containment");
+        // Mirror production ordering exactly: the helper is created suspended
+        // and only starts running once it is a job member.
+        let pid = child.id().expect("helper pid");
+        assert!(
+            windows_process_has_no_descendant(pid),
+            "a suspended child cannot have created any descendant before assignment"
+        );
+        containment
+            .release_startup_suspension()
+            .expect("resume contained helper");
         (child, containment)
+    }
+
+    /// True when no live process reports `pid` as its parent. Used to prove the
+    /// containment race is closed: before the resume, the suspended leader has
+    /// executed nothing and therefore owns no descendant.
+    #[cfg(windows)]
+    fn windows_process_has_no_descendant(pid: u32) -> bool {
+        use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+        use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+            CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32,
+            TH32CS_SNAPPROCESS,
+        };
+        // SAFETY: process-only snapshot; the `0` pid argument is ignored for
+        // `TH32CS_SNAPPROCESS`.
+        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+        if snapshot == INVALID_HANDLE_VALUE {
+            return true;
+        }
+        // SAFETY: plain-data struct; `dwSize` must be pre-filled.
+        let mut entry: PROCESSENTRY32 = unsafe { core::mem::zeroed() };
+        entry.dwSize = core::mem::size_of::<PROCESSENTRY32>() as u32;
+        // SAFETY: valid snapshot handle and live out-param.
+        let mut more = unsafe { Process32First(snapshot, &mut entry) };
+        let mut found = false;
+        while more != 0 {
+            if entry.th32ParentProcessID == pid {
+                found = true;
+                break;
+            }
+            // SAFETY: same contract as `Process32First`.
+            more = unsafe { Process32Next(snapshot, &mut entry) };
+        }
+        // SAFETY: closing the snapshot handle opened above.
+        unsafe { CloseHandle(snapshot) };
+        !found
     }
 
     /// `OpenProcess` + `GetExitCodeProcess` liveness probe on a pid *this test
@@ -2148,6 +2351,41 @@ mod tests {
         terminate_sidecar(&mut child, &mut containment)
             .await
             .expect("second teardown is idempotent");
+    }
+
+    /// Setup-failure path (SEC-09): if anything between spawn and the resume
+    /// fails, `spawn` closes the containment and discards the child. Because
+    /// the child is still suspended it owns no descendant, so that teardown is
+    /// provably complete. Simulated here by never resuming: closing the job
+    /// must kill the suspended leader through KILL_ON_JOB_CLOSE.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_setup_failure_before_resume_leaves_nothing_running() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let script = "Start-Sleep -Seconds 25";
+        let mut cmd = windows_helper_command(dir.path(), script);
+        let mut child = cmd.spawn().expect("spawn powershell helper");
+        let leader = child.id().expect("helper pid");
+        let mut containment =
+            SidecarContainment::establish(&child).expect("job object containment");
+        // The pre-resume state the failure paths act on: contained, frozen,
+        // childless.
+        assert!(
+            windows_process_has_no_descendant(leader),
+            "a suspended leader cannot have spawned anything"
+        );
+        // Exactly what `spawn` does when the resume (or any later setup step)
+        // fails.
+        containment.close().expect("close job object");
+        discard_uncontained_child(&mut child);
+        assert!(
+            wait_windows_pid_dead(leader, DEADLINE_AFTER_TEARDOWN).await,
+            "the suspended leader is terminated by the setup-failure teardown"
+        );
+        assert!(
+            windows_process_has_no_descendant(leader),
+            "no descendant is left behind by the failure path"
+        );
     }
 
     /// A pid that cannot exist must produce a typed establishment error, and
