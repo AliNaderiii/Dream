@@ -876,6 +876,7 @@ dependencies = [
 name = "dream-desktop"
 version = "0.4.6"
 dependencies = [
+ "libc",
  "log",
  "serde",
  "serde_json",
@@ -894,6 +895,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
