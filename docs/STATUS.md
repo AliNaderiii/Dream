@@ -337,13 +337,28 @@ simple chat agent into a powerful autonomous system:
 
 3. **Web Gateway** (`dream/gateway_server.py`) — FastAPI HTTP server:
    - Serves the React SPA (same desktop UI as a web page)
-   - Token authentication with read/write scopes
-   - One-time setup token, token management (create, rotate, revoke)
-   - mDNS/Bonjour LAN discovery (dream.local)
-   - Self-signed TLS certificate generation
-   - CORS and security headers (CSP, HSTS, X-Frame-Options)
-   - QR code for easy mobile connection
-   - Active connections tracking
+   - Local-first by default: binds `127.0.0.1`; LAN exposure requires an
+     explicit private bind + `DREAM_GATEWAY_LAN_ONLY`/`--lan`; public and
+     unspecified binds are refused
+   - `Authorization: Bearer` token authentication with read/write scopes;
+     query-string, `X-Access-Token`, and URL/QR-embedded tokens are rejected
+   - New tokens are shown once; persisted store keeps only an id, a masked
+     prefix, and a SHA-256 verifier at `0600`, atomically, and fails closed on
+     a malformed/un-migratable legacy store
+   - Token management (create, rotate, revoke) — list endpoints are masked
+   - Token creation/revocation and raw values never appear in URLs, QR
+     payloads, or logs
+   - Self-signed TLS certificate generation (no trusted public TLS)
+   - Same-origin/default CORS with no wildcard-credential combination; security
+     headers (CSP, HSTS, X-Frame-Options)
+   - Bounded request bodies, per-source auth-attempt throttling, per-token
+     throttling, bilingually surfaced bind/store failures
+   - The web gateway does **not** expose agent tools, memory, files, or
+     projects and has **no inbound WebSocket route** (the repo WebSocket
+     implementation is an outbound Discord/Slack client)
+   - No QR code: the prior settings card embedded a token in a URL; the
+     current UI shows a masked token list and an explicit non-secret connect
+     address
 
 All three are integrated into the bridge with 40 new RPC methods
 (`sandbox.*`, `browser.*`, `gateway.*`). Frontend gains settings pages

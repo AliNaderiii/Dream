@@ -16,6 +16,33 @@ optional and are read when a backend or workspace is constructed.
 | `DREAM_RETRY_BACKOFF_SECONDS` | Base backoff sleep before the first retry; each retry doubles it | `1.0` | OpenAI, Ollama |
 | `DREAM_EXTRACTION_TIMEOUT_SECONDS` | Wall-clock budget a turn waits for the background extraction pass before marking it abandoned | `5.0` | all backends |
 
+## Web gateway
+
+The web gateway (`dream/gateway_server.py`) serves the React desktop UI as a
+web page for remote access. It is **local-first by default**: the effective
+bind address is `127.0.0.1` and there is no LAN listener unless you explicitly
+opt in. Public / unspecified bind addresses (`0.0.0.0`, public IPs) are
+refused.
+
+| Variable | Controls | Default | Notes |
+| --- | --- | --- | --- |
+| `DREAM_GATEWAY_HOST` | Bind address | `127.0.0.1` | Loopback by default. A private RFC1918 LAN address also requires `DREAM_GATEWAY_LAN_ONLY=true` (or `--lan`). |
+| `DREAM_GATEWAY_PORT` | Listen port | `9090` | Must be 1024–65535. |
+| `DREAM_GATEWAY_LAN_ONLY` | LAN exposure gate | `true` | `true` (or `--lan`) is required to bind a private LAN address. |
+| `DREAM_GATEWAY_TLS` | Self-signed TLS | `false` | Only meaningful over TLS; Dream does **not** provide trusted public certificates, HSTS, or a managed reverse proxy. |
+| `DREAM_GATEWAY_ALLOWED_ORIGINS` | Extra cross-origin allows | empty | Comma-separated origins. Same-origin requests are always allowed. |
+
+Gateway authentication uses `Authorization: Bearer <token>` only. Query-string
+tokens (`?token=...`), `X-Access-Token`, and tokens embedded in URLs/QR links
+are rejected. New tokens are shown exactly once and the on-disk store
+(`~/.dream/gateway_tokens.json`) retains only an identifier, a masked prefix,
+and a SHA-256 verifier at owner-only permissions.
+
+The gateway works fully offline. Starting it never probes provider endpoints,
+the internet, or DNS. The explicit `python -m dream.remotegw` (`dream-serve`)
+surface is a separate bearer-token JSON-RPC endpoint and is loopback-only by
+default too (LAN with `--lan`, WAN refused).
+
 The CLI can override backend selection with `--backend echo`, `--backend
 openai`, or `--backend ollama`. Its `--db` flag controls the SQLite memory path
 and defaults to `data/dream.db`. `--owner` only changes the CLI greeting.
