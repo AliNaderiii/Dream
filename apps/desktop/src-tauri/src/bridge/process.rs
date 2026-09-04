@@ -4,9 +4,8 @@
 //! to the dispatcher, monitors it with a heartbeat, and restarts it on crash
 //! with backoff (per the failure-recovery table in the master prompt):
 //!
-//! - max 3 automatic restarts in a row, 2 s / 5 s / 10 s backoff; the
-//!   counter resets once an instance has stayed healthy for a while, and a
-//!   manual `bridge_restart` always gets a fresh attempt without backoff;
+//! - max 3 automatic restarts, 2 s / 5 s / 10 s backoff (unchanged); a manual
+//!   `bridge_restart` always gets a fresh attempt without backoff;
 //! - heartbeat ping every 5 s; no traffic for 15 s ⇒ hang ⇒ kill ⇒ restart;
 //! - on restart, every in-flight request is rejected with `INTERNAL_ERROR`
 //!   (tagged `data.kind = "transport"`), exactly once;
@@ -85,9 +84,6 @@ pub struct SupervisorTiming {
     pub heartbeat_timeout: Duration,
     /// Backoff before each automatic restart; its length is the retry budget.
     pub restart_backoff: Vec<Duration>,
-    /// An instance that stays up this long after the handshake resets the
-    /// retry budget, so a crash a day apart never exhausts it.
-    pub stable_after: Duration,
 }
 
 impl Default for SupervisorTiming {
@@ -99,7 +95,6 @@ impl Default for SupervisorTiming {
                 .iter()
                 .map(|secs| Duration::from_secs(*secs))
                 .collect(),
-            stable_after: STABLE_AFTER,
         }
     }
 }
@@ -323,9 +318,6 @@ pub(crate) fn sidecar_python_env(is_bundled: bool) -> Vec<(&'static str, &'stati
 const RESTART_BACKOFF_SECS: [u64; 3] = [2, 5, 10];
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
-/// An instance alive this long after its handshake counts as healthy and
-/// resets the automatic-restart budget (SEC-10).
-const STABLE_AFTER: Duration = Duration::from_secs(30);
 /// First heartbeat id. Lives in the reserved band (`>= RESERVED_ID_FLOOR`)
 /// so it can never collide with a frontend id (SEC-10 request ownership).
 const HEARTBEAT_ID_BASE: u64 = RESERVED_ID_FLOOR;
@@ -390,9 +382,11 @@ impl SupervisorControl {
 /// One supervisor task exists per [`Bridge`](crate::bridge::Bridge). It never
 /// returns on its own: when the automatic retry budget is spent (or the
 /// bridge was killed) it parks in `Disconnected` and waits for the next manual
-/// restart, which resets the budget and skips the backoff. This guarantees
-/// there is never more than one reader/writer/heartbeat set alive and that a
-/// manual reconnect always works, no matter how many crashes came before.
+/// restart, which resets the budget and skips the backoff. The automatic
+/// budget (3 attempts, 2 s / 5 s / 10 s) is unchanged and only ever resets on
+/// a manual restart. This guarantees there is never more than one
+/// reader/writer/heartbeat set alive and that a manual reconnect always works,
+/// no matter how many crashes came before.
 pub async fn run_supervisor<R: Runtime>(
     app: tauri::AppHandle<R>,
     state: Arc<SharedState>,
@@ -412,7 +406,6 @@ pub async fn run_supervisor<R: Runtime>(
         }
         set_state(&app, &state, ConnectionState::Connecting);
 
-        let started = Instant::now();
         let ended = start_instance(&app, &state, &dispatcher, &writer_tx, &config).await;
         // Reject everything that was in flight when the instance died —
         // exactly once (the dispatcher drops each entry as it fails it).
@@ -420,13 +413,10 @@ pub async fn run_supervisor<R: Runtime>(
         if rejected > 0 {
             log::info!("bridge: rejected {rejected} in-flight request(s) after instance end");
         }
+        // Both end causes take the same recovery path; the distinction is
+        // kept for diagnostics only.
         let (InstanceEnd::Exited { reached_ready } | InstanceEnd::Hung { reached_ready }) = ended;
-        // A handshaken instance that stayed up long enough proves the
-        // interpreter works: start the budget afresh so sporadic crashes hours
-        // apart never add up to a permanent disconnect.
-        if reached_ready && started.elapsed() >= config.timing.stable_after {
-            attempt = 0;
-        }
+        log::debug!("bridge: instance ended ({ended:?}, handshake completed: {reached_ready})");
 
         if killed.load(std::sync::atomic::Ordering::Acquire) {
             continue; // parks above until the next manual restart
@@ -2095,7 +2085,6 @@ mod tests {
             heartbeat_interval: Duration::from_millis(50),
             heartbeat_timeout: Duration::from_millis(1500),
             restart_backoff: vec![Duration::from_millis(10)],
-            stable_after: Duration::from_secs(3600),
         }
     }
 

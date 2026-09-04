@@ -743,7 +743,7 @@ The sidecar may emit notifications with **no** `id`:
 
 | Scenario | Behaviour |
 | --- | --- |
-| Sidecar crashes | Supervisor auto-restarts (max 3 in a row: 2 s / 5 s / 10 s backoff). Pending requests are rejected **exactly once** with `INTERNAL_ERROR` + `data.kind: "transport"`; UI shows "Reconnecting…". An instance that stayed `Ready` for 30 s resets the retry budget, so sporadic crashes hours apart never add up to a permanent disconnect. |
+| Sidecar crashes | Supervisor auto-restarts (max 3: 2 s / 5 s / 10 s backoff, unchanged). Pending requests are rejected **exactly once** with `INTERNAL_ERROR` + `data.kind: "transport"`; UI shows "Reconnecting…". The automatic budget is unchanged and resets only on a manual restart. |
 | Sidecar hangs | Heartbeat (`health.check` every 5 s) sees no stdout traffic for 15 s → the shell **terminates** the instance (full SEC-09 containment teardown) → restart path above. Any stdout traffic counts as liveness, including stream chunks and rejected frames. |
 | Retries exhausted | State `Disconnected`. The supervisor **stays alive** and parks; `bridge_restart` (UI "Reconnect") always produces a fresh attempt with a reset budget and no backoff. A restart requested during backoff or teardown is remembered, never lost. |
 | Manual restart / kill | Closing the sidecar's stdin ends the instance immediately (the reader does not wait for the peer to notice EOF); pending requests are rejected as above. |
