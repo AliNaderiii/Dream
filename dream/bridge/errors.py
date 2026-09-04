@@ -122,7 +122,11 @@ def _map_exception(exc: BaseException) -> tuple[int, str]:
     exception they raise for a 401.
     """
     if isinstance(exc, BridgeError):
-        return exc.code, str(exc) or exc.fallback_message
+        # Handler-chosen codes pass through untouched, but the message is still
+        # value-scanned: handlers routinely interpolate a wrapped exception's
+        # text (``f"Failed to start gateway: {exc}"``), and that text is not
+        # under the handler's control (SEC-10).
+        return exc.code, _redact(str(exc)) or exc.fallback_message
 
     message = _redact(str(exc) or type(exc).__name__)
     lowered = message.lower()

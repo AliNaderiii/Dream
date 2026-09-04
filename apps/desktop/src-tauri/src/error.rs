@@ -106,11 +106,36 @@ impl BridgeError {
     }
 
     /// The sidecar is not connected / not yet ready.
+    ///
+    /// Carries `data.kind = "transport"` so the frontend can tell a shell
+    /// transport failure from a Python `INTERNAL_ERROR` without parsing the
+    /// message (SEC-10). The numeric code is unchanged for compatibility.
     pub fn not_ready() -> Self {
         Self {
             code: RPC_INTERNAL_ERROR,
             message: "bridge is not connected".to_string(),
-            data: None,
+            data: Some(transport_kind()),
+        }
+    }
+
+    /// The sidecar went away (EOF, crash, heartbeat timeout, restart) while
+    /// this request was in flight. Same code as before; tagged as transport.
+    pub fn transport(message: &str) -> Self {
+        Self {
+            code: RPC_INTERNAL_ERROR,
+            message: message.to_string(),
+            data: Some(transport_kind()),
+        }
+    }
+
+    /// The sidecar announced a protocol major this shell does not speak.
+    pub fn protocol_version(found: u32, supported: u32) -> Self {
+        Self {
+            code: RPC_PARSE_ERROR,
+            message: format!(
+                "unsupported protocol major version {found} (this build speaks {supported})"
+            ),
+            data: Some(transport_kind()),
         }
     }
 
@@ -185,14 +210,29 @@ impl BridgeError {
         Self {
             code: RPC_INTERNAL_ERROR,
             message: format!("operation timed out after {duration:?}"),
-            data: None,
+            data: Some(serde_json::json!({ "kind": "timeout" })),
         }
+    }
+
+    /// Whether this error originated in the shell transport rather than in
+    /// the sidecar's handler taxonomy.
+    pub fn is_transport(&self) -> bool {
+        self.data
+            .as_ref()
+            .and_then(|d| d.get("kind"))
+            .and_then(Value::as_str)
+            .is_some_and(|k| k == "transport")
     }
 
     /// JSON-RPC numeric code used when this error crosses the Tauri boundary.
     pub fn rpc_code(&self) -> i32 {
         self.code
     }
+}
+
+/// The additive discriminator attached to shell-originated errors.
+fn transport_kind() -> Value {
+    serde_json::json!({ "kind": "transport" })
 }
 
 impl From<std::io::Error> for BridgeError {
@@ -318,7 +358,13 @@ mod tests {
         let ready = serde_json::to_value(BridgeError::not_ready()).expect("serialize not_ready");
         assert_eq!(ready["code"], RPC_INTERNAL_ERROR);
         assert_eq!(ready["message"], "bridge is not connected");
-        assert!(ready.get("data").is_none());
+        // Shell-originated: tagged so the frontend can tell it from a sidecar
+        // INTERNAL_ERROR; the code itself is unchanged.
+        assert_eq!(ready["data"]["kind"], "transport");
+        assert!(BridgeError::not_ready().is_transport());
+        assert!(BridgeError::transport("sidecar restarted").is_transport());
+        assert!(!BridgeError::internal("x").is_transport());
+        assert!(!BridgeError::rpc(-32603, "py".into(), None).is_transport());
 
         let rpc = BridgeError::rpc(
             -32005,
@@ -335,6 +381,21 @@ mod tests {
         assert_eq!(internal["code"], RPC_INTERNAL_ERROR);
         assert_eq!(internal["message"], "sidecar closed");
         assert!(internal.get("data").is_none());
+    }
+
+    #[test]
+    fn protocol_version_error_is_typed_and_transport_tagged() {
+        let err = BridgeError::protocol_version(2, 1);
+        assert_eq!(err.rpc_code(), RPC_PARSE_ERROR);
+        assert!(err.is_transport());
+        assert!(err.message.contains('2') && err.message.contains('1'));
+    }
+
+    #[test]
+    fn timeout_is_tagged_as_timeout_not_transport() {
+        let err = BridgeError::timeout(Duration::from_secs(1));
+        assert_eq!(err.data.as_ref().unwrap()["kind"], "timeout");
+        assert!(!err.is_transport());
     }
 
     #[test]

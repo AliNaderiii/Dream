@@ -6,7 +6,8 @@
 > **Prompt P-02, Item 1.2.1–1.2.8** (Protocol Design) and gate **G1**.
 
 - **Status:** Stable
-- **Protocol version:** `1.1`
+- **Protocol version:** `1.1` (the sidecar's header still announces `1.0`;
+  the `1.x` line is additive, see §1.1 and §8)
 - **Transport:** one process (the Python *sidecar*) speaking newline-delimited
   JSON over its **stdin** (frontend → sidecar) and **stdout** (sidecar →
   frontend). **stderr** is reserved for human-readable logs and must never carry
@@ -33,6 +34,13 @@ on the **major** number (`1` ≠ `2`) is fatal: the frontend must not send
 requests and must surface a `PROTOCOL_VERSION` error to the UI. A minor-version
 mismatch is ignored (additive).
 
+Since SEC-10 the Rust shell enforces this: the header is parsed as
+`MAJOR.MINOR`; a malformed header or a major other than `1` is logged (English
+and Persian), the instance is never marked `Ready`, and the supervisor treats
+it as a failed interpreter candidate (§6.2). The header's `1.0` is the wire
+major/minor of the *framing*; §3.x additions bump the documented minor without
+changing the header, which is what "additive" means here.
+
 ### 1.2 Message framing
 
 - Every message is **exactly one line of UTF-8 JSON**, terminated by `\n` (`U+000A`).
@@ -40,7 +48,18 @@ mismatch is ignored (additive).
   are used inside values. The boundary between messages is a literal `\n`.
 - The maximum line length is **10 MiB** (10 × 1024 × 1024 bytes). A line that
   exceeds it is rejected with `INVALID_REQUEST` ("payload too large") and the
-  connection stays alive (see §6).
+  connection stays alive (see §6). The sidecar enforces the cap **while
+  reading**: the excess is discarded chunk by chunk and never buffered, and
+  exactly one error is produced for the whole over-long line (with `id: null`,
+  because the envelope was never parsed).
+- The sidecar reads stdin as **bytes** and decodes UTF-8 with replacement.
+  Invalid UTF-8 inside a line therefore reaches the JSON parser as `U+FFFD`
+  and is handled by the normal `PARSE_ERROR`/`INVALID_REQUEST` path; it never
+  terminates the reader.
+- The Rust shell applies the same discipline to the sidecar's **stdout**: its
+  frame cap is 16 MiB (`MAX_FRAME_BYTES`), enforced while reading; an oversized
+  or non-UTF-8 stdout line is dropped with a logged typed error and the stream
+  stays in sync on the next `\n`.
 - Empty lines are ignored (lenient skip). A trailing line without `\n` at EOF is
   parsed if non-empty.
 
@@ -64,6 +83,19 @@ mismatch is ignored (additive).
 - `id` — integer or string, set by the frontend, unique among in-flight
   requests. **Must** be present on requests. A message missing `id` is a
   **notification** (§5.4) and receives no response.
+  - The sidecar accepts an `id` that is a string, an integer or `null`. Any
+    other JSON type (boolean, float, object, array) is rejected with
+    `INVALID_REQUEST` and `id: null`. A duplicate in-flight `id` is rejected
+    with `INVALID_REQUEST` (the original request keeps running).
+  - **Reserved band.** Integer ids `≥ 2^62` belong to the Rust shell (its
+    heartbeat `health.check` pings). The shell refuses a frontend request in
+    that band with `INVALID_PARAMS`, and a response in that band is never
+    routed to a frontend request. The TypeScript client issues a plain
+    increasing counter starting at 1 and never reaches the band.
+  - `RpcId` on the TypeScript side is `number | string`; the Rust shell's
+    dispatcher keys on `u64`, so a **numeric** id must be a non-negative safe
+    integer. String ids are passed through unchanged by the sidecar but are
+    not used by the desktop client.
 - `method` — dotted name from §3.
 - `params` — object (named parameters). Arrays are not used; all methods take an
   object. `params` may be omitted (treated as `{}`).
@@ -88,8 +120,20 @@ mismatch is ignored (additive).
 - `error.data` — optional, machine-readable detail. In **dev mode**
   (`DREAM_DEV=1`) it may include a `traceback` string for debugging; in
   production it is omitted or minimal.
+- `error.data.kind` — **additive (SEC-10).** Errors that originate in the Rust
+  shell rather than in a sidecar handler carry `"kind": "transport"`
+  (bridge not connected, request could not be written, sidecar restarted or
+  closed while the request was in flight, id in the reserved band, unsupported
+  protocol header). The shell's own deadline carries `"kind": "timeout"`. The
+  numeric `code` is unchanged for all of these (`INTERNAL_ERROR`,
+  `INVALID_PARAMS`, `PARSE_ERROR` as before), so older clients keep working;
+  newer clients expose it as `BridgeRpcError.kind`. Sidecar handlers do not
+  set `data.kind`; a handler error without the tag classifies as `"rpc"`.
 
 A response carries exactly one of `result` or `error`, never both, never neither.
+A `result` that cannot be encoded as strict JSON (NaN, ±Infinity, or a
+non-serialisable object) is replaced by an `INTERNAL_ERROR` response for the
+same `id`; the sidecar never writes a non-JSON line.
 
 ---
 
@@ -611,6 +655,12 @@ Mapping from Python exceptions to codes (see `dream/bridge/errors.py`):
 
 The mapping is a **deny-by-default** fallback: an unmapped exception is never
 shown verbatim in production — only its type and a sanitised message appear.
+Every message crossing the wire — including messages built by handlers with an
+explicit `BridgeError` code — is value-scanned for credential shapes (provider
+keys, bearer tokens, gateway tokens) before serialisation. `METHOD_NOT_FOUND`
+echoes at most 128 characters of the unknown method name. A `code` that does
+not fit a signed 32-bit integer is reported by the shell as `INTERNAL_ERROR`
+rather than wrapped into another taxonomy entry.
 
 ---
 
@@ -680,19 +730,38 @@ The sidecar may emit notifications with **no** `id`:
   with backoff.
 - The frontend writer buffers requests and applies **write-time** backpressure
   by awaiting each line's flush; it never floods stdin faster than the sidecar
-  reads.
+  reads. The shell's writer queue holds 64 lines; the heartbeat uses a
+  non-blocking send so a saturated queue can never wedge the watchdog.
+- Handlers that do blocking work (`tool.execute`, `approval.resolve` when it
+  runs the approved tool, `sandbox.status`) execute that work on a worker
+  thread or with an awaited bound; the sidecar's event loop keeps answering
+  `health.check` while a tool runs, so a long tool cannot be mistaken for a
+  hang. Responses are written by a dedicated single-writer thread so the
+  output path is never starved by busy worker threads.
 
 ### 6.2 Failure recovery (mirrors the master-prompt table)
 
 | Scenario | Behaviour |
 | --- | --- |
-| Sidecar crashes | Supervisor auto-restarts (max 3: 2 s / 5 s / 10 s backoff). Pending requests are rejected with `INTERNAL_ERROR`; UI shows "Reconnecting…". |
-| Sidecar hangs | Heartbeat (`health.check`) timeout 15 s → kill → restart. |
+| Sidecar crashes | Supervisor auto-restarts (max 3: 2 s / 5 s / 10 s backoff, unchanged). Pending requests are rejected **exactly once** with `INTERNAL_ERROR` + `data.kind: "transport"`; UI shows "Reconnecting…". The automatic budget is unchanged and resets only on a manual restart. |
+| Sidecar hangs | Heartbeat (`health.check` every 5 s) sees no stdout traffic for 15 s → the shell **terminates** the instance (full SEC-09 containment teardown) → restart path above. Any stdout traffic counts as liveness, including stream chunks and rejected frames. |
+| Retries exhausted | State `Disconnected`. The supervisor **stays alive** and parks; `bridge_restart` (UI "Reconnect") always produces a fresh attempt with a reset budget and no backoff. A restart requested during backoff or teardown is remembered, never lost. |
+| Manual restart / kill | Closing the sidecar's stdin ends the instance immediately (the reader does not wait for the peer to notice EOF); pending requests are rejected as above. |
+| Unsupported protocol header | Never `Ready`; treated as a failed interpreter candidate; logged in English and Persian. |
 | Python exception in handler | Serialized as an RPC error (traceback in dev, sanitised message in prod). |
-| Message too large (> 10 MiB) | `INVALID_REQUEST` "payload too large"; connection alive. |
-| Unknown method | `METHOD_NOT_FOUND`. |
-| Malformed JSON | `PARSE_ERROR`; line skipped; connection alive. |
-| EOF on stdin | Graceful shutdown: drain in-flight requests (up to 5 s), close the store, exit 0. |
+| Message too large (> 10 MiB) | `INVALID_REQUEST` "payload too large"; excess never buffered; connection alive. |
+| Unknown method | `METHOD_NOT_FOUND` (method name truncated to 128 chars in the echo). |
+| Malformed JSON / invalid UTF-8 | `PARSE_ERROR`; line skipped; connection alive. |
+| Non-JSON-encodable result | `INTERNAL_ERROR` for that `id`; connection alive. |
+| Sidecar stdout write fails (pipe closed) | The sidecar stops accepting input and shuts down; the shell sees EOF and takes the crash path. |
+| EOF on stdin | Graceful shutdown: drain in-flight requests (**bounded to 5 s**, stragglers cancelled), close the store, exit 0. |
+
+Client-side deadlines (`timeoutMs`, default 30 s for `call`, 300 s for
+`stream`) and `AbortSignal` cancellation are **local** to the renderer: the
+promise rejects with a `BridgeRpcError` whose `kind` is `"timeout"` or
+`"cancelled"`, but the sidecar is **not** told to stop the handler. Use
+`conversation.stop` (§5.3) or `subagent.cancel` to interrupt work; a late
+response for an abandoned id is dropped by the shell.
 
 ---
 
@@ -707,8 +776,13 @@ The sidecar may emit notifications with **no** `id`:
   logs, or error `data`; `error.message` is sanitised of bearer tokens.
 - **No privilege escalation.** The sidecar runs as the same OS user as the app;
   it performs no `setuid`/elevation and opens no privileged sockets.
-- **Bounded input.** Line length (10 MiB), queue depth (128), and concurrency
-  (16) are all capped to resist resource exhaustion.
+- **Bounded input.** Line length (10 MiB on stdin, 16 MiB on stdout), queue
+  depth (128), and concurrency (16) are all capped to resist resource
+  exhaustion, and the line caps are enforced *before* allocation on both sides
+  of the pipe.
+- **Request ownership.** Responses are matched to requests by `id` only within
+  the current sidecar instance; a stale, duplicate, or reserved-band response
+  is dropped and can never complete another caller's request.
 - **Subagent containment.** A child agent gets an ephemeral in-memory store and
   an explicit tool subset, so it cannot read the parent's memories or reach the
   workspace through a tool the parent did not grant. `dangerous` tools are
@@ -729,12 +803,19 @@ The sidecar may emit notifications with **no** `id`:
   compatible (frontend ignores unknown fields).
 - The protocol version is independent of the `dream/` package version
   (`sidecar.version.core`) and the sidecar build (`sidecar.version.sidecar`).
+- **Migration note (SEC-10).** No wire change is breaking. New: `error.data.kind`
+  (additive, ignorable), reserved id band `≥ 2^62` (no client ever used it),
+  header major-version enforcement in the shell (the sidecar has always sent
+  `1.0`). Renderer code that matched timeout/cancel rejections with
+  `instanceof Error` still works — `BridgeRpcError` extends `Error` and the
+  messages are unchanged; code that checked `!(err instanceof BridgeRpcError)`
+  to detect a local timeout should switch to `err.isTimeout` / `err.isCancelled`.
 
 ## 9. Reference implementation map
 
 | Concern | Python | Rust | TypeScript |
 | --- | --- | --- | --- |
-| Framing & envelope | `dream/bridge/server.py` | `bridge/framing.rs` | `lib/bridge/client.ts` |
+| Framing & envelope | `dream/bridge/server.py` | `bridge/framing.rs`, `bridge/reader.rs` | `lib/bridge/client.ts` |
 | Error taxonomy | `dream/bridge/errors.py` | `bridge/framing.rs` | `lib/bridge/errors.ts` |
 | Method handlers | `dream/bridge/methods.py` | — (passthrough) | `lib/bridge/types.ts` |
 | Streaming helpers | `dream/bridge/streams.py` | `bridge/dispatcher.rs` | `lib/bridge/client.ts` |

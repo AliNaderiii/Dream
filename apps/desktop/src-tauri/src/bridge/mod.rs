@@ -21,14 +21,16 @@ use tokio::sync::Mutex;
 
 use crate::bridge::dispatcher::{Dispatcher, RequestChannels};
 use crate::bridge::framing::Outcome;
+use crate::bridge::framing::RESERVED_ID_FLOOR;
 use crate::bridge::process::{
-    ensure_sidecar_data_root, run_supervisor, sidecar_data_root, SidecarConfig,
+    ensure_sidecar_data_root, run_supervisor, sidecar_data_root, SidecarConfig, SupervisorControl,
 };
 use crate::bridge::state::{ConnectionState, SharedState};
 
 pub mod dispatcher;
 pub mod framing;
 pub mod process;
+pub mod reader;
 pub mod state;
 
 /// Re-export the typed bridge error so command signatures stay
@@ -47,6 +49,7 @@ pub struct Bridge<R: Runtime> {
     dispatcher: Arc<Mutex<Dispatcher>>,
     writer_tx: Arc<Mutex<Option<tokio::sync::mpsc::Sender<String>>>>,
     killed: Arc<AtomicBool>,
+    control: Arc<SupervisorControl>,
     config: SidecarConfig,
 }
 
@@ -90,6 +93,7 @@ impl<R: Runtime> Bridge<R> {
             dispatcher: Arc::new(Mutex::new(Dispatcher::new())),
             writer_tx: Arc::new(Mutex::new(None)),
             killed: Arc::new(AtomicBool::new(false)),
+            control: Arc::new(SupervisorControl::default()),
             config,
         }
     }
@@ -103,8 +107,9 @@ impl<R: Runtime> Bridge<R> {
         let writer_tx = Arc::clone(&self.writer_tx);
         let config = self.config.clone();
         let killed = Arc::clone(&self.killed);
+        let control = Arc::clone(&self.control);
         tauri::async_runtime::spawn(async move {
-            run_supervisor(app, state, dispatcher, writer_tx, config, killed).await;
+            run_supervisor(app, state, dispatcher, writer_tx, config, killed, control).await;
         });
     }
 
@@ -118,6 +123,13 @@ impl<R: Runtime> Bridge<R> {
     ) -> std::result::Result<Value, BridgeError> {
         if self.state.get() != ConnectionState::Ready {
             return Err(BridgeError::not_ready());
+        }
+        if id >= RESERVED_ID_FLOOR {
+            // The band above the floor belongs to the shell (heartbeat); a
+            // frontend id there could be answered by a heartbeat reply.
+            return Err(BridgeError::invalid_argument(
+                "request id is in the range reserved for the bridge",
+            ));
         }
 
         let RequestChannels {
@@ -136,16 +148,23 @@ impl<R: Runtime> Bridge<R> {
 
         // Write the request line to the sidecar. Clone the sender out of the
         // guard before awaiting the send (clippy:await_holding_lock).
+        // If the request never reaches the sidecar, forget it: otherwise the
+        // dispatcher would keep a dead entry and a later request reusing the
+        // id would be refused as a duplicate (SEC-10 R3).
         let line = framing::request_line(id, &method, &params);
         let tx = self.writer_tx.lock().await.as_ref().cloned();
-        match tx {
-            Some(tx) => tx.send(line).await.map_err(|_| BridgeError::not_ready())?,
-            None => return Err(BridgeError::not_ready()),
+        let sent = match tx {
+            Some(tx) => tx.send(line).await.is_ok(),
+            None => false,
+        };
+        if !sent {
+            self.dispatcher.lock().await.cancel(id);
+            return Err(BridgeError::not_ready());
         }
 
         match final_rx
             .await
-            .map_err(|_| BridgeError::internal("sidecar closed"))?
+            .map_err(|_| BridgeError::transport("sidecar closed"))?
         {
             Outcome::Result(value) => Ok(value),
             Outcome::Error {
@@ -163,19 +182,32 @@ impl<R: Runtime> Bridge<R> {
 
     /// Restart the sidecar: close the writer so the current instance exits and
     /// the supervisor respawns it (pending requests are rejected on exit).
+    ///
+    /// Also wakes a supervisor that is parked in `Disconnected` (retry budget
+    /// spent, or killed) or sleeping in backoff, so a manual restart always
+    /// produces a fresh attempt.
     pub async fn restart(&self) {
         self.killed.store(false, Ordering::Release);
         self.state.set(ConnectionState::Restarting);
         let _ = self.app.emit(STATE_EVENT, ConnectionState::Restarting);
         *self.writer_tx.lock().await = None;
+        self.control.request_restart();
     }
 
     /// Stop the bridge for good (no further restarts). Used on quit / diagnostics.
     pub fn kill(&self) {
         self.killed.store(true, Ordering::Release);
-        // Drop the writer sender to end the current instance promptly.
-        if let Ok(mut guard) = self.writer_tx.try_lock() {
-            *guard = None;
+        // Drop the writer sender to end the current instance promptly. If the
+        // lock is momentarily held (a request being written) the sender is
+        // dropped by a detached task instead of being silently skipped.
+        match self.writer_tx.try_lock() {
+            Ok(mut guard) => *guard = None,
+            Err(_) => {
+                let writer_tx = Arc::clone(&self.writer_tx);
+                tauri::async_runtime::spawn(async move {
+                    *writer_tx.lock().await = None;
+                });
+            }
         }
         self.state.set(ConnectionState::Disconnected);
         let _ = self.app.emit(STATE_EVENT, ConnectionState::Disconnected);

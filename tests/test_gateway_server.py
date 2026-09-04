@@ -6,6 +6,7 @@ The FastAPI application is tested with mocked HTTP requests.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -288,20 +289,23 @@ class TestSandboxBridgeIntegration:
         assert "sandbox.install_packages" in bridge.handlers
 
     def test_sandbox_status_returns_unavailable_without_docker(self):
-        """sandbox.status returns unavailable when Docker is absent."""
-        from dream.bridge.methods import BridgeMethods
+        """sandbox.status returns unavailable when Docker is absent.
 
-        bridge = BridgeMethods()
-        # If Docker is not available, the sandbox status handler will try to
-        # check and fail. We've created the sandbox object, so it should
-        # return an error.
-        result = bridge.sandbox_status()
+        The probe is injected so the outcome does not depend on whether the
+        host running the suite has a Docker daemon (CI runners do).
+        """
+        from dream.bridge.methods import BridgeMethods
+        from dream.docker_sandbox import DockerUnavailableError
+
+        class _NoDocker:
+            async def check_docker(self) -> dict:
+                raise DockerUnavailableError("Docker daemon is not reachable")
+
+        bridge = BridgeMethods(sandbox=_NoDocker())
+        result = asyncio.run(bridge.sandbox_status())
         assert isinstance(result, dict)
-        # It should either show available: False or raise an error code.
-        if "available" in result:
-            assert result["available"] is False
-        elif "error" in result:
-            assert result["error"] is not None
+        assert result["available"] is False
+        assert "not reachable" in result["error"]
 
 
 class TestBrowserBridgeIntegration:

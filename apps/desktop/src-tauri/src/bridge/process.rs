@@ -4,9 +4,13 @@
 //! to the dispatcher, monitors it with a heartbeat, and restarts it on crash
 //! with backoff (per the failure-recovery table in the master prompt):
 //!
-//! - max 3 restarts, 2 s / 5 s / 10 s backoff;
+//! - max 3 automatic restarts, 2 s / 5 s / 10 s backoff (unchanged); a manual
+//!   `bridge_restart` always gets a fresh attempt without backoff;
 //! - heartbeat ping every 5 s; no traffic for 15 s ⇒ hang ⇒ kill ⇒ restart;
-//! - on restart, every in-flight request is rejected with `INTERNAL_ERROR`.
+//! - on restart, every in-flight request is rejected with `INTERNAL_ERROR`
+//!   (tagged `data.kind = "transport"`), exactly once;
+//! - the supervisor task lives for the whole app: after the retries are spent
+//!   (`Disconnected`) it waits for the next manual restart instead of exiting.
 //!
 //! State transitions are written to the shared [`SharedState`] and emitted as
 //! `bridge://state` events so the frontend status indicator stays in sync.
@@ -38,12 +42,13 @@ use std::time::{Duration, Instant};
 
 use serde_json::json;
 use tauri::{Emitter, Runtime};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdout};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, Notify};
 
 use crate::bridge::dispatcher::Dispatcher;
-use crate::bridge::framing::{self, code, ParsedMessage};
+use crate::bridge::framing::{self, code, ParsedMessage, RESERVED_ID_FLOOR};
+use crate::bridge::reader::{Frame, FrameReader};
 use crate::bridge::state::{ConnectionState, SharedState};
 use crate::error::BridgeError;
 
@@ -65,6 +70,33 @@ pub struct SidecarConfig {
     /// never land under Program Files. `None` leaves the inherited cwd
     /// (tests that never spawn).
     data_root: Option<PathBuf>,
+    /// Supervisor timings. Production uses [`SupervisorTiming::default`];
+    /// tests shrink them so lifecycle paths run in milliseconds.
+    pub timing: SupervisorTiming,
+}
+
+/// Heartbeat, backoff and stability windows used by the supervisor.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SupervisorTiming {
+    /// Interval between `health.check` pings.
+    pub heartbeat_interval: Duration,
+    /// Silence on stdout longer than this marks the instance hung.
+    pub heartbeat_timeout: Duration,
+    /// Backoff before each automatic restart; its length is the retry budget.
+    pub restart_backoff: Vec<Duration>,
+}
+
+impl Default for SupervisorTiming {
+    fn default() -> Self {
+        Self {
+            heartbeat_interval: HEARTBEAT_INTERVAL,
+            heartbeat_timeout: HEARTBEAT_TIMEOUT,
+            restart_backoff: RESTART_BACKOFF_SECS
+                .iter()
+                .map(|secs| Duration::from_secs(*secs))
+                .collect(),
+        }
+    }
 }
 
 /// Interpreter candidates when `DREAM_SIDECAR_PYTHON` is unset. On Windows the
@@ -90,6 +122,7 @@ impl SidecarConfig {
             module,
             bundled: Vec::new(),
             data_root: None,
+            timing: SupervisorTiming::default(),
         }
     }
 
@@ -285,6 +318,13 @@ pub(crate) fn sidecar_python_env(is_bundled: bool) -> Vec<(&'static str, &'stati
 const RESTART_BACKOFF_SECS: [u64; 3] = [2, 5, 10];
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
+/// First heartbeat id. Lives in the reserved band (`>= RESERVED_ID_FLOOR`)
+/// so it can never collide with a frontend id (SEC-10 request ownership).
+const HEARTBEAT_ID_BASE: u64 = RESERVED_ID_FLOOR;
+// Compile-time guarantees: heartbeat ids live in the reserved band and far
+// above the old `1_000_000` base that sat inside the frontend counter range.
+const _: () = assert!(HEARTBEAT_ID_BASE >= RESERVED_ID_FLOOR);
+const _: () = assert!(HEARTBEAT_ID_BASE > 1_000_000);
 const STATE_EVENT: &str = "bridge://state";
 
 /// How long the sidecar gets to exit from the stdin-EOF graceful shutdown it
@@ -303,10 +343,54 @@ const SIDECAR_TERM_GRACE: Duration = Duration::from_secs(1);
 /// never blocks forever and never leaks.
 const SIDECAR_REAP_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Run the supervisor loop until the sidecar stays up or all retries are spent.
+/// Control channel from [`Bridge`](crate::bridge::Bridge) to the supervisor.
 ///
-/// Returns when the bridge gives up (state `Disconnected`) — the frontend can
-/// kick it again with `bridge_restart`.
+/// A manual restart is a level (`requested`) plus a wake-up (`wake`): the flag
+/// is remembered until the supervisor consumes it, so a request that arrives
+/// while an instance is still being torn down, or while the supervisor is
+/// sleeping in backoff or parked in `Disconnected`, is never lost — and a
+/// stale wake-up can never be mistaken for a request.
+#[derive(Default)]
+pub struct SupervisorControl {
+    requested: std::sync::atomic::AtomicBool,
+    wake: Notify,
+}
+
+impl SupervisorControl {
+    /// Ask the supervisor for a fresh instance (`bridge_restart`, UI reconnect).
+    pub fn request_restart(&self) {
+        self.requested
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.wake.notify_one();
+    }
+
+    /// Consume a pending request, if any.
+    fn take_restart_request(&self) -> bool {
+        self.requested
+            .swap(false, std::sync::atomic::Ordering::AcqRel)
+    }
+
+    /// Park until a restart is requested (and consume it).
+    async fn wait_for_restart(&self) {
+        loop {
+            if self.take_restart_request() {
+                return;
+            }
+            self.wake.notified().await;
+        }
+    }
+}
+
+/// Run the supervisor loop for the lifetime of the app.
+///
+/// One supervisor task exists per [`Bridge`](crate::bridge::Bridge). It never
+/// returns on its own: when the automatic retry budget is spent (or the
+/// bridge was killed) it parks in `Disconnected` and waits for the next manual
+/// restart, which resets the budget and skips the backoff. The automatic
+/// budget (3 attempts, 2 s / 5 s / 10 s) is unchanged and only ever resets on
+/// a manual restart. This guarantees there is never more than one
+/// reader/writer/heartbeat set alive and that a manual reconnect always works,
+/// no matter how many crashes came before.
 pub async fn run_supervisor<R: Runtime>(
     app: tauri::AppHandle<R>,
     state: Arc<SharedState>,
@@ -314,46 +398,66 @@ pub async fn run_supervisor<R: Runtime>(
     writer_tx: Arc<Mutex<Option<mpsc::Sender<String>>>>,
     config: SidecarConfig,
     killed: Arc<std::sync::atomic::AtomicBool>,
+    control: Arc<SupervisorControl>,
 ) {
     let mut attempt = 0usize;
     loop {
         if killed.load(std::sync::atomic::Ordering::Acquire) {
             set_state(&app, &state, ConnectionState::Disconnected);
-            return;
+            control.wait_for_restart().await;
+            attempt = 0;
+            continue;
         }
         set_state(&app, &state, ConnectionState::Connecting);
 
         let ended = start_instance(&app, &state, &dispatcher, &writer_tx, &config).await;
-        // Reject everything that was in flight when the instance died.
-        reject_pending(&dispatcher).await;
-        // Both exit causes take the same recovery path; the distinction is kept
-        // for diagnostics/logging.
-        match ended {
-            InstanceOutcome::Exited | InstanceOutcome::Hung => {}
+        // Reject everything that was in flight when the instance died —
+        // exactly once (the dispatcher drops each entry as it fails it).
+        let rejected = reject_pending(&dispatcher).await;
+        if rejected > 0 {
+            log::info!("bridge: rejected {rejected} in-flight request(s) after instance end");
         }
+        // Both end causes take the same recovery path; the distinction is
+        // kept for diagnostics only.
+        let (InstanceEnd::Exited { reached_ready } | InstanceEnd::Hung { reached_ready }) = ended;
+        log::debug!("bridge: instance ended ({ended:?}, handshake completed: {reached_ready})");
 
         if killed.load(std::sync::atomic::Ordering::Acquire) {
-            set_state(&app, &state, ConnectionState::Disconnected);
-            return;
+            continue; // parks above until the next manual restart
         }
-        if attempt >= RESTART_BACKOFF_SECS.len() {
-            set_state(&app, &state, ConnectionState::Disconnected);
-            return;
+        if control.take_restart_request() {
+            // The user asked for it: respawn now, no backoff, fresh budget.
+            attempt = 0;
+            continue;
         }
+        let Some(backoff) = config.timing.restart_backoff.get(attempt).copied() else {
+            // Budget spent: park until a manual restart, then start over.
+            set_state(&app, &state, ConnectionState::Disconnected);
+            control.wait_for_restart().await;
+            attempt = 0;
+            continue;
+        };
         set_state(&app, &state, ConnectionState::Restarting);
-        let backoff = RESTART_BACKOFF_SECS[attempt];
         attempt += 1;
-        tokio::time::sleep(Duration::from_secs(backoff)).await;
+        tokio::select! {
+            () = tokio::time::sleep(backoff) => {}
+            () = control.wait_for_restart() => {
+                // A manual restart during backoff: respawn now, fresh budget.
+                attempt = 0;
+            }
+        }
     }
 }
 
-/// Outcome of one sidecar instance's lifetime.
-#[derive(Debug)]
-enum InstanceOutcome {
-    /// The process exited or its stdout closed.
-    Exited,
+/// How one sidecar instance's lifetime ended. `reached_ready` records whether
+/// the protocol handshake had completed.
+#[derive(Debug, Clone, Copy)]
+enum InstanceEnd {
+    /// The process exited, its stdout closed, or its stdin was closed by a
+    /// manual restart/kill (the supervisor checks the control flag).
+    Exited { reached_ready: bool },
     /// The heartbeat timed out and the process was killed.
-    Hung,
+    Hung { reached_ready: bool },
 }
 
 /// Log an I/O failure without embedding OS paths (see [`BridgeError::io`]).
@@ -379,8 +483,14 @@ fn discard_uncontained_child(child: &mut Child) {
     }
 }
 
-/// Drain request lines onto sidecar stdin until the channel closes.
-async fn write_stdin_loop(mut stdin: tokio::process::ChildStdin, mut rx: mpsc::Receiver<String>) {
+/// Drain request lines onto sidecar stdin until the channel closes, then
+/// close stdin (EOF ⇒ graceful sidecar shutdown) and signal `done`.
+async fn write_stdin_loop(
+    mut stdin: tokio::process::ChildStdin,
+    mut rx: mpsc::Receiver<String>,
+    done: Arc<Notify>,
+) {
+    let _signal_on_exit = NotifyOnDrop(done);
     while let Some(line) = rx.recv().await {
         if let Err(err) = stdin.write_all(line.as_bytes()).await {
             warn_bridge_io(
@@ -410,6 +520,16 @@ async fn write_stdin_loop(mut stdin: tokio::process::ChildStdin, mut rx: mpsc::R
             "shutdown sidecar stdin",
             err,
         );
+    }
+}
+
+/// Fires its `Notify` when dropped — also when the owning task is aborted —
+/// so a waiter can never miss the writer's end.
+struct NotifyOnDrop(Arc<Notify>);
+
+impl Drop for NotifyOnDrop {
+    fn drop(&mut self) {
+        self.0.notify_one();
     }
 }
 
@@ -532,7 +652,7 @@ async fn start_instance<R: Runtime>(
     dispatcher: &Arc<Mutex<Dispatcher>>,
     writer_tx: &Arc<Mutex<Option<mpsc::Sender<String>>>>,
     config: &SidecarConfig,
-) -> InstanceOutcome {
+) -> InstanceEnd {
     let mut remaining: &[String] = config.candidates();
     loop {
         let Some((index, exe, mut instance)) = spawn_first(remaining, |exe| spawn(config, exe))
@@ -541,7 +661,9 @@ async fn start_instance<R: Runtime>(
             // supervisor (it goes Disconnected after the retries) and say why
             // in both languages.
             log_python_required(config.candidates());
-            return InstanceOutcome::Exited;
+            return InstanceEnd::Exited {
+                reached_ready: false,
+            };
         };
         // Drop the used candidates so the next discovery round resumes where
         // this one stopped.
@@ -563,27 +685,60 @@ async fn start_instance<R: Runtime>(
             }
         };
 
-        // Writer task: drains the request channel and writes newline-framed lines.
+        // Writer task: drains the request channel and writes newline-framed
+        // lines. `writer_gone` fires when the writer loop ends for any reason
+        // (channel closed by `Bridge::restart`/`kill`, or a write failure), so
+        // the reader can stop waiting on a peer that will never answer.
         let (tx, rx) = mpsc::channel::<String>(64);
         {
             let mut guard = writer_tx.lock().await;
             *guard = Some(tx);
         }
-        let writer = tauri::async_runtime::spawn(write_stdin_loop(stdin, rx));
+        let writer_gone = Arc::new(Notify::new());
+        let writer =
+            tauri::async_runtime::spawn(write_stdin_loop(stdin, rx, Arc::clone(&writer_gone)));
 
-        let last_activity = Arc::new(Mutex::new(Instant::now()));
-        let (outcome, reached_ready) =
-            supervise_reader(app, state, dispatcher, writer_tx, stdout, &last_activity).await;
+        let ended = supervise_reader(
+            app,
+            state,
+            dispatcher,
+            writer_tx,
+            stdout,
+            &config.timing,
+            &writer_gone,
+        )
+        .await;
 
         writer.abort();
         // Runs the full containment teardown (see [`terminate_sidecar`]) and
         // completes *before* the supervisor's next spawn, so a restart never
-        // overlaps the old process group / job object with the new one.
+        // overlaps the old process group / job object with the new one — and
+        // no reader/writer/heartbeat task of the old instance is alive when
+        // the new one starts.
         reap_instance(&mut instance, writer_tx).await;
 
-        if reached_ready {
-            log::info!("bridge: instance running under `{exe}` ended ({outcome:?})");
-            return outcome;
+        match ended {
+            ReaderEnd::WriterClosed { reached_ready } => {
+                // Manual restart/kill closed stdin, or stdin broke: either way
+                // this instance is over; the supervisor decides what follows.
+                log::info!("bridge: instance running under `{exe}` ended (stdin closed)");
+                return InstanceEnd::Exited { reached_ready };
+            }
+            ReaderEnd::Hung { reached_ready } => {
+                log::warn!("bridge: instance running under `{exe}` ended (heartbeat timeout)");
+                return InstanceEnd::Hung { reached_ready };
+            }
+            ReaderEnd::Exited {
+                reached_ready: true,
+            } => {
+                log::info!("bridge: instance running under `{exe}` ended (exit)");
+                return InstanceEnd::Exited {
+                    reached_ready: true,
+                };
+            }
+            ReaderEnd::Exited {
+                reached_ready: false,
+            } => {}
         }
         log::warn!(
             "bridge: `{exe}` exited before the protocol handshake — trying the next interpreter"
@@ -632,34 +787,62 @@ pub(crate) fn require_piped_stdio<I, O>(
     Ok((stdin, stdout))
 }
 
-/// Heartbeat watchdog: ping every 5 s; if no traffic for 15 s, flag a hang.
+/// Heartbeat watchdog: ping every `heartbeat_interval`; if stdout has been
+/// silent for longer than `heartbeat_timeout`, fire `hung` and return.
+///
+/// The ping id lives in the reserved band ([`HEARTBEAT_ID_BASE`]) and is not
+/// registered with the dispatcher: its response is dropped by design, but
+/// reading it refreshes `last_activity`, proving the sidecar is responsive.
 async fn heartbeat_watchdog(
     writer_tx: Arc<Mutex<Option<mpsc::Sender<String>>>>,
-    last_activity: Arc<Mutex<Instant>>,
-    hung: Arc<std::sync::atomic::AtomicBool>,
+    last_activity: Arc<std::sync::Mutex<Instant>>,
+    timing: SupervisorTiming,
+    hung: Arc<Notify>,
 ) {
-    let mut seq: u64 = 1_000_000; // heartbeat ids live above frontend ids
+    let mut seq: u64 = HEARTBEAT_ID_BASE;
     loop {
-        tokio::time::sleep(HEARTBEAT_INTERVAL).await;
-        // Send a ping through the writer. The ping id is not registered with
-        // the dispatcher, so its response is dropped — but reading it still
-        // refreshes `last_activity`, proving the sidecar is responsive.
+        tokio::time::sleep(timing.heartbeat_interval).await;
         // Clone the sender out of the guard before awaiting the send.
         let tx = writer_tx.lock().await.as_ref().cloned();
         if let Some(tx) = tx {
             let line = framing::request_line(seq, "health.check", &json!({}));
-            let _ = tx.send(line).await;
-            seq += 1;
+            // A full channel means the writer is already backed up; the
+            // liveness check still works because *any* stdout traffic counts.
+            let _ = tx.try_send(line);
+            seq = seq.wrapping_add(1).max(HEARTBEAT_ID_BASE);
         }
-        let stale = {
-            let last = *last_activity.lock().await;
-            last.elapsed() > HEARTBEAT_TIMEOUT
-        };
-        if stale {
-            hung.store(true, std::sync::atomic::Ordering::Release);
+        if last_activity_elapsed(&last_activity) > timing.heartbeat_timeout {
+            hung.notify_one();
             return;
         }
     }
+}
+
+/// Elapsed time since the last stdout activity. The lock is a plain
+/// `std::sync::Mutex` held for a single `Instant` copy — never across an
+/// await — so it cannot deadlock the reader or the watchdog.
+fn last_activity_elapsed(last_activity: &std::sync::Mutex<Instant>) -> Duration {
+    match last_activity.lock() {
+        Ok(guard) => guard.elapsed(),
+        // A poisoned lock only means a panic elsewhere; the Instant is still
+        // valid. Treat as "just now" so a poisoned lock cannot fake a hang.
+        Err(_) => Duration::ZERO,
+    }
+}
+
+fn touch_last_activity(last_activity: &std::sync::Mutex<Instant>) {
+    if let Ok(mut guard) = last_activity.lock() {
+        *guard = Instant::now();
+    }
+}
+
+/// Outcome of routing one stdout line.
+enum LineOutcome {
+    /// Keep reading.
+    Continue,
+    /// The sidecar announced a protocol this shell cannot speak: treat the
+    /// instance as unusable (never `Ready`).
+    UnsupportedProtocol,
 }
 
 /// Route one stdout line: handshake, JSON-RPC response, or stream chunk.
@@ -669,21 +852,49 @@ async fn handle_stdout_line<R: Runtime>(
     dispatcher: &Arc<Mutex<Dispatcher>>,
     line: &str,
     reached_ready: &mut bool,
-) {
-    if line.starts_with("DREAM-PROTOCOL:") {
-        set_state(app, state, ConnectionState::Ready);
-        *reached_ready = true;
-        return;
+) -> LineOutcome {
+    if framing::is_protocol_header(line) {
+        return match framing::parse_header(line) {
+            Ok(version) => {
+                log::info!(
+                    "bridge: sidecar speaks protocol {}.{}",
+                    version.major,
+                    version.minor
+                );
+                set_state(app, state, ConnectionState::Ready);
+                *reached_ready = true;
+                LineOutcome::Continue
+            }
+            Err(err) => {
+                log::error!("bridge: refusing sidecar handshake: {err}");
+                log::error!(
+                    "bridge: نسخهٔ پروتکل موتور Dream با این نسخهٔ برنامه سازگار نیست — \
+                     برنامه و بستهٔ dream را هم‌زمان به‌روزرسانی کنید."
+                );
+                LineOutcome::UnsupportedProtocol
+            }
+        };
     }
 
     match framing::parse(line) {
         Ok(ParsedMessage::Response { id, outcome }) => {
-            dispatcher.lock().await.resolve(id, outcome);
+            if id >= RESERVED_ID_FLOOR {
+                // Heartbeat reply: liveness was already recorded by the reader.
+                return LineOutcome::Continue;
+            }
+            if !dispatcher.lock().await.resolve(id, outcome) {
+                // Unknown or late id (already resolved, cancelled, or from a
+                // request that was rejected on restart). Dropped by design —
+                // it can never reach another request's channels.
+                log::debug!("bridge: dropping response for unknown request id");
+            }
         }
         Ok(ParsedMessage::Notification { method, params }) => {
             if method == "stream.chunk" {
                 if let Some(id) = params.get("id").and_then(|v| v.as_u64()) {
-                    dispatcher.lock().await.route_stream(id, params);
+                    if id < RESERVED_ID_FLOOR {
+                        dispatcher.lock().await.route_stream(id, params);
+                    }
                 }
             }
         }
@@ -691,54 +902,89 @@ async fn handle_stdout_line<R: Runtime>(
             log::debug!("bridge: skipping unparseable line: {err}");
         }
     }
+    LineOutcome::Continue
 }
 
-/// Read stdout until EOF, routing messages to the dispatcher. Returns `Hung`
-/// if the heartbeat watchdog fired (it kills the child via the returned signal),
-/// plus whether the protocol handshake (`DREAM-PROTOCOL:`) was ever seen.
+/// How the reader loop ended.
+#[derive(Debug)]
+enum ReaderEnd {
+    Exited { reached_ready: bool },
+    Hung { reached_ready: bool },
+    WriterClosed { reached_ready: bool },
+}
+
+/// Read stdout until EOF, a heartbeat timeout, or the writer's end, routing
+/// messages to the dispatcher.
+///
+/// The heartbeat used to only *record* a hang and rely on stdout closing —
+/// which a wedged sidecar never does. The loop now `select!`s on the next
+/// frame, the watchdog and the writer's end, so every exit path is bounded:
+/// a hung instance is torn down by the caller within `heartbeat_timeout`
+/// (+ one interval), and a manual restart takes effect immediately.
 async fn supervise_reader<R: Runtime>(
     app: &tauri::AppHandle<R>,
     state: &Arc<SharedState>,
     dispatcher: &Arc<Mutex<Dispatcher>>,
     writer_tx: &Arc<Mutex<Option<mpsc::Sender<String>>>>,
     stdout: ChildStdout,
-    last_activity: &Arc<Mutex<Instant>>,
-) -> (InstanceOutcome, bool) {
-    let mut reader = BufReader::new(stdout).lines();
-    let hung = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    timing: &SupervisorTiming,
+    writer_gone: &Arc<Notify>,
+) -> ReaderEnd {
+    let mut reader = FrameReader::new(BufReader::new(stdout));
+    let last_activity = Arc::new(std::sync::Mutex::new(Instant::now()));
+    let hung = Arc::new(Notify::new());
     let mut reached_ready = false;
 
     let heartbeat = tauri::async_runtime::spawn(heartbeat_watchdog(
         Arc::clone(writer_tx),
-        Arc::clone(last_activity),
+        Arc::clone(&last_activity),
+        timing.clone(),
         Arc::clone(&hung),
     ));
 
-    // Reader loop. I/O and UTF-8 failures are logged and treated as instance
-    // death (the supervisor restarts); malformed JSON-RPC is skipped with
-    // context so a single bad line cannot take the sidecar down.
-    loop {
-        match reader.next_line().await {
-            Ok(Some(line)) => {
-                *last_activity.lock().await = Instant::now();
-                handle_stdout_line(app, state, dispatcher, &line, &mut reached_ready).await;
+    // Reader loop. I/O failures end the instance (the supervisor restarts);
+    // oversized, non-UTF-8 and malformed frames are skipped with context so a
+    // single bad line cannot take the sidecar down.
+    let end = loop {
+        tokio::select! {
+            frame = reader.next_frame() => match frame {
+                Ok(Frame::Line(line)) => {
+                    touch_last_activity(&last_activity);
+                    match handle_stdout_line(app, state, dispatcher, &line, &mut reached_ready)
+                        .await
+                    {
+                        LineOutcome::Continue => {}
+                        LineOutcome::UnsupportedProtocol => {
+                            break ReaderEnd::Exited { reached_ready: false };
+                        }
+                    }
+                }
+                Ok(Frame::Rejected(err)) => {
+                    // Still traffic: the sidecar is alive, just misbehaving.
+                    touch_last_activity(&last_activity);
+                    log::warn!("bridge: dropped a sidecar frame: {err}");
+                }
+                Ok(Frame::Eof) => break ReaderEnd::Exited { reached_ready },
+                Err(err) => {
+                    warn_bridge_io("failed reading sidecar stdout", "read sidecar stdout", err);
+                    break ReaderEnd::Exited { reached_ready };
+                }
+            },
+            () = hung.notified() => {
+                log::warn!("bridge: sidecar heartbeat timed out — restarting");
+                break ReaderEnd::Hung { reached_ready };
             }
-            Ok(None) => break,
-            Err(err) => {
-                warn_bridge_io("failed reading sidecar stdout", "read sidecar stdout", err);
-                break;
+            () = writer_gone.notified() => {
+                // The request channel was dropped (`Bridge::restart`/`kill`)
+                // or stdin broke. Either way this instance is finished; do
+                // not wait for the peer to notice EOF.
+                break ReaderEnd::WriterClosed { reached_ready };
             }
         }
-    }
+    };
 
     heartbeat.abort();
-    let outcome = if hung.load(std::sync::atomic::Ordering::Acquire) {
-        log::warn!("bridge: sidecar heartbeat timed out — restarting");
-        InstanceOutcome::Hung
-    } else {
-        InstanceOutcome::Exited
-    };
-    (outcome, reached_ready)
+    end
 }
 
 /// Windows `CREATE_NO_WINDOW` (0x08000000): spawn the sidecar without a
@@ -1431,12 +1677,12 @@ fn log_python_required(candidates: &[String]) {
     );
 }
 
-/// Reject every in-flight request after a crash/restart.
-async fn reject_pending(dispatcher: &Arc<Mutex<Dispatcher>>) {
+/// Reject every in-flight request after a crash/restart. Returns the count.
+async fn reject_pending(dispatcher: &Arc<Mutex<Dispatcher>>) -> usize {
     dispatcher
         .lock()
         .await
-        .fail_all(code::INTERNAL_ERROR, "sidecar restarted");
+        .fail_all(code::INTERNAL_ERROR, "sidecar restarted")
 }
 
 /// Write a state transition and emit it to the frontend.
@@ -1455,6 +1701,8 @@ fn set_state<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use crate::bridge::framing::Outcome;
     use std::collections::HashMap;
     use std::io;
 
@@ -1821,6 +2069,494 @@ mod tests {
 
         let (stdin, stdout) = require_piped_stdio(Some(1), Some(2)).expect("both present");
         assert_eq!((stdin, stdout), (1, 2));
+    }
+
+    // ---- SEC-10: supervisor / transport tests -------------------------------
+    //
+    // Pure-logic tests run everywhere. The end-to-end supervisor tests drive
+    // `run_supervisor` against a fake sidecar written as a `/bin/sh` script
+    // (never the installed interpreter, never matched by process name), with
+    // millisecond timings and pid-file assertions, following the SEC-09
+    // ground rules above. They are `#[cfg(unix)]` because the fake sidecar
+    // is a POSIX shell script; the Windows job runs `cargo clippy` over them
+    // and skips `cargo test` for an unrelated reason (see desktop-ci.yml).
+
+    fn short_timing() -> SupervisorTiming {
+        // Generous enough that a loaded CI runner cannot fake a hang while
+        // the responsive fake sidecar is answering pings (`/bin/sh` + `sed`
+        // per line), short enough that a real hang is caught in seconds.
+        SupervisorTiming {
+            heartbeat_interval: Duration::from_millis(50),
+            heartbeat_timeout: Duration::from_millis(1500),
+            restart_backoff: vec![Duration::from_millis(10)],
+        }
+    }
+
+    #[test]
+    fn default_timing_matches_documented_constants() {
+        let timing = SupervisorTiming::default();
+        assert_eq!(timing.heartbeat_interval, Duration::from_secs(5));
+        assert_eq!(timing.heartbeat_timeout, Duration::from_secs(15));
+        assert_eq!(
+            timing.restart_backoff,
+            vec![
+                Duration::from_secs(2),
+                Duration::from_secs(5),
+                Duration::from_secs(10)
+            ]
+        );
+        assert_eq!(SidecarConfig::default().timing, timing);
+    }
+
+    #[test]
+    fn restart_request_is_remembered_until_consumed() {
+        let control = SupervisorControl::default();
+        assert!(!control.take_restart_request());
+        control.request_restart();
+        control.request_restart();
+        assert!(control.take_restart_request(), "one request is kept");
+        assert!(!control.take_restart_request(), "and consumed exactly once");
+    }
+
+    #[tokio::test]
+    async fn wait_for_restart_returns_immediately_for_an_earlier_request() {
+        // The request arrives *before* anyone waits: no lost wake-up.
+        let control = Arc::new(SupervisorControl::default());
+        control.request_restart();
+        tokio::time::timeout(Duration::from_secs(2), control.wait_for_restart())
+            .await
+            .expect("an earlier request is not lost");
+        // And a request that arrives *while* waiting wakes the waiter.
+        let waiter = Arc::clone(&control);
+        let waiting = tokio::spawn(async move { waiter.wait_for_restart().await });
+        control.request_restart();
+        tokio::time::timeout(Duration::from_secs(2), waiting)
+            .await
+            .expect("bounded")
+            .expect("waiter task");
+        assert!(!control.take_restart_request(), "consumed by the waiter");
+    }
+
+    #[tokio::test]
+    async fn heartbeat_watchdog_fires_after_silence() {
+        let writer_tx: Arc<Mutex<Option<mpsc::Sender<String>>>> = Arc::new(Mutex::new(None));
+        let last_activity = Arc::new(std::sync::Mutex::new(Instant::now()));
+        let hung = Arc::new(Notify::new());
+        let timing = SupervisorTiming {
+            heartbeat_interval: Duration::from_millis(5),
+            heartbeat_timeout: Duration::from_millis(40),
+            ..short_timing()
+        };
+        let watchdog = tokio::spawn(heartbeat_watchdog(
+            writer_tx,
+            Arc::clone(&last_activity),
+            timing,
+            Arc::clone(&hung),
+        ));
+        tokio::time::timeout(Duration::from_secs(5), hung.notified())
+            .await
+            .expect("watchdog flags the silence within the bound");
+        tokio::time::timeout(Duration::from_secs(2), watchdog)
+            .await
+            .expect("bounded")
+            .expect("watchdog task exits after firing");
+    }
+
+    #[tokio::test]
+    async fn heartbeat_watchdog_sends_reserved_ids_and_tolerates_a_full_channel() {
+        let (tx, mut rx) = mpsc::channel::<String>(1);
+        let writer_tx = Arc::new(Mutex::new(Some(tx)));
+        let last_activity = Arc::new(std::sync::Mutex::new(Instant::now()));
+        let hung = Arc::new(Notify::new());
+        let timing = SupervisorTiming {
+            heartbeat_interval: Duration::from_millis(5),
+            heartbeat_timeout: Duration::from_millis(60),
+            ..short_timing()
+        };
+        let watchdog = tokio::spawn(heartbeat_watchdog(
+            Arc::clone(&writer_tx),
+            last_activity,
+            timing,
+            Arc::clone(&hung),
+        ));
+        let first = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .expect("bounded")
+            .expect("a ping is written");
+        let value: serde_json::Value = serde_json::from_str(&first).expect("ping is JSON");
+        assert_eq!(value["method"], "health.check");
+        let id = value["id"].as_u64().expect("numeric id");
+        assert!(
+            id >= RESERVED_ID_FLOOR,
+            "ping id {id} is in the reserved band"
+        );
+        // Nobody drains the channel any more: `try_send` must not block the
+        // watchdog, which still has to detect the silence.
+        tokio::time::timeout(Duration::from_secs(5), hung.notified())
+            .await
+            .expect("watchdog is not wedged behind a full writer channel");
+        watchdog.abort();
+    }
+
+    #[tokio::test]
+    async fn writer_end_is_signalled_even_when_the_task_is_aborted() {
+        let done = Arc::new(Notify::new());
+        let guard_done = Arc::clone(&done);
+        // The guard only exists once the task body has run to its first
+        // await, so wait for that before aborting: aborting a never-polled
+        // task drops an async block whose locals were never constructed.
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel::<()>();
+        let task = tokio::spawn(async move {
+            let _guard = NotifyOnDrop(guard_done);
+            let _ = started_tx.send(());
+            std::future::pending::<()>().await;
+        });
+        started_rx.await.expect("task reached its first await");
+        task.abort();
+        tokio::time::timeout(Duration::from_secs(2), done.notified())
+            .await
+            .expect("abort drops the guard, which notifies");
+        assert!(task.await.expect_err("task was aborted").is_cancelled());
+    }
+
+    /// Where the supervisor tests write their fake sidecars and pid files.
+    #[cfg(unix)]
+    fn write_fake_sidecar(dir: &Path, name: &str, body: &str) -> String {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("write fake sidecar");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod fake sidecar");
+        path.to_string_lossy().into_owned()
+    }
+
+    /// A sidecar that completes the handshake and answers every request
+    /// (including heartbeats) with a result carrying the same id.
+    #[cfg(unix)]
+    fn responsive_sidecar_body(pid_file: &Path) -> String {
+        format!(
+            "printf '%s\\n' \"$$\" >> '{pid}'\n\
+             printf 'DREAM-PROTOCOL: 1.0\\n'\n\
+             while IFS= read -r line; do\n\
+               id=$(printf '%s' \"$line\" | sed -n 's/.*\"id\":[ ]*\\([0-9][0-9]*\\).*/\\1/p')\n\
+               if [ -n \"$id\" ]; then\n\
+                 printf '{{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{{\"echo\":true}}}}\\n' \"$id\"\n\
+               fi\n\
+             done",
+            pid = pid_file.display()
+        )
+    }
+
+    /// A sidecar that hangs after the handshake — unless `flag` exists, in
+    /// which case it behaves like [`responsive_sidecar_body`].
+    #[cfg(unix)]
+    fn hang_until_flag_sidecar_body(pid_file: &Path, flag: &Path) -> String {
+        format!(
+            "if [ -e '{flag}' ]; then\n{responsive}\nexit 0\nfi\n\
+             printf '%s\\n' \"$$\" >> '{pid}'\n\
+             printf 'DREAM-PROTOCOL: 1.0\\n'\n\
+             exec sleep 30",
+            flag = flag.display(),
+            responsive = responsive_sidecar_body(pid_file),
+            pid = pid_file.display()
+        )
+    }
+
+    #[cfg(unix)]
+    fn read_pids(path: &Path) -> Vec<u32> {
+        std::fs::read_to_string(path)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|line| line.trim().parse().ok())
+            .collect()
+    }
+
+    /// Bounded poll for a connection state.
+    #[cfg(unix)]
+    async fn wait_for_state(state: &SharedState, target: ConnectionState, deadline: Duration) {
+        let start = Instant::now();
+        while state.get() != target {
+            assert!(
+                start.elapsed() < deadline,
+                "state did not reach {target:?} within {deadline:?} (now {:?})",
+                state.get()
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    /// Everything a supervisor test needs, spawned on a runtime the test owns
+    /// so teardown is deterministic.
+    #[cfg(unix)]
+    struct SupervisorHarness {
+        state: Arc<SharedState>,
+        dispatcher: Arc<Mutex<Dispatcher>>,
+        writer_tx: Arc<Mutex<Option<mpsc::Sender<String>>>>,
+        killed: Arc<std::sync::atomic::AtomicBool>,
+        control: Arc<SupervisorControl>,
+    }
+
+    #[cfg(unix)]
+    impl SupervisorHarness {
+        fn start(app: &tauri::AppHandle<tauri::test::MockRuntime>, config: SidecarConfig) -> Self {
+            let harness = Self {
+                state: Arc::new(SharedState::default()),
+                dispatcher: Arc::new(Mutex::new(Dispatcher::new())),
+                writer_tx: Arc::new(Mutex::new(None)),
+                killed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                control: Arc::new(SupervisorControl::default()),
+            };
+            tokio::spawn(run_supervisor(
+                app.clone(),
+                Arc::clone(&harness.state),
+                Arc::clone(&harness.dispatcher),
+                Arc::clone(&harness.writer_tx),
+                config,
+                Arc::clone(&harness.killed),
+                Arc::clone(&harness.control),
+            ));
+            harness
+        }
+
+        /// Register `id`, write the request, return the final receiver.
+        async fn send(&self, id: u64) -> tokio::sync::oneshot::Receiver<Outcome> {
+            let channels = self.dispatcher.lock().await.register(id).expect("register");
+            let tx = self
+                .writer_tx
+                .lock()
+                .await
+                .as_ref()
+                .cloned()
+                .expect("writer present while Ready");
+            tx.send(framing::request_line(id, "health.check", &json!({})))
+                .await
+                .expect("request written");
+            channels.final_rx
+        }
+
+        /// Mirror of `Bridge::kill`: no more restarts, close stdin.
+        async fn kill(&self) {
+            self.killed
+                .store(true, std::sync::atomic::Ordering::Release);
+            *self.writer_tx.lock().await = None;
+        }
+    }
+
+    #[cfg(unix)]
+    fn mock_app() -> tauri::AppHandle<tauri::test::MockRuntime> {
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+        app.handle().clone()
+    }
+
+    #[cfg(unix)]
+    fn test_runtime() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .expect("test runtime")
+    }
+
+    #[cfg(unix)]
+    fn supervisor_config(python: Vec<String>) -> SidecarConfig {
+        let mut config = SidecarConfig::from_env(&|_key: &str| -> Option<String> { None });
+        config.python = python;
+        config.timing = short_timing();
+        config
+    }
+
+    /// Full path: a candidate that dies before the handshake is skipped, the
+    /// next one reaches `Ready`, a request round-trips, and `kill` ends the
+    /// instance (pid dead) and parks the supervisor in `Disconnected` with no
+    /// pending requests left behind.
+    #[cfg(unix)]
+    #[test]
+    fn unix_supervisor_skips_dead_candidate_answers_requests_and_parks_on_kill() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let pid_file = dir.path().join("pids");
+        let dead = write_fake_sidecar(dir.path(), "dead.sh", "exit 0");
+        let good = write_fake_sidecar(dir.path(), "good.sh", &responsive_sidecar_body(&pid_file));
+        // The mock app is built outside any runtime (Tauri's builder may
+        // block_on internally).
+        let app = mock_app();
+        let rt = test_runtime();
+        rt.block_on(async move {
+            let harness = SupervisorHarness::start(&app, supervisor_config(vec![dead, good]));
+            wait_for_state(
+                &harness.state,
+                ConnectionState::Ready,
+                Duration::from_secs(20),
+            )
+            .await;
+
+            let rx = harness.send(7).await;
+            match tokio::time::timeout(Duration::from_secs(10), rx)
+                .await
+                .expect("bounded")
+                .expect("dispatcher delivers")
+            {
+                Outcome::Result(value) => assert_eq!(value["echo"], true),
+                other => panic!("expected a result, got {other:?}"),
+            }
+            assert!(harness.dispatcher.lock().await.is_empty());
+
+            let leader = *read_pids(&pid_file).last().expect("leader pid recorded");
+            harness.kill().await;
+            wait_for_state(
+                &harness.state,
+                ConnectionState::Disconnected,
+                Duration::from_secs(20),
+            )
+            .await;
+            assert!(
+                wait_unix_pid_dead(leader, DEADLINE_AFTER_TEARDOWN).await,
+                "killed instance is reaped"
+            );
+            assert!(harness.writer_tx.lock().await.is_none());
+            assert_eq!(read_pids(&pid_file).len(), 1, "no respawn after kill");
+        });
+    }
+
+    /// R1 + R2: a sidecar that goes silent after the handshake is detected
+    /// by the heartbeat and torn down (pid dead); the in-flight request is
+    /// rejected exactly once with a transport-tagged INTERNAL_ERROR; after the
+    /// retry budget is spent the bridge is `Disconnected`, and a manual
+    /// restart revives it with a fresh attempt.
+    #[cfg(unix)]
+    #[test]
+    fn unix_heartbeat_kills_hung_sidecar_rejects_pending_and_manual_restart_revives() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let pid_file = dir.path().join("pids");
+        let flag = dir.path().join("behave");
+        let script = write_fake_sidecar(
+            dir.path(),
+            "hang.sh",
+            &hang_until_flag_sidecar_body(&pid_file, &flag),
+        );
+        let app = mock_app();
+        let rt = test_runtime();
+        rt.block_on(async move {
+            let harness = SupervisorHarness::start(&app, supervisor_config(vec![script]));
+            wait_for_state(
+                &harness.state,
+                ConnectionState::Ready,
+                Duration::from_secs(20),
+            )
+            .await;
+            let first_leader = *read_pids(&pid_file).last().expect("first leader pid");
+
+            // In flight while the sidecar hangs.
+            let rx = harness.send(1).await;
+            match tokio::time::timeout(Duration::from_secs(30), rx)
+                .await
+                .expect("pending request is rejected within the bound")
+                .expect("rejected, not dropped")
+            {
+                Outcome::Error {
+                    code,
+                    message,
+                    data,
+                } => {
+                    assert_eq!(code, code::INTERNAL_ERROR);
+                    assert_eq!(message, "sidecar restarted");
+                    assert_eq!(data.expect("tagged")["kind"], "transport");
+                }
+                other => panic!("expected a transport error, got {other:?}"),
+            }
+            assert!(
+                wait_unix_pid_dead(first_leader, DEADLINE_AFTER_TEARDOWN).await,
+                "hung leader was killed, not left running"
+            );
+
+            // Budget: one backoff entry ⇒ two instances, then Disconnected.
+            wait_for_state(
+                &harness.state,
+                ConnectionState::Disconnected,
+                Duration::from_secs(60),
+            )
+            .await;
+            let pids = read_pids(&pid_file);
+            assert_eq!(
+                pids.len(),
+                2,
+                "one automatic restart, then give up: {pids:?}"
+            );
+            for pid in &pids {
+                assert!(
+                    wait_unix_pid_dead(*pid, DEADLINE_AFTER_TEARDOWN).await,
+                    "every hung instance is dead"
+                );
+            }
+            assert!(harness.dispatcher.lock().await.is_empty());
+
+            // Manual restart after the budget is spent: fresh attempt, works.
+            std::fs::write(&flag, b"1").expect("flag");
+            harness.control.request_restart();
+            wait_for_state(
+                &harness.state,
+                ConnectionState::Ready,
+                Duration::from_secs(20),
+            )
+            .await;
+            let rx = harness.send(2).await;
+            match tokio::time::timeout(Duration::from_secs(10), rx)
+                .await
+                .expect("bounded")
+                .expect("delivered")
+            {
+                Outcome::Result(value) => assert_eq!(value["echo"], true),
+                other => panic!("revived sidecar answers, got {other:?}"),
+            }
+
+            let leader = *read_pids(&pid_file).last().expect("revived leader pid");
+            harness.kill().await;
+            wait_for_state(
+                &harness.state,
+                ConnectionState::Disconnected,
+                Duration::from_secs(20),
+            )
+            .await;
+            assert!(wait_unix_pid_dead(leader, DEADLINE_AFTER_TEARDOWN).await);
+        });
+    }
+
+    /// A sidecar announcing an unsupported protocol major never becomes
+    /// `Ready`; the supervisor treats it as a failed candidate.
+    #[cfg(unix)]
+    #[test]
+    fn unix_unsupported_protocol_major_never_becomes_ready() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let pid_file = dir.path().join("pids");
+        let script = write_fake_sidecar(
+            dir.path(),
+            "future.sh",
+            &format!(
+                "printf '%s\\n' \"$$\" >> '{pid}'\nprintf 'DREAM-PROTOCOL: 2.0\\n'\nexec sleep 30",
+                pid = pid_file.display()
+            ),
+        );
+        let app = mock_app();
+        let rt = test_runtime();
+        rt.block_on(async move {
+            let harness = SupervisorHarness::start(&app, supervisor_config(vec![script]));
+            wait_for_state(
+                &harness.state,
+                ConnectionState::Disconnected,
+                Duration::from_secs(60),
+            )
+            .await;
+            // Never Ready: no writer was ever handed to a caller as usable.
+            assert!(harness.writer_tx.lock().await.is_none());
+            for pid in read_pids(&pid_file) {
+                assert!(
+                    wait_unix_pid_dead(pid, DEADLINE_AFTER_TEARDOWN).await,
+                    "refused instance is torn down"
+                );
+            }
+            harness.kill().await;
+        });
     }
 
     // ---- SEC-09: containment lifecycle tests --------------------------------

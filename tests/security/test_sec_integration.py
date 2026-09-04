@@ -152,6 +152,14 @@ def test_execute_harmless_approved_shell_still_runs() -> None:
 # -- surface 3: the bridge approval flow -------------------------------------- #
 
 
+def _run(coro):
+    """Drive an async bridge handler to completion (tool/approval handlers
+    run their tool body on a worker thread since SEC-10)."""
+    import asyncio
+
+    return asyncio.run(coro)
+
+
 def _make_methods():
     from dream.bridge.methods import BridgeMethods
     from dream.memory import MemoryStore as Store
@@ -166,7 +174,7 @@ def _make_methods():
 
 def test_bridge_tool_execute_floor_blocks_before_approval_flow() -> None:
     methods = _make_methods()
-    out = methods.tool_execute({"name": "run_shell", "arguments": {"command": "rm -rf /"}})
+    out = _run(methods.tool_execute({"name": "run_shell", "arguments": {"command": "rm -rf /"}}))
     assert out["blocked"] is True
     assert out["floor_blocked"] is True
     assert "security floor" in out["reason"]
@@ -174,8 +182,10 @@ def test_bridge_tool_execute_floor_blocks_before_approval_flow() -> None:
 
 def test_bridge_tool_execute_floor_blocks_even_with_approved_flag() -> None:
     methods = _make_methods()
-    out = methods.tool_execute(
-        {"name": "run_shell", "arguments": {"command": "rm -rf /"}, "approved": True}
+    out = _run(
+        methods.tool_execute(
+            {"name": "run_shell", "arguments": {"command": "rm -rf /"}, "approved": True}
+        )
     )
     assert out["blocked"] is True and out["floor_blocked"] is True
 
@@ -188,8 +198,8 @@ def test_bridge_approval_request_marks_floor_and_resolve_never_executes() -> Non
     assert request["floor_blocked"] is True
     assert "security floor" in request["floor_reason"]
     # A human answering YES still gets a refusal — the floor is final.
-    resolved = methods.approval_resolve(
-        {"approval_id": request["approval_id"], "allowed": True}
+    resolved = _run(
+        methods.approval_resolve({"approval_id": request["approval_id"], "allowed": True})
     )
     assert resolved["blocked"] is True
     assert "security floor" in resolved["reason"]
@@ -201,8 +211,8 @@ def test_bridge_non_floor_approvals_are_untouched() -> None:
         {"name": "run_shell", "arguments": {"command": "echo bridge-floor"}}
     )
     assert "floor_blocked" not in request
-    resolved = methods.approval_resolve(
-        {"approval_id": request["approval_id"], "allowed": True}
+    resolved = _run(
+        methods.approval_resolve({"approval_id": request["approval_id"], "allowed": True})
     )
     assert resolved["status"] == "ok"
     assert "bridge-floor" in resolved["result"]["stdout"]
@@ -215,7 +225,7 @@ def test_bridge_security_status_and_history_are_boundary_validated() -> None:
     status = methods.security_status()
     assert status["floor"] == "always-on"
     assert status["mode"] in MODES
-    methods.tool_execute({"name": "run_shell", "arguments": {"command": "rm -rf /"}})
+    _run(methods.tool_execute({"name": "run_shell", "arguments": {"command": "rm -rf /"}}))
     history = methods.security_history({"limit": 10})
     assert history["entries"][0]["verdict"] == "floor_blocked"
     with pytest.raises(BridgeError):
