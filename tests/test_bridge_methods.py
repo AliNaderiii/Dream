@@ -265,7 +265,7 @@ def test_tool_list_exposes_registry():
 
 def test_tool_execute_runs_safe_tool():
     m = make_methods()
-    out = m.tool_execute({"name": "calculate", "arguments": {"expression": "2 + 3"}})
+    out = run(m.tool_execute({"name": "calculate", "arguments": {"expression": "2 + 3"}}))
     assert out["status"] == "ok"
     assert out["result"] == 5
 
@@ -273,13 +273,13 @@ def test_tool_execute_runs_safe_tool():
 def test_tool_execute_unknown_tool_invalid_params():
     m = make_methods()
     with pytest.raises(BridgeError):
-        m.tool_execute({"name": "no_such_tool", "arguments": {}})
+        run(m.tool_execute({"name": "no_such_tool", "arguments": {}}))
 
 
 def test_tool_execute_dangerous_requires_approval():
     m = make_methods()
     with pytest.raises(BridgeError) as exc:
-        m.tool_execute({"name": "run_shell", "arguments": {"command": "echo hi"}})
+        run(m.tool_execute({"name": "run_shell", "arguments": {"command": "echo hi"}}))
     assert exc.value.code == APPROVAL_REQUIRED
     approval_id = exc.value.data["approval_id"]
     assert approval_id
@@ -288,8 +288,10 @@ def test_tool_execute_dangerous_requires_approval():
 def test_tool_execute_dangerous_with_approved_flag_runs():
     # run_shell is dangerous; with approved=True it executes (echo is harmless).
     m = make_methods()
-    out = m.tool_execute(
-        {"name": "run_shell", "arguments": {"command": "echo bridge"}, "approved": True}
+    out = run(
+        m.tool_execute(
+            {"name": "run_shell", "arguments": {"command": "echo bridge"}, "approved": True}
+        )
     )
     assert out["status"] == "ok"
     assert "bridge" in out["result"]["stdout"]
@@ -306,7 +308,7 @@ def test_approval_request_then_resolve_allowed_executes():
     aid = req["approval_id"]
     assert req["risk"] == "dangerous"
 
-    resolved = m.approval_resolve({"approval_id": aid, "allowed": True})
+    resolved = run(m.approval_resolve({"approval_id": aid, "allowed": True}))
     assert resolved["status"] == "ok"
     assert "ok" in resolved["result"]["stdout"]
 
@@ -315,7 +317,7 @@ def test_approval_resolve_denied_returns_blocked():
     m = make_methods()
     req = m.approval_request({"name": "run_shell", "arguments": {"command": "rm -rf /"}})
     aid = req["approval_id"]
-    out = m.approval_resolve({"approval_id": aid, "allowed": False})
+    out = run(m.approval_resolve({"approval_id": aid, "allowed": False}))
     assert out["blocked"] is True
 
 
@@ -323,9 +325,9 @@ def test_approval_resolve_twice_rejected():
     m = make_methods()
     req = m.approval_request({"name": "run_shell", "arguments": {"command": "echo x"}})
     aid = req["approval_id"]
-    m.approval_resolve({"approval_id": aid, "allowed": False})
+    run(m.approval_resolve({"approval_id": aid, "allowed": False}))
     with pytest.raises(BridgeError):
-        m.approval_resolve({"approval_id": aid, "allowed": True})
+        run(m.approval_resolve({"approval_id": aid, "allowed": True}))
 
 
 # --------------------------------------------------------------------------- #

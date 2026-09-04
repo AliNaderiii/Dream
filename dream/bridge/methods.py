@@ -1823,7 +1823,16 @@ class BridgeMethods:
         ]
         return {"tools": tools}
 
-    def tool_execute(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def tool_execute(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Run a registered tool.
+
+        Async so the blocking tool body (``run_shell`` may take up to its 30 s
+        budget; ``web_fetch`` does network I/O) runs on a worker thread instead
+        of the event loop — the loop must stay free to answer ``health.check``
+        heartbeats and ``conversation.stop`` while a tool runs (SEC-10).
+        Validation, the L3 floor and the approval gate stay synchronous and
+        fail closed exactly as before.
+        """
         from dream.tools import REGISTRY, execute
 
         params = params or {}
@@ -1855,7 +1864,7 @@ class BridgeMethods:
             )
 
         approved = bool(params.get("approved")) or registered.risk != "dangerous"
-        raw = execute(name, arguments, approved=approved)
+        raw = await asyncio.to_thread(execute, name, arguments, approved=approved)
         try:
             decoded = json.loads(raw)
         except (TypeError, ValueError):
@@ -1905,7 +1914,12 @@ class BridgeMethods:
             reply["floor_reason"] = refusal
         return reply
 
-    def approval_resolve(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def approval_resolve(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Resolve a pending approval; on *allowed* run the gated tool.
+
+        Async for the same reason as :meth:`tool_execute`: the approved tool
+        body runs on a worker thread so the bridge loop is never blocked.
+        """
         params = params or {}
         approval_id = params.get("approval_id")
         allowed = bool(params.get("allowed"))
@@ -1947,7 +1961,7 @@ class BridgeMethods:
 
         from dream.tools import execute
 
-        raw = execute(name, arguments, approved=True)
+        raw = await asyncio.to_thread(execute, name, arguments, approved=True)
         try:
             return json.loads(raw)
         except (TypeError, ValueError):
@@ -2586,23 +2600,21 @@ class BridgeMethods:
                                       "Install docker and the dream package with Docker support.")
         return self.sandbox
 
-    def sandbox_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Check Docker availability and return sandbox status."""
+    async def sandbox_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Check Docker availability and return sandbox status.
+
+        Async like the other ``sandbox.*`` handlers. The previous synchronous
+        version scheduled the probe on the running loop and then blocked that
+        same loop with ``future.result(timeout=10)`` — a guaranteed deadlock
+        until the timeout, during which no request (including heartbeats)
+        could be served (SEC-10). The wait stays bounded at 10 s.
+        """
         del params
         sb = self._require_sandbox()
         try:
-            # Use asyncio to run the async check in a synchronous context.
-            import asyncio
-            try:
-                loop = asyncio.get_running_loop()
-                if loop.is_running():
-                    fut = asyncio.run_coroutine_threadsafe(sb.check_docker(), loop)
-                    return fut.result(timeout=10)
-            except RuntimeError:
-                pass
+            return await asyncio.wait_for(sb.check_docker(), timeout=10)
         except Exception as exc:
             return {"available": False, "error": str(exc)}
-        return {"available": False, "error": "Could not check Docker status"}
 
     async def sandbox_run_code(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Execute code inside a Docker sandbox container."""

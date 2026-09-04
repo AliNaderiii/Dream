@@ -6,6 +6,7 @@ The FastAPI application is tested with mocked HTTP requests.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -295,7 +296,7 @@ class TestSandboxBridgeIntegration:
         # If Docker is not available, the sandbox status handler will try to
         # check and fail. We've created the sandbox object, so it should
         # return an error.
-        result = bridge.sandbox_status()
+        result = asyncio.run(bridge.sandbox_status())
         assert isinstance(result, dict)
         # It should either show available: False or raise an error code.
         if "available" in result:
