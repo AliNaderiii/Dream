@@ -269,17 +269,30 @@ hardening pinned by tests even though today's storage is SQLite-backed
 validation; MP-02 families covered by the Gate-F error-path suite
 (29 functions / 52 cases: `memory2.*`, `skills.*`, `search.sessions.*`,
 `conversation.compact`, `nudge.status`). `dream/bridge/errors.py` redacts
-before wire errors. `dream/gateway_server.py`: token store with
-read/write scopes, `rotate_token`, `revoke_token`; headers
-`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
-`Referrer-Policy`, HSTS under TLS, default CSP. Shell execution elsewhere
-uses argument arrays (`docker_sandbox.py` builds argv lists; only the
-deliberate `run_shell` uses `shell=True`).
+before wire errors. `dream/gateway_server.py` (SEC-11): the web gateway is
+**local-first** — it defaults to `127.0.0.1`, refuses public/unspecified
+binds, and requires an explicit private LAN address plus `DREAM_GATEWAY_LAN_ONLY`
+(or `--lan`) to listen off-loopback. Authentication is `Authorization: Bearer`
+only; query-string tokens, `X-Access-Token`, and URL/QR-embedded tokens are
+rejected. The token store uses a SHA-256 verifier (raw values are shown once),
+is written atomically with owner-only `0600` permissions, and fails closed on
+a malformed or un-migratable legacy store. Per-source auth-attempt throttling
+runs before verification, per-token throttling after it. Request bodies are
+capped at 64 KiB, malformed JSON is rejected, token-management routes require
+the write scope, cross-origin POSTs are refused unless same-origin or
+explicitly allow-listed, and CORS never combines wildcard origins with
+credentials. Headers remain `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, `Referrer-Policy`, HSTS under TLS, and the default
+CSP. The web gateway exposes no agent tools, memory, files, or projects, and
+has **no inbound WebSocket route**; the repository WebSocket implementation is
+an outbound Discord/Slack client, not a gateway surface. Shell execution
+elsewhere uses argument arrays (`docker_sandbox.py` builds argv lists; only
+the deliberate `run_shell` uses `shell=True`).
 
 **Threats.** T8.1 any future bridge family merged without boundary
-validation. T8.2 header regressions (no automated CSP/HSTS tests today).
-T8.3 token-store file permissions and rotation hygiene untested. T8.4
-per-token rate limits absent (a stolen token can saturate the agent).
+validation. T8.2 header regressions (the CSP/HSTS pin is now tested).
+T8.3 future inbound WebSocket or agent/tool exposure on the gateway would need
+an equivalent authentication and authorization audit before shipping.
 T8.5 the legacy Tk window `desktop.py` (1,570 lines, M22–M26) predates the
 bridge-era boundary discipline; it is a dormant second front end.
 
@@ -287,8 +300,10 @@ bridge-era boundary discipline; it is a dormant second front end.
 with a reject-before-dispatch property test + bounded, seeded bridge
 fuzzing. `SEC-G-23` gateway header tests (CSP/HSTS/X-Frame-Options) in the
 suite. `SEC-G-24` token rotation + read-only scope enforcement audit +
-per-token rate limits. `SEC-G-25` `desktop.py` audit: quarantine (behind
-an explicit flag) or remove, documented in this threat model.
+per-token rate limits are closed by SEC-11 (tested in
+`tests/test_web_gateway_security.py`); the per-source auth-attempt throttle is
+also tested. `SEC-G-25` `desktop.py` audit: quarantine (behind an explicit
+flag) or remove, documented in this threat model.
 
 ### L9 — The agentic layer (P6)
 

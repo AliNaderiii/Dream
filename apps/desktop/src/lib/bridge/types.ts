@@ -705,17 +705,19 @@ export interface BrowserStatus {
 // P-08: Web gateway types
 // ---------------------------------------------------------------------------
 
-/** Gateway token info (display-safe, partial token). */
-export interface GatewayTokenInfo {
-  prefix: string;
-  scope: 'read' | 'write';
-  label: string;
-  created_at: number;
-  last_used_at: number | null;
+/** Effective gateway bind/exposure state (never carries a token). */
+export interface GatewayBind {
+  host: string;
+  port: number;
+  tls_enabled: boolean;
+  lan_only: boolean;
+  leaves_machine: boolean;
 }
 
-/** Gateway token with full value (for settings display). */
-export interface GatewayTokenFull {
+/** Gateway token info (display-safe, masked only, selectable by id). */
+export interface GatewayTokenInfo {
+  id: string;
+  prefix: string;
   scope: 'read' | 'write';
   label: string;
   created_at: number;
@@ -728,6 +730,7 @@ export interface GatewayStatus {
   token_count: number;
   tokens: GatewayTokenInfo[];
   has_setup_token: boolean;
+  bind?: GatewayBind;
 }
 
 /** Active gateway connection. */

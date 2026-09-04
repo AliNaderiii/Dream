@@ -2419,22 +2419,45 @@ class BridgeMethods:
     async def gateway_start(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Start every enabled, configured platform adapter and web gateway."""
         params = params or {}
-        if "port" in params or "tls" in params:
-            # Web gateway startup (P-08)
-            port = int(params.get("port", 9090))
+        if "port" in params or "tls" in params or "host" in params or "lan" in params:
+            # Web gateway startup (P-08): validate the bind before any thread is
+            # spawned. Public/unspecified addresses are refused.
+            from dream.gateway_server import resolve_gateway_bind, run_gateway
+
+            try:
+                port = int(params.get("port", 9090))
+            except (TypeError, ValueError) as exc:
+                raise invalid_params("port must be an integer") from exc
+            host = params.get("host")
+            if host is not None and not isinstance(host, str):
+                raise invalid_params("host must be a string")
+            lan = bool(params.get("lan", False))
             tls = bool(params.get("tls", False))
             try:
-                from dream.gateway_server import run_gateway
-
+                bind = resolve_gateway_bind(lan=lan, host=host, port=port)
+            except ValueError as exc:
+                raise invalid_params(str(exc)) from exc
+            try:
                 thread = threading.Thread(
                     target=run_gateway,
-                    kwargs={"host": "0.0.0.0", "port": port, "tls": tls},
+                    kwargs={
+                        "host": bind["host"],
+                        "port": bind["port"],
+                        "tls": tls,
+                        "lan": lan,
+                    },
                     daemon=True,
                 )
                 thread.start()
-                return {"started": True, "port": port, "tls": tls}
             except Exception as exc:
-                raise BridgeError(-32016, f"Failed to start gateway: {exc}") from exc
+                raise BridgeError(-32016, "Failed to start gateway") from exc
+            return {
+                "started": True,
+                "bind": bind,
+                "port": int(bind["port"]),
+                "tls": tls,
+                "leaves_machine": bool(bind.get("leaves_machine")),
+            }
 
         # Connectivity adapters (P-07)
         gateway = self._ensure_gateway()
@@ -2459,12 +2482,25 @@ class BridgeMethods:
 
         if self.gateway_tokens is not None:
             tokens = self.gateway_tokens.list_tokens()
+            from dream.gateway_server import gateway_config as _gateway_config
+
             status.update(
                 {
                     "enabled": True,
                     "token_count": len(tokens),
                     "tokens": tokens,
                     "has_setup_token": self.gateway_tokens.get_setup_token() is not None,
+                    "bind": {
+                        "host": _gateway_config.host,
+                        "port": _gateway_config.port,
+                        "tls_enabled": _gateway_config.tls_enabled,
+                        "lan_only": _gateway_config.lan_only,
+                        "leaves_machine": _gateway_config.host not in {
+                            "127.0.0.1",
+                            "localhost",
+                            "::1",
+                        },
+                    },
                 }
             )
         return status
@@ -2947,49 +2983,47 @@ class BridgeMethods:
         return self.gateway_tokens
 
     def gateway_get_tokens(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Get all tokens (with full values for display)."""
+        """List token metadata only (never raw values or verifiers)."""
         del params
         tm = self._require_gateway_tokens()
-        tokens = tm.all_tokens()
-        return {"tokens": tokens}
+        return {"tokens": tm.list_tokens()}
 
     def gateway_create_token(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Create a new gateway token."""
+        """Create a new gateway token; raw value is returned exactly once."""
         params = params or {}
         tm = self._require_gateway_tokens()
         scope_str = params.get("scope", "write")
         label = params.get("label", "New Token")
+        if scope_str not in ("write", "read"):
+            raise invalid_params("scope must be 'write' or 'read'")
+        if not isinstance(label, str) or not label.strip() or len(label) > 200:
+            raise invalid_params("label must be a non-empty string of at most 200 characters")
         scope = TokenScope.WRITE if scope_str == "write" else TokenScope.READ
-        token = tm.create_token(scope=scope, label=label)
-        return {"token": token, "scope": scope.value, "label": label}
+        token = tm.create_token(scope=scope, label=label.strip())
+        return {"token": token, "scope": scope.value, "label": label.strip()}
 
     def gateway_rotate_token(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Rotate (regenerate) a gateway token."""
+        """Rotate (regenerate) a gateway token by raw value or non-secret id."""
         params = params or {}
         tm = self._require_gateway_tokens()
         token = params.get("token")
-        if not isinstance(token, str) or not token:
+        if not isinstance(token, str) or not token.strip():
             raise invalid_params("token must be a non-empty string")
-        new_token = tm.rotate_token(token)
+        new_token = tm.rotate_token(token.strip())
         if new_token is None:
             raise invalid_params("Token not found")
         return {"token": new_token, "rotated": True}
 
     def gateway_revoke_token(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Revoke a gateway token."""
+        """Revoke a gateway token by raw value or non-secret id."""
         params = params or {}
         tm = self._require_gateway_tokens()
         token = params.get("token")
-        if not isinstance(token, str) or not token:
+        if not isinstance(token, str) or not token.strip():
             raise invalid_params("token must be a non-empty string")
-        revoked = tm.revoke_token(token)
-        if not revoked:
-            # Try matching by prefix.
-            for t in list(tm.all_tokens().keys()):
-                if t.startswith(token):
-                    tm.revoke_token(t)
-                    revoked = True
-                    break
+        if len(token.strip()) < 8:
+            raise invalid_params("token must be a full value or token id of at least 8 characters")
+        revoked = tm.revoke_token(token.strip())
         return {"revoked": revoked}
 
     # ------------------------------------------------------------------ #

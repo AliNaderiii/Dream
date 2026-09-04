@@ -201,7 +201,7 @@ class TestGatewayConfig:
         cfg = GatewayConfig()
         assert cfg.enabled is True
         assert cfg.port == 9090  # from env default
-        assert cfg.host == "0.0.0.0"
+        assert cfg.host == "127.0.0.1"  # local-first default
         assert cfg.tls_enabled is False
         assert cfg.lan_only is True
         assert cfg.mdns_enabled is True
