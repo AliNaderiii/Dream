@@ -89,6 +89,14 @@ impl Dispatcher {
         true
     }
 
+    /// Forget *id* without delivering anything: the caller gave up before the
+    /// request reached the sidecar (writer gone), so no response can ever
+    /// arrive for it. Dropping the senders closes both channels. Returns
+    /// `true` if the entry existed. Idempotent.
+    pub fn cancel(&mut self, id: u64) -> bool {
+        self.pending.remove(&id).is_some()
+    }
+
     /// Number of in-flight requests (diagnostics / tests).
     pub fn len(&self) -> usize {
         self.pending.len()
@@ -101,17 +109,21 @@ impl Dispatcher {
 
     /// Reject every in-flight request with the same error outcome. Called when
     /// the sidecar crashes/restarts so awaiting callers fail fast instead of
-    /// hanging until their own timeout.
-    pub fn fail_all(&mut self, code: i32, message: &str) {
+    /// hanging until their own timeout. Each request is resolved exactly once
+    /// (the entry is removed as it is failed); a second call is a no-op.
+    /// Returns how many requests were rejected.
+    pub fn fail_all(&mut self, code: i32, message: &str) -> usize {
         let ids: Vec<u64> = self.pending.keys().copied().collect();
+        let count = ids.len();
         for id in ids {
             let outcome = Outcome::Error {
                 code,
                 message: message.to_string(),
-                data: None,
+                data: Some(serde_json::json!({ "kind": "transport" })),
             };
             self.resolve(id, outcome);
         }
+        count
     }
 }
 
@@ -176,18 +188,69 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fail_all_rejects_every_pending_request() {
+    async fn fail_all_rejects_every_pending_request_exactly_once() {
         let mut d = Dispatcher::new();
         let RequestChannels { final_rx: r1, .. } = d.register(1).expect("register 1");
         let RequestChannels { final_rx: r2, .. } = d.register(2).expect("register 2");
-        d.fail_all(code::INTERNAL_ERROR, "sidecar restarted");
+        assert_eq!(d.fail_all(code::INTERNAL_ERROR, "sidecar restarted"), 2);
         for rx in [r1, r2] {
             match rx.await.unwrap() {
-                Outcome::Error { code, .. } => assert_eq!(code, code::INTERNAL_ERROR),
+                Outcome::Error { code, data, .. } => {
+                    assert_eq!(code, code::INTERNAL_ERROR);
+                    assert_eq!(data.unwrap()["kind"], "transport");
+                }
                 _ => panic!("expected error"),
             }
         }
         assert!(d.is_empty());
+        // Second sweep: nothing left, nothing double-completed.
+        assert_eq!(d.fail_all(code::INTERNAL_ERROR, "again"), 0);
+    }
+
+    #[tokio::test]
+    async fn late_response_after_fail_all_is_dropped() {
+        let mut d = Dispatcher::new();
+        let RequestChannels { final_rx, .. } = d.register(5).expect("register");
+        d.fail_all(code::INTERNAL_ERROR, "sidecar restarted");
+        // The old instance's answer arrives after the sweep: no listener.
+        assert!(!d.resolve(5, Outcome::Result(json!({"stale": true}))));
+        assert!(!d.route_stream(5, json!({"token": "stale"})));
+        match final_rx.await.unwrap() {
+            Outcome::Error { .. } => {}
+            other => panic!("the caller saw the rejection first, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn cancel_forgets_the_request_and_closes_channels() {
+        let mut d = Dispatcher::new();
+        let RequestChannels {
+            final_rx,
+            mut stream_rx,
+        } = d.register(3).expect("register");
+        assert!(d.cancel(3));
+        assert!(!d.cancel(3), "idempotent");
+        assert!(d.is_empty());
+        // Nothing is ever delivered; both receivers observe closure.
+        assert!(final_rx.await.is_err());
+        assert!(stream_rx.recv().await.is_none());
+        // The id is free for reuse (no stale "duplicate id" error).
+        d.register(3).expect("re-register after cancel");
+    }
+
+    #[tokio::test]
+    async fn duplicate_response_resolves_only_once() {
+        let mut d = Dispatcher::new();
+        let RequestChannels { final_rx, .. } = d.register(8).expect("register");
+        assert!(d.resolve(8, Outcome::Result(json!(1))));
+        assert!(
+            !d.resolve(8, Outcome::Result(json!(2))),
+            "second answer is dropped"
+        );
+        match final_rx.await.unwrap() {
+            Outcome::Result(v) => assert_eq!(v, json!(1)),
+            other => panic!("expected the first result, got {other:?}"),
+        }
     }
 
     #[test]

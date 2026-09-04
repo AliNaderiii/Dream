@@ -17,6 +17,19 @@ use crate::error::BridgeError;
 /// blobs.
 pub const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
 
+/// Prefix of the sidecar's startup handshake line (protocol §1.1).
+pub const PROTOCOL_HEADER_PREFIX: &str = "DREAM-PROTOCOL:";
+/// The only protocol major version this shell speaks. A sidecar announcing a
+/// different major is refused (§1.1: a major mismatch is fatal, a minor
+/// difference is additive and ignored).
+pub const SUPPORTED_PROTOCOL_MAJOR: u32 = 1;
+
+/// Request ids at or above this value are reserved for shell-originated
+/// traffic (the heartbeat). Frontend ids must stay below it so a heartbeat
+/// reply can never be matched to a frontend request, and vice versa
+/// (SEC-10 request ownership).
+pub const RESERVED_ID_FLOOR: u64 = 1 << 62;
+
 /// Numeric error codes, kept in lock-step with `dream/bridge/errors.py`.
 pub mod code {
     pub const PARSE_ERROR: i32 = -32700;
@@ -72,6 +85,48 @@ pub fn error_response(id: Option<u64>, code: i32, message: &str, data: Option<Va
     json!({"jsonrpc": "2.0", "id": id, "error": error})
 }
 
+/// A parsed `DREAM-PROTOCOL: <major>.<minor>` handshake line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProtocolVersion {
+    pub major: u32,
+    pub minor: u32,
+}
+
+/// Whether `line` is the protocol handshake (regardless of validity).
+pub fn is_protocol_header(line: &str) -> bool {
+    line.trim_start().starts_with(PROTOCOL_HEADER_PREFIX)
+}
+
+/// Parse and validate the handshake line.
+///
+/// # Errors
+/// A malformed version or an unsupported major returns a typed error; the
+/// supervisor treats that as an unusable instance instead of marking the
+/// bridge `Ready` on the strength of an unknown peer.
+pub fn parse_header(line: &str) -> std::result::Result<ProtocolVersion, BridgeError> {
+    let rest = line
+        .trim()
+        .strip_prefix(PROTOCOL_HEADER_PREFIX)
+        .ok_or_else(|| BridgeError::malformed("not a protocol header"))?
+        .trim();
+    let (major, minor) = rest
+        .split_once('.')
+        .ok_or_else(|| BridgeError::malformed("protocol version must be MAJOR.MINOR"))?;
+    let major: u32 = major
+        .parse()
+        .map_err(|_| BridgeError::malformed("protocol major version is not a number"))?;
+    let minor: u32 = minor
+        .parse()
+        .map_err(|_| BridgeError::malformed("protocol minor version is not a number"))?;
+    if major != SUPPORTED_PROTOCOL_MAJOR {
+        return Err(BridgeError::protocol_version(
+            major,
+            SUPPORTED_PROTOCOL_MAJOR,
+        ));
+    }
+    Ok(ProtocolVersion { major, minor })
+}
+
 /// Parse one stdout line into a [`ParsedMessage`].
 ///
 /// Malformed frames, invalid JSON, missing JSON-RPC fields, oversized messages
@@ -103,7 +158,7 @@ fn validate_frame(trimmed: &str) -> std::result::Result<(), BridgeError> {
     if trimmed.len() > MAX_FRAME_BYTES {
         return Err(BridgeError::frame_too_large(trimmed.len(), MAX_FRAME_BYTES));
     }
-    if trimmed.starts_with("DREAM-PROTOCOL:") {
+    if trimmed.starts_with(PROTOCOL_HEADER_PREFIX) {
         return Err(BridgeError::malformed(
             "protocol header is not a JSON-RPC message",
         ));
@@ -131,8 +186,13 @@ fn classify_message(value: Value) -> std::result::Result<ParsedMessage, BridgeEr
     if let Some(error) = obj.get("error").cloned() {
         let id =
             id.ok_or_else(|| BridgeError::malformed("error response is missing a numeric id"))?;
-        let err_code = error.get("code").and_then(Value::as_i64);
-        let err_code = err_code.unwrap_or(i64::from(code::INTERNAL_ERROR)) as i32;
+        // An out-of-range code must not wrap into an unrelated taxonomy
+        // entry: anything that does not fit `i32` is reported as internal.
+        let err_code = error
+            .get("code")
+            .and_then(Value::as_i64)
+            .and_then(|raw| i32::try_from(raw).ok())
+            .unwrap_or(code::INTERNAL_ERROR);
         let message = error
             .get("message")
             .and_then(Value::as_str)
@@ -299,6 +359,48 @@ mod tests {
             err.message.contains("UTF-8"),
             "expected UTF-8 error, got {err}"
         );
+    }
+
+    #[test]
+    fn parse_header_accepts_supported_major_and_any_minor() {
+        assert_eq!(
+            parse_header("DREAM-PROTOCOL: 1.0").unwrap(),
+            ProtocolVersion { major: 1, minor: 0 }
+        );
+        assert_eq!(
+            parse_header("DREAM-PROTOCOL: 1.7\r").unwrap(),
+            ProtocolVersion { major: 1, minor: 7 }
+        );
+        assert!(is_protocol_header("DREAM-PROTOCOL: 1.0"));
+        assert!(!is_protocol_header("{\"jsonrpc\":\"2.0\"}"));
+    }
+
+    #[test]
+    fn parse_header_rejects_other_major_and_garbage() {
+        let err = parse_header("DREAM-PROTOCOL: 2.0").unwrap_err();
+        assert!(err.message.contains("major"), "got {err:?}");
+        assert!(parse_header("DREAM-PROTOCOL: x.y").is_err());
+        assert!(parse_header("DREAM-PROTOCOL: 1").is_err());
+        assert!(parse_header("DREAM-PROTOCOL:").is_err());
+        assert!(parse_header("hello").is_err());
+    }
+
+    #[test]
+    fn out_of_range_error_code_maps_to_internal_error() {
+        let msg = parse(r#"{"jsonrpc":"2.0","id":1,"error":{"code":99999999999,"message":"x"}}"#)
+            .unwrap();
+        match msg {
+            ParsedMessage::Response {
+                outcome: Outcome::Error { code, .. },
+                ..
+            } => assert_eq!(code, code::INTERNAL_ERROR),
+            other => panic!("expected error response, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn reserved_id_floor_is_far_above_frontend_counters() {
+        assert!(RESERVED_ID_FLOOR > u64::from(u32::MAX));
     }
 
     #[test]
