@@ -321,6 +321,10 @@ const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 /// First heartbeat id. Lives in the reserved band (`>= RESERVED_ID_FLOOR`)
 /// so it can never collide with a frontend id (SEC-10 request ownership).
 const HEARTBEAT_ID_BASE: u64 = RESERVED_ID_FLOOR;
+// Compile-time guarantees: heartbeat ids live in the reserved band and far
+// above the old `1_000_000` base that sat inside the frontend counter range.
+const _: () = assert!(HEARTBEAT_ID_BASE >= RESERVED_ID_FLOOR);
+const _: () = assert!(HEARTBEAT_ID_BASE > 1_000_000);
 const STATE_EVENT: &str = "bridge://state";
 
 /// How long the sidecar gets to exit from the stdin-EOF graceful shutdown it
@@ -2105,13 +2109,6 @@ mod tests {
     }
 
     #[test]
-    fn heartbeat_ids_live_in_the_reserved_band() {
-        assert!(HEARTBEAT_ID_BASE >= RESERVED_ID_FLOOR);
-        // The old base sat inside the frontend's counter range.
-        assert!(HEARTBEAT_ID_BASE > 1_000_000);
-    }
-
-    #[test]
     fn restart_request_is_remembered_until_consumed() {
         let control = SupervisorControl::default();
         assert!(!control.take_restart_request());
@@ -2340,7 +2337,6 @@ mod tests {
 
     #[cfg(unix)]
     fn mock_app() -> tauri::AppHandle<tauri::test::MockRuntime> {
-        use tauri::Manager as _;
         let app = tauri::test::mock_builder()
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
             .expect("mock app");
