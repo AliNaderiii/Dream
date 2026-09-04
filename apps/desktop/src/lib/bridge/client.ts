@@ -1421,6 +1421,12 @@ export function defaultTransport(): BridgeTransport {
 
 export class BridgeClient {
   private transport: BridgeTransport;
+  /**
+   * Monotonic request ids. They stay far below the shell's reserved band
+   * (ids ≥ 2^62 belong to the Rust heartbeat) — a renderer would need to issue
+   * 2^53 requests to reach even `Number.MAX_SAFE_INTEGER`, so a plain counter
+   * is safe; it is still reset to 1 if it ever gets close.
+   */
   private nextId = 1;
   private handlers = new Set<EventHandler>();
   private _state: BridgeConnectionState;
@@ -1512,6 +1518,7 @@ export class BridgeClient {
     onChunk: ((chunk: StreamChunk) => void) | undefined,
     options: Required<Pick<RequestOptions, 'timeoutMs'>> & Pick<RequestOptions, 'signal'>,
   ): Promise<T> {
+    if (this.nextId >= Number.MAX_SAFE_INTEGER) this.nextId = 1;
     const id = this.nextId++;
     let active = true;
     const deliverChunk = onChunk
@@ -1526,11 +1533,13 @@ export class BridgeClient {
     try {
       const bounded = new Promise<T>((resolve, reject) => {
         request.then(resolve, reject);
+        // Typed rejections: a renderer deadline or cancellation must be
+        // distinguishable from a sidecar handler error (`error.kind`).
         timeout = setTimeout(
-          () => reject(new Error(`${method} timed out after ${options.timeoutMs}ms`)),
+          () => reject(BridgeRpcError.timeout(method, options.timeoutMs)),
           options.timeoutMs,
         );
-        abort = () => reject(new Error(`${method} was cancelled`));
+        abort = () => reject(BridgeRpcError.cancelled(method));
         if (options.signal?.aborted) abort();
         else options.signal?.addEventListener('abort', abort, { once: true });
       });

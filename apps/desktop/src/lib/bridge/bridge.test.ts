@@ -171,6 +171,8 @@ describe('BridgeClient', () => {
     const bounded = new BridgeClient(new HangingTransport());
     await expect(bounded.call('slow.method', {}, { timeoutMs: 5 })).rejects.toMatchObject({
       message: 'slow.method timed out after 5ms',
+      kind: 'timeout',
+      code: RPC_ERROR.INTERNAL_ERROR,
     });
   });
 
@@ -179,14 +181,69 @@ describe('BridgeClient', () => {
     const controller = new AbortController();
     const pending = bounded.call('cancel.method', {}, { signal: controller.signal });
     controller.abort();
-    await expect(pending).rejects.toMatchObject({ message: 'cancel.method was cancelled' });
+    await expect(pending).rejects.toMatchObject({
+      message: 'cancel.method was cancelled',
+      kind: 'cancelled',
+    });
+  });
+
+  it('rejects immediately when the signal is already aborted', async () => {
+    const transport = new HangingTransport();
+    const bounded = new BridgeClient(transport);
+    const controller = new AbortController();
+    controller.abort();
+    const err = await bounded
+      .call('pre.aborted', {}, { signal: controller.signal, timeoutMs: 10_000 })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BridgeRpcError);
+    expect((err as BridgeRpcError).isCancelled).toBe(true);
+    expect((err as BridgeRpcError).isTimeout).toBe(false);
+  });
+
+  it('timeouts and cancellations are typed errors that reach error listeners', async () => {
+    const bounded = new BridgeClient(new HangingTransport());
+    const seen: BridgeRpcError[] = [];
+    bounded.on((e) => {
+      if (e.type === 'error') seen.push(e.error);
+    });
+    const controller = new AbortController();
+    const cancelled = bounded.call('c', {}, { signal: controller.signal });
+    controller.abort();
+    await expect(cancelled).rejects.toBeInstanceOf(BridgeRpcError);
+    await expect(bounded.call('t', {}, { timeoutMs: 1 })).rejects.toBeInstanceOf(BridgeRpcError);
+    expect(seen.map((e) => e.kind)).toEqual(['cancelled', 'timeout']);
+    expect(seen.every((e) => !e.isRetryable && !e.isApprovalRequired)).toBe(true);
   });
 
   it('bounds streams independently from calls', async () => {
     const bounded = new BridgeClient(new HangingTransport());
     await expect(bounded.stream('slow.stream', {}, { timeoutMs: 5 })).rejects.toMatchObject({
       message: 'slow.stream timed out after 5ms',
+      kind: 'timeout',
     });
+  });
+
+  it('issues distinct increasing numeric ids below the shell reserved band', async () => {
+    const ids: RpcId[] = [];
+    const recording: BridgeTransport = {
+      kind: 'echo',
+      request<T>(id: RpcId): Promise<T> {
+        ids.push(id);
+        return Promise.resolve(null as T);
+      },
+      onState: () => () => undefined,
+      reconnect: () => undefined,
+    };
+    const c = new BridgeClient(recording);
+    await c.call('a');
+    await c.call('b');
+    await c.stream('c', {});
+    expect(ids).toEqual([1, 2, 3]);
+    for (const id of ids) {
+      expect(typeof id).toBe('number');
+      expect(Number.isSafeInteger(id)).toBe(true);
+      expect(id as number).toBeLessThan(2 ** 62);
+    }
   });
 
   it('cancels a stream and suppresses chunks that arrive after settlement', async () => {
@@ -295,6 +352,43 @@ describe('BridgeRpcError', () => {
     expect(toBridgeError({ code: -32602, message: 'bad params' }).code).toBe(-32602);
     const existing = new BridgeRpcError({ code: -1, message: 'x' });
     expect(toBridgeError(existing)).toBe(existing);
+  });
+
+  it('classifies shell transport errors from data.kind without changing codes', () => {
+    // What the Rust shell serialises for not-connected / sidecar restarted.
+    const notConnected = toBridgeError({
+      code: RPC_ERROR.INTERNAL_ERROR,
+      message: 'bridge is not connected',
+      data: { kind: 'transport' },
+    });
+    expect(notConnected.kind).toBe('transport');
+    expect(notConnected.isTransport).toBe(true);
+    expect(notConnected.code).toBe(RPC_ERROR.INTERNAL_ERROR);
+    expect(notConnected.isRetryable).toBe(false);
+
+    // A sidecar INTERNAL_ERROR with the same code but no tag stays `rpc`.
+    const handler = toBridgeError({ code: RPC_ERROR.INTERNAL_ERROR, message: 'boom' });
+    expect(handler.kind).toBe('rpc');
+    expect(handler.isTransport).toBe(false);
+
+    // Unknown tags (future shells) fall back to `rpc`, never throw.
+    const odd = toBridgeError({ code: -32603, message: 'x', data: { kind: 42 } });
+    expect(odd.kind).toBe('rpc');
+
+    // Structured data such as approval_id is preserved alongside the kind.
+    const approval = toBridgeError({
+      code: RPC_ERROR.APPROVAL_REQUIRED,
+      message: 'approve',
+      data: { approval_id: 'a1' },
+    });
+    expect(approval.kind).toBe('rpc');
+    expect(approval.approvalId).toBe('a1');
+  });
+
+  it('a string thrown by a Tauri command is an untyped rpc error', () => {
+    const err = toBridgeError('window not found');
+    expect(err.kind).toBe('rpc');
+    expect(err.message).toBe('window not found');
   });
 });
 
