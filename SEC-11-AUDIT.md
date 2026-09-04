@@ -338,19 +338,42 @@ See `tests/test_web_gateway_security.py` and the updated existing tests.
 
 ## 20. CI run URLs
 
-To be filled after the PR is pushed.
+- PR: https://github.com/AliNaderiii/Dream/pull/125
+- Workflow run (Python): https://github.com/AliNaderiii/Dream/actions/runs/33907013928
+- Workflow run (desktop): https://github.com/AliNaderiii/Dream/actions/runs/33907013919
+
+CI status is pinned to the final remote SHA in §21 after the last push.
 
 ---
 
 ## 21. Final remote SHA
 
-To be filled after the PR is pushed and the head verified.
+`a3d4cb594303e114976af3b0cca67cfa526d2ec2`
+
+Verified via the GitHub API: PR `head.sha == a3d4cb594303e114976af3b0cca67cfa526d2ec2`,
+base `main == 3bcded5a7a47b6976571cc9c7d334c096ee0e451`.
 
 ---
 
 ## 22. Changed-file verification
 
-To be filled after the PR is pushed.
+The PR reports 12 changed files:
+
+1. `SEC-11-AUDIT.md`
+2. `apps/desktop/src/components/gateway/gateway-settings.tsx`
+3. `apps/desktop/src/lib/bridge/client.ts`
+4. `apps/desktop/src/lib/bridge/types.ts`
+5. `docs/CONFIGURATION.md`
+6. `docs/STATUS.md`
+7. `docs/security/threat-model.md`
+8. `dream/bridge/methods.py`
+9. `dream/gateway_server.py`
+10. `dream/remotegw/tokens.py`
+11. `tests/test_gateway_server.py`
+12. `tests/test_web_gateway_security.py`
+
+No workflows, release tooling, Rust shell files, connectivity/gws/providerhub
+files, or SEC-08/09/10 implementation files are changed.
 
 ---
 
