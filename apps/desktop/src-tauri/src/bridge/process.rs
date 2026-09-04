@@ -2202,14 +2202,21 @@ mod tests {
     async fn writer_end_is_signalled_even_when_the_task_is_aborted() {
         let done = Arc::new(Notify::new());
         let guard_done = Arc::clone(&done);
+        // The guard only exists once the task body has run to its first
+        // await, so wait for that before aborting: aborting a never-polled
+        // task drops an async block whose locals were never constructed.
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel::<()>();
         let task = tokio::spawn(async move {
             let _guard = NotifyOnDrop(guard_done);
+            let _ = started_tx.send(());
             std::future::pending::<()>().await;
         });
+        started_rx.await.expect("task reached its first await");
         task.abort();
         tokio::time::timeout(Duration::from_secs(2), done.notified())
             .await
             .expect("abort drops the guard, which notifies");
+        assert!(task.await.expect_err("task was aborted").is_cancelled());
     }
 
     /// Where the supervisor tests write their fake sidecars and pid files.
