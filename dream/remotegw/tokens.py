@@ -60,9 +60,9 @@ class RemoteTokens:
             )
         ok = self.manager.revoke_token(raw)
         if not ok:
-            for candidate in list(self.manager.all_tokens()):
-                if candidate.startswith(raw) and len(raw) >= 12:
-                    ok = self.manager.revoke_token(candidate)
+            for row in self.manager.list_tokens():
+                if str(row.get("id")) == raw:
+                    ok = self.manager.revoke_token(str(row["id"]))
                     break
         if not ok:
             raise RemoteGwSecurityError(
