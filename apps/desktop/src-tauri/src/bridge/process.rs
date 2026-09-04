@@ -10,6 +10,26 @@
 //!
 //! State transitions are written to the shared [`SharedState`] and emitted as
 //! `bridge://state` events so the frontend status indicator stays in sync.
+//!
+//! ## Containment (SEC-09)
+//!
+//! The sidecar can spawn descendants (tools, subprocesses), so a plain
+//! `Child::kill()` would orphan them. Every instance therefore runs inside a
+//! platform containment owned by [`SidecarContainment`]:
+//!
+//! - **Windows**: a Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. The
+//!   kernel keeps the whole tree alive-or-dead with the job handle: closing it
+//!   — normal teardown *or* an abrupt parent exit — terminates every member.
+//! - **Unix-like**: a dedicated process group (`process_group(0)`, applied in
+//!   the child before `exec` — the safe std equivalent of `setpgid(0, 0)`),
+//!   so teardown can signal the leader *and its descendants* via `killpg`.
+//!   Parent death is covered by the pipe itself: the kernel closes the sidecar's
+//!   stdin when the desktop process dies (even under `SIGKILL`), and the
+//!   sidecar's EOF shutdown terminates the leader. `PR_SET_PDEATHSIG` is
+//!   deliberately **not** used — it fires on parent *thread* exit, which
+//!   conflicts with tokio's idle-worker reaping (see the lifecycle doc).
+//!
+//! See `docs/dev/how-to/sidecar-lifecycle.md` for the full lifecycle contract.
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -267,6 +287,22 @@ const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(15);
 const STATE_EVENT: &str = "bridge://state";
 
+/// How long the sidecar gets to exit from the stdin-EOF graceful shutdown it
+/// is designed for before the containment is asked to terminate (SEC-09).
+/// A healthy sidecar exits from EOF within milliseconds; the window only ever
+/// delays a wedged instance, never a normal restart (the exit itself resolves
+/// the wait early).
+const SIDECAR_GRACEFUL_EXIT: Duration = Duration::from_secs(1);
+/// Grace period after the containment-wide graceful termination request
+/// (SIGTERM to the whole Unix process group; the job-close/terminate sweep on
+/// Windows has no cooperative signal, so the grace windows are identical).
+const SIDECAR_TERM_GRACE: Duration = Duration::from_secs(1);
+/// Bounded final reap for a forcibly terminated leader. If this expires the
+/// containment is still closed (which sweeps everything) and the child's
+/// `kill_on_drop` safety net finishes the reap in the background — teardown
+/// never blocks forever and never leaks.
+const SIDECAR_REAP_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Run the supervisor loop until the sidecar stays up or all retries are spent.
 ///
 /// Returns when the bridge gives up (state `Disconnected`) — the frontend can
@@ -325,19 +361,19 @@ fn warn_bridge_io(context: &str, operation: &'static str, err: std::io::Error) {
     log::warn!("bridge: {context}: {}", BridgeError::io(operation, err));
 }
 
-/// Kill a child we cannot use as a sidecar and wait so the PID is reaped.
-async fn abandon_child(child: &mut Child, exe: &str) {
+/// Kill a child we cannot use as a sidecar *and* could not contain.
+///
+/// The process must not keep running uncontained (it could spawn descendants
+/// nothing would be able to sweep). `start_kill` is synchronous; the child's
+/// `kill_on_drop(true)` setup reaps it in the background once the value drops,
+/// so this helper never blocks and never leaves an orphan behind.
+fn discard_uncontained_child(child: &mut Child) {
     if let Err(err) = child.start_kill() {
+        // `start_kill` on an already-exited child succeeds, so an error here
+        // is a real (rare) platform failure — logged, never a panic.
         warn_bridge_io(
-            &format!("killing `{exe}` after stdio failure"),
+            "killing an uncontained sidecar child failed",
             "kill sidecar",
-            err,
-        );
-    }
-    if let Err(err) = child.wait().await {
-        warn_bridge_io(
-            &format!("waiting for `{exe}` after stdio failure"),
-            "wait for sidecar",
             err,
         );
     }
@@ -377,17 +413,108 @@ async fn write_stdin_loop(mut stdin: tokio::process::ChildStdin, mut rx: mpsc::R
     }
 }
 
-/// Drop the stdin writer and reap the child after the reader ends.
-async fn reap_instance(child: &mut Child, writer_tx: &Arc<Mutex<Option<mpsc::Sender<String>>>>) {
+/// Wait for `child` to exit, bounded by `limit`. `Ok(true)` means "reaped",
+/// `Ok(false)` means "still running when the window closed".
+async fn wait_within(child: &mut Child, limit: Duration) -> std::result::Result<bool, BridgeError> {
+    match tokio::time::timeout(limit, child.wait()).await {
+        Ok(Ok(_status)) => Ok(true),
+        // `wait` failing means the handle is gone (already reaped elsewhere or
+        // a platform fault) — surface it typed, never panic.
+        Ok(Err(err)) => Err(BridgeError::io("wait for sidecar", err)),
+        Err(_elapsed) => Ok(false),
+    }
+}
+
+/// Terminate one sidecar instance and everything inside its containment.
+///
+/// Escalation sequence (SEC-09 lifecycle contract):
+///
+/// 1. grace window for the stdin-EOF graceful shutdown the sidecar implements;
+/// 2. graceful request to the containment (Unix: `SIGTERM` to the whole
+///    process group; Windows: nothing to signal — the EOF path already asked)
+///    plus a second bounded wait;
+/// 3. forced termination of the containment (Unix: `SIGKILL` to the group;
+///    Windows: `TerminateJobObject`), then a final bounded reap of the leader;
+/// 4. containment teardown (Unix: one last `SIGKILL` group sweep for
+///    descendants that outlived the leader; Windows: closing the job handle,
+///    which the kernel also performs when the process dies).
+///
+/// Idempotent: safe to call more than once and safe when the child already
+/// exited — both cases complete without spurious errors. No locks are held
+/// across the waits (the caller clears the writer channel first).
+pub(crate) async fn terminate_sidecar(
+    child: &mut Child,
+    containment: &mut SidecarContainment,
+) -> std::result::Result<(), BridgeError> {
+    let mut failure: Option<BridgeError> = None;
+    let leader = containment.leader_pid;
+
+    match wait_within(child, SIDECAR_GRACEFUL_EXIT).await {
+        Ok(true) => {
+            log::debug!("bridge: sidecar pid {leader} exited gracefully on stdin EOF");
+        }
+        Ok(false) => {
+            if let Err(err) = containment.request_graceful_termination() {
+                failure.get_or_insert(err);
+            }
+            log::info!("bridge: graceful termination requested for sidecar pid {leader}");
+            match wait_within(child, SIDECAR_TERM_GRACE).await {
+                Ok(true) => {
+                    log::debug!("bridge: sidecar pid {leader} exited after containment SIGTERM");
+                }
+                Ok(false) => {
+                    log::warn!("bridge: forced termination performed for sidecar pid {leader}");
+                    if let Err(err) = containment.terminate_forced() {
+                        failure.get_or_insert(err);
+                    }
+                    match wait_within(child, SIDECAR_REAP_TIMEOUT).await {
+                        Ok(true) => {}
+                        Ok(false) => log::warn!(
+                            "bridge: sidecar pid {leader} reap timed out — the containment \
+                             teardown below and the child's drop-time kill finish the job"
+                        ),
+                        Err(err) => {
+                            failure.get_or_insert(err);
+                        }
+                    }
+                }
+                Err(err) => {
+                    failure.get_or_insert(err);
+                }
+            }
+        }
+        Err(err) => {
+            failure.get_or_insert(err);
+        }
+    }
+
+    // Containment teardown runs on every path, including the ones above that
+    // already saw a clean exit: descendants can outlive the leader.
+    if let Err(err) = containment.close() {
+        log::warn!("bridge: containment cleanup failed for pid {leader}: {err}");
+    }
+
+    match failure {
+        Some(err) => Err(err),
+        None => Ok(()),
+    }
+}
+
+/// Drop the stdin writer and terminate the instance (process tree) after the
+/// reader loop ends. Containment teardown makes this also sweep any
+/// descendants the sidecar spawned.
+async fn reap_instance(
+    instance: &mut SpawnedSidecar,
+    writer_tx: &Arc<Mutex<Option<mpsc::Sender<String>>>>,
+) {
     {
         let mut guard = writer_tx.lock().await;
         *guard = None;
     }
-    if let Err(err) = child.start_kill() {
-        warn_bridge_io("killing sidecar failed", "kill sidecar", err);
-    }
-    if let Err(err) = child.wait().await {
-        warn_bridge_io("waiting for sidecar exit failed", "wait for sidecar", err);
+    if let Err(err) = terminate_sidecar(&mut instance.child, &mut instance.containment).await {
+        // `terminate_sidecar` already swept the containment; the supervisor
+        // restarts regardless, so this is a diagnostic, never a panic.
+        log::warn!("bridge: sidecar teardown did not complete cleanly: {err}");
     }
 }
 
@@ -408,7 +535,8 @@ async fn start_instance<R: Runtime>(
 ) -> InstanceOutcome {
     let mut remaining: &[String] = config.candidates();
     loop {
-        let Some((index, exe, mut child)) = spawn_first(remaining, |exe| spawn(config, exe)) else {
+        let Some((index, exe, mut instance)) = spawn_first(remaining, |exe| spawn(config, exe))
+        else {
             // No candidate could even be launched. Leave the state to the
             // supervisor (it goes Disconnected after the retries) and say why
             // in both languages.
@@ -419,11 +547,18 @@ async fn start_instance<R: Runtime>(
         // this one stopped.
         remaining = &remaining[index + 1..];
 
-        let (stdin, stdout) = match take_piped_stdio(&mut child) {
+        let (stdin, stdout) = match take_piped_stdio(&mut instance.child) {
             Ok(pair) => pair,
             Err(err) => {
                 log::error!("bridge: `{exe}` cannot be used as a sidecar: {err}");
-                abandon_child(&mut child, exe).await;
+                // The child is contained even though it is unusable as a
+                // sidecar: tear the containment down (kills the child and any
+                // descendants), never just drop it.
+                if let Err(err) =
+                    terminate_sidecar(&mut instance.child, &mut instance.containment).await
+                {
+                    log::warn!("bridge: teardown of unusable sidecar instance failed: {err}");
+                }
                 continue;
             }
         };
@@ -441,7 +576,10 @@ async fn start_instance<R: Runtime>(
             supervise_reader(app, state, dispatcher, writer_tx, stdout, &last_activity).await;
 
         writer.abort();
-        reap_instance(&mut child, writer_tx).await;
+        // Runs the full containment teardown (see [`terminate_sidecar`]) and
+        // completes *before* the supervisor's next spawn, so a restart never
+        // overlaps the old process group / job object with the new one.
+        reap_instance(&mut instance, writer_tx).await;
 
         if reached_ready {
             log::info!("bridge: instance running under `{exe}` ended ({outcome:?})");
@@ -458,15 +596,12 @@ async fn start_instance<R: Runtime>(
 /// so tests can fake the command order without spawning real processes.
 fn spawn_first<'a, T, F>(candidates: &'a [String], mut probe: F) -> Option<(usize, &'a str, T)>
 where
-    F: FnMut(&'a str) -> std::io::Result<T>,
+    F: FnMut(&'a str) -> std::result::Result<T, BridgeError>,
 {
     for (index, candidate) in candidates.iter().enumerate() {
         match probe(candidate) {
             Ok(item) => return Some((index, candidate.as_str(), item)),
-            Err(err) => log::warn!(
-                "bridge: failed to spawn `{candidate}`: {}",
-                BridgeError::io("spawn sidecar", err)
-            ),
+            Err(err) => log::warn!("bridge: failed to spawn `{candidate}`: {err}"),
         }
     }
     None
@@ -612,17 +747,32 @@ async fn supervise_reader<R: Runtime>(
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+/// Windows `CREATE_SUSPENDED` (0x00000004): the new process is created with its
+/// primary thread suspended and therefore executes *no* instruction — not even
+/// loader code — until [`SidecarContainment::release_startup_suspension`]
+/// resumes it.
+///
+/// This is what makes Job Object containment race-free (SEC-09): assignment to
+/// the job happens while the child is frozen, so the child cannot have created
+/// a single descendant before it is contained, and every instruction it ever
+/// runs is executed as a job member.
+#[cfg(windows)]
+const CREATE_SUSPENDED: u32 = 0x0000_0004;
+
 /// Creation flags for the sidecar process on the host platform.
 ///
-/// On Windows we hide the console window (CREATE_NO_WINDOW); on POSIX there is
-/// no such flag and the function returns 0. The POSIX variant is only compiled
-/// in test builds to avoid a `dead_code` lint on the lib target.
+/// On Windows we hide the console window (CREATE_NO_WINDOW) and start the child
+/// suspended (CREATE_SUSPENDED) so containment can be attached before it runs;
+/// on POSIX there is no such flag and the function returns 0 (the process group
+/// is applied by the kernel inside the forked child, which is already
+/// race-free). The POSIX variant is only compiled in test builds to avoid a
+/// `dead_code` lint on the lib target.
 ///
 /// The function is pure and cfg-gated so it can be unit-tested without spawning
 /// a real process.
 #[cfg(windows)]
 pub(crate) fn sidecar_creation_flags() -> u32 {
-    CREATE_NO_WINDOW
+    CREATE_NO_WINDOW | CREATE_SUSPENDED
 }
 
 /// POSIX stub — only compiled in test builds so `cargo clippy --lib` does not
@@ -632,8 +782,40 @@ pub(crate) fn sidecar_creation_flags() -> u32 {
     0
 }
 
-/// Spawn the Python sidecar with piped stdio under interpreter `exe`.
-fn spawn(config: &SidecarConfig, exe: &str) -> std::io::Result<Child> {
+/// One sidecar process together with the platform containment that owns its
+/// whole process tree. The containment value moves with the child and must be
+/// closed through [`SidecarContainment::close`] (or dropped, which does the same
+/// on Windows) at teardown.
+pub(crate) struct SpawnedSidecar {
+    pub(crate) child: Child,
+    pub(crate) containment: SidecarContainment,
+}
+
+/// Apply the pre-`exec` containment configuration to a command that is about
+/// to become a containment leader.
+///
+/// On Unix this puts the child into its own process group (`pgid == child
+/// pid`) before `exec`, so the group survives interpreter changes and covers
+/// every descendant the sidecar later spawns. `process_group(0)` is the safe
+/// std/tokio equivalent of calling `setpgid(0, 0)` in a `pre_exec` hook — no
+/// `unsafe` needed and no parent/child race (the kernel applies it inside the
+/// forked child, before `exec`).
+///
+/// On Windows a `Command` cannot pre-configure containment: the Job Object is
+/// attached right after spawn by [`SidecarContainment::establish`].
+pub(crate) fn configure_containment(cmd: &mut tokio::process::Command) {
+    #[cfg(unix)]
+    cmd.process_group(0);
+    #[cfg(not(unix))]
+    let _ = cmd;
+}
+
+/// Build the sidecar `Command` without spawning it.
+///
+/// Preserves the exact interpreter-selection, stdio, environment and working
+/// directory semantics documented for [`spawn`]; the containment wiring is the
+/// only addition (see [`configure_containment`]).
+fn sidecar_command(config: &SidecarConfig, exe: &str) -> tokio::process::Command {
     // kill_on_drop prevents the sidecar from outliving the app on POSIX.
     let mut cmd = tokio::process::Command::new(exe);
     cmd.args(["-u", "-m", &config.module])
@@ -651,6 +833,13 @@ fn spawn(config: &SidecarConfig, exe: &str) -> std::io::Result<Child> {
     cmd.stderr(Stdio::null());
     #[cfg(not(windows))]
     cmd.stderr(Stdio::inherit());
+    // Containment: Unix leads a fresh process group from `exec` onwards.
+    // (Note: `PR_SET_PDEATHSIG` is deliberately *not* used — it fires when the
+    // parent *thread* exits, and tokio reaps idle worker threads, which would
+    // kill healthy sidecars mid-run. Parent death is covered by stdin EOF —
+    // the kernel closes the pipe when the process dies — plus the group sweep
+    // in `terminate_sidecar`; see the lifecycle doc.)
+    configure_containment(&mut cmd);
     if let Ok(path) = std::env::var("DREAM_PYTHONPATH") {
         cmd.env("PYTHONPATH", path);
     }
@@ -666,7 +855,564 @@ fn spawn(config: &SidecarConfig, exe: &str) -> std::io::Result<Child> {
         }
         cmd.current_dir(root);
     }
-    cmd.spawn()
+    cmd
+}
+
+/// Spawn the Python sidecar with piped stdio under interpreter `exe`, wrapped
+/// in the platform containment (Windows: Job Object with kill-on-close;
+/// Unix-like: dedicated process group).
+///
+/// If containment cannot be established, the child is killed and dropped
+/// instead of being handed back uncontained — the supervisor must never run a
+/// sidecar whose descendants nobody can sweep. Reaping of a discarded child is
+/// completed by its `kill_on_drop` configuration, so this stays non-blocking.
+///
+/// Windows ordering is what makes containment race-free (SEC-09): the child is
+/// created *suspended*, so it has executed no instruction and cannot have
+/// created any descendant while the Job Object is created, configured and
+/// assigned. Only after successful assignment is the primary thread resumed,
+/// which means every instruction the sidecar ever executes runs inside the job.
+/// If any step before the resume fails, the only process in existence is the
+/// still-suspended leader, and terminating it is provably complete.
+fn spawn(config: &SidecarConfig, exe: &str) -> std::result::Result<SpawnedSidecar, BridgeError> {
+    let mut cmd = sidecar_command(config, exe);
+    let mut child = match cmd.spawn() {
+        Ok(child) => child,
+        Err(err) => return Err(BridgeError::io("spawn sidecar", err)),
+    };
+    if let Some(pid) = child.id() {
+        log::info!("bridge: sidecar spawned (pid {pid})");
+    }
+    let mut containment = match SidecarContainment::establish(&child) {
+        Ok(containment) => containment,
+        Err(err) => {
+            log::error!(
+                "bridge: containment setup failed for the just-spawned sidecar — terminating \
+                 the uncontained child ({err})"
+            );
+            discard_uncontained_child(&mut child);
+            return Err(err);
+        }
+    };
+    // Windows: the child is only allowed to start running now that it is a job
+    // member. On failure the containment is closed first (kill-on-close kills
+    // the assigned, still-suspended leader) and the child handle is discarded
+    // as a second safety net.
+    if let Err(err) = containment.release_startup_suspension() {
+        log::error!(
+            "bridge: could not start the contained sidecar — tearing down the contained \
+             child ({err})"
+        );
+        let _ = containment.close();
+        discard_uncontained_child(&mut child);
+        return Err(err);
+    }
+    log::info!(
+        "bridge: containment established for pid {}: {}",
+        containment.leader_pid,
+        containment.summary()
+    );
+    Ok(SpawnedSidecar { child, containment })
+}
+
+/// The platform containment owning one sidecar process tree.
+///
+/// Ownership: exactly one [`SidecarContainment`] exists per spawned instance;
+/// it is created immediately after spawn inside [`spawn`], lives inside the
+/// [`SpawnedSidecar`] while the instance is supervised, and is consumed by
+/// [`terminate_sidecar`] (which closes it). A containment that is only dropped
+/// (e.g. a panicking supervisor) still releases its OS object — the Windows job
+/// handle is closed by `Drop` (killing all members via kill-on-close); a Unix
+/// group holds no kernel object, so its drop-time safety net is the child's
+/// `kill_on_drop` plus the leader's stdin-EOF self-exit.
+pub(crate) struct SidecarContainment {
+    /// Pid of the contained leader (== process-group id on Unix).
+    pub(crate) leader_pid: u32,
+    #[cfg(windows)]
+    job: windows_job::JobHandle,
+    #[cfg(unix)]
+    pgid: Option<libc::pid_t>,
+}
+
+impl SidecarContainment {
+    /// Attach containment to a just-spawned child.
+    ///
+    /// Races where the child exits before assignment are *not* failures that
+    /// can leave an orphan: there is then nothing left to contain, the child
+    /// cannot be signalled again (kill returns `ESRCH`, which every helper here
+    /// treats as success), and the supervisor simply moves to the next
+    /// interpreter candidate.
+    fn establish(child: &Child) -> std::result::Result<Self, BridgeError> {
+        let pid = child.id().ok_or_else(|| {
+            BridgeError::sidecar_crashed("sidecar exited before containment was established")
+        })?;
+        #[cfg(windows)]
+        {
+            let job = windows_job::contain_pid(pid)
+                .map_err(|err| BridgeError::io("contain sidecar in job object", err))?;
+            Ok(Self {
+                leader_pid: pid,
+                job,
+            })
+        }
+        #[cfg(unix)]
+        {
+            let leader = libc::pid_t::try_from(pid)
+                .map_err(|_| BridgeError::sidecar_crashed("sidecar pid out of range"))?;
+            // Verify the pre-`exec` group actually took effect: the child must
+            // lead the group that the teardown will signal. A freshly forked
+            // but not-yet-reaped child always answers `getpgid`, so an error
+            // here means the child vanished (or the platform refused the
+            // group) — in both cases there is nothing to leak.
+            let pgid =
+                group_of(pid).map_err(|err| BridgeError::io("read sidecar process group", err))?;
+            if pgid != leader {
+                return Err(BridgeError::sidecar_crashed(
+                    "sidecar does not lead its containment process group",
+                ));
+            }
+            Ok(Self {
+                leader_pid: pid,
+                pgid: Some(leader),
+            })
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            // No containment primitive on this target (nothing in the
+            // supported matrix hits this path); leader-only semantics apply.
+            Ok(Self { leader_pid: pid })
+        }
+    }
+
+    /// Let a contained child start executing.
+    ///
+    /// Windows: the sidecar is created with `CREATE_SUSPENDED` (see
+    /// [`sidecar_creation_flags`]) precisely so that the window between process
+    /// creation and Job Object assignment contains *no* executed child
+    /// instruction — and therefore no descendant that could escape the job.
+    /// This resumes the primary thread once assignment has succeeded, so the
+    /// first instruction the child runs is already a job member's.
+    ///
+    /// Unix: the process group is applied by the kernel inside the forked child
+    /// before `exec`, which is already race-free, so there is nothing to
+    /// release and this is a no-op.
+    ///
+    /// Idempotency: resuming an already-running thread is a documented no-op
+    /// (`ResumeThread` just decrements a zero suspend count and reports it), so
+    /// a repeated call cannot corrupt the child.
+    fn release_startup_suspension(&mut self) -> std::result::Result<(), BridgeError> {
+        #[cfg(windows)]
+        {
+            windows_job::resume_process(self.leader_pid)
+                .map_err(|err| BridgeError::io("resume contained sidecar", err))?;
+        }
+        Ok(())
+    }
+
+    /// Human-readable mechanism for lifecycle logs (never contains paths or
+    /// command arguments).
+    fn summary(&self) -> &'static str {
+        #[cfg(windows)]
+        {
+            "job object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE"
+        }
+        #[cfg(unix)]
+        {
+            "dedicated process group (SIGTERM/SIGKILL to the group on teardown)"
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            "none (leader-only kill semantics on this platform)"
+        }
+    }
+
+    /// Ask the containment to exit cooperatively. Unix: `SIGTERM` to the whole
+    /// group. Windows: Job Objects have no cooperative signal — stdin EOF is
+    /// the graceful channel, so this is a no-op kept for a symmetric flow.
+    fn request_graceful_termination(&self) -> std::result::Result<(), BridgeError> {
+        #[cfg(unix)]
+        if let Some(pgid) = self.pgid {
+            signal_group(pgid, libc::SIGTERM)
+                .map_err(|err| BridgeError::io("signal sidecar process group", err))?;
+        }
+        Ok(())
+    }
+
+    /// Force-terminate everything still contained.
+    fn terminate_forced(&self) -> std::result::Result<(), BridgeError> {
+        #[cfg(windows)]
+        {
+            self.job
+                .terminate_all()
+                .map_err(|err| BridgeError::io("terminate sidecar job object", err))?;
+        }
+        #[cfg(unix)]
+        if let Some(pgid) = self.pgid {
+            signal_group(pgid, libc::SIGKILL)
+                .map_err(|err| BridgeError::io("kill sidecar process group", err))?;
+        }
+        Ok(())
+    }
+
+    /// Final release of the containment object; idempotent.
+    ///
+    /// Unix: one last `SIGKILL` sweep of the group — descendants can outlive a
+    /// gracefully-exiting leader, and `ESRCH` (empty group, or already swept)
+    /// is treated as success. Windows: closing the job handle; the kernel then
+    /// terminates any member still inside it (`KILL_ON_JOB_CLOSE`).
+    fn close(&mut self) -> std::result::Result<(), BridgeError> {
+        #[cfg(unix)]
+        if let Some(pgid) = self.pgid.take() {
+            match signal_group(pgid, libc::SIGKILL) {
+                Ok(true) => {
+                    log::info!(
+                        "bridge: descendant cleanup attempted — signaled process group {pgid}"
+                    );
+                }
+                // Nothing left inside the group: normal case after a clean exit.
+                Ok(false) => log::debug!("bridge: sidecar process group {pgid} already empty"),
+                Err(err) => {
+                    return Err(BridgeError::io("sweep sidecar process group", err));
+                }
+            }
+        }
+        #[cfg(windows)]
+        {
+            self.job
+                .close()
+                .map_err(|err| BridgeError::io("close sidecar job object", err))?;
+        }
+        Ok(())
+    }
+}
+
+/// `getpgid` wrapper (never a panic: errors are surfaced as `io::Error`).
+#[cfg(unix)]
+fn group_of(pid: u32) -> std::io::Result<libc::pid_t> {
+    // SAFETY: `getpgid` takes one integer and writes nothing; a pid of `u32`
+    // max never enters the valid pid space (kernel reserves it), so the
+    // truncating cast below cannot alias a live process.
+    let pgid = unsafe { libc::getpgid(pid as libc::pid_t) };
+    if pgid == -1 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(pgid)
+    }
+}
+
+/// Send `signal` to the whole process group `pgid` (`killpg`).
+///
+/// Returns `Ok(true)` when the signal was delivered to at least one member and
+/// `Ok(false)` when the group is already empty (`ESRCH` — the idempotent
+/// success case). Any other errno is an error, so a permission problem is
+/// never mistaken for cleanup. Only groups we created and led are targeted —
+/// `pgid` always equals a sidecar/helper child pid owned by this supervisor,
+/// which makes unrelated-process collateral impossible by construction.
+#[cfg(unix)]
+fn signal_group(pgid: libc::pid_t, signal: libc::c_int) -> std::io::Result<bool> {
+    // SAFETY: `killpg` is async-signal-safe and only takes plain integers.
+    let rc = unsafe { libc::killpg(pgid, signal) };
+    if rc == 0 {
+        Ok(true)
+    } else {
+        let err = std::io::Error::last_os_error();
+        if err.raw_os_error() == Some(libc::ESRCH) {
+            Ok(false)
+        } else {
+            Err(err)
+        }
+    }
+}
+
+/// Windows Job Object containment.
+///
+/// Isolated in its own module because assigning a process to a Job Object is
+/// the one part of the lifecycle that has no safe-Rust abstraction on the
+/// `Command`/`Child` types. The FFI surface below is deliberately tiny: a
+/// handful of `kernel32` calls via `windows-sys`, every one documented at its
+/// `unsafe` block, with the raw handle wrapped in [`JobHandle`] for ownership
+/// and `Drop` semantics (no handle can leak, closing is idempotent).
+#[cfg(windows)]
+pub(crate) mod windows_job {
+    use std::io;
+
+    // `windows-sys` 0.52 shapes (verified against the Windows CI compiler):
+    // `IsProcessInJob`, `AssignProcessToJobObject` and the limit structs live
+    // under `JobObjects`, `OpenProcess` under `Threading`, and `HANDLE`/`BOOL`
+    // are plain `isize`/`i32` aliases whose null/failure sentinel is `0`.
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
+    };
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, JobObjectExtendedLimitInformation, SetInformationJobObject,
+        TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, OpenThread, ResumeThread, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
+        THREAD_SUSPEND_RESUME,
+    };
+
+    // `windows-sys` 0.52 exposes every Job Object operation *except* job
+    // creation itself (`CreateJobObjectW` was only added in a later release —
+    // verified against the Windows CI compiler on both candidate modules), so
+    // the kernel32 import is declared directly here. The signature matches
+    // the SDK header (`CreateJobObjectW(SECURITY_ATTRIBUTES*, PCWSTR)`): both
+    // parameters are bare pointers (`*const c_void` is ABI-identical to the
+    // `*const SECURITY_ATTRIBUTES` the API takes, and `*const u16` to the
+    // `PCWSTR` newtype), and callers in this module only ever pass nulls.
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn CreateJobObjectW(
+            lpjobattributes: *const core::ffi::c_void,
+            lpname: *const u16,
+        ) -> HANDLE;
+    }
+
+    /// `ERROR_NOT_FOUND` (`winerror.h`): `TerminateJobObject` reports this when
+    /// the job contains no processes — success for teardown purposes.
+    const WIN32_ERROR_NOT_FOUND: i32 = 1168;
+
+    /// An owned, unnamed Job Object configured with `KILL_ON_JOB_CLOSE`.
+    ///
+    /// Ownership contract: the handle inside is created exactly once and
+    /// closed exactly once — explicit [`JobHandle::close`] takes it, and
+    /// `Drop` closes whatever is left. With `KILL_ON_JOB_CLOSE`, closing the
+    /// *last* handle terminates every process still in the job, so even a
+    /// dropped-without-teardown value (or a crashed parent process) cannot
+    /// leave the sidecar tree running.
+    #[derive(Debug)]
+    pub(crate) struct JobHandle {
+        raw: Option<HANDLE>,
+    }
+
+    // SAFETY: `JobHandle` exclusively owns a private kernel handle created by
+    // `CreateJobObjectW` for this process. Job handles are not thread-affine:
+    // `AssignProcessToJobObject`, `TerminateJobObject` and `CloseHandle` may
+    // each be called from any thread, and the struct never duplicates or
+    // aliases the handle, so transfer of ownership between threads is sound.
+    unsafe impl Send for JobHandle {}
+
+    impl JobHandle {
+        /// `TerminateJobObject`: kill every process still inside the job.
+        pub(crate) fn terminate_all(&self) -> io::Result<()> {
+            if let Some(job) = self.raw {
+                // SAFETY: `job` is the (still open) handle this struct owns;
+                // exit code 0 is an arbitrary teardown status accepted by
+                // the API.
+                let ok = unsafe { TerminateJobObject(job, 0) };
+                // Capture the error before any other call can clobber
+                // `GetLastError`.
+                let err = if ok == 0 {
+                    Some(io::Error::last_os_error())
+                } else {
+                    None
+                };
+                if let Some(err) = err {
+                    if err.raw_os_error() == Some(WIN32_ERROR_NOT_FOUND) {
+                        return Ok(());
+                    }
+                    return Err(err);
+                }
+            }
+            Ok(())
+        }
+
+        /// Release the job handle, killing any surviving member. Idempotent:
+        /// the handle is taken, so a second call (or the `Drop`) is a no-op.
+        pub(crate) fn close(&mut self) -> io::Result<()> {
+            if let Some(job) = self.raw.take() {
+                // SAFETY: closing the only owned reference to this job,
+                // exactly once. Kill-on-close sweeps any remaining members.
+                let ok = unsafe { CloseHandle(job) };
+                if ok == 0 {
+                    return Err(io::Error::last_os_error());
+                }
+            }
+            Ok(())
+        }
+
+        #[cfg(test)]
+        pub(crate) fn as_raw(&self) -> Option<HANDLE> {
+            self.raw
+        }
+    }
+
+    impl Drop for JobHandle {
+        fn drop(&mut self) {
+            // Best effort and never panicking: a failed `CloseHandle` on the
+            // way out has no useful recovery beyond process exit, which also
+            // closes the handle and triggers kill-on-close.
+            let _ = self.close();
+        }
+    }
+
+    /// Create a private Job Object (kill-on-close) and assign the process with
+    /// `pid` to it. Errors carry the platform cause; on error the job (if it
+    /// was created) has already been closed and the child was *not* contained,
+    /// so the caller must discard the child (see `spawn`).
+    pub(crate) fn contain_pid(pid: u32) -> io::Result<JobHandle> {
+        // SAFETY: both arguments are null — default security attributes and a
+        // null name (an unnamed, private job), which Win32 explicitly allows.
+        let job = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+        if job == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let mut job_handle = JobHandle { raw: Some(job) };
+
+        // `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` is the whole point of the job:
+        // closing the last handle must tear down every member (the sidecar and
+        // all descendants it inherited into the job).
+        let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { core::mem::zeroed() };
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        // SAFETY: `job` is valid (owned above) and `limits` is a plain-data
+        // struct passed with its exact size; the API only reads it.
+        let configured = unsafe {
+            SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                &limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION as *const _,
+                core::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            )
+        };
+        if configured == 0 {
+            let err = io::Error::last_os_error();
+            let _ = job_handle.close();
+            return Err(err);
+        }
+
+        if let Err(err) = assign_process(&mut job_handle, pid) {
+            // Nothing got assigned (or the child exited mid-handshake);
+            // closing the job is cheap and leaves no kernel object behind.
+            let _ = job_handle.close();
+            return Err(err);
+        }
+        Ok(job_handle)
+    }
+
+    /// `ResumeThread` failure sentinel (`(DWORD) -1`, per the Win32 docs).
+    const RESUME_THREAD_FAILED: u32 = u32::MAX;
+
+    /// Resume the primary thread of the suspended process `pid`.
+    ///
+    /// Called only after the process has been assigned to its Job Object, so
+    /// the child begins executing as a job member and no descendant can ever be
+    /// created outside containment (SEC-09).
+    ///
+    /// A `CREATE_SUSPENDED` process has exactly one thread — it has executed no
+    /// instruction, so it cannot have created another — which is why resuming
+    /// every thread owned by `pid` is precise, not a heuristic. Threads are
+    /// selected by owner pid from a snapshot; no process/thread name is ever
+    /// matched and nothing outside this pid is touched.
+    pub(crate) fn resume_process(pid: u32) -> io::Result<()> {
+        // SAFETY: a thread-only snapshot of the whole system; the `0` pid
+        // argument is ignored for `TH32CS_SNAPTHREAD` (Win32 documented).
+        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
+        if snapshot == INVALID_HANDLE_VALUE {
+            return Err(io::Error::last_os_error());
+        }
+        let result = resume_threads_of(snapshot, pid);
+        // SAFETY: closing the snapshot handle opened above, on every path.
+        unsafe { CloseHandle(snapshot) };
+        result
+    }
+
+    /// Walk `snapshot` and resume every thread whose owner is `pid`.
+    ///
+    /// Split out so the snapshot handle above is closed on all paths, including
+    /// early returns from here.
+    fn resume_threads_of(snapshot: HANDLE, pid: u32) -> io::Result<()> {
+        // SAFETY: `THREADENTRY32` is plain data; the API requires `dwSize` to
+        // be pre-filled with the struct size.
+        let mut entry: THREADENTRY32 = unsafe { core::mem::zeroed() };
+        entry.dwSize = core::mem::size_of::<THREADENTRY32>() as u32;
+        // SAFETY: `snapshot` is a valid thread snapshot; `entry` is a live
+        // out-param sized above.
+        let mut more = unsafe { Thread32First(snapshot, &mut entry) };
+        let mut resumed = 0usize;
+        while more != 0 {
+            if entry.th32OwnerProcessID == pid {
+                resume_thread(entry.th32ThreadID)?;
+                resumed += 1;
+            }
+            // SAFETY: same contract as `Thread32First`.
+            more = unsafe { Thread32Next(snapshot, &mut entry) };
+        }
+        if resumed == 0 {
+            // The child vanished between assignment and resume (it was
+            // suspended, so this means an external kill). Nothing is running
+            // and nothing can be orphaned; report it so the caller discards the
+            // instance instead of supervising a dead sidecar.
+            return Err(io::Error::other(
+                "the suspended sidecar had no thread left to resume",
+            ));
+        }
+        Ok(())
+    }
+
+    /// `OpenThread` + `ResumeThread` for one thread id, closing the handle on
+    /// every path.
+    fn resume_thread(tid: u32) -> io::Result<()> {
+        // SAFETY: plain integer arguments; `0` is the non-inheritable flag.
+        let thread = unsafe { OpenThread(THREAD_SUSPEND_RESUME, 0, tid) };
+        if thread == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: `thread` is the handle opened directly above.
+        let previous = unsafe { ResumeThread(thread) };
+        // Capture the error before `CloseHandle` can clobber `GetLastError`.
+        let err = if previous == RESUME_THREAD_FAILED {
+            Some(io::Error::last_os_error())
+        } else {
+            None
+        };
+        // SAFETY: closing the handle this function opened, in every branch.
+        unsafe { CloseHandle(thread) };
+        match err {
+            None => Ok(()),
+            Some(err) => Err(err),
+        }
+    }
+
+    fn assign_process(job: &mut JobHandle, pid: u32) -> io::Result<()> {
+        let Some(handle) = job.raw else {
+            return Err(io::Error::other("job handle already closed"));
+        };
+        // `AssignProcessToJobObject` requires both access rights on the
+        // process handle (see the Win32 docs for this API).
+        const DESIRED: u32 = PROCESS_SET_QUOTA | PROCESS_TERMINATE;
+        // SAFETY: plain integer arguments; the `0` inherit flag is `false`.
+        // A child that already exited fails here with `ERROR_INVALID_PARAMETER`
+        // — the documented "child exited before assignment" race, surfaced to
+        // the caller as an establishment failure that discards the (already
+        // dead) child.
+        let process = unsafe { OpenProcess(DESIRED, 0, pid) };
+        if process == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        // SAFETY: both handles are valid and owned appropriately (the process
+        // handle is closed below in all paths; the job handle is borrowed from
+        // `job`).
+        let assigned = unsafe { AssignProcessToJobObject(handle, process) };
+        // Capture the assignment error *before* `CloseHandle` can overwrite
+        // `GetLastError`.
+        let assign_err = if assigned == 0 {
+            Some(io::Error::last_os_error())
+        } else {
+            None
+        };
+        // SAFETY: `process` was opened by this function and is no longer
+        // needed either way — no handle leaks.
+        unsafe { CloseHandle(process) };
+        // Ignore `CloseHandle`'s result on our own just-opened handle: even a
+        // failure there only risks a handle that process exit would reclaim;
+        // the assignment outcome is what the caller acts on.
+        match assign_err {
+            None => Ok(()),
+            Some(err) => Err(err),
+        }
+    }
 }
 
 /// Log the reason the sidecar stays disconnected: none of the interpreter
@@ -751,9 +1497,9 @@ mod tests {
             if exe == "python3" {
                 Ok(42usize)
             } else {
-                Err(io::Error::new(
-                    io::ErrorKind::NotFound,
-                    "no such interpreter",
+                Err(BridgeError::io(
+                    "spawn sidecar",
+                    io::Error::new(io::ErrorKind::NotFound, "no such interpreter"),
                 ))
             }
         });
@@ -772,7 +1518,10 @@ mod tests {
         // be inferred from the closure alone.
         let found: Option<(usize, &str, usize)> = spawn_first(&candidates, |_| {
             attempts += 1;
-            Err(io::Error::new(io::ErrorKind::NotFound, "missing"))
+            Err(BridgeError::io(
+                "spawn sidecar",
+                io::Error::new(io::ErrorKind::NotFound, "missing"),
+            ))
         });
 
         assert!(found.is_none(), "every candidate failed — give up");
@@ -788,6 +1537,14 @@ mod tests {
             sidecar_creation_flags() & CREATE_NO_WINDOW,
             0,
             "Windows sidecar must set CREATE_NO_WINDOW"
+        );
+        // SEC-09: without CREATE_SUSPENDED the child could run — and spawn
+        // descendants — before it is assigned to the Job Object.
+        #[cfg(windows)]
+        assert_ne!(
+            sidecar_creation_flags() & CREATE_SUSPENDED,
+            0,
+            "Windows sidecar must start suspended so containment precedes execution"
         );
         #[cfg(not(windows))]
         assert_eq!(
@@ -1064,5 +1821,590 @@ mod tests {
 
         let (stdin, stdout) = require_piped_stdio(Some(1), Some(2)).expect("both present");
         assert_eq!((stdin, stdout), (1, 2));
+    }
+
+    // ---- SEC-09: containment lifecycle tests --------------------------------
+    //
+    // Contract: a contained child and every descendant it spawns must die with
+    // the containment teardown; teardown must be idempotent; an already-exited
+    // child must clean up without errors; containment setup failure must never
+    // leave a running uncontained child behind.
+    //
+    // Ground rules these tests follow (see
+    // `docs/dev/how-to/sidecar-lifecycle.md`):
+    // - helper children are `/bin/sh` (POSIX) or `powershell.exe` (Windows),
+    //   never the installed interpreter and never matched by process name;
+    // - every assertion is by explicit PID reported through a pid file in a
+    //   temp dir, with bounded polling (no unbounded waits, no sleeps without
+    //   a deadline);
+    // - the tests never signal any process other than the children they
+    //   spawned, and never kill the test runner.
+    //
+    // Platform coverage:
+    // - the process-group tests below run on every Unix (Linux and macOS are
+    //   the supported matrix);
+    // - the Job Object tests are `#[cfg(windows)]`: they compile and lint on
+    //   Windows CI (`clippy --all-targets`) but the CI job skips `cargo test`
+    //   on Windows for the tauri-winres/ComCtl32 reason documented in
+    //   `.github/workflows/desktop-ci.yml`, so they execute on Windows dev
+    //   machines (`cargo test --lib`) — documented in the SEC-09 audit;
+    // - `PR_SET_PDEATHSIG` is deliberately absent (parent-*thread* semantics
+    //   clash with tokio worker reaping) and Linux-only anyway, so there is
+    //   nothing Linux-specific left to skip; the parent-death guarantees
+    //   tested here are cross-platform.
+
+    /// Bounded deadline for the helper to start and write its pid files.
+    /// PowerShell can be slow to cold-start on Windows, hence 20 s.
+    const HELPER_START_DEADLINE: Duration = Duration::from_secs(20);
+    /// Bounded deadline for a *killed* pid to disappear (signal delivery +
+    /// reparent reap by init). Generous; real teardown is sub-millisecond.
+    const DEADLINE_AFTER_TEARDOWN: Duration = Duration::from_secs(10);
+
+    /// Poll `path` until it holds a positive pid (the helper writes it right
+    /// after it starts). `None` if the deadline expires — the caller asserts.
+    async fn read_pid_file(path: &Path, deadline: Duration) -> Option<u32> {
+        let start = Instant::now();
+        loop {
+            if let Ok(text) = std::fs::read_to_string(path) {
+                if let Ok(pid) = text.trim().parse::<u32>() {
+                    if pid > 0 {
+                        return Some(pid);
+                    }
+                }
+            }
+            if start.elapsed() > deadline {
+                return None;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    }
+
+    #[cfg(unix)]
+    fn unix_helper_command(dir: &Path, script: &str) -> tokio::process::Command {
+        let mut cmd = tokio::process::Command::new("/bin/sh");
+        cmd.arg("-c")
+            .arg(script)
+            .current_dir(dir)
+            .env("DREAM_LIFECYCLE_DIR", dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true);
+        // Same containment configuration the production spawner applies.
+        configure_containment(&mut cmd);
+        cmd
+    }
+
+    #[cfg(unix)]
+    async fn spawn_contained_unix_helper(dir: &Path, script: &str) -> (Child, SidecarContainment) {
+        let mut cmd = unix_helper_command(dir, script);
+        let child = cmd.spawn().expect("spawn /bin/sh helper");
+        let containment = SidecarContainment::establish(&child)
+            .expect("process-group containment on a freshly spawned helper");
+        (child, containment)
+    }
+
+    #[cfg(unix)]
+    fn unix_pid_alive(pid: u32) -> bool {
+        let Ok(pid) = libc::pid_t::try_from(pid) else {
+            return false;
+        };
+        // SAFETY: `kill(pid, 0)` is the standard POSIX liveness probe — it
+        // validates the pid without delivering a signal and writes nothing.
+        unsafe { libc::kill(pid, 0) == 0 }
+    }
+
+    #[cfg(unix)]
+    async fn wait_unix_pid_dead(pid: u32, deadline: Duration) -> bool {
+        let start = Instant::now();
+        while unix_pid_alive(pid) {
+            if start.elapsed() > deadline {
+                return false;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        true
+    }
+
+    /// Teardown must terminate the contained child *and* its descendants, and
+    /// the group id must be the child pid (a fresh group led by the sidecar —
+    /// exactly what `killpg` needs to reach the whole tree).
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn unix_teardown_terminates_child_and_descendants() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let script = concat!(
+            "printf %s \"$$\" > \"$DREAM_LIFECYCLE_DIR/leader.pid\"; ",
+            "sleep 25 & ",
+            "printf %s \"$!\" > \"$DREAM_LIFECYCLE_DIR/descendant.pid\"; ",
+            "wait",
+        );
+        let (mut child, mut containment) = spawn_contained_unix_helper(dir.path(), script).await;
+
+        let leader = read_pid_file(&dir.path().join("leader.pid"), HELPER_START_DEADLINE)
+            .await
+            .expect("helper writes its pid file promptly");
+        let descendant = read_pid_file(&dir.path().join("descendant.pid"), HELPER_START_DEADLINE)
+            .await
+            .expect("helper reports its backgrounded sleep via pid file");
+        assert_eq!(
+            child.id(),
+            Some(leader),
+            "pid file matches the contained child"
+        );
+
+        // The child leads its own process group (the containment invariant),
+        // and the descendant was born inside that group — both are reachable
+        // by one `killpg`.
+        assert_eq!(
+            group_of(leader).expect("leader group"),
+            i32::try_from(leader).expect("leader pid fits pid_t"),
+            "contained child must lead its process group"
+        );
+        assert_eq!(
+            group_of(descendant).expect("descendant group"),
+            group_of(leader).expect("leader group"),
+            "descendants inherit the containment group"
+        );
+        // The descendant must genuinely be alive before teardown, or the
+        // post-teardown liveness check below could pass vacuously.
+        assert!(unix_pid_alive(descendant), "descendant started");
+
+        terminate_sidecar(&mut child, &mut containment)
+            .await
+            .expect("group teardown completes without error");
+
+        // Leader: reaped by the teardown itself (no zombies, no spurious
+        // errors). Descendant: must have been swept via the group signal.
+        assert!(
+            child.try_wait().expect("try_wait").is_some(),
+            "teardown reaps the leader"
+        );
+        assert!(
+            wait_unix_pid_dead(descendant, DEADLINE_AFTER_TEARDOWN).await,
+            "the containment sweep must kill the descendant (pid {descendant})"
+        );
+    }
+
+    /// Repeated teardown and teardown of an already-exited child must be
+    /// no-op successes — cleanup is idempotent and must never fabricate an
+    /// error, panic, or signal an unrelated process.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn unix_teardown_is_idempotent_and_safe_after_natural_exit() {
+        // (a) already-exited child: the grace wait sees the exit, the sweep
+        // tolerates ESRCH, everything completes clean.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let script = "printf %s \"$$\" > \"$DREAM_LIFECYCLE_DIR/leader.pid\"; sleep 1; exit 0";
+        let (mut child, mut containment) = spawn_contained_unix_helper(dir.path(), script).await;
+        child.wait().await.expect("helper exits on its own");
+        terminate_sidecar(&mut child, &mut containment)
+            .await
+            .expect("teardown of an exited child is a clean no-op");
+
+        // (b) repeated teardown on a live helper: the second call finds the
+        // containment closed and the child reaped — still Ok, no signals sent
+        // (a group that is empty answers ESRCH, which `close` absorbs).
+        let dir = tempfile::tempdir().expect("temp dir");
+        let script = "printf %s \"$$\" > \"$DREAM_LIFECYCLE_DIR/leader.pid\"; sleep 25";
+        let (mut child, mut containment) = spawn_contained_unix_helper(dir.path(), script).await;
+        terminate_sidecar(&mut child, &mut containment)
+            .await
+            .expect("first teardown");
+        let leader = read_pid_file(&dir.path().join("leader.pid"), HELPER_START_DEADLINE)
+            .await
+            .expect("pid file written");
+        assert!(
+            wait_unix_pid_dead(leader, DEADLINE_AFTER_TEARDOWN).await,
+            "first teardown kills the leader"
+        );
+        terminate_sidecar(&mut child, &mut containment)
+            .await
+            .expect("second teardown is idempotent");
+    }
+
+    /// When containment cannot be established the spawner must not hand the
+    /// child to the supervisor: it is killed (and reaped via `kill_on_drop`)
+    /// so an *uncontained* process can never linger. This drives the same
+    /// `discard_uncontained_child` policy `spawn` uses.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn unix_containment_setup_failure_does_not_leave_an_orphan() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let mut cmd = unix_helper_command(dir.path(), "sleep 25");
+        let mut child = cmd.spawn().expect("spawn helper");
+        let leader = child.id().expect("fresh child has a pid");
+        assert!(unix_pid_alive(leader), "child is live before the discard");
+
+        discard_uncontained_child(&mut child);
+
+        let start = Instant::now();
+        loop {
+            if child.try_wait().expect("try_wait").is_some() {
+                break;
+            }
+            assert!(
+                start.elapsed() <= HELPER_START_DEADLINE,
+                "a discarded uncontained child must terminate promptly"
+            );
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        assert!(!unix_pid_alive(leader), "the child is gone");
+    }
+
+    /// The supervisor's restart ordering ("the old group is killed before the
+    /// new instance starts") is structural: `terminate_sidecar` is awaited
+    /// before the next spawn. This test mirrors that hand-off and asserts the
+    /// new instance is contained in a *fresh* group.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn unix_restart_tears_down_old_group_before_new_instance() {
+        let dir_a = tempfile::tempdir().expect("temp dir a");
+        let script = "printf %s \"$$\" > \"$DREAM_LIFECYCLE_DIR/leader.pid\"; sleep 25";
+        let (mut child_a, mut containment_a) =
+            spawn_contained_unix_helper(dir_a.path(), script).await;
+        let leader_a = read_pid_file(&dir_a.path().join("leader.pid"), HELPER_START_DEADLINE)
+            .await
+            .expect("first helper reports its pid");
+
+        // Awaited full teardown *before* the "restart" spawn:
+        terminate_sidecar(&mut child_a, &mut containment_a)
+            .await
+            .expect("old instance torn down first");
+
+        let dir_b = tempfile::tempdir().expect("temp dir b");
+        let script_b = "printf %s \"$$\" > \"$DREAM_LIFECYCLE_DIR/leader.pid\"; sleep 25 & wait";
+        let (mut child_b, mut containment_b) =
+            spawn_contained_unix_helper(dir_b.path(), script_b).await;
+        let leader_b = read_pid_file(&dir_b.path().join("leader.pid"), HELPER_START_DEADLINE)
+            .await
+            .expect("second helper reports its pid");
+        assert_ne!(
+            leader_a, leader_b,
+            "the new instance is a different process"
+        );
+        assert_eq!(
+            group_of(leader_b).expect("new leader group"),
+            i32::try_from(leader_b).expect("pid fits pid_t"),
+            "the new instance leads its own group"
+        );
+
+        terminate_sidecar(&mut child_b, &mut containment_b)
+            .await
+            .expect("second teardown");
+        assert!(
+            wait_unix_pid_dead(leader_a, DEADLINE_AFTER_TEARDOWN).await,
+            "old leader stays dead (pid recycling never aliases a live group member we signal)"
+        );
+    }
+
+    #[cfg(windows)]
+    fn windows_helper_command(dir: &Path, script: &str) -> tokio::process::Command {
+        // Prefer the well-known absolute path (no PATH dependence); fall back
+        // to the bare name if SystemRoot is somehow unavailable.
+        let powershell = match std::env::var("SystemRoot") {
+            Ok(root) => Path::new(&root)
+                .join("System32")
+                .join("WindowsPowerShell")
+                .join("v1.0")
+                .join("powershell.exe"),
+            Err(_) => std::path::PathBuf::from("powershell.exe"),
+        };
+        let mut cmd = tokio::process::Command::new(powershell);
+        cmd.arg("-NoProfile")
+            .arg("-NonInteractive")
+            .arg("-Command")
+            .arg(script)
+            .current_dir(dir)
+            .env("DREAM_LIFECYCLE_DIR", dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            // The sidecar's production console policy is applied to helpers
+            // too, so the CREATE_NO_WINDOW + job combination is exercised.
+            .creation_flags(sidecar_creation_flags());
+        configure_containment(&mut cmd);
+        cmd
+    }
+
+    #[cfg(windows)]
+    async fn spawn_contained_windows_helper(
+        dir: &Path,
+        script: &str,
+    ) -> (Child, SidecarContainment) {
+        let mut cmd = windows_helper_command(dir, script);
+        let child = cmd
+            .spawn()
+            .expect("spawn powershell helper (present on every Windows install)");
+        let mut containment =
+            SidecarContainment::establish(&child).expect("job object containment");
+        // Mirror production ordering exactly: the helper is created suspended
+        // and only starts running once it is a job member.
+        let pid = child.id().expect("helper pid");
+        assert!(
+            windows_process_has_no_descendant(pid),
+            "a suspended child cannot have created any descendant before assignment"
+        );
+        containment
+            .release_startup_suspension()
+            .expect("resume contained helper");
+        (child, containment)
+    }
+
+    /// True when no live process reports `pid` as its parent. Used to prove the
+    /// containment race is closed: before the resume, the suspended leader has
+    /// executed nothing and therefore owns no descendant.
+    #[cfg(windows)]
+    fn windows_process_has_no_descendant(pid: u32) -> bool {
+        use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+        use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+            CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32,
+            TH32CS_SNAPPROCESS,
+        };
+        // SAFETY: process-only snapshot; the `0` pid argument is ignored for
+        // `TH32CS_SNAPPROCESS`.
+        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+        if snapshot == INVALID_HANDLE_VALUE {
+            return true;
+        }
+        // SAFETY: plain-data struct; `dwSize` must be pre-filled.
+        let mut entry: PROCESSENTRY32 = unsafe { core::mem::zeroed() };
+        entry.dwSize = core::mem::size_of::<PROCESSENTRY32>() as u32;
+        // SAFETY: valid snapshot handle and live out-param.
+        let mut more = unsafe { Process32First(snapshot, &mut entry) };
+        let mut found = false;
+        while more != 0 {
+            if entry.th32ParentProcessID == pid {
+                found = true;
+                break;
+            }
+            // SAFETY: same contract as `Process32First`.
+            more = unsafe { Process32Next(snapshot, &mut entry) };
+        }
+        // SAFETY: closing the snapshot handle opened above.
+        unsafe { CloseHandle(snapshot) };
+        !found
+    }
+
+    /// `OpenProcess` + `GetExitCodeProcess` liveness probe on a pid *this test
+    /// created*: cannot open ⇒ fully gone; openable with a real exit code ⇒
+    /// exited (possibly still a handle-holding zombie) ⇒ treated as dead.
+    #[cfg(windows)]
+    fn windows_pid_dead(pid: u32) -> bool {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Threading::{
+            GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+        };
+        /// `StillActive` from winerror/winbase (no windows-sys 0.52 constant).
+        const STILL_ACTIVE: u32 = 259;
+        // SAFETY: `PROCESS_QUERY_LIMITED_INFORMATION` is read-only; the `0`
+        // inherit flag (false) prevents handle inheritance.
+        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if handle == 0 {
+            return true;
+        }
+        let mut code = 0u32;
+        // SAFETY: `handle` is the handle opened directly above (NULL handled
+        // already); `code` is a live out-param.
+        let ok = unsafe { GetExitCodeProcess(handle, &mut code) };
+        // SAFETY: closing the handle this probe opened, in every branch.
+        unsafe { CloseHandle(handle) };
+        ok == 0 || code != STILL_ACTIVE
+    }
+
+    #[cfg(windows)]
+    async fn wait_windows_pid_dead(pid: u32, deadline: Duration) -> bool {
+        let start = Instant::now();
+        while !windows_pid_dead(pid) {
+            if start.elapsed() > deadline {
+                return false;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        true
+    }
+
+    #[cfg(windows)]
+    fn windows_process_in_job(pid: u32, job: windows_sys::Win32::Foundation::HANDLE) -> bool {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::JobObjects::IsProcessInJob;
+        use windows_sys::Win32::System::Threading::{
+            OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+        };
+        // SAFETY: read-only query rights, no inheritance (`0` == false).
+        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if handle == 0 {
+            return false;
+        }
+        let mut member = 0i32;
+        // SAFETY: the just-opened process handle, the owned job handle and a
+        // valid out-param — exactly the contract `IsProcessInJob` documents.
+        let ok = unsafe { IsProcessInJob(handle, job, &mut member) };
+        // SAFETY: close the handle this function opened, regardless of result.
+        unsafe { CloseHandle(handle) };
+        ok != 0 && member != 0
+    }
+
+    /// The Job Object must contain the child and every process it starts, and
+    /// the teardown (TerminateJobObject + handle close, both kill-on-close)
+    /// must take the whole tree down. No `taskkill`, no name matching.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_job_object_contains_child_and_descendants() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        // The helper writes its own pid, starts a detached `ping.exe` that
+        // writes its own pid, then idles. `Start-Process` inherits the job, so
+        // the grandchild must end up inside the same job object.
+        let script = concat!(
+            r#"Set-Content -LiteralPath "$env:DREAM_LIFECYCLE_DIR\leader.pid" -Value $PID; "#,
+            r#"$d = Start-Process -FilePath "$env:SystemRoot\System32\PING.EXE" "#,
+            r#"-ArgumentList '-n','25','127.0.0.1' -PassThru -WindowStyle Hidden; "#,
+            r#"Set-Content -LiteralPath "$env:DREAM_LIFECYCLE_DIR\descendant.pid" -Value $d.Id; "#,
+            r#"Start-Sleep -Seconds 25"#,
+        );
+        let (mut child, mut containment) = spawn_contained_windows_helper(dir.path(), script).await;
+
+        let leader = read_pid_file(&dir.path().join("leader.pid"), HELPER_START_DEADLINE)
+            .await
+            .expect("leader writes its pid file");
+        let descendant = read_pid_file(&dir.path().join("descendant.pid"), HELPER_START_DEADLINE)
+            .await
+            .expect("leader reports the ping child via pid file");
+        assert_eq!(
+            child.id(),
+            Some(leader),
+            "pid file matches the contained child"
+        );
+        assert_ne!(leader, descendant, "the descendant is a separate process");
+        assert!(
+            !windows_pid_dead(descendant),
+            "descendant is alive pre-teardown"
+        );
+
+        let job = containment
+            .job
+            .as_raw()
+            .expect("job handle still open before teardown");
+        assert!(
+            windows_process_in_job(leader, job),
+            "the sidecar child must be a member of the containment job"
+        );
+        assert!(
+            windows_process_in_job(descendant, job),
+            "processes spawned by a job member join the same job"
+        );
+
+        terminate_sidecar(&mut child, &mut containment)
+            .await
+            .expect("job teardown completes without error");
+
+        assert!(
+            child.try_wait().expect("try_wait").is_some(),
+            "teardown reaps the leader"
+        );
+        assert!(
+            wait_windows_pid_dead(descendant, DEADLINE_AFTER_TEARDOWN).await,
+            "kill-on-close / TerminateJobObject must take the descendant down too"
+        );
+        assert!(
+            wait_windows_pid_dead(leader, DEADLINE_AFTER_TEARDOWN).await,
+            "the leader pid must stop answering the liveness probe"
+        );
+    }
+
+    /// Repeated teardown + teardown of an already-exited child: the job handle
+    /// close is take-based (idempotent) and `TerminateJobObject` on an empty
+    /// job is absorbed, so both paths must complete `Ok`.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_teardown_is_idempotent_and_safe_after_natural_exit() {
+        // (a) natural exit first.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let script = concat!(
+            r#"Set-Content -LiteralPath "$env:DREAM_LIFECYCLE_DIR\leader.pid" -Value $PID; "#,
+            "Start-Sleep -Seconds 1; exit 0",
+        );
+        let (mut child, mut containment) = spawn_contained_windows_helper(dir.path(), script).await;
+        child.wait().await.expect("helper exits on its own");
+        terminate_sidecar(&mut child, &mut containment)
+            .await
+            .expect("teardown of an exited, contained child is a clean no-op");
+
+        // (b) teardown twice on a live helper.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let script = concat!(
+            r#"Set-Content -LiteralPath "$env:DREAM_LIFECYCLE_DIR\leader.pid" -Value $PID; "#,
+            "Start-Sleep -Seconds 25",
+        );
+        let (mut child, mut containment) = spawn_contained_windows_helper(dir.path(), script).await;
+        let leader = read_pid_file(&dir.path().join("leader.pid"), HELPER_START_DEADLINE)
+            .await
+            .expect("helper reports its pid");
+        terminate_sidecar(&mut child, &mut containment)
+            .await
+            .expect("first teardown");
+        assert!(
+            wait_windows_pid_dead(leader, DEADLINE_AFTER_TEARDOWN).await,
+            "first teardown kills the leader"
+        );
+        terminate_sidecar(&mut child, &mut containment)
+            .await
+            .expect("second teardown is idempotent");
+    }
+
+    /// Setup-failure path (SEC-09): if anything between spawn and the resume
+    /// fails, `spawn` closes the containment and discards the child. Because
+    /// the child is still suspended it owns no descendant, so that teardown is
+    /// provably complete. Simulated here by never resuming: closing the job
+    /// must kill the suspended leader through KILL_ON_JOB_CLOSE.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_setup_failure_before_resume_leaves_nothing_running() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let script = "Start-Sleep -Seconds 25";
+        let mut cmd = windows_helper_command(dir.path(), script);
+        let mut child = cmd.spawn().expect("spawn powershell helper");
+        let leader = child.id().expect("helper pid");
+        let mut containment =
+            SidecarContainment::establish(&child).expect("job object containment");
+        // The pre-resume state the failure paths act on: contained, frozen,
+        // childless.
+        assert!(
+            windows_process_has_no_descendant(leader),
+            "a suspended leader cannot have spawned anything"
+        );
+        // Exactly what `spawn` does when the resume (or any later setup step)
+        // fails.
+        containment.close().expect("close job object");
+        discard_uncontained_child(&mut child);
+        assert!(
+            wait_windows_pid_dead(leader, DEADLINE_AFTER_TEARDOWN).await,
+            "the suspended leader is terminated by the setup-failure teardown"
+        );
+        assert!(
+            windows_process_has_no_descendant(leader),
+            "no descendant is left behind by the failure path"
+        );
+    }
+
+    /// A pid that cannot exist must produce a typed establishment error, and
+    /// must not be touched any other way (the helper never signals by guessed
+    /// identity). This is the failure mode `spawn` reacts to by discarding the
+    /// uncontained child rather than proceeding.
+    #[cfg(windows)]
+    #[test]
+    fn windows_containment_setup_reports_typed_error_for_dead_pid() {
+        // 0xFFFFFFFE sits above the system-reserved pid range (and 0xFFFFFFFF
+        // is the API's own INVALID_HANDLE_VALUE sentinel) — guaranteed miss.
+        let result = windows_job::contain_pid(0xFFFF_FFFE);
+        let err = result.expect_err("a nonexistent pid cannot be contained");
+        // An establishment error must never be a panic and must carry the OS
+        // cause for the log line; nothing was created-and-leaked (JobHandle's
+        // Drop closes any partial handle).
+        assert!(
+            err.raw_os_error().is_some(),
+            "the platform cause is preserved"
+        );
     }
 }
