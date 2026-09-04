@@ -339,25 +339,26 @@ See `tests/test_web_gateway_security.py` and the updated existing tests.
 ## 20. CI run URLs
 
 - PR: https://github.com/AliNaderiii/Dream/pull/125
-- Workflow run (Python, head `caf4ff5`): https://github.com/AliNaderiii/Dream/actions/runs/33907530689
-- Workflow run (desktop, head `caf4ff5`): https://github.com/AliNaderiii/Dream/actions/runs/33907530566
+- Workflow run (Python, head `d6ce6e9`): https://github.com/AliNaderiii/Dream/actions/runs/33908009287
+- Workflow run (desktop, head `d6ce6e9`): https://github.com/AliNaderiii/Dream/actions/runs/33908009330
 
-The Python matrix (3.10–3.13) completed successfully including `Commit rules`.
-The desktop run was retried after an initial `Format check` failure caused by a
-missing Prettier pass on the new gateway-settings component; that formatting
-fix is applied on the branch and does not change runtime behavior.
+Both workflows completed successfully:
+- Python matrix 3.10–3.13: `Test`, `Lint`, `Commit rules`, and `Suite size`
+  all passed.
+- Desktop CI: `Frontend checks` and the Rust matrix on macOS, Ubuntu, and
+  Windows all passed.
 
 ---
 
 ## 21. Verified CI head SHA
 
-`caf4ff566f887056ee8897818fa6c2c43392d075`
+`d6ce6e9ed03ecdb19dbc6cee22e5b42087a6d920`
 
-Verified via the GitHub API: this was the PR `head.sha` for the successful
-Python CI run in §20, with
+Verified via the GitHub API: this was the PR `head.sha` for the successful CI
+runs in §20, with
 base `main == 3bcded5a7a47b6976571cc9c7d334c096ee0e451`.
-A subsequent formatting-only commit may advance the branch head; the tree
-verified by the run above is unchanged apart from Prettier whitespace.
+The branch head may advance only through this audit-metadata update after
+those runs; the tree verified above is unchanged.
 
 ---
 
