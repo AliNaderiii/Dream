@@ -6,16 +6,7 @@
  * a URL, QR payload, or link.
  */
 
-import {
-  Copy,
-  Key,
-  Plus,
-  RefreshCw,
-  Shield,
-  Trash2,
-  Wifi,
-  X,
-} from 'lucide-react';
+import { Copy, Key, Plus, RefreshCw, Shield, Trash2, Wifi, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';

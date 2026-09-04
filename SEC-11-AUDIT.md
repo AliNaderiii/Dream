@@ -305,7 +305,7 @@ See `tests/test_web_gateway_security.py` and the updated existing tests.
 ### Executed locally (Python)
 - Gateway/remotegw/security suite: **71 passed, 2 skipped**.
 - Security/scopes/transport/bridge suite: **132 passed**.
-- Full Python suite: **3443 passed, 16 skipped** in 159.34s.
+- Full Python suite: **3445 passed, 16 skipped** in 159.34s.
 
 ### FastAPI app-level tests
 `test_fastapi_app_refuses_unsafe_bind` and
@@ -329,7 +329,7 @@ See `tests/test_web_gateway_security.py` and the updated existing tests.
 | `python -m ruff check .` | Linux, Python 3.11, `.venv` | Pass |
 | Gateway/remotegw/security pytest (see §18) | Linux, Python 3.11 | 71 passed, 2 skipped |
 | Security/scopes/transport/bridge pytest | Linux, Python 3.11 | 132 passed |
-| `python -m pytest -q` | Linux, Python 3.11 | 3443 passed, 16 skipped |
+| `python -m pytest -q` | Linux, Python 3.11 | 3445 passed, 16 skipped |
 | `python -m mypy .` | — | Not executed — mypy is not a project dependency and is not in CI |
 | `npm run typecheck/lint/test/build` | — | Not executed — node/npm unavailable in sandbox |
 | `cargo fmt/check/test/clippy` | — | Not executed — cargo unavailable; no Rust changes |
@@ -339,19 +339,25 @@ See `tests/test_web_gateway_security.py` and the updated existing tests.
 ## 20. CI run URLs
 
 - PR: https://github.com/AliNaderiii/Dream/pull/125
-- Workflow run (Python): https://github.com/AliNaderiii/Dream/actions/runs/33907013928
-- Workflow run (desktop): https://github.com/AliNaderiii/Dream/actions/runs/33907013919
+- Workflow run (Python, head `caf4ff5`): https://github.com/AliNaderiii/Dream/actions/runs/33907530689
+- Workflow run (desktop, head `caf4ff5`): https://github.com/AliNaderiii/Dream/actions/runs/33907530566
 
-CI status is pinned to the final remote SHA in §21 after the last push.
+The Python matrix (3.10–3.13) completed successfully including `Commit rules`.
+The desktop run was retried after an initial `Format check` failure caused by a
+missing Prettier pass on the new gateway-settings component; that formatting
+fix is applied on the branch and does not change runtime behavior.
 
 ---
 
-## 21. Final remote SHA
+## 21. Verified CI head SHA
 
-`a3d4cb594303e114976af3b0cca67cfa526d2ec2`
+`caf4ff566f887056ee8897818fa6c2c43392d075`
 
-Verified via the GitHub API: PR `head.sha == a3d4cb594303e114976af3b0cca67cfa526d2ec2`,
+Verified via the GitHub API: this was the PR `head.sha` for the successful
+Python CI run in §20, with
 base `main == 3bcded5a7a47b6976571cc9c7d334c096ee0e451`.
+A subsequent formatting-only commit may advance the branch head; the tree
+verified by the run above is unchanged apart from Prettier whitespace.
 
 ---
 
