@@ -1076,7 +1076,7 @@ export class EchoBridgeTransport implements BridgeTransport {
 
       // P-08: Web gateway echo stubs.
       case 'gateway.get_tokens':
-        return { tokens: {} };
+        return { tokens: [] };
       case 'gateway.create_token':
         return {
           token: `drm_echo_${Date.now()}`,

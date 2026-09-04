@@ -1,14 +1,15 @@
 /**
- * Web Gateway settings UI — token management, connection list, QR code.
+ * Web Gateway settings UI — token management, effective bind state.
+ *
+ * Raw tokens are shown only once (after create/rotate). Stored token rows are
+ * always masked and identified by a non-secret id. No token is ever placed in
+ * a URL, QR payload, or link.
  */
 
 import {
   Copy,
-  Eye,
-  EyeOff,
   Key,
   Plus,
-  QrCode,
   RefreshCw,
   Shield,
   Trash2,
@@ -19,21 +20,29 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useBridge } from '@/lib/bridge/hooks';
-import type { GatewayConnection, GatewayStatus, GatewayTokenFull } from '@/lib/bridge/types';
+import type {
+  GatewayBind,
+  GatewayConnection,
+  GatewayStatus,
+  GatewayTokenInfo,
+} from '@/lib/bridge/types';
 import { cn } from '@/utils/cn';
+
+interface IssuedToken {
+  token: string;
+  scope: string;
+  label: string;
+}
 
 export function GatewaySettings() {
   const { call } = useBridge();
   const [status, setStatus] = useState<GatewayStatus | null>(null);
-  const [tokens, setTokens] = useState<Record<string, GatewayTokenFull>>({});
+  const [tokens, setTokens] = useState<GatewayTokenInfo[]>([]);
   const [connections] = useState<GatewayConnection[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [gatewayEnabled, setGatewayEnabled] = useState(true);
-  const [showTokenValues, setShowTokenValues] = useState(false);
-  const [newTokenResult, setNewTokenResult] = useState<{ token: string; scope: string } | null>(
-    null,
-  );
+  const [newTokenResult, setNewTokenResult] = useState<IssuedToken | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -42,7 +51,7 @@ export function GatewaySettings() {
     try {
       const [statusResult, tokensResult] = await Promise.all([
         call<GatewayStatus>('gateway.status'),
-        call<{ tokens: Record<string, GatewayTokenFull> }>('gateway.get_tokens'),
+        call<{ tokens: GatewayTokenInfo[] }>('gateway.get_tokens'),
       ]);
       setStatus(statusResult);
       setTokens(tokensResult.tokens);
@@ -62,7 +71,7 @@ export function GatewaySettings() {
       try {
         const [statusResult, tokensResult] = await Promise.all([
           call<GatewayStatus>('gateway.status'),
-          call<{ tokens: Record<string, GatewayTokenFull> }>('gateway.get_tokens'),
+          call<{ tokens: GatewayTokenInfo[] }>('gateway.get_tokens'),
         ]);
         if (!ignore) {
           setStatus(statusResult);
@@ -83,7 +92,7 @@ export function GatewaySettings() {
   const handleCreateToken = async (scope: 'read' | 'write') => {
     setError(null);
     try {
-      const result = await call<{ token: string; scope: string }>('gateway.create_token', {
+      const result = await call<IssuedToken>('gateway.create_token', {
         scope,
         label: scope === 'write' ? 'Full Access' : 'Read Only',
       });
@@ -94,23 +103,23 @@ export function GatewaySettings() {
     }
   };
 
-  const handleRotateToken = async (tokenValue: string) => {
+  const handleRotateToken = async (tokenId: string) => {
     setError(null);
     try {
       const result = await call<{ token: string }>('gateway.rotate_token', {
-        token: tokenValue,
+        token: tokenId,
       });
-      setNewTokenResult({ token: result.token, scope: 'write' });
+      setNewTokenResult({ token: result.token, scope: 'write', label: 'Rotated' });
       void refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to rotate token');
     }
   };
 
-  const handleRevokeToken = async (tokenValue: string) => {
+  const handleRevokeToken = async (tokenId: string) => {
     setError(null);
     try {
-      await call('gateway.revoke_token', { token: tokenValue });
+      await call('gateway.revoke_token', { token: tokenId });
       setNewTokenResult(null);
       void refresh();
     } catch (err: unknown) {
@@ -128,15 +137,8 @@ export function GatewaySettings() {
     }
   };
 
-  // Build a connection URL for the QR code.
-  const connectionUrl = (() => {
-    if (!status?.has_setup_token) return null;
-    const tokenEntries = Object.entries(tokens);
-    if (tokenEntries.length === 0) return null;
-    const [firstToken] = tokenEntries[0];
-    // Use local IP: this would need to be resolved dynamically.
-    return `http://${firstToken}@dream.local:9090`;
-  })();
+  const bind: GatewayBind | undefined = status?.bind;
+  const connectUrl = bind ? `http://${bind.host}:${bind.port}/` : null;
 
   return (
     <section>
@@ -159,7 +161,6 @@ export function GatewaySettings() {
         </Button>
       </div>
 
-      {/* Gateway status */}
       {gatewayEnabled && (
         <>
           <div className="border-b border-border-default py-3">
@@ -168,7 +169,7 @@ export function GatewaySettings() {
                 <p className="text-body font-medium">Status</p>
                 <p className="text-caption text-fg-secondary">
                   {status?.has_setup_token
-                    ? 'Gateway ready — connect from your LAN'
+                    ? 'Gateway ready — connect using a bearer token'
                     : 'No tokens configured — create one to enable access'}
                 </p>
               </div>
@@ -187,6 +188,31 @@ export function GatewaySettings() {
             {error && <p className="mt-1 text-caption text-danger-fg">{error}</p>}
           </div>
 
+          <div className="border-b border-border-default py-3">
+            <p className="text-body font-medium mb-2">
+              <Wifi className="mr-1 inline size-3" />
+              Exposure
+            </p>
+            {bind ? (
+              <div className="space-y-1">
+                <p className="font-mono text-caption">{connectUrl}</p>
+                <p className="text-caption text-fg-muted">
+                  {bind.leaves_machine
+                    ? 'This gateway is reachable from your LAN. Only the owner should have a token.'
+                    : 'Loopback only: this gateway is reachable from this machine only.'}
+                </p>
+                {bind.leaves_machine && (
+                  <p className="text-caption text-fg-muted">
+                    The desktop is not served over trusted public TLS by default. Use it only on a
+                    network you trust.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-caption text-fg-muted">Gateway status unavailable.</p>
+            )}
+          </div>
+
           {/* Token management */}
           <div className="border-b border-border-default py-3">
             <p className="text-body font-medium mb-2">
@@ -194,12 +220,12 @@ export function GatewaySettings() {
               Authentication Tokens
             </p>
 
-            {/* Existing tokens */}
-            {Object.entries(tokens).length > 0 && (
+            {/* Existing tokens (masked metadata only) */}
+            {tokens.length > 0 && (
               <div className="mb-3 space-y-2">
-                {Object.entries(tokens).map(([tokenValue, info]) => (
+                {tokens.map((row) => (
                   <div
-                    key={tokenValue}
+                    key={row.id}
                     className="flex items-center gap-2 rounded-xs border border-border-default bg-surface-raised p-2"
                   >
                     <div className="min-w-0 flex-1">
@@ -207,47 +233,29 @@ export function GatewaySettings() {
                         <span
                           className={cn(
                             'inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-caption font-medium',
-                            info.scope === 'write'
+                            row.scope === 'write'
                               ? 'bg-success-fg/10 text-success-fg'
                               : 'bg-fg-muted/10 text-fg-muted',
                           )}
                         >
-                          {info.scope === 'write' ? 'Full' : 'Read'}
+                          {row.scope === 'write' ? 'Full' : 'Read'}
                         </span>
-                        {showTokenValues ? (
-                          <code className="ltr-island truncate text-caption text-fg-primary">
-                            {tokenValue}
-                          </code>
-                        ) : (
-                          <code className="ltr-island text-caption text-fg-muted">
-                            {tokenValue.slice(0, 16)}•••••••••
-                          </code>
-                        )}
+                        <code className="ltr-island truncate text-caption text-fg-muted">
+                          {row.prefix}
+                        </code>
                       </div>
                       <p className="text-caption text-fg-muted">
-                        {info?.label} &middot;{' '}
-                        {info.last_used_at
-                          ? `Last used ${new Date(info.last_used_at * 1000).toLocaleString()}`
+                        {row.label} &middot;{' '}
+                        {row.last_used_at
+                          ? `Last used ${new Date(row.last_used_at * 1000).toLocaleString()}`
                           : 'Never used'}
                       </p>
                     </div>
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
-                        onClick={() => void copyToClipboard(tokenValue)}
-                        className="rounded-xs p-1 text-fg-muted hover:text-fg-primary"
-                        title="Copy token"
-                      >
-                        {copiedToken === tokenValue.slice(0, 12) ? (
-                          <span className="text-caption text-success-fg">Copied!</span>
-                        ) : (
-                          <Copy className="size-3" />
-                        )}
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => {
-                          void handleRotateToken(tokenValue);
+                          void handleRotateToken(row.id);
                         }}
                         className="rounded-xs p-1 text-fg-muted hover:text-fg-primary"
                         title="Rotate (regenerate) token"
@@ -257,7 +265,7 @@ export function GatewaySettings() {
                       <button
                         type="button"
                         onClick={() => {
-                          void handleRevokeToken(tokenValue);
+                          void handleRevokeToken(row.id);
                         }}
                         className="rounded-xs p-1 text-danger-fg hover:text-danger-fg"
                         title="Revoke token"
@@ -268,18 +276,6 @@ export function GatewaySettings() {
                   </div>
                 ))}
               </div>
-            )}
-
-            {/* Show/hide tokens toggle */}
-            {Object.keys(tokens).length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowTokenValues((v) => !v)}
-                className="mb-2 flex items-center gap-1 text-caption text-fg-muted hover:text-fg-primary"
-              >
-                {showTokenValues ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
-                {showTokenValues ? 'Hide tokens' : 'Show tokens'}
-              </button>
             )}
 
             {/* Create new token */}
@@ -305,7 +301,7 @@ export function GatewaySettings() {
               </Button>
             </div>
 
-            {/* Newly created token display */}
+            {/* Newly created/rotated token — shown exactly once */}
             {newTokenResult && (
               <div className="mt-3 rounded-xs border border-success-fg bg-success-fg/5 p-3">
                 <p className="flex items-center gap-1 text-caption font-medium text-success-fg">
@@ -321,7 +317,11 @@ export function GatewaySettings() {
                     onClick={() => void copyToClipboard(newTokenResult.token)}
                     className="rounded-xs p-1 text-fg-muted hover:text-fg-primary"
                   >
-                    <Copy className="size-3" />
+                    {copiedToken === newTokenResult.token.slice(0, 12) ? (
+                      <span className="text-caption text-success-fg">Copied!</span>
+                    ) : (
+                      <Copy className="size-3" />
+                    )}
                   </button>
                 </div>
                 <p className="mt-1 text-caption text-fg-muted">
@@ -331,7 +331,7 @@ export function GatewaySettings() {
             )}
           </div>
 
-          {/* Active connections */}
+          {/* Active connections (tracker only) */}
           <div className="border-b border-border-default py-3">
             <p className="text-body font-medium mb-2">
               <Wifi className="mr-1 inline size-3" />
@@ -365,35 +365,6 @@ export function GatewaySettings() {
               </div>
             )}
           </div>
-
-          {/* QR Code */}
-          {connectionUrl && (
-            <div className="py-3">
-              <p className="text-body font-medium mb-2">
-                <QrCode className="mr-1 inline size-3" />
-                Quick Connect
-              </p>
-              <p className="text-caption text-fg-secondary mb-2">
-                Scan this QR code with your phone camera to connect automatically
-              </p>
-              <div className="inline-flex flex-col items-center gap-2 rounded-xs border border-border-default bg-surface-raised p-4">
-                <div className="flex h-32 w-32 items-center justify-center bg-white text-black">
-                  <QrCode className="size-24 text-black" />
-                </div>
-                <p className="text-caption text-fg-muted">
-                  Or visit{' '}
-                  <a
-                    href={connectionUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-accent-fg underline"
-                  >
-                    {connectionUrl}
-                  </a>
-                </p>
-              </div>
-            </div>
-          )}
         </>
       )}
     </section>
