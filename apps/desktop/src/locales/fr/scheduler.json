@@ -4,10 +4,14 @@
   "noTasks": "Aucune tâche planifiée",
   "noTasksDesc": "Planifiez une tâche pour l’exécuter plus tard ou à intervalle.",
   "newSchedule": "Nouvelle planification",
+  "editSchedule": "Modifier la planification",
   "create": "Créer la planification",
+  "save": "Enregistrer les modifications",
   "cancel": "Annuler",
   "nameLabel": "Nom",
   "namePlaceholder": "p. ex. Brief du matin",
+  "descriptionLabel": "Description",
+  "descriptionPlaceholder": "Description facultative pour cette planification",
   "promptLabel": "Prompt",
   "promptPlaceholder": "Que doit faire Dream au déclenchement ?",
   "rhythmLabel": "Quand",
@@ -28,6 +32,7 @@
   "stateOff": "En pause",
   "runNow": "Exécuter maintenant",
   "history": "Historique",
+  "edit": "Modifier",
   "delete": "Supprimer",
   "confirmDeleteTitle": "Supprimer cette planification ?",
   "confirmDeleteDesc": "La planification et son historique d’exécutions sont supprimés définitivement.",
@@ -51,5 +56,6 @@
   "loadError": "Impossible de charger les planifications.",
   "loading": "Loading schedules…",
   "retry": "Retry",
-  "created": "Planification créée."
+  "created": "Planification créée.",
+  "updated": "Planification mise à jour."
 }

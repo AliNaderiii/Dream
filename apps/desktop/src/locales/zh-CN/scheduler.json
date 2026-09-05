@@ -4,10 +4,14 @@
   "noTasks": "没有已调度的任务",
   "noTasksDesc": "调度一个任务以便稍后或按间隔运行。",
   "newSchedule": "新建调度",
+  "editSchedule": "编辑调度",
   "create": "创建调度",
+  "save": "保存更改",
   "cancel": "取消",
   "nameLabel": "名称",
   "namePlaceholder": "例如：晨间简报",
+  "descriptionLabel": "描述",
+  "descriptionPlaceholder": "此调度的可选描述",
   "promptLabel": "提示词",
   "promptPlaceholder": "触发时 Dream 应该做什么？",
   "rhythmLabel": "时间",
@@ -28,6 +32,7 @@
   "stateOff": "已暂停",
   "runNow": "立即运行",
   "history": "历史",
+  "edit": "编辑",
   "delete": "删除",
   "confirmDeleteTitle": "删除此调度？",
   "confirmDeleteDesc": "调度及其运行历史将被永久移除。",
@@ -51,5 +56,6 @@
   "loadError": "无法加载调度。",
   "loading": "Loading schedules…",
   "retry": "Retry",
-  "created": "调度已创建。"
+  "created": "调度已创建。",
+  "updated": "调度已更新。"
 }

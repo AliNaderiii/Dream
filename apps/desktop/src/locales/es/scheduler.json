@@ -4,10 +4,14 @@
   "noTasks": "No hay tareas programadas",
   "noTasksDesc": "Programa una tarea para ejecutarla más tarde o en un intervalo repetido.",
   "newSchedule": "Nueva programación",
+  "editSchedule": "Editar programación",
   "create": "Crear programación",
+  "save": "Guardar cambios",
   "cancel": "Cancelar",
   "nameLabel": "Nombre",
   "namePlaceholder": "p. ej. Resumen matinal",
+  "descriptionLabel": "Descripción",
+  "descriptionPlaceholder": "Descripción opcional para esta programación",
   "promptLabel": "Indicación",
   "promptPlaceholder": "¿Qué debe hacer Dream cuando se ejecute?",
   "rhythmLabel": "Cuándo",
@@ -28,6 +32,7 @@
   "stateOff": "En pausa",
   "runNow": "Ejecutar ahora",
   "history": "Historial",
+  "edit": "Editar",
   "delete": "Eliminar",
   "confirmDeleteTitle": "¿Eliminar esta programación?",
   "confirmDeleteDesc": "La programación y su historial de ejecuciones se eliminan de forma permanente.",
@@ -51,5 +56,6 @@
   "loadError": "No se pudieron cargar las programaciones.",
   "loading": "Loading schedules…",
   "retry": "Retry",
-  "created": "Programación creada."
+  "created": "Programación creada.",
+  "updated": "Programación actualizada."
 }

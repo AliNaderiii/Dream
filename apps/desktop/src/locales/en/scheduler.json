@@ -4,10 +4,14 @@
   "noTasks": "No scheduled tasks",
   "noTasksDesc": "Schedule a task to run it later or on a repeating interval.",
   "newSchedule": "New schedule",
+  "editSchedule": "Edit schedule",
   "create": "Create schedule",
+  "save": "Save changes",
   "cancel": "Cancel",
   "nameLabel": "Name",
   "namePlaceholder": "e.g. Morning brief",
+  "descriptionLabel": "Description",
+  "descriptionPlaceholder": "Optional description for this schedule",
   "promptLabel": "Prompt",
   "promptPlaceholder": "What should Dream do when this fires?",
   "rhythmLabel": "When",
@@ -28,6 +32,7 @@
   "stateOff": "Paused",
   "runNow": "Run now",
   "history": "History",
+  "edit": "Edit",
   "delete": "Delete",
   "confirmDeleteTitle": "Delete this schedule?",
   "confirmDeleteDesc": "The schedule and its run history are removed permanently.",
@@ -51,5 +56,6 @@
   "loadError": "Could not load schedules.",
   "loading": "Loading schedules…",
   "retry": "Retry",
-  "created": "Schedule created."
+  "created": "Schedule created.",
+  "updated": "Schedule updated."
 }

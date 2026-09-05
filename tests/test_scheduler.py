@@ -21,6 +21,7 @@ from dream.nl_schedule import NL_EXAMPLES, ScheduleParseError, nl_to_cron
 from dream.scheduler import (
     Schedule,
     SchedulerDaemon,
+    claim_due_schedule,
     create_schedule,
     delete_schedule,
     due_schedules,
@@ -32,6 +33,7 @@ from dream.scheduler import (
     preview_schedule,
     record_run_finished,
     record_run_started,
+    recover_interrupted_runs,
     run_to_dict,
     schedule_to_dict,
     toggle_schedule,
@@ -835,3 +837,77 @@ def test_preview_accepts_explicit_cron() -> None:
 
 def test_preview_of_empty_input_is_invalid_not_an_error() -> None:
     assert preview_schedule(natural_language="")["valid"] is False
+
+
+def test_claim_due_schedule_prevents_duplicate_workers(store: MemoryStore) -> None:
+    schedule = create_schedule(
+        store,
+        name="Concurrent test",
+        prompt="run once",
+        cron_expression="0 * * * *",
+    )
+    # Claim once
+    claimed_1 = claim_due_schedule(store, schedule, now=1000.0)
+    assert claimed_1 is True
+
+    # Second worker attempting to claim with the stale schedule snapshot is rejected
+    claimed_2 = claim_due_schedule(store, schedule, now=1000.0)
+    assert claimed_2 is False
+
+
+def test_recover_interrupted_runs_on_restart(store: MemoryStore) -> None:
+    schedule = create_schedule(
+        store,
+        name="Crash recovery test",
+        prompt="do work",
+        cron_expression="0 * * * *",
+    )
+    run_id = record_run_started(store, schedule.id, now=100.0)
+    assert run_id > 0
+    runs_before = list_runs(store, schedule_id=schedule.id)
+    assert len(runs_before) == 1
+    assert runs_before[0].status == "running"
+
+    recovered_count = recover_interrupted_runs(store, now=200.0)
+    assert recovered_count == 1
+
+    runs_after = list_runs(store, schedule_id=schedule.id)
+    assert len(runs_after) == 1
+    assert runs_after[0].status == "error"
+    assert "interrupted" in (runs_after[0].result_summary or "")
+    assert runs_after[0].completed_at == 200.0
+    assert runs_after[0].duration == 100.0
+
+
+def test_update_schedule_description_and_fields(store: MemoryStore) -> None:
+    schedule = create_schedule(
+        store,
+        name="Original name",
+        description="Original description",
+        prompt="original prompt",
+        cron_expression="0 * * * *",
+    )
+    assert schedule.description == "Original description"
+
+    from dream.scheduler import update_schedule
+    updated = update_schedule(
+        store,
+        schedule.id,
+        name="Updated name",
+        description="Updated description",
+        prompt="updated prompt",
+        require_approval=True,
+    )
+    assert updated.name == "Updated name"
+    assert updated.description == "Updated description"
+    assert updated.prompt == "updated prompt"
+    assert updated.require_approval is True
+
+    fetched = get_schedule(store, schedule.id)
+    assert fetched is not None
+    assert fetched.name == "Updated name"
+    assert fetched.description == "Updated description"
+    assert fetched.prompt == "updated prompt"
+    assert fetched.require_approval is True
+
+

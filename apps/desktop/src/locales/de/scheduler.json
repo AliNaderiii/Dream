@@ -4,10 +4,14 @@
   "noTasks": "Keine geplanten Aufgaben",
   "noTasksDesc": "Plane eine Aufgabe, um sie später oder in einem Intervall auszuführen.",
   "newSchedule": "Neuer Zeitplan",
+  "editSchedule": "Zeitplan bearbeiten",
   "create": "Zeitplan erstellen",
+  "save": "Änderungen speichern",
   "cancel": "Abbrechen",
   "nameLabel": "Name",
   "namePlaceholder": "z. B. Morgen-Briefing",
+  "descriptionLabel": "Beschreibung",
+  "descriptionPlaceholder": "Optionale Beschreibung für diesen Zeitplan",
   "promptLabel": "Prompt",
   "promptPlaceholder": "Was soll Dream beim Ausführen tun?",
   "rhythmLabel": "Wann",
@@ -28,6 +32,7 @@
   "stateOff": "Pausiert",
   "runNow": "Jetzt ausführen",
   "history": "Verlauf",
+  "edit": "Bearbeiten",
   "delete": "Löschen",
   "confirmDeleteTitle": "Diesen Zeitplan löschen?",
   "confirmDeleteDesc": "Der Zeitplan und sein Laufverlauf werden dauerhaft entfernt.",
@@ -51,5 +56,6 @@
   "loadError": "Zeitpläne konnten nicht geladen werden.",
   "loading": "Loading schedules…",
   "retry": "Retry",
-  "created": "Zeitplan erstellt."
+  "created": "Zeitplan erstellt.",
+  "updated": "Zeitplan aktualisiert."
 }

@@ -4,10 +4,14 @@
   "noTasks": "スケジュールされたタスクはありません",
   "noTasksDesc": "後で、または繰り返し間隔で実行するタスクをスケジュールします。",
   "newSchedule": "新規スケジュール",
+  "editSchedule": "スケジュールを編集",
   "create": "スケジュールを作成",
+  "save": "変更を保存",
   "cancel": "キャンセル",
   "nameLabel": "名前",
   "namePlaceholder": "例：朝のブリーフィング",
+  "descriptionLabel": "説明",
+  "descriptionPlaceholder": "このスケジュールの任意の説明",
   "promptLabel": "プロンプト",
   "promptPlaceholder": "実行時に Dream が何をすべきですか？",
   "rhythmLabel": "日時",
@@ -28,6 +32,7 @@
   "stateOff": "一時停止中",
   "runNow": "今すぐ実行",
   "history": "履歴",
+  "edit": "編集",
   "delete": "削除",
   "confirmDeleteTitle": "このスケジュールを削除しますか？",
   "confirmDeleteDesc": "スケジュールとその実行履歴が完全に削除されます。",
@@ -51,5 +56,6 @@
   "loadError": "スケジュールを読み込めませんでした。",
   "loading": "Loading schedules…",
   "retry": "Retry",
-  "created": "スケジュールを作成しました。"
+  "created": "スケジュールを作成しました。",
+  "updated": "スケジュールを更新しました。"
 }

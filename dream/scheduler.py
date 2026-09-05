@@ -36,16 +36,21 @@ __all__ = [
     "Schedule",
     "ScheduleRun",
     "SchedulerDaemon",
+    "claim_due_schedule",
     "create_schedule",
     "delete_schedule",
     "ensure_schedule_tables",
     "get_schedule",
     "list_runs",
     "list_schedules",
+    "mark_executed",
+    "preview_schedule",
     "record_run_finished",
     "record_run_started",
+    "recover_interrupted_runs",
     "schedule_to_dict",
     "toggle_schedule",
+    "upcoming_runs",
     "update_schedule",
 ]
 
@@ -486,7 +491,7 @@ def record_run_started(store: MemoryStore, schedule_id: str, *, now: float | Non
             (schedule_id, started),
         )
         store.conn.commit()
-        return int(cursor.lastrowid)
+        return int(cursor.lastrowid or 0)
 
 
 def record_run_finished(
@@ -513,6 +518,21 @@ def record_run_finished(
         store.conn.commit()
 
 
+def recover_interrupted_runs(store: MemoryStore, *, now: float | None = None) -> int:
+    """Settle lingering 'running' rows left from an interrupted process on restart."""
+    ensure_schedule_tables(store)
+    moment = time.time() if now is None else now
+    with store._lock:  # noqa: SLF001
+        cursor = store.conn.execute(
+            "UPDATE schedule_runs SET completed_at = ?, status = 'error', "
+            "result_summary = 'execution interrupted by system restart' "
+            "WHERE status = 'running'",
+            (moment,),
+        )
+        store.conn.commit()
+        return int(cursor.rowcount)
+
+
 def list_runs(
     store: MemoryStore, *, schedule_id: str | None = None, limit: int = 50
 ) -> list[ScheduleRun]:
@@ -531,6 +551,51 @@ def list_runs(
     return [_row_to_run(row) for row in rows]
 
 
+def claim_due_schedule(
+    store: MemoryStore, schedule: Schedule, *, now: float | None = None
+) -> bool:
+    """Atomically claim a due schedule by advancing its next_run.
+
+    Returns True if this worker claimed the schedule; False if another
+    worker or concurrent tick already claimed or updated it.
+    """
+    ensure_schedule_tables(store)
+    moment = time.time() if now is None else now
+    run_count = schedule.run_count + 1
+    exhausted = schedule.max_runs is not None and run_count >= schedule.max_runs
+    next_run = None if exhausted else _compute_next_run(schedule.cron_expression, moment)
+    with store._lock:  # noqa: SLF001
+        if schedule.next_run is not None:
+            cursor = store.conn.execute(
+                "UPDATE schedules SET last_run = ?, run_count = ?, next_run = ?, enabled = ? "
+                "WHERE id = ? AND user_id = ? AND enabled = 1 AND next_run = ?",
+                (
+                    moment,
+                    run_count,
+                    next_run,
+                    int(schedule.enabled and not exhausted),
+                    schedule.id,
+                    store.user_id,
+                    schedule.next_run,
+                ),
+            )
+        else:
+            cursor = store.conn.execute(
+                "UPDATE schedules SET last_run = ?, run_count = ?, next_run = ?, enabled = ? "
+                "WHERE id = ? AND user_id = ? AND enabled = 1 AND next_run IS NULL",
+                (
+                    moment,
+                    run_count,
+                    next_run,
+                    int(schedule.enabled and not exhausted),
+                    schedule.id,
+                    store.user_id,
+                ),
+            )
+        store.conn.commit()
+        return bool(cursor.rowcount > 0)
+
+
 def mark_executed(
     store: MemoryStore, schedule: Schedule, *, now: float | None = None
 ) -> Schedule | None:
@@ -540,6 +605,7 @@ def mark_executed(
     rather than being deleted: the user asked for N runs, and the history of
     those runs stays reachable from a row they can still see.
     """
+    ensure_schedule_tables(store)
     moment = time.time() if now is None else now
     run_count = schedule.run_count + 1
     exhausted = schedule.max_runs is not None and run_count >= schedule.max_runs
@@ -597,6 +663,7 @@ class SchedulerDaemon:
         if self.running:
             return
         ensure_schedule_tables(self.store)
+        recover_interrupted_runs(self.store, now=self.clock())
         self.running = True
         self._stop = asyncio.Event()
         self._task = asyncio.get_event_loop().create_task(self._loop(), name="scheduler")
@@ -652,9 +719,10 @@ class SchedulerDaemon:
             return []
         launched: list[str] = []
         for schedule in due:
-            # Advance the schedule before running it, so a long execution
-            # cannot be picked up twice by the next poll.
-            mark_executed(self.store, schedule, now=self.clock())
+            # Advance the schedule atomically before running it, so a long execution
+            # or concurrent worker cannot pick it up twice.
+            if not claim_due_schedule(self.store, schedule, now=self.clock()):
+                continue
             task = asyncio.get_event_loop().create_task(
                 self._execute(schedule), name=f"schedule:{schedule.id}"
             )

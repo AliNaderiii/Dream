@@ -14,6 +14,7 @@ import {
   ChevronDown,
   ChevronUp,
   History,
+  Pencil,
   Play,
   Plus,
   ShieldAlert,
@@ -49,6 +50,7 @@ import {
   previewSchedule,
   runScheduleNow,
   toggleSchedule,
+  updateSchedule,
 } from '@/lib/bridge/schedule';
 import type {
   BridgeApproval,
@@ -73,6 +75,7 @@ export function SchedulerRoute() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<BridgeSchedule | null>(null);
   const [deleting, setDeleting] = useState<BridgeSchedule | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [runs, setRuns] = useState<BridgeScheduleRun[]>([]);
@@ -121,6 +124,7 @@ export function SchedulerRoute() {
   }, [approvals.length, refresh]);
 
   const onToggle = async (schedule: BridgeSchedule) => {
+    if (busyId === schedule.id) return;
     setBusyId(schedule.id);
     try {
       await toggleSchedule(client, schedule.id, !schedule.enabled);
@@ -133,6 +137,7 @@ export function SchedulerRoute() {
   };
 
   const onRunNow = async (schedule: BridgeSchedule) => {
+    if (busyId === schedule.id) return;
     setBusyId(schedule.id);
     try {
       if (schedule.require_approval) {
@@ -318,6 +323,14 @@ export function SchedulerRoute() {
                 <Button
                   variant="ghost"
                   size="icon-sm"
+                  aria-label={`${t('edit')}: ${schedule.name}`}
+                  onClick={() => setEditing(schedule)}
+                >
+                  <Pencil className="size-4" aria-hidden />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
                   aria-label={`${t('delete')}: ${schedule.name}`}
                   onClick={() => setDeleting(schedule)}
                 >
@@ -325,6 +338,11 @@ export function SchedulerRoute() {
                 </Button>
               </div>
 
+              {schedule.description && (
+                <p className="mt-1 text-caption text-fg-secondary" dir="auto">
+                  {schedule.description}
+                </p>
+              )}
               <p className="mt-1 text-body text-fg-secondary" dir="auto">
                 {schedule.human}
               </p>
@@ -380,6 +398,16 @@ export function SchedulerRoute() {
         onCreated={() => void refresh()}
       />
 
+      <EditScheduleDialog
+        key={editing ? `edit-${editing.id}` : 'edit-closed'}
+        schedule={editing}
+        open={editing !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null);
+        }}
+        onUpdated={() => void refresh()}
+      />
+
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => {
@@ -408,6 +436,7 @@ function CreateScheduleDialog({
   const { client } = useBridge();
 
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [prompt, setPrompt] = useState('');
   const [rhythm, setRhythm] = useState('');
   const [requireApproval, setRequireApproval] = useState(false);
@@ -439,6 +468,7 @@ function CreateScheduleDialog({
     try {
       await createSchedule(client, {
         name: name.trim(),
+        description: description.trim(),
         prompt: prompt.trim(),
         natural_language: rhythm.trim(),
         require_approval: requireApproval,
@@ -473,6 +503,15 @@ function CreateScheduleDialog({
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder={t('namePlaceholder')}
+              className="h-9 rounded-md border border-border-default bg-canvas px-3 text-body outline-none focus:border-accent"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-caption font-medium">
+            {t('descriptionLabel')}
+            <input
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder={t('descriptionPlaceholder')}
               className="h-9 rounded-md border border-border-default bg-canvas px-3 text-body outline-none focus:border-accent"
             />
           </label>
@@ -553,6 +592,196 @@ function CreateScheduleDialog({
           </Button>
           <Button variant="primary" disabled={!valid || busy} onClick={() => void submit()}>
             {t('create')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Edit form with pre-populated values and live prose→cron preview. */
+function EditScheduleDialog({
+  schedule,
+  open,
+  onOpenChange,
+  onUpdated,
+}: {
+  schedule: BridgeSchedule | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onUpdated: () => void;
+}) {
+  const { t } = useTranslation('scheduler');
+  const { client } = useBridge();
+
+  const [name, setName] = useState(schedule?.name ?? '');
+  const [description, setDescription] = useState(schedule?.description ?? '');
+  const [prompt, setPrompt] = useState(schedule?.prompt ?? '');
+  const [rhythm, setRhythm] = useState(
+    schedule?.natural_language || schedule?.cron_expression || '',
+  );
+  const [requireApproval, setRequireApproval] = useState(schedule?.require_approval ?? false);
+  const [preview, setPreview] = useState<SchedulePreview | null>(
+    schedule
+      ? {
+          valid: true,
+          cron_expression: schedule.cron_expression,
+          human: schedule.human,
+          next_run: schedule.next_run,
+          natural_language: schedule.natural_language,
+          error: null,
+        }
+      : null,
+  );
+  const [busy, setBusy] = useState(false);
+
+  const debouncedRhythm = useDebouncedValue(rhythm, 200);
+
+  useEffect(() => {
+    if (!open || !schedule) return;
+    const text = debouncedRhythm.trim();
+    if (!text) return;
+    const controller = new AbortController();
+    void previewSchedule(client, { natural_language: text }, { signal: controller.signal })
+      .then((result) => setPreview(result))
+      .catch(() => {
+        if (!controller.signal.aborted) setPreview(null);
+      });
+    return () => controller.abort();
+  }, [client, debouncedRhythm, open, schedule]);
+
+  const valid = Boolean(preview?.valid) && Boolean(name.trim()) && Boolean(prompt.trim());
+
+  const submit = async () => {
+    if (!schedule) return;
+    setBusy(true);
+    try {
+      await updateSchedule(client, schedule.id, {
+        name: name.trim(),
+        description: description.trim(),
+        prompt: prompt.trim(),
+        natural_language: rhythm.trim(),
+        require_approval: requireApproval,
+      });
+      onOpenChange(false);
+      onUpdated();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const nextRuns = useMemo(() => {
+    if (!preview?.valid || !preview.cron_expression) return [];
+    try {
+      return upcomingRuns(preview.cron_expression, 3);
+    } catch {
+      return [];
+    }
+  }, [preview]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[min(34rem,92vw)]">
+        <DialogHeader>
+          <DialogTitle>{t('editSchedule')}</DialogTitle>
+          <DialogDescription>{t('rhythmHelp')}</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1 text-caption font-medium">
+            {t('nameLabel')}
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder={t('namePlaceholder')}
+              className="h-9 rounded-md border border-border-default bg-canvas px-3 text-body outline-none focus:border-accent"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-caption font-medium">
+            {t('descriptionLabel')}
+            <input
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder={t('descriptionPlaceholder')}
+              className="h-9 rounded-md border border-border-default bg-canvas px-3 text-body outline-none focus:border-accent"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-caption font-medium">
+            {t('promptLabel')}
+            <textarea
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              placeholder={t('promptPlaceholder')}
+              rows={2}
+              className="rounded-md border border-border-default bg-canvas px-3 py-2 text-body outline-none focus:border-accent"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-caption font-medium">
+            {t('rhythmLabel')}
+            <input
+              value={rhythm}
+              onChange={(event) => setRhythm(event.target.value)}
+              placeholder={t('rhythmPlaceholder')}
+              dir="auto"
+              className="h-9 rounded-md border border-border-default bg-canvas px-3 text-body outline-none focus:border-accent"
+            />
+          </label>
+
+          <div aria-live="polite" className="rounded-md border border-border-default bg-canvas p-3">
+            <p className="mb-1 text-micro font-semibold uppercase text-fg-muted">
+              {t('previewTitle')}
+            </p>
+            {rhythm.trim() === '' ? (
+              <p className="text-caption text-fg-muted">{t('previewEmpty')}</p>
+            ) : preview === null ? (
+              <p className="text-caption text-fg-muted">…</p>
+            ) : preview.valid ? (
+              <div className="flex flex-col gap-1 text-caption">
+                <p dir="auto">{preview.human}</p>
+                <p className="ltr-island font-mono text-micro text-fg-muted">
+                  {t('previewCron')}: {preview.cron_expression}
+                </p>
+                {nextRuns.length > 0 && (
+                  <ol aria-label={t('previewRuns')} className="flex flex-col gap-1">
+                    {nextRuns.map((run) => {
+                      const timestamp = run.getTime() / 1000;
+                      return (
+                        <li key={run.getTime()} className="grid gap-x-2 sm:grid-cols-2">
+                          <span>
+                            {t('previewNext')}: {absoluteTime(timestamp)}
+                          </span>
+                          <span data-testid="preview-jalali" dir="rtl">
+                            {t('previewJalali')}: {jalaliDateTime(timestamp)}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+              </div>
+            ) : (
+              <p className="text-caption text-fg-muted">{t('previewInvalid')}</p>
+            )}
+          </div>
+
+          <label className="flex items-start gap-2 text-caption">
+            <input
+              type="checkbox"
+              checked={requireApproval}
+              onChange={(event) => setRequireApproval(event.target.checked)}
+              className="mt-0.5 size-4 accent-current"
+            />
+            <span>
+              {t('approvalLabel')}
+              <span className="block text-micro text-fg-muted">{t('approvalHelp')}</span>
+            </span>
+          </label>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            {t('cancel')}
+          </Button>
+          <Button variant="primary" disabled={!valid || busy} onClick={() => void submit()}>
+            {t('save')}
           </Button>
         </DialogFooter>
       </DialogContent>

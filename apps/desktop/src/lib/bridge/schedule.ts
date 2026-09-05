@@ -82,6 +82,25 @@ export function createSchedule(
   return client.call<BridgeSchedule>('schedule.create', params, request);
 }
 
+export function updateSchedule(
+  client: BridgeClient,
+  scheduleId: string,
+  patch: Partial<ScheduleDraft>,
+  request?: RequestOptions,
+): Promise<BridgeSchedule> {
+  const params: Record<string, unknown> = { schedule_id: scheduleId };
+  if (patch.name !== undefined) params['name'] = patch.name;
+  if (patch.prompt !== undefined) params['prompt'] = patch.prompt;
+  if (patch.cron_expression !== undefined) params['cron_expression'] = patch.cron_expression;
+  if (patch.natural_language !== undefined) params['natural_language'] = patch.natural_language;
+  if (patch.description !== undefined) params['description'] = patch.description;
+  if (patch.session_id !== undefined) params['session_id'] = patch.session_id;
+  if (patch.enabled !== undefined) params['enabled'] = patch.enabled;
+  if (patch.max_runs !== undefined) params['max_runs'] = patch.max_runs;
+  if (patch.require_approval !== undefined) params['require_approval'] = patch.require_approval;
+  return client.call<BridgeSchedule>('schedule.update', params, request);
+}
+
 export function toggleSchedule(
   client: BridgeClient,
   scheduleId: string,
