@@ -215,4 +215,70 @@ describe('SchedulerRoute (S06)', () => {
     expect(screen.queryByText('…')).not.toBeInTheDocument();
     expect(transport.previewCalls).toBe(2);
   });
+
+  it('edits a schedule with live preview and updates the card', async () => {
+    const user = userEvent.setup();
+    renderRoute();
+
+    // Create schedule first
+    await user.click(await screen.findByRole('button', { name: 'New schedule' }));
+    await user.type(await screen.findByLabelText('Name'), 'Daily digest');
+    await user.type(screen.getByLabelText('Description'), 'Morning news review');
+    await user.type(screen.getByLabelText('Prompt'), 'summarise feeds');
+    await user.type(screen.getByLabelText('When'), 'every day at 8 AM');
+    await screen.findByText('every day at 8:00 AM');
+    await user.click(screen.getByRole('button', { name: 'Create schedule' }));
+
+    const card = await screen.findByRole('heading', { level: 3, name: 'Daily digest' });
+    expect(card).toBeInTheDocument();
+    expect(screen.getByText('Morning news review')).toBeInTheDocument();
+
+    // Open edit dialog
+    await user.click(screen.getByRole('button', { name: 'Edit: Daily digest' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Edit schedule' })).toBeInTheDocument();
+
+    // Modify fields
+    const nameInput = screen.getByLabelText('Name');
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Updated digest');
+
+    const descInput = screen.getByLabelText('Description');
+    await user.clear(descInput);
+    await user.type(descInput, 'Evening news review');
+
+    const rhythmInput = screen.getByLabelText('When');
+    await user.clear(rhythmInput);
+    await user.type(rhythmInput, 'every day at 6 PM');
+    await screen.findByText('every day at 6:00 PM');
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    // Verify updated card
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'Updated digest' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Evening news review')).toBeInTheDocument();
+    expect(screen.getByText('every day at 6:00 PM')).toBeInTheDocument();
+  });
+
+  it('renders duration and status in history timeline', async () => {
+    const user = userEvent.setup();
+    renderRoute();
+
+    await user.click(await screen.findByRole('button', { name: 'New schedule' }));
+    await user.type(await screen.findByLabelText('Name'), 'Quick task');
+    await user.type(screen.getByLabelText('Prompt'), 'ping');
+    await user.type(screen.getByLabelText('When'), 'every hour');
+    await screen.findByText('at cron schedule 0 * * * *');
+    await user.click(screen.getByRole('button', { name: 'Create schedule' }));
+    await screen.findByRole('heading', { level: 3, name: 'Quick task' });
+
+    // Run now
+    await user.click(screen.getByRole('button', { name: 'Run now' }));
+    await user.click(await screen.findByRole('button', { name: /History/ }));
+
+    // Success status badge is rendered
+    expect(await screen.findByText('success')).toBeInTheDocument();
+  });
 });

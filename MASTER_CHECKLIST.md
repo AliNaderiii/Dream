@@ -86,7 +86,7 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 - [x] 2.6.4 Scheduler daemon: 30 s poll, session reuse, fail-closed approval gate (Gate G8)
 - [x] 2.6.5 Execution history with status and duration (Gate G10)
 - [x] 2.6.6 RPC: `schedule.create|list|get|update|delete|toggle|history|preview|run_now|approve`
-- [ ] 2.6.7 Scheduler UI: schedule cards, live cron preview, history timeline,
+- [x] 2.6.7 Scheduler UI: schedule cards, live cron preview, history timeline,
   edit/delete confirmation (Gate G9)
 - [x] 2.6.8 Security: children cannot reach parent files or memory; scheduled
   dangerous tools require approval (Gate G11)

@@ -18,6 +18,13 @@ function runStatusKey(status: string): string {
   }
 }
 
+/** Formats execution duration in seconds or milliseconds. */
+function formatDuration(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined) return '';
+  if (seconds < 1) return `${Math.round(seconds * 1000)}ms`;
+  return `${seconds.toFixed(1)}s`;
+}
+
 /** Bounded timeline used even when a schedule has thousands of historical runs. */
 export function ScheduleHistory({ runs }: { runs: readonly BridgeScheduleRun[] }) {
   const { t } = useTranslation('scheduler');
@@ -40,6 +47,11 @@ export function ScheduleHistory({ runs }: { runs: readonly BridgeScheduleRun[] }
             {t(runStatusKey(run.status))}
           </Badge>
           <span className="text-fg-muted">{absoluteTime(run.started_at)}</span>
+          {run.duration !== null && run.duration !== undefined && (
+            <span className="font-mono text-micro text-fg-muted">
+              ({formatDuration(run.duration)})
+            </span>
+          )}
           <span className="min-w-0 flex-1 truncate" dir="auto">
             {run.result_summary}
           </span>

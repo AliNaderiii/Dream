@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { BridgeClient, RequestOptions } from './client';
-import { getBridgeClient, resetBridgeClient, type BridgeClientEvent } from './client';
+import { getBridgeClient, type BridgeClientEvent } from './client';
 import type { BridgeRpcError } from './errors';
 import type { BridgeConnectionState, RpcParams, StreamChunk } from './types';
 
@@ -84,8 +84,6 @@ export function useBridge(): UseBridgeResult {
   useEffect(() => {
     return () => {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      // Reset the singleton between tests so each test gets a fresh client.
-      if (import.meta.env?.MODE === 'test') resetBridgeClient();
     };
   }, []);
 

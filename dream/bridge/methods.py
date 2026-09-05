@@ -2354,11 +2354,18 @@ class BridgeMethods:
             "dangerous",
         )
         approval.decision = None
-        while approval.decision is None:
-            # Approval wait has no cancellation token today; the helper still
-            # cooperatively yields and keeps the existing 50 ms polling cadence.
-            await ainterruptible_sleep(0.05)
-        return bool(approval.decision)
+        try:
+            while approval.decision is None:
+                # Approval wait has no cancellation token today; the helper still
+                # cooperatively yields and keeps the existing 50 ms polling cadence.
+                await ainterruptible_sleep(0.05)
+            return bool(approval.decision)
+        finally:
+            with self._lock:
+                if not approval.resolved:
+                    approval.resolved = True
+                    if approval.decision is None:
+                        approval.decision = False
 
     def schedule_approve(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Resolve a scheduled run's approval request."""

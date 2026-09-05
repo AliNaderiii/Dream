@@ -4,10 +4,14 @@
   "noTasks": "예약된 작업 없음",
   "noTasksDesc": "나중에 또는 반복 간격으로 실행할 작업을 예약하세요.",
   "newSchedule": "새 예약",
+  "editSchedule": "예약 수정",
   "create": "예약 만들기",
+  "save": "변경사항 저장",
   "cancel": "취소",
   "nameLabel": "이름",
   "namePlaceholder": "예: 아침 브리핑",
+  "descriptionLabel": "설명",
+  "descriptionPlaceholder": "이 예약에 대한 선택적 설명",
   "promptLabel": "프롬프트",
   "promptPlaceholder": "실행 시 Dream이 무엇을 해야 하나요?",
   "rhythmLabel": "시기",
@@ -28,6 +32,7 @@
   "stateOff": "일시 중지됨",
   "runNow": "지금 실행",
   "history": "기록",
+  "edit": "수정",
   "delete": "삭제",
   "confirmDeleteTitle": "이 예약을 삭제할까요?",
   "confirmDeleteDesc": "예약과 실행 기록이 영구적으로 제거됩니다.",
@@ -51,5 +56,6 @@
   "loadError": "예약을 불러올 수 없습니다.",
   "loading": "Loading schedules…",
   "retry": "Retry",
-  "created": "예약이 생성되었습니다."
+  "created": "예약이 생성되었습니다.",
+  "updated": "예약이 업데이트되었습니다."
 }
