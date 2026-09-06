@@ -101,7 +101,14 @@ separated from checklist completion and release readiness.
 
 ## 8. Final remote SHA / CI
 
-(To be recorded immediately after the branch is pushed and checked.)
+- P-16 documentation commit: `f225503ec07a7e3251066a9a3dc0cdd3155e6e0e`
+  (`docs(p16): reconcile roadmap checklist and release readiness`), pushed to
+  `arena/01a07857-dream`.
+- Post-push CI is verified on the pushed branch tip from the PR page (this
+  audit is a follow-up documentation commit; the exact tip/CI evidence is also
+  recorded in the PR comment). The base/merge CI in §2 remains the authoritative
+  baseline evidence; P-16 changes only Markdown, so no test-code CI delta is
+  expected.
 
 ## 9. Rollback
 
