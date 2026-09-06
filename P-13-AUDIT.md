@@ -136,7 +136,8 @@ Backend (Python 3.13, repo `.venv`):
 
 | Command | Result |
 |---|---|
-| `.venv/bin/python -m pytest -q` | `23 failed, 3444 passed, 16 skipped in ~161s` — **failure set byte-identical to the pristine base checkout** (see below) |
+| `.venv/bin/python -m pytest -q` (instance 1) | `23 failed, 3444 passed, 16 skipped in ~161s` — failure set byte-identical to the pristine base checkout |
+| `.venv/bin/python -m pytest -q` (re-executed after sandbox rebuild) | `21 failed, 3446 passed, 16 skipped in 191s` — again byte-identical to the pristine base (detached-checkout re-run) |
 | `.venv/bin/python -m ruff check .` | `All checks passed!` |
 | `.venv/bin/python -m pytest tests/test_scheduler.py tests/test_bridge_memory_skills.py tests/test_bridge_subagent_schedule.py` (targeted, pre-existing) | `207 passed` (on the unmodified suites) |
 | `.venv/bin/python -m pytest tests/test_p13_reminder_authoring.py tests/test_scheduler.py tests/test_bridge_subagent_schedule.py` | `216 passed in 2.12s` |
@@ -145,11 +146,11 @@ Backend (Python 3.13, repo `.venv`):
 | `.venv/bin/python -m mypy dream/scheduler.py` | 0 errors in this file |
 | `.venv/bin/python -m mypy dream/bridge/methods.py` | 6 errors — same 6 as the pristine base (pre-existing; none on changed lines); mypy is not CI-gated |
 
-Pre-existing sandbox failures (NOT introduced by P-13; identical list on the
-pristine base commit): 23 tests in `tests/test_sec_agentic_audit.py`,
-`tests/security/test_sec_surfaces_f.py`,
-`tests/security/test_sec_transport_hardening.py` — environment-sensitive
-security probes that fail in this offline sandbox. GitHub CI adjudicates.
+Pre-existing sandbox failures (NOT introduced by P-13; identical set on the
+pristine base commit in every run): the exact list, counts per sandbox
+instance, and CI adjudication are recorded in the "Local full pytest" section
+below. **The full local suite was never green in this sandbox — neither on
+the base commit nor on P-13.** GitHub CI (all four Pythons) is green.
 
 Frontend (`apps/desktop`, Node/npm):
 
@@ -230,24 +231,77 @@ Scheduler page sends `kind:'task'` and hides reminders.
    prompt), so it appears in schedule listings returned by `schedule.list`
    to the same local user — same trust boundary as every other schedule.
 
-## CI
+## CI — final results
 
-- Local commit: `f623b47` (`feat(memory): add reminder authoring on the
-  existing scheduler (P-13)`) on branch `arena/01a0734c-dream`, based on
-  `0b5617c0d444501644559c35f11030c9526760f4`. Working tree clean.
-- **Status at audit time:** the push and PR creation are blocked — `git push`
-  and `gh` both fail with GitHub authentication errors from this sandbox
-  (`could not read Username`, `HTTP 401 Bad credentials`). The GitHub
-  connection needs to be re-authorised; the push + PR will follow in the
-  same session once it is. The final remote SHA and its CI results will be
-  appended here and to the PR after that happens.
-- CI matrix that will adjudicate: Python 3.10–3.13
-  (pytest/ruff/commit-rules/suite-count) + desktop job
-  (typecheck/lint/format/test/build/performance/accessibility/locales) +
-  Rust job (fmt/clippy/build/test; no Rust sources changed).
-- Note on commit rules: `tools/check_commit.py` flags the platform-injected
-  `Co-authored-by` attribution trailer (the same trailer and bot author
-  appear on the merged main HEAD `0b5617c` from PR #126, which passed CI).
-  The commit author itself is `Ali Naderi <alinaderi@users.noreply.github.com>`
-  exactly as the rules require.
-- The PR will stay **open and unmerged**; no release tag, no v0.4.7.
+- **PR:** [#127](https://github.com/AliNaderiii/Dream/pull/127) —
+  `arena/01a0734c-dream` -> `main`, **open and unmerged**.
+- **Code SHA fully verified by CI:** `67b062375063f6dc7d106f257d4f9ecc42a29805`
+  (`feat(memory): add reminder authoring on the existing scheduler (P-13)`),
+  author `Ali Naderi <alinaderi@users.noreply.github.com>`, no trailers,
+  `tools/check_commit.py` passes on it. (This audit update is the only later
+  commit; its CI run is recorded below.)
+- **All 8 checks PASS on that SHA:**
+
+| Check | Result | URL |
+|---|---|---|
+| test (3.10) | pass, 3m38s | https://github.com/AliNaderiii/Dream/actions/runs/34024943063/job/101466038467 |
+| test (3.11) | pass, 3m22s | https://github.com/AliNaderiii/Dream/actions/runs/34024943063/job/101466038846 |
+| test (3.12) | pass, 3m35s | https://github.com/AliNaderiii/Dream/actions/runs/34024943063/job/101466039013 |
+| test (3.13) | pass, 3m19s | https://github.com/AliNaderiii/Dream/actions/runs/34024943063/job/101466039300 |
+| Frontend checks | pass, 2m25s | https://github.com/AliNaderiii/Dream/actions/runs/34024943006/job/101464139135 |
+| Rust (ubuntu-22.04) | pass, 2m33s | https://github.com/AliNaderiii/Dream/actions/runs/34024943006/job/101464139040 |
+| Rust (windows-latest) | pass, 2m29s | https://github.com/AliNaderiii/Dream/actions/runs/34024943006/job/101464139107 |
+| Rust (macos-latest) | pass, 2m5s | https://github.com/AliNaderiii/Dream/actions/runs/34024943006/job/101464139026 |
+
+Each `test (3.x)` job internally ran pytest, ruff, the PR commit-rules gate
+and the suite-count gate — all green on every Python. One 3.10 job attempt
+was cancelled mid-run by a GitHub runner loss and was automatically re-run
+(the retry passed). CI's full-suite green on all four Pythons also confirms
+the local failures below are sandbox-environment-bound, not code defects.
+
+## Local full pytest — NOT fully green (truthful record)
+
+The full local `pytest -q` in this sandbox was **not** green:
+
+- First sandbox instance: `23 failed, 3444 passed, 16 skipped`.
+- The sandbox was rebuilt mid-phase (fresh clone; commit objects lost, file
+  changes preserved); re-executed after rebuild:
+  `21 failed, 3446 passed, 16 skipped in 191s`.
+- In both cases the **failure set was reproduced byte-identically on the
+  pristine base commit `0b5617c`** (verified via stash / detached-checkout
+  re-runs and `diff` of the FAILED lists — identical sets).
+- Every failure is an environment-sensitive security probe expecting an
+  audit-script execution context this offline sandbox does not provide:
+
+```
+tests/security/test_sec_surfaces_f.py::test_audit_script_fails_when_a_layer_breaks
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-A docker-absence no longer refuses-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-A import allowlist disabled-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-A output truncation removed-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-A path confinement removed-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-B codegen scanner disabled-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-B data framing loses its banner-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-B literals become raw interpolation-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-C autonomous sessions can mint approval-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-C expensive actions are reclassified-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-C plan gate always allows-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-C the approval throttle is removed-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-D artifact seals are never checked-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-D claim verification always passes-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-D run fingerprints ignore the code-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-E global grants are allowed-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-E probes accept any endpoint-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-E snapshots stop redacting-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-E the gateway enables every tool-...]
+tests/test_sec_agentic_audit.py::test_the_audit_fails_when_a_control_breaks[L9-E tokens stop being tool-scoped-...]
+tests/test_sec_agentic_audit.py::test_the_baseline_layers_still_alarm
+```
+
+(Parametrized IDs abbreviated with `-...` for the embedded probe source;
+the full IDs are in the PR's CI history and the raw local logs.)
+
+- The count difference (23 -> 21 across sandbox instances) is sandbox drift;
+  within a single instance the sets were stable and identical to base.
+- **CI adjudicated: all four Python matrix jobs pass the complete suite** on
+  the PR SHA — zero new P-13 failures, and the pre-existing local failures
+  do not reproduce on CI runners.
