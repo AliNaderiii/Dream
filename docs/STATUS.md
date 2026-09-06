@@ -1,5 +1,45 @@
 # Status
 
+## P-16 — Roadmap reconciliation and release-readiness verification — DOCS-ONLY
+
+**What this entry is.** P-16 reconciled `MASTER_CHECKLIST.md` against the
+merged baseline and recorded release-readiness evidence. It is documentation
+and verification only: no product behaviour, test, workflow, provider,
+scheduler, subagent, or release change was made.
+
+- Base/merge verification: `origin/main` = `8838466128a6da944ce440a869b0e161a5c00709`
+  = PR #129 merge SHA; PR #129 merged; post-merge CI green (8/8: 4 Python +
+  Frontend + 3 Rust).
+- Merged baselines: P-12 = PR #126 (`0b5617c0d444501644559c35f11030c9526760f4`),
+  P-13 = PR #127 (`c05b32839ea6c1680a7d0f06ec30529def385e7f`),
+  P-14 = PR #128 (`fb45ad8da8270c023acf8e24c293ace1a10cf066`),
+  P-15 = PR #129 (`8838466128a6da944ce440a869b0e161a5c00709`).
+- Tags: end at `v0.4.6`; **no `v0.4.7` tag exists and none was created**;
+  `pyproject.toml`, `Cargo.toml`, and release automation are unchanged.
+- Gate G9 (final client sign-off): **still open** per
+  `docs/design/approval-signoff.md`; client checklist and signature are blank.
+- Checklist item 1.5 (IPC bridge): marked complete with P-16 evidence — Rust
+  bridge exists and CI-compiles/tests green on the exact merged `main` SHA.
+- Checklist item 5.3 (web gateway mobile/tablet responsive + auth): P-08
+  server/token auth implemented; the shipped SPA has **no** viewport-responsive
+  mobile/tablet evidence, so the item remains open (`[~]`).
+- Release readiness: **not claimed for `v0.4.7`**. There is no release tag or
+  version bump, and P-16 does not create one. The current shipped release stays
+  `v0.4.6`.
+- Audit artifacts: `P-12-AUDIT.md` … `P-15-AUDIT.md` remain untouched. They were
+  written before their PRs merged and do not carry the final merge SHAs; the
+  current merge SHAs and CI evidence live in `P-16-SYNTHESIS.md` /
+  `P-16-AUDIT.md`.
+
+**Verification.** Locale integrity PASS (8 locales × 30 namespaces, fa gate
+PASS); doc tree reviewed; existing CI green on the exact base. Full local
+pytest/vitest were not run because dev deps are not installed in the workspace
+and P-16 changes no testable code.
+
+**What is next.** Client sign-off for G9; mobile/tablet responsive web-gateway
+implementation and test evidence before 5.3 can be completed; an explicit
+release decision if `v0.4.7` is intended.
+
 ## 0.4.6 — Non-streaming chat completions — CUT
 
 **What shipped.** Version **0.4.6** (non-streaming chat #113 plus this bump).
