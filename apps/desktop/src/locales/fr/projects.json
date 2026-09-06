@@ -4,6 +4,14 @@
     "importHelp": "Le projet pointe vers le vrai dossier. Rien n’est copié.",
     "openWorkspace": "Ouvrir dans l’espace de travail",
     "settings": "Plan comme mode par défaut",
-    "inPlaceBadge": "Sur place — jamais copié"
+    "inPlaceBadge": "Sur place — jamais copié",
+    "retry": "Réessayer",
+    "loading": "Chargement des projets…",
+    "editProject": "Modifier le projet",
+    "editHelp": "Renommez le projet ou changez son dossier lié. Le dossier reste un lien — rien n’est copié ni supprimé.",
+    "unlinkHelp": "Laissez vide pour dissocier le dossier. Les fichiers sur le disque ne sont jamais touchés.",
+    "saveChanges": "Enregistrer les modifications",
+    "showAll": "Afficher les {{count}} sessions",
+    "showFewer": "Afficher moins de sessions"
   }
 }

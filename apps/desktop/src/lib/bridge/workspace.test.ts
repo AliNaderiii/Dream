@@ -101,3 +101,36 @@ describe('workspace echo wrappers', () => {
     expect(live.live).toBe(true);
   });
 });
+
+describe('workspace listing pagination (P-14)', () => {
+  beforeEach(() => {
+    resetBridgeClient();
+    resetEchoWorkspace();
+  });
+
+  it('pages a listing with cursor/limit and reports next_cursor', async () => {
+    const client = getBridgeClient();
+    const first = await workspaceFilesList(client, getSeedRootId(), '', { cursor: 0, limit: 2 });
+    expect(first.entries.length).toBe(2);
+    expect(first.has_more).toBe(true);
+    expect(first.next_cursor).toBe(2);
+
+    const second = await workspaceFilesList(client, getSeedRootId(), '', {
+      cursor: first.next_cursor ?? 0,
+      limit: 2,
+    });
+    expect(second.entries.length).toBeGreaterThan(0);
+    const names = new Set([...first.entries, ...second.entries].map((entry) => entry.name));
+    expect(names.size).toBe(first.entries.length + second.entries.length);
+  });
+
+  it('rejects an out-of-bounds limit and a negative cursor', async () => {
+    const client = getBridgeClient();
+    await expect(workspaceFilesList(client, getSeedRootId(), '', { limit: 201 })).rejects.toThrow(
+      /limit/,
+    );
+    await expect(workspaceFilesList(client, getSeedRootId(), '', { cursor: -1 })).rejects.toThrow(
+      /cursor/,
+    );
+  });
+});

@@ -95,3 +95,84 @@ describe('ProjectsRoute (S06)', () => {
     expect(create).toBeDisabled();
   });
 });
+
+describe('ProjectsRoute (P-14)', () => {
+  beforeEach(() => {
+    resetBridgeClient();
+  });
+
+  it('shows a loading state before the list arrives', () => {
+    renderRoute();
+    // Synchronous first render: the skeleton is present until refresh lands.
+    expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+
+  it('edits a project name and unlinks its folder', async () => {
+    const user = userEvent.setup();
+    renderRoute();
+
+    await user.click(await screen.findByRole('button', { name: 'New project' }));
+    await user.type(await screen.findByLabelText('Name'), 'Old name');
+    await user.type(screen.getByLabelText(/Workspace folder/), '/work/old');
+    await user.click(screen.getByRole('button', { name: 'Create project' }));
+    await screen.findByRole('heading', { level: 3, name: 'Old name' });
+
+    await user.click(screen.getByRole('button', { name: 'Edit project: Old name' }));
+    const nameInput = await screen.findByLabelText('Name');
+    await user.clear(nameInput);
+    await user.type(nameInput, 'New name');
+    await user.clear(screen.getByLabelText(/Workspace folder/));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByRole('heading', { level: 3, name: 'New name' })).toBeInTheDocument();
+    // The folder was unlinked (link removed, files untouched by contract).
+    expect(screen.queryByText('/work/old')).toBeNull();
+  });
+
+  it('keeps long session lists bounded behind an explicit toggle', async () => {
+    const user = userEvent.setup();
+    const client = getBridgeClient();
+    const ids: string[] = [];
+    for (let index = 0; index < 12; index += 1) {
+      const created = await client.call<{ session_id: string }>('session.create', {
+        title: `Bulk ${index}`,
+      });
+      ids.push(created.session_id);
+    }
+    const project = await client.call<{ project_id: string }>('project.create', {
+      name: 'Big project',
+      session_ids: ids,
+    });
+    expect(project.project_id).toBeTruthy();
+
+    renderRoute();
+    await screen.findByRole('heading', { level: 3, name: 'Big project' });
+
+    // Only the first 8 rows render; the rest are behind the toggle.
+    expect(screen.getByText('Bulk 0')).toBeInTheDocument();
+    expect(screen.queryByText('Bulk 11')).toBeNull();
+
+    const toggle = screen.getByRole('button', { name: 'Show all 12 sessions' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.click(toggle);
+    expect(await screen.findByText('Bulk 11')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Show fewer sessions' }));
+    await waitFor(() => expect(screen.queryByText('Bulk 11')).toBeNull());
+  });
+
+  it('rejects an oversized project name through the shared validation', async () => {
+    const client = getBridgeClient();
+    await expect(client.call('project.create', { name: 'x'.repeat(201) })).rejects.toThrow(/200/);
+  });
+
+  it('renders correctly in RTL', async () => {
+    document.documentElement.dir = 'rtl';
+    try {
+      renderRoute();
+      expect(await screen.findByRole('heading', { level: 2, name: 'Projects' })).toBeVisible();
+    } finally {
+      document.documentElement.dir = 'ltr';
+    }
+  });
+});

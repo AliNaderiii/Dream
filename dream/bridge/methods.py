@@ -528,6 +528,15 @@ class BridgeMethods:
             "DREAM_PROJECTS_PATH", "data/bridge_projects.json"
         )
         self.projects: dict[str, dict[str, Any]] = {}
+        #: Extra per-project fields written by other writers (the Projects 2.0
+        #: overlay stores ``settings``/``imported_in_place`` in the same file).
+        #: They are round-tripped verbatim so a ``project.*`` save never drops
+        #: them (P-14, F1).
+        self._project_extras: dict[str, dict[str, Any]] = {}
+        #: Ids deleted through ``project.delete`` in this process. A merge-
+        #: preserving save keeps unknown on-disk rows *except* these, so a
+        #: deletion survives the merge while foreign rows do (P-14, F1).
+        self._deleted_project_ids: set[str] = set()
         self._providers_path = providers_path or os.environ.get(
             "DREAM_PROVIDERS_PATH", "data/bridge_providers.json"
         )
@@ -3831,18 +3840,45 @@ class BridgeMethods:
                 cleaned.append(item)
         return cleaned
 
+    _PROJECT_NAME_MAX = 200
+    _PROJECT_FOLDER_MAX = 4_096
+
+    @classmethod
+    def _clean_project_name(cls, value: Any) -> str:
+        """Validated display name: non-empty, bounded, no control bytes."""
+        if not isinstance(value, str) or not value.strip():
+            raise invalid_params("name must be a non-empty string")
+        name = value.strip()
+        if len(name) > cls._PROJECT_NAME_MAX:
+            raise invalid_params(f"name must be at most {cls._PROJECT_NAME_MAX} characters")
+        if "\x00" in name:
+            raise invalid_params("name must not contain control characters")
+        return name
+
+    @classmethod
+    def _clean_project_folder(cls, value: Any) -> str:
+        """Validated folder reference. Stored as a pointer; never copied."""
+        if not isinstance(value, str) or not value.strip():
+            raise invalid_params("folder must be a non-empty string when set")
+        folder = value.strip()
+        if len(folder) > cls._PROJECT_FOLDER_MAX:
+            raise invalid_params(
+                f"folder must be at most {cls._PROJECT_FOLDER_MAX} characters"
+            )
+        if "\x00" in folder:
+            raise invalid_params("folder must not contain control characters")
+        return folder
+
     def project_create(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
-        name = params.get("name")
-        if not isinstance(name, str) or not name.strip():
-            raise invalid_params("name must be a non-empty string")
+        name = self._clean_project_name(params.get("name"))
         folder = params.get("folder")
-        if folder is not None and (not isinstance(folder, str) or not folder.strip()):
-            raise invalid_params("folder must be a non-empty string when set")
+        if folder is not None:
+            folder = self._clean_project_folder(folder)
         project = {
             "id": f"prj_{uuid.uuid4().hex[:20]}",
-            "name": name.strip(),
-            "folder": folder.strip() if isinstance(folder, str) else None,
+            "name": name,
+            "folder": folder if isinstance(folder, str) else None,
             "session_ids": self._clean_session_ids(params.get("session_ids")),
             "created_at": time.time(),
             "updated_at": time.time(),
@@ -3876,16 +3912,13 @@ class BridgeMethods:
         params = params or {}
         project = self._require_project(params)
         if "name" in params:
-            name = params.get("name")
-            if not isinstance(name, str) or not name.strip():
-                raise invalid_params("name must be a non-empty string")
-            project["name"] = name.strip()
+            project["name"] = self._clean_project_name(params.get("name"))
         if "folder" in params:
             folder = params.get("folder")
             if folder is None or (isinstance(folder, str) and not folder.strip()):
                 project["folder"] = None
             elif isinstance(folder, str):
-                project["folder"] = folder.strip()
+                project["folder"] = self._clean_project_folder(folder)
             else:
                 raise invalid_params("folder must be a string or null")
         project["updated_at"] = time.time()
@@ -3898,6 +3931,8 @@ class BridgeMethods:
         project = self._require_project(params or {})
         with self._lock:
             self.projects.pop(project["id"], None)
+            self._project_extras.pop(project["id"], None)
+            self._deleted_project_ids.add(project["id"])
             self._save_projects_index()
         return {"deleted": True, "project_id": project["id"]}
 
@@ -3934,13 +3969,46 @@ class BridgeMethods:
                 self._save_projects_index()
         return self._project_to_dict(project)
 
+    #: Keys the S06 surface owns; anything else on a stored row is a foreign
+    #: extra (e.g. the Projects 2.0 overlay's ``settings``) and round-trips.
+    _PROJECT_OWN_KEYS = frozenset(
+        {"id", "project_id", "name", "folder", "session_ids", "created_at", "updated_at"}
+    )
+
+    def _quarantine_corrupt_index(self, reason: str) -> None:
+        """Move an unreadable projects file aside instead of overwriting it.
+
+        Fail closed (P-14, F2): a later save must never silently destroy
+        records a human might still recover. The path is not logged with
+        user file names beyond the store file itself.
+        """
+        source = self._projects_path
+        for attempt in range(1, 100):
+            backup = f"{source}.corrupt-{attempt}"
+            if not os.path.exists(backup):
+                try:
+                    os.replace(source, backup)
+                    logger.warning(
+                        "projects index was unreadable (%s); preserved as %s",
+                        reason,
+                        os.path.basename(backup),
+                    )
+                except OSError:
+                    logger.warning("projects index was unreadable (%s)", reason)
+                return
+        logger.warning("projects index was unreadable (%s); backups exhausted", reason)
+
     def _load_projects_index(self) -> None:
         try:
             with open(self._projects_path, encoding="utf-8") as handle:
                 rows = json.load(handle)
-        except (OSError, ValueError):
+        except OSError:
+            return
+        except ValueError:
+            self._quarantine_corrupt_index("invalid JSON")
             return
         if not isinstance(rows, list):
+            self._quarantine_corrupt_index("not a JSON list")
             return
         for row in rows:
             if not isinstance(row, dict) or not row.get("id"):
@@ -3956,10 +4024,52 @@ class BridgeMethods:
                 "created_at": float(row.get("created_at", time.time())),
                 "updated_at": float(row.get("updated_at", time.time())),
             }
+            extras = {k: v for k, v in row.items() if k not in self._PROJECT_OWN_KEYS}
+            if extras:
+                self._project_extras[project_id] = extras
 
     def _save_projects_index(self) -> None:
-        rows = [self._project_to_dict(p) for p in self.projects.values()]
-        self._write_json(self._projects_path, rows)
+        """Merge-preserving save (P-14, F1).
+
+        Other writers (the Projects 2.0 overlay) share this file at runtime.
+        The save re-reads the current on-disk rows so a project adopted after
+        startup is never silently dropped, keeps foreign extra fields on rows
+        this surface tracks, and removes only ids deleted through
+        ``project.delete``. Corrupt on-disk content never blocks a save — it
+        was already quarantined on load, and a fresh read that fails to parse
+        is treated as absent (the quarantined copy is the recovery artifact).
+        """
+        disk_rows: list[dict[str, Any]] = []
+        try:
+            with open(self._projects_path, encoding="utf-8") as handle:
+                raw = json.load(handle)
+            if isinstance(raw, list):
+                disk_rows = [row for row in raw if isinstance(row, dict) and row.get("id")]
+        except (OSError, ValueError):
+            disk_rows = []
+
+        merged: dict[str, dict[str, Any]] = {}
+        for row in disk_rows:
+            project_id = str(row["id"])
+            if project_id in self._deleted_project_ids:
+                continue
+            if project_id not in self.projects:
+                # Foreign row (e.g. adopted through workspace.* after start):
+                # keep it verbatim, and pick up its extras for future saves.
+                merged[project_id] = dict(row)
+                extras = {k: v for k, v in row.items() if k not in self._PROJECT_OWN_KEYS}
+                if extras:
+                    self._project_extras.setdefault(project_id, {}).update(extras)
+                continue
+            extras = {k: v for k, v in row.items() if k not in self._PROJECT_OWN_KEYS}
+            if extras:
+                self._project_extras.setdefault(project_id, {}).update(extras)
+        for project_id, project in self.projects.items():
+            row = self._project_to_dict(project)
+            row.pop("project_id", None)
+            row.update(self._project_extras.get(project_id, {}))
+            merged[project_id] = row
+        self._write_json(self._projects_path, list(merged.values()))
 
     # ------------------------------------------------------------------ #
     # approval.list — the pending-approval queue (S06). The scheduler UI

@@ -14,6 +14,7 @@ from dream.workspace.errors import WorkspaceSecurityError
 
 _NULL = "\x00"
 _MAX_PATH = 4_096
+_MAX_DEPTH = 64
 
 
 def _refuse(message: str) -> None:
@@ -55,6 +56,8 @@ def relative_key(rel: str | None) -> str:
     parts = [part for part in text.split("/") if part not in {"", "."}]
     if any(part == ".." for part in parts):
         _refuse("parent-directory traversal is refused")
+    if len(parts) > _MAX_DEPTH:
+        _refuse(f"path depth is limited to {_MAX_DEPTH} segments")
     return "/".join(parts)
 
 

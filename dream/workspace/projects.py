@@ -24,12 +24,37 @@ def _project_path() -> Path:
     return Path(os.environ.get("DREAM_PROJECTS_PATH", _DEFAULT_PROJECTS))
 
 
+def quarantine_corrupt(path: Path) -> None:
+    """Move an unreadable store aside so a later save cannot destroy it.
+
+    Fail closed (P-14): corrupted metadata is preserved as a `.corrupt-N`
+    sibling for manual recovery instead of being overwritten by the next
+    atomic write.
+    """
+    for attempt in range(1, 100):
+        backup = path.with_name(f"{path.name}.corrupt-{attempt}")
+        if not backup.exists():
+            try:
+                os.replace(path, backup)
+            except OSError:
+                pass
+            return
+
+
 def _load_projects(path: Path) -> list[dict[str, Any]]:
     try:
-        rows = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
         return []
-    return [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+    try:
+        rows = json.loads(raw)
+    except ValueError:
+        quarantine_corrupt(path)
+        return []
+    if not isinstance(rows, list):
+        quarantine_corrupt(path)
+        return []
+    return [row for row in rows if isinstance(row, dict)]
 
 
 def _save_projects(path: Path, rows: list[dict[str, Any]]) -> None:

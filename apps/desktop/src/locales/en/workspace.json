@@ -18,7 +18,10 @@
     "copyPath": "Copy path",
     "copied": "Copied path",
     "global": "Workspace root",
-    "menu": "Actions"
+    "menu": "Actions",
+    "retry": "Retry",
+    "loading": "Loading the workspace…",
+    "loadMore": "Load more files"
   },
   "preview": {
     "title": "Preview",

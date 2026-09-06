@@ -52,11 +52,20 @@ export function workspaceUnregister(client: BridgeClient, rootId: string) {
   });
 }
 
-export function workspaceFilesList(client: BridgeClient, rootId: string, path = '') {
-  return echoOr(client, () => echo.echoFilesList(rootId, path), 'workspace.files_list', {
-    root_id: rootId,
-    path,
-  });
+export function workspaceFilesList(
+  client: BridgeClient,
+  rootId: string,
+  path = '',
+  options?: { cursor?: number; limit?: number },
+) {
+  const cursor = options?.cursor ?? 0;
+  const limit = options?.limit ?? 100;
+  return echoOr(
+    client,
+    () => echo.echoFilesList(rootId, path, cursor, limit),
+    'workspace.files_list',
+    { root_id: rootId, path, cursor, limit },
+  );
 }
 
 export function workspaceFilesPreview(client: BridgeClient, rootId: string, path: string) {

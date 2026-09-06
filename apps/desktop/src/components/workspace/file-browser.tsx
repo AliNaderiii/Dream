@@ -54,7 +54,14 @@ export function FileBrowser({
           {menu === entry.path && (
             <div
               role="menu"
+              aria-label={`${t('browser.menu')}: ${entry.name}`}
               className="absolute end-2 z-10 mt-1 flex flex-col rounded-md border border-border-default bg-overlay p-1 shadow-e2"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.stopPropagation();
+                  setMenu(null);
+                }
+              }}
             >
               <button
                 type="button"

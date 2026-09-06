@@ -311,19 +311,46 @@ export function echoUnregister(rootId: string): { deleted: boolean; root_id: str
   return { deleted: true, root_id: rootId };
 }
 
-export function echoFilesList(
-  rootId: string,
-  rel = '',
-): {
+export interface WorkspaceListing {
   root_id: string;
   path: string;
   entries: WorkspaceEntry[];
   count: number;
   cursor: number;
-  next_cursor: null;
+  next_cursor: number | null;
   has_more: boolean;
   truncated: boolean;
-} {
+}
+
+/** Sidecar-parity paging over a fixed entry set. */
+function page(
+  rootId: string,
+  path: string,
+  all: WorkspaceEntry[],
+  cursor: number,
+  limit: number,
+): WorkspaceListing {
+  if (!Number.isInteger(cursor) || cursor < 0)
+    throw new Error('cursor must be a non-negative integer');
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+    throw new Error('limit must be an integer from 1 to 200');
+  }
+  const entries = all.slice(cursor, cursor + limit).map((row) => ({ ...row }));
+  const nextCursor = cursor + entries.length;
+  const hasMore = nextCursor < all.length;
+  return {
+    root_id: rootId,
+    path,
+    entries,
+    count: entries.length,
+    cursor,
+    next_cursor: hasMore ? nextCursor : null,
+    has_more: hasMore,
+    truncated: false,
+  };
+}
+
+export function echoFilesList(rootId: string, rel = '', cursor = 0, limit = 100): WorkspaceListing {
   requireRoot(rootId);
   if (rel.includes('..')) throw new Error('parent-directory traversal is refused');
   const normalized = rel
@@ -331,41 +358,12 @@ export function echoFilesList(
     .replace(/^\.\/+/, '')
     .replace(/^\/+|\/+$/g, '');
   if (normalized === 'notes') {
-    const nested = NOTES_FILES.map((row) => ({ ...row }));
-    return {
-      root_id: rootId,
-      path: 'notes',
-      entries: nested,
-      count: nested.length,
-      cursor: 0,
-      next_cursor: null,
-      has_more: false,
-      truncated: false,
-    };
+    return page(rootId, 'notes', NOTES_FILES, cursor, limit);
   }
   if (normalized) {
-    return {
-      root_id: rootId,
-      path: normalized,
-      entries: [],
-      count: 0,
-      cursor: 0,
-      next_cursor: null,
-      has_more: false,
-      truncated: false,
-    };
+    return page(rootId, normalized, [], cursor, limit);
   }
-  const entries = files.get(rootId) ?? [];
-  return {
-    root_id: rootId,
-    path: rel,
-    entries,
-    count: entries.length,
-    cursor: 0,
-    next_cursor: null,
-    has_more: false,
-    truncated: false,
-  };
+  return page(rootId, rel, files.get(rootId) ?? [], cursor, limit);
 }
 
 export function echoFilesPreview(rootId: string, rel: string): WorkspacePreview {

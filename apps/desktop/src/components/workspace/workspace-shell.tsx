@@ -1,6 +1,7 @@
 import { FolderPlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { BridgeOfflineBanner } from '@/components/shared/bridge-offline-banner';
 import { FileBrowser } from '@/components/workspace/file-browser';
 import { FilePreview } from '@/components/workspace/file-preview';
 import { Badge } from '@/components/ui/badge';
@@ -31,12 +32,16 @@ export function WorkspaceShell() {
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [copiedNotice, setCopiedNotice] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     void workspaceRootsList(client)
       .then(async (result) => {
         if (cancelled) return;
+        setError(null);
         setRoots(result.roots);
         const rootId = result.roots[0]?.root_id;
         if (!rootId) return;
@@ -44,14 +49,18 @@ export function WorkspaceShell() {
         if (cancelled) return;
         setActive(rootId);
         setEntries(listing.entries);
+        setNextCursor(listing.next_cursor);
       })
       .catch((reason: unknown) => {
         if (!cancelled) setError(reason instanceof Error ? reason.message : t('errors.unknown'));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [client, t]);
+  }, [client, t, reloadKey]);
 
   const onImport = async () => {
     setError(null);
@@ -71,7 +80,19 @@ export function WorkspaceShell() {
     try {
       const listing = await workspaceFilesList(client, rootId, rel);
       setEntries(listing.entries);
+      setNextCursor(listing.next_cursor);
       setPath(rel);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t('errors.unknown'));
+    }
+  };
+
+  const loadMore = async () => {
+    if (!active || nextCursor === null) return;
+    try {
+      const listing = await workspaceFilesList(client, active, path, { cursor: nextCursor });
+      setEntries((previous) => [...previous, ...listing.entries]);
+      setNextCursor(listing.next_cursor);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('errors.unknown'));
     }
@@ -144,9 +165,30 @@ export function WorkspaceShell() {
         </CardContent>
       </Card>
 
+      <BridgeOfflineBanner />
+
       {error && (
-        <p role="alert" className="rounded-lg border border-danger-fg p-3 text-body text-danger-fg">
-          {error}
+        <div
+          role="alert"
+          className="flex items-center gap-3 rounded-lg border border-danger-fg p-3 text-body text-danger-fg"
+        >
+          <span className="min-w-0 flex-1">{error}</span>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              setLoading(true);
+              setReloadKey((previous) => previous + 1);
+            }}
+          >
+            {t('browser.retry')}
+          </Button>
+        </div>
+      )}
+
+      {loading && (
+        <p role="status" aria-busy="true" className="text-body text-fg-muted">
+          {t('browser.loading')}
         </p>
       )}
       {copiedNotice && (
@@ -190,6 +232,11 @@ export function WorkspaceShell() {
               onPreview={(entry) => void onPreview(entry)}
               onCopyPath={(entry) => void onCopy(entry)}
             />
+            {nextCursor !== null && (
+              <Button variant="ghost" size="sm" className="mt-2" onClick={() => void loadMore()}>
+                {t('browser.loadMore')}
+              </Button>
+            )}
           </CardContent>
         </Card>
         <Card>
