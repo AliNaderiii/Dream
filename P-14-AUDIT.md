@@ -203,8 +203,12 @@ ride the existing generic RPC plumbing. Desktop CI compiles Rust on push.
 
 ## 12. Final remote SHA
 
-`330242135bc28414deff1360629d6da247488bfb` — the only commit on the PR,
-based directly on `c05b32839ea6c1680a7d0f06ec30529def385e7f`.
+- Implementation commit: `330242135bc28414deff1360629d6da247488bfb`
+  (all production and test changes; all 8 CI checks green on it).
+- PR head: the follow-up documentation-only commits that record PR number,
+  CI results, and this section (same pattern as P-13). The PR is based
+  directly on `c05b32839ea6c1680a7d0f06ec30529def385e7f`; CI status for the
+  live head is authoritative on the PR page and green at time of writing.
 
 ## 13. Changed files (31 production/test files + 2 docs)
 
