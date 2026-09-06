@@ -231,6 +231,30 @@ Scheduler page sends `kind:'task'` and hides reminders.
    prompt), so it appears in schedule listings returned by `schedule.list`
    to the same local user — same trust boundary as every other schedule.
 
+## CI incident and fix (truthful record)
+
+The **second** CI run (on the docs-only commit `56c2567`, pushed ~10:03 UTC)
+failed `test (3.10)`, `test (3.11)`, `test (3.12)` — while the **identical
+code** had passed all four Pythons forty minutes earlier (run of ~09:32 UTC
+on `67b0623`). Root cause, reproduced locally and pinned:
+
+- `tests/test_p13_reminder_authoring.py::test_kind_filters_the_list` asserted
+  insertion order (`["r1", "r2"]`) over schedules whose crons were
+  `0 10 * * *` and `0 11 * * *`.
+- `list_schedules` correctly orders by **next fire time**; between 10:00 and
+  11:00 local time, "0 11 * * *" fires *today* and sorts first, flipping the
+  assertion. The first CI run executed before 10:00 UTC (green); the second
+  inside the window (red). A time-of-day-dependent test — exactly the class
+  this phase forbids; the production ordering behavior is correct and was
+  not changed.
+- **Fix:** the filter test now compares names as a set, and a new
+  `test_kind_list_order_is_stable_at_any_hour` pins the ordering rule with
+  identical cron expressions (equal `next_run` at any hour, tie broken by
+  `created_at`), which cannot flip with the wall clock.
+- Verified: full P-13 file green under `TZ=UTC`, `Asia/Tehran`,
+  `Pacific/Kiritimati`, and `America/New_York` (20 tests each), plus the
+  227-test targeted run and ruff.
+
 ## CI — final results
 
 - **PR:** [#127](https://github.com/AliNaderiii/Dream/pull/127) —

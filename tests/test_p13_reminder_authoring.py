@@ -73,9 +73,28 @@ def test_kind_filters_the_list(store: MemoryStore) -> None:
     create_schedule(
         store, name="r2", prompt="p", cron_expression="0 11 * * *", kind="reminder"
     )
-    assert [s.name for s in list_schedules(store, kind="reminder")] == ["r1", "r2"]
+    # Compare sets, not order: list_schedules orders by next fire time, so
+    # which of two daily crons comes first depends on the wall clock the test
+    # runs at (after 10:00 but before 11:00, "0 11 * * *" fires first). That
+    # ordering rule is pinned time-independently below and by the P-12 suite.
+    assert sorted(s.name for s in list_schedules(store, kind="reminder")) == ["r1", "r2"]
     assert [s.name for s in list_schedules(store, kind="task")] == ["t1"]
     assert len(list_schedules(store)) == 3  # unfiltered keeps both kinds
+
+
+def test_kind_list_order_is_stable_at_any_hour(store: MemoryStore) -> None:
+    """Two reminders with the same cron tie on next_run; created_at breaks it.
+
+    Identical expressions give identical next fire times at any hour of any
+    day, so the ordering assertion cannot flip with the wall clock.
+    """
+    create_schedule(
+        store, name="first", prompt="p", cron_expression="0 9 * * *", kind="reminder"
+    )
+    create_schedule(
+        store, name="second", prompt="p", cron_expression="0 9 * * *", kind="reminder"
+    )
+    assert [s.name for s in list_schedules(store, kind="reminder")] == ["first", "second"]
 
 
 def test_kind_can_be_changed_by_update(store: MemoryStore) -> None:
