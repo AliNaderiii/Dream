@@ -189,12 +189,22 @@ ride the existing generic RPC plumbing. Desktop CI compiles Rust on push.
 
 ## 11. CI
 
-- PR: _recorded after push (see §16 update)_
-- CI runs tied to the final SHA: _recorded after push_
+- PR: https://github.com/AliNaderiii/Dream/pull/128 (open, unmerged)
+- CI on the final SHA — **all 8 checks pass**:
+  - `test (3.10/3.11/3.12/3.13)`: pass —
+    https://github.com/AliNaderiii/Dream/actions/runs/34037030941
+  - `Frontend checks`, `Rust (ubuntu-22.04)`, `Rust (macos-latest)`,
+    `Rust (windows-latest)`: pass —
+    https://github.com/AliNaderiii/Dream/actions/runs/34037030940
+- Note: the first pushed commit (`a29503d`) failed only the repository's
+  "Commit rules" gate (author identity + trailer policy); tests and lint were
+  already green on it. The commit was amended to the repository's required
+  author and trailer-free message and force-pushed as the final SHA below.
 
 ## 12. Final remote SHA
 
-_Recorded after push._
+`330242135bc28414deff1360629d6da247488bfb` — the only commit on the PR,
+based directly on `c05b32839ea6c1680a7d0f06ec30529def385e7f`.
 
 ## 13. Changed files (31 production/test files + 2 docs)
 
