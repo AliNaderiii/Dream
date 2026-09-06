@@ -208,6 +208,41 @@ the running stage and skips the rest.
 `subagent.spawn` also accepts the legacy P-02 parameter `message` as an alias of
 `prompt`, so the 1.0 clients keep working.
 
+### 2.7 Explicit bounds & deterministic log replay (P-15)
+
+Every subagent operation is bounded; oversized input fails closed with a
+`ValueError` the bridge maps to `invalid_params`. The echo transport mirrors
+each bound byte-for-byte so dev/tests fail exactly like the sidecar.
+
+| Bound | Constant | Value | On violation |
+| --- | --- | --- | --- |
+| prompt length | `MAX_PROMPT_CHARS` | 16 000 | refused |
+| context length | `MAX_CONTEXT_CHARS` | 32 000 | **truncated** (a pipeline hand-me-down must not kill the stage consuming it) |
+| system prompt | `MAX_SYSTEM_PROMPT_CHARS` | 8 000 | refused |
+| name | `MAX_NAME_CHARS` | 120 | truncated |
+| tool grant size | `MAX_TOOL_GRANTS` / `MAX_TOOL_NAME_CHARS` | 32 / 100 | refused |
+| `max_turns` | `MAX_TURNS_CAP` | 100 | refused |
+| `max_tokens` | `MAX_TOKENS_CAP` | 200 000 | refused |
+| `max_duration` | `MAX_DURATION_CAP` | 3 600 s | refused |
+| pipeline stages | `MAX_PIPELINE_STAGES` | 16 | refused before any stage spawns |
+| cancel grace | `MAX_CANCEL_GRACE_SECONDS` (bridge) | 30 s | refused |
+| log entries per agent | `MAX_LOG_ENTRIES` | 500 | ring buffer; drops counted in `log_dropped` |
+| log message length | `MAX_LOG_MESSAGE_CHARS` | 2 000 | truncated with a marker |
+| retained agents | `MAX_RETAINED_SUBAGENTS` | 200 | oldest **terminal** agents evicted; active agents never |
+
+**Log replay.** Each `LogEntry` carries a per-agent monotonic `seq`.
+`follow_logs` subscribes its queue *before* snapshotting history, replays the
+snapshot, then drains the queue skipping any entry whose `seq` the replay
+already covered — the replay/live handover can neither lose a line nor emit
+one twice. A full subscriber queue drops its **oldest** item to make room, so
+the `None` close sentinel always lands and a slow client can never hold a
+stream open past the agent's terminal state.
+
+**Privacy.** A failed child's `error` string is passed through
+`dream.security.secrets.redact_text` and bounded *at source*, because it is
+returned by `subagent.get`/`subagent.list` as a result payload — a path the
+bridge's error-path redaction never sees.
+
 ---
 
 ## 3. Scheduler

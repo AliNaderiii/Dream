@@ -149,7 +149,14 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
   lists; workspace file browser pagination; merge-preserving project
   persistence, fail-closed corrupt-metadata quarantine, binary-preview refusal,
   path-depth cap, and a path-free ops log.
-- [ ] 3.2 Subagent monitor
+- [x] 3.2 Subagent monitor — **P-15**: explicitly bounded subagent/pipeline
+  operations (prompt/context/system/name/tool-grant caps, turn/token/duration
+  ceilings, 16-stage pipelines, 30 s cancel grace), deterministic seq-based
+  `subagent.logs` replay with no gaps or duplicates and guaranteed stream
+  termination, bounded log ring + terminal-only retention eviction,
+  redacted-at-source failure text, echo/sidecar contract parity, and explicit
+  localized stream states (live/ended/disconnected) with bounded log
+  retention, focus-preserving pause/resume and clamped spawn limits in the UI.
 - [x] 3.3 Run history / provenance viewer — **P-10**: Full tamper-evident SHA-256 provenance logging, artifact sidecar linking, lineage graph & timeline UI, and reproducibility ZIP export.
 
 ## Phase 4 — Data Science Workbench (Prompt P-04 / P-09)

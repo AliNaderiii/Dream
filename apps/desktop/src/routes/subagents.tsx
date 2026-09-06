@@ -31,6 +31,19 @@ import { formatDuration } from '@/utils/format';
 /** How often to refresh the list while a child is still running. */
 const POLL_MS = 500;
 
+/**
+ * Retained streamed log lines per followed child (P-15). Rendering is already
+ * virtualised; this bounds the *state* so an hours-long child cannot grow the
+ * renderer's memory without limit. Older lines are dropped and counted.
+ */
+const MAX_RETAINED_LOG = 1_000;
+
+/** Councils this page remembers; the oldest mapping rolls off past the cap. */
+const MAX_RETAINED_COUNCILS = 50;
+
+/** The lifecycle of the `subagent.logs` stream for the selected child. */
+type StreamPhase = 'connecting' | 'live' | 'ended' | 'disconnected';
+
 interface ToolRow {
   name: string;
   risk: string;
@@ -41,6 +54,9 @@ interface FollowedSubagent {
   id: string;
   agent: BridgeSubagent | null;
   log: BridgeLogEntry[];
+  /** Log lines dropped from this page's bounded retention. */
+  dropped: number;
+  phase: StreamPhase;
 }
 
 /** One row in the list, collapsed to its essentials. */
@@ -166,11 +182,23 @@ export function SubagentsRoute() {
 
   // Follow the selected child. `subagent.get` seeds the snapshot and
   // `subagent.logs` carries the log, which the sidecar replays from the start —
-  // so the log comes from the stream alone and never doubles up.
+  // so the log comes from the stream alone and never doubles up. Retention is
+  // bounded (`MAX_RETAINED_LOG`) and the stream's phase is explicit:
+  // connecting → live → ended (clean final) or disconnected (dropped).
   useEffect(() => {
     const id = activeId;
     if (!id) return;
     const controller = new AbortController();
+    // No synchronous reset is needed: `followedNow` derives from the id
+    // match, so a stale record for a previous selection is never rendered —
+    // the phase defaults to 'connecting' until this stream reports in.
+    const empty: FollowedSubagent = {
+      id,
+      agent: null,
+      log: [],
+      dropped: 0,
+      phase: 'connecting',
+    };
 
     const seed = async () => {
       try {
@@ -179,7 +207,7 @@ export function SubagentsRoute() {
           { subagent_id: id },
           { signal: controller.signal },
         );
-        setFollowed((prev) => (prev?.id === id ? { ...prev, agent } : { id, agent, log: [] }));
+        setFollowed((prev) => (prev?.id === id ? { ...prev, agent } : { ...empty, agent }));
       } catch {
         // The stream below still carries everything worth showing.
       }
@@ -193,20 +221,33 @@ export function SubagentsRoute() {
           (chunk) => {
             const entry = chunk.entry;
             if (controller.signal.aborted || !entry) return;
-            setFollowed((prev) =>
-              prev?.id === id
-                ? { ...prev, log: [...prev.log, entry] }
-                : { id, agent: null, log: [entry] },
-            );
+            setFollowed((prev) => {
+              const base = prev?.id === id ? prev : empty;
+              const log = [...base.log, entry];
+              let dropped = base.dropped;
+              const overflow = log.length - MAX_RETAINED_LOG;
+              if (overflow > 0) {
+                log.splice(0, overflow);
+                dropped += overflow;
+              }
+              return { ...base, log, dropped, phase: 'live' };
+            });
           },
           { signal: controller.signal },
         );
         if (controller.signal.aborted) return;
         setFollowed((prev) =>
-          prev?.id === id ? { ...prev, agent: final } : { id, agent: final, log: [] },
+          prev?.id === id
+            ? { ...prev, agent: final, phase: 'ended' }
+            : { ...empty, agent: final, phase: 'ended' },
         );
       } catch {
-        // A dropped stream leaves the last snapshot on screen.
+        // A dropped stream leaves the last snapshot on screen — but says so.
+        if (controller.signal.aborted) return;
+        setFollowed((prev) => {
+          const base = prev?.id === id ? prev : empty;
+          return { ...base, phase: 'disconnected' };
+        });
       }
     };
 
@@ -222,6 +263,10 @@ export function SubagentsRoute() {
     ? { ...followedNow.agent, ...(listRow ?? {}) }
     : listRow;
   const log = followedNow?.log ?? [];
+  // Lines missing from the rendered tail: dropped by this page's retention
+  // cap plus anything the sidecar's own ring dropped before replay.
+  const logDropped = (followedNow?.dropped ?? 0) + (detail?.log_dropped ?? 0);
+  const streamPhase: StreamPhase = followedNow?.phase ?? 'connecting';
   // When the selected child belongs to a council this page started, the
   // detail pane becomes the three-column council widget.
   const activeCouncil = detail?.pipeline_id
@@ -266,10 +311,11 @@ export function SubagentsRoute() {
         setError(result.refusal);
         return;
       }
-      setCouncils((prev) => [
-        ...prev,
-        { council_id: result.council_id, pipeline_id: result.pipeline_id },
-      ]);
+      setCouncils((prev) =>
+        [...prev, { council_id: result.council_id, pipeline_id: result.pipeline_id }].slice(
+          -MAX_RETAINED_COUNCILS,
+        ),
+      );
       const head = result.members[0];
       if (head) setSelectedId(head.subagent_id);
       await refresh();
@@ -401,6 +447,8 @@ export function SubagentsRoute() {
                 <SubagentDetail
                   agent={detail}
                   log={log}
+                  logDropped={logDropped}
+                  streamPhase={streamPhase}
                   busy={busy}
                   onCancel={() => void control('subagent.cancel')}
                   onPause={() => void control('subagent.pause')}

@@ -20,6 +20,16 @@ import { cn } from '@/utils/cn';
 const DEFAULT_TOOLS = ['calculate', 'get_datetime', 'remember_fact', 'search_memory'];
 const DEFAULT_LIMITS = { max_turns: 8, max_tokens: 20_000, max_duration: 120 };
 
+/** Sidecar hard caps (P-15), mirrored so the form cannot submit a refused value. */
+const LIMIT_CAPS = { max_turns: 100, max_tokens: 200_000, max_duration: 3_600 };
+const MAX_STAGES = 16;
+
+/** Clamp a numeric limit into the sidecar's accepted range. */
+function clampLimit(key: keyof typeof LIMIT_CAPS, raw: number): number {
+  if (!Number.isFinite(raw) || raw < 1) return DEFAULT_LIMITS[key];
+  return Math.min(raw, LIMIT_CAPS[key]);
+}
+
 /** One stage of the form. `tools` is the grant handed to that child. */
 export interface StageDraft {
   key: string;
@@ -282,41 +292,44 @@ function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogPr
             </fieldset>
 
             <div className="grid gap-3 sm:grid-cols-3">
-              <Field label={t('maxTurns')}>
+              <Field label={t('maxTurns')} hint={t('limitCap', { max: LIMIT_CAPS.max_turns })}>
                 <input
                   type="number"
                   min={1}
+                  max={LIMIT_CAPS.max_turns}
                   className={fieldClass}
                   value={stage.max_turns}
                   onChange={(e) =>
                     patch(stage.key, {
-                      max_turns: Number(e.target.value) || DEFAULT_LIMITS.max_turns,
+                      max_turns: clampLimit('max_turns', Number(e.target.value)),
                     })
                   }
                 />
               </Field>
-              <Field label={t('maxTokens')}>
+              <Field label={t('maxTokens')} hint={t('limitCap', { max: LIMIT_CAPS.max_tokens })}>
                 <input
                   type="number"
                   min={1}
+                  max={LIMIT_CAPS.max_tokens}
                   className={fieldClass}
                   value={stage.max_tokens}
                   onChange={(e) =>
                     patch(stage.key, {
-                      max_tokens: Number(e.target.value) || DEFAULT_LIMITS.max_tokens,
+                      max_tokens: clampLimit('max_tokens', Number(e.target.value)),
                     })
                   }
                 />
               </Field>
-              <Field label={t('maxSeconds')}>
+              <Field label={t('maxSeconds')} hint={t('limitCap', { max: LIMIT_CAPS.max_duration })}>
                 <input
                   type="number"
                   min={1}
+                  max={LIMIT_CAPS.max_duration}
                   className={fieldClass}
                   value={stage.max_duration}
                   onChange={(e) =>
                     patch(stage.key, {
-                      max_duration: Number(e.target.value) || DEFAULT_LIMITS.max_duration,
+                      max_duration: clampLimit('max_duration', Number(e.target.value)),
                     })
                   }
                 />
@@ -328,7 +341,10 @@ function SpawnForm({ onOpenChange, availableTools, onSpawn }: Omit<SpawnDialogPr
         <Button
           variant="secondary"
           className="self-start"
-          onClick={() => setStages((prev) => [...prev, emptyStage()])}
+          disabled={stages.length >= MAX_STAGES}
+          onClick={() =>
+            setStages((prev) => (prev.length >= MAX_STAGES ? prev : [...prev, emptyStage()]))
+          }
         >
           <Plus aria-hidden />
           {t('addStage')}

@@ -702,3 +702,197 @@ def test_council_children_are_real_subagents() -> None:
     assert len(listing["subagents"]) == 3
     pipeline_ids = {agent["pipeline_id"] for agent in listing["subagents"]}
     assert pipeline_ids == {done["pipeline_id"]}
+
+
+# ==================================================================== P-15
+# Explicit bounds and deterministic stream semantics at the RPC layer.
+
+
+def test_spawn_rejects_an_oversized_prompt() -> None:
+    from dream.subagents import MAX_PROMPT_CHARS
+
+    m = make_methods()
+    with pytest.raises(BridgeError, match="prompt"):
+        run(m.subagent_spawn({"prompt": "x" * (MAX_PROMPT_CHARS + 1)}))
+
+
+def test_spawn_rejects_an_oversized_system_prompt() -> None:
+    from dream.subagents import MAX_SYSTEM_PROMPT_CHARS
+
+    m = make_methods()
+    with pytest.raises(BridgeError, match="system_prompt"):
+        run(
+            m.subagent_spawn(
+                {"prompt": "ok", "system_prompt": "x" * (MAX_SYSTEM_PROMPT_CHARS + 1)}
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [("max_turns", 101), ("max_tokens", 200_001), ("max_duration", 3_601)],
+)
+def test_spawn_rejects_limits_above_the_caps(key: str, value: Any) -> None:
+    m = make_methods()
+    with pytest.raises(BridgeError, match=key):
+        run(m.subagent_spawn({"prompt": "ok", key: value}))
+
+
+def test_spawn_rejects_an_oversized_tool_grant() -> None:
+    from dream.subagents import MAX_TOOL_GRANTS
+
+    m = make_methods()
+    grants = [f"t{i}" for i in range(MAX_TOOL_GRANTS + 1)]
+    with pytest.raises(BridgeError, match="tools"):
+        run(m.subagent_spawn({"prompt": "ok", "tools": grants}))
+
+
+def test_pipeline_rejects_too_many_stages_before_any_spawn() -> None:
+    from dream.subagents import MAX_PIPELINE_STAGES
+
+    m = make_methods()
+    stages = [{"prompt": f"s{i}"} for i in range(MAX_PIPELINE_STAGES + 1)]
+    with pytest.raises(BridgeError, match="stages"):
+        run(m.subagent_pipeline({"stages": stages}))
+    # Fail-closed means fail-empty: nothing was registered.
+    assert m.subagent_list({})["subagents"] == []
+
+
+@pytest.mark.parametrize("grace", ["abc", [], {}])
+def test_cancel_rejects_a_malformed_grace(grace: Any) -> None:
+    m = make_methods()
+
+    async def scenario() -> None:
+        spawned = await m.subagent_spawn({"prompt": "task"})
+        await m.subagent_cancel({"subagent_id": spawned["subagent_id"], "grace_seconds": grace})
+
+    with pytest.raises(BridgeError, match="grace_seconds"):
+        run(scenario())
+
+
+@pytest.mark.parametrize("grace", [-1, 31, 10_000])
+def test_cancel_rejects_an_out_of_range_grace(grace: Any) -> None:
+    m = make_methods()
+
+    async def scenario() -> None:
+        spawned = await m.subagent_spawn({"prompt": "task"})
+        await m.subagent_cancel({"subagent_id": spawned["subagent_id"], "grace_seconds": grace})
+
+    with pytest.raises(BridgeError, match="grace_seconds"):
+        run(scenario())
+
+
+def test_cancel_is_idempotent_at_the_rpc_layer() -> None:
+    m = make_methods()
+
+    async def scenario() -> tuple[dict[str, Any], dict[str, Any]]:
+        spawned = await m.subagent_spawn({"prompt": "task"})
+        sid = spawned["subagent_id"]
+        first = await m.subagent_cancel({"subagent_id": sid, "grace_seconds": 0})
+        second = await m.subagent_cancel({"subagent_id": sid, "grace_seconds": 0})
+        return first, second
+
+    first, second = run(scenario())
+    assert first["cancelled"] is True and second["cancelled"] is True
+    assert second["status"] in {"cancelled", "completed", "failed", "timeout"}
+
+
+def test_logs_stream_replay_is_ordered_and_deduplicated() -> None:
+    """Two subscribers to the same finished agent see identical ordered seqs."""
+    m = make_methods()
+
+    async def scenario() -> tuple[list[int], list[int]]:
+        spawned = await m.subagent_spawn({"prompt": "task"})
+        sid = spawned["subagent_id"]
+        await wait_terminal(m, sid)
+
+        async def collect() -> list[int]:
+            stream = await m.subagent_logs({"subagent_id": sid})
+            assert isinstance(stream, Stream)
+            return [chunk["entry"]["seq"] async for chunk in stream.chunks]
+
+        return await collect(), await collect()
+
+    first, second = run(scenario())
+    assert first == second
+    assert first == sorted(first)
+    assert len(set(first)) == len(first)
+
+
+def test_logs_stream_of_a_terminal_agent_terminates() -> None:
+    """Replay of a finished run ends cleanly instead of waiting for more."""
+    m = make_methods()
+
+    async def scenario() -> int:
+        spawned = await m.subagent_spawn({"prompt": "task"})
+        sid = spawned["subagent_id"]
+        await wait_terminal(m, sid)
+        stream = await m.subagent_logs({"subagent_id": sid})
+        chunks = [c async for c in stream.chunks]
+        return len(chunks)
+
+    count = run(scenario())
+    assert count > 0
+
+
+def test_pause_resume_cancel_race_is_safe() -> None:
+    """Overlapping control calls settle into one terminal state, no exception
+    other than the explicit invalid-state refusals."""
+    m = make_methods()
+
+    async def scenario() -> dict[str, Any]:
+        spawned = await m.subagent_spawn({"prompt": "task", "max_duration": 30})
+        sid = spawned["subagent_id"]
+        # pause → resume → pause, then cancel while paused.
+        m.subagent_pause({"subagent_id": sid})
+        m.subagent_resume({"subagent_id": sid})
+        m.subagent_pause({"subagent_id": sid})
+        result = await m.subagent_cancel({"subagent_id": sid, "grace_seconds": 0})
+        # Post-terminal controls must refuse explicitly, not corrupt state.
+        with pytest.raises(BridgeError):
+            m.subagent_pause({"subagent_id": sid})
+        with pytest.raises(BridgeError):
+            m.subagent_resume({"subagent_id": sid})
+        return result
+
+    result = run(scenario())
+    assert result["status"] in {"cancelled", "completed", "failed", "timeout"}
+
+
+def test_wire_payload_reports_log_dropped() -> None:
+    m = make_methods()
+
+    async def scenario() -> dict[str, Any]:
+        spawned = await m.subagent_spawn({"prompt": "task"})
+        return await wait_terminal(m, spawned["subagent_id"])
+
+    state = run(scenario())
+    assert state["log_dropped"] == 0
+    assert all("seq" in entry for entry in state["log"])
+
+
+def test_council_rejects_an_oversized_topic() -> None:
+    from dream.subagents import MAX_PROMPT_CHARS
+
+    m = make_methods()
+    with pytest.raises(BridgeError, match="topic"):
+        run(m.council_run({"prompt": "x" * (MAX_PROMPT_CHARS + 1)}))
+
+
+def test_parent_session_id_is_an_inert_string() -> None:
+    """The session join is a label for filtering — no session state reaches
+    the child, and an id that matches no session is not an error."""
+    m = make_methods()
+
+    async def scenario() -> tuple[dict[str, Any], dict[str, Any]]:
+        spawned = await m.subagent_spawn(
+            {"prompt": "task", "session_id": "sess_does_not_exist"}
+        )
+        state = await wait_terminal(m, spawned["subagent_id"])
+        listed = m.subagent_list({"session_id": "sess_does_not_exist"})
+        return state, listed
+
+    state, listed = run(scenario())
+    assert state["status"] == "completed"
+    assert state["parent_session_id"] == "sess_does_not_exist"
+    assert [s["subagent_id"] for s in listed["subagents"]] == [state["subagent_id"]]

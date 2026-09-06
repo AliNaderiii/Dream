@@ -17,8 +17,12 @@ class SubagentStateTransport implements BridgeTransport {
   listCalls = 0;
   failListOnce = false;
   hangList = false;
+  failLogs = false;
 
   request<T>(id: RpcId, method: string, params: RpcParams, onChunk?: (chunk: StreamChunk) => void) {
+    if (method === 'subagent.logs' && this.failLogs) {
+      return Promise.reject(new Error('log stream dropped'));
+    }
     if (method === 'subagent.list') {
       this.listCalls += 1;
       if (this.hangList) return new Promise<T>(() => {});
@@ -169,6 +173,82 @@ describe('SubagentsRoute', () => {
     expect(container.querySelectorAll('.animate-pulse')).toHaveLength(6);
     unmount();
     expect(screen.queryByRole('status', { name: 'Loading subagents…' })).not.toBeInTheDocument();
+  });
+
+  // ------------------------------------------------------------------ P-15
+
+  it('shows an explicit stream state beside the activity log', async () => {
+    const user = userEvent.setup();
+    render(<SubagentsRoute />);
+    await screen.findByText('No subagents yet');
+
+    await spawnOne(user, 'Stream state task', 'Streamer');
+    await screen.findByRole('region', { name: 'Subagent Streamer' });
+
+    // While the child runs, the stream is live; once the echo child
+    // finishes, the stream resolves and the state flips to ended.
+    await waitFor(
+      () => {
+        expect(screen.getByText('Stream ended')).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
+  });
+
+  it('marks the stream disconnected when subagent.logs drops', async () => {
+    const user = userEvent.setup();
+    const transport = new SubagentStateTransport();
+    transport.failLogs = true;
+    getBridgeClient().setTransport(transport);
+    render(<SubagentsRoute />);
+    await screen.findByText('No subagents yet');
+
+    await spawnOne(user, 'Doomed stream task', 'Dropper');
+    await screen.findByRole('region', { name: 'Subagent Dropper' });
+
+    await waitFor(
+      () => {
+        expect(screen.getByText(/Stream disconnected/)).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
+    // The last known snapshot stays on screen rather than blanking.
+    expect(screen.getByRole('region', { name: 'Subagent Dropper' })).toBeInTheDocument();
+  });
+
+  it('falls back to the newest child when the selected one is unknown after refresh', async () => {
+    const user = userEvent.setup();
+    render(<SubagentsRoute />);
+    await screen.findByText('No subagents yet');
+
+    await spawnOne(user, 'First task', 'Alpha');
+    await spawnOne(user, 'Second task', 'Beta');
+
+    // Newest-first: Beta is selected by default (deterministic fallback).
+    expect(screen.getByRole('region', { name: 'Subagent Beta' })).toBeInTheDocument();
+    const list = screen.getByRole('list', { name: 'Subagents' });
+    const rows = within(list).getAllByRole('button');
+    expect(rows[0]).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('keeps the pause/resume control focused across the swap', async () => {
+    const user = userEvent.setup();
+    render(<SubagentsRoute />);
+    await screen.findByText('No subagents yet');
+
+    await spawnOne(user, 'Pause focus task', 'Pausable');
+    await screen.findByRole('region', { name: 'Subagent Pausable' });
+
+    const pause = screen.getByRole('button', { name: 'Pause' });
+    pause.focus();
+    await user.keyboard('{Enter}');
+
+    const resume = await screen.findByRole('button', { name: 'Resume' });
+    await waitFor(() => expect(resume).toHaveFocus());
+
+    await user.keyboard('{Enter}');
+    const pauseAgain = await screen.findByRole('button', { name: 'Pause' });
+    await waitFor(() => expect(pauseAgain).toHaveFocus());
   });
 
   it('retries a failed roster bridge request', async () => {

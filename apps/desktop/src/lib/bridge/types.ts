@@ -304,6 +304,8 @@ export interface BridgeLogEntry {
   ts: number;
   level: string;
   message: string;
+  /** Per-agent monotonic sequence number; makes replay deduplicable. */
+  seq?: number;
 }
 
 /** A spawned subagent and its live counters. */
@@ -333,6 +335,8 @@ export interface BridgeSubagent {
   pipeline_index: number | null;
   /** Which limit ended the run — `turns`, `tokens` or `duration`. */
   limit_hit: string | null;
+  /** Entries dropped from the head of the bounded log ring. */
+  log_dropped?: number;
   elapsed: number;
   /** 0–1, the highest of the turn, token and time ratios. */
   progress: number;

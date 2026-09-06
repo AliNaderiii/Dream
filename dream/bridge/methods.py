@@ -88,6 +88,7 @@ from dream.subagents import (
     DEFAULT_MAX_DURATION,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MAX_TURNS,
+    MAX_PIPELINE_STAGES,
     SubAgent,
     SubAgentManager,
     SubAgentSpec,
@@ -106,6 +107,11 @@ from .errors import (
 from .streams import Chunk, Stream, stream_text, tokenise
 
 logger = logging.getLogger(__name__)
+
+#: Upper bound on ``subagent.cancel``'s ``grace_seconds`` (P-15): long enough
+#: for any provider call to wind down, short enough that cancel stays a
+#: bounded operation.
+MAX_CANCEL_GRACE_SECONDS = 30.0
 
 #: Optional infrastructure imports — enabled lazily so the sidecar runs even
 #: when Docker/Playwright/FastAPI are not installed.
@@ -2054,6 +2060,10 @@ class BridgeMethods:
         raw_stages = params.get("stages")
         if not isinstance(raw_stages, list) or not raw_stages:
             raise invalid_params("stages must be a non-empty array")
+        if len(raw_stages) > MAX_PIPELINE_STAGES:
+            # Checked before any stage is validated or spawned, so an
+            # oversized request cannot do partial work.
+            raise invalid_params(f"a pipeline may have at most {MAX_PIPELINE_STAGES} stages")
         shared = {k: v for k, v in params.items() if k not in {"stages", "name"}}
         specs: list[SubAgentSpec] = []
         for index, stage in enumerate(raw_stages):
@@ -2099,8 +2109,19 @@ class BridgeMethods:
         params = params or {}
         agent = self._require_subagent(params)
         grace = params.get("grace_seconds")
+        if grace is not None:
+            # Validated, bounded: a malformed value must be invalid_params
+            # (not INTERNAL), and a huge one must not stall the cancel path.
+            try:
+                grace = float(grace)
+            except (TypeError, ValueError) as exc:
+                raise invalid_params("grace_seconds must be a number") from exc
+            if not (0 <= grace <= MAX_CANCEL_GRACE_SECONDS):
+                raise invalid_params(
+                    f"grace_seconds must be between 0 and {MAX_CANCEL_GRACE_SECONDS}"
+                )
         cancelled = await self.subagents.cancel(
-            agent.id, grace_seconds=float(grace) if grace is not None else None
+            agent.id, grace_seconds=grace
         )
         payload = subagent_to_dict(cancelled or agent, include_log=False)
         payload["cancelled"] = True
