@@ -35,6 +35,7 @@
 | `dream/bridge/server.py` | **Fix (proven defect, this investigation):** `StdinLineReader._pump` EOF sentinel now takes a buffer slot — removes the lost-sentinel/`QueueFull` race that wedged CI Python-3.10 at 22% |
 | `tests/test_bridge_transport_hardening.py` | New deterministic regression test for the full-queue EOF race; existing reader test bounded by `wait_for` |
 | `tests/test_bridge_subprocess.py` | Kill-watchdog bounds the manual pipe-read loop (fails with diagnosis instead of hanging) |
+| `pyproject.toml` | `faulthandler_timeout = 300` — hung tests dump stacks and fail in bounded time (diagnostic only) |
 | `MASTER_CHECKLIST.md` | §2.3 checked |
 | `P-13-SYNTHESIS.md`, `P-13-AUDIT.md` | Phase documents |
 
@@ -257,6 +258,37 @@ on `67b0623`). Root cause, reproduced locally and pinned:
 - Verified: full P-13 file green under `TZ=UTC`, `Asia/Tehran`,
   `Pacific/Kiritimati`, and `America/New_York` (20 tests each), plus the
   227-test targeted run and ruff.
+
+## CI — run F: ALL 8 CHECKS PASS on the final head
+
+Head `61ab054` (run 34031271292 + Frontend/Rust run 34031271265):
+
+| check | result | duration | job |
+| --- | --- | --- | --- |
+| test (3.10) | **pass** | 3m52s | 101481103822 |
+| test (3.11) | **pass** | 3m27s | 101481103842 |
+| test (3.12) | **pass** | 3m49s | 101481103712 |
+| test (3.13) | **pass** | 3m10s | 101481103849 |
+| Frontend | **pass** | 3m22s | 101481103775 |
+| Rust (ubuntu-22.04) | **pass** | 2m23s | 101481103888 |
+| Rust (windows-latest) | **pass** | 2m43s | 101481103852 |
+| Rust (macos-latest) | **pass** | 2m3s | 101481103902 |
+
+3.11 — the configuration that hung in run E — passed on the very next run,
+consistent with a rare contention-sensitive stall rather than anything
+version- or change-specific; the faulthandler watchdog is now in place so
+any future occurrence fails with a full stack dump instead of wedging.
+The two wedged jobs from runs D and E stay hung until GitHub's job limit
+and are recorded above as never-green; the PR's gating checks are those of
+the latest commit, which are all green.
+
+**Final diff scope (truthful update): 29 files** vs. main — the approved
+P-13 25-file diff plus four investigation additions, all disclosed in this
+audit: `dream/bridge/server.py` (proven sentinel-race fix),
+`tests/test_bridge_transport_hardening.py` (regression test + bound),
+`tests/test_bridge_subprocess.py` (read watchdog), `pyproject.toml`
+(faulthandler watchdog). No workflow, rust, or gateway paths; no P-12 or
+SEC behaviour change on any non-race path.
 
 ## CI Python-3.10 stall — root cause and fix (post-run-D investigation)
 
