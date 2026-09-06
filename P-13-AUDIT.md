@@ -324,6 +324,26 @@ fresh-process iterations clean; full local suite failure set identical to
 the known pre-existing 21; `ruff check .` clean; `mypy dream/bridge/server.py`
 0 errors; P-13 suite 20 passed.
 
+**Run E on the fix SHA (`a2660e2`/`5ab9540`): 3.10 finally PASS.**
+Python 3.10 passed in 3m44s (job 101476356219) — the configuration that
+froze in run D completed cleanly with the sentinel fix; 3.12, 3.13,
+Frontend, and all three Rust jobs also passed. **Python 3.11 then hung**
+(job 101476356233, Test step, no output progress for 40+ minutes): the
+hang is rare and *mobile between matrix jobs* (run D froze 3.10 with 3.11
+green; run E froze 3.11 with 3.10 green), so at least one further
+contention-sensitive stall exists that no local run has reproduced (five
+local full suites, plus three concurrent contention runs — two clean, one
+showed only a bounded ~82s shutdown linger from leaked pool workers with
+120s barrier timeouts, which self-terminates and is not the CI mid-suite
+freeze). Because the issue is CI-only and unobservable from outside a
+wedged job, the investigation added diagnostic-safe bounded instrumentation
+per directive item 8: `faulthandler_timeout = 300` in the pytest config —
+a hung test now dumps every thread's stack into the job log and fails in
+bounded time instead of wedging for GitHub's job limit. No tests were
+hidden, skipped, or given blank cheque timeouts, and no workflow file was
+touched. Run-E 3.11's own log stays unavailable until GitHub's job limit
+releases it; its result is recorded as **hung — never green**.
+
 **Run-D disposition.** The wedged 3.10 job (run 34028164192, job 101472757123)
 stayed hung on the race with nothing to stop it (no faulthandler timeout is
 configured); an attempt to cancel it after pushing the fix was denied to this
