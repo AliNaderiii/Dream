@@ -18,7 +18,10 @@
     "copyPath": "复制路径",
     "copied": "已复制路径",
     "global": "工作区根目录",
-    "menu": "操作"
+    "menu": "操作",
+    "retry": "重试",
+    "loading": "正在加载工作区…",
+    "loadMore": "加载更多文件"
   },
   "preview": {
     "title": "预览",

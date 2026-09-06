@@ -4,6 +4,14 @@
     "importHelp": "El proyecto apunta a la carpeta real. No se copia nada.",
     "openWorkspace": "Abrir en el espacio de trabajo",
     "settings": "Plan como modo predeterminado",
-    "inPlaceBadge": "In situ — nunca copiado"
+    "inPlaceBadge": "In situ — nunca copiado",
+    "retry": "Reintentar",
+    "loading": "Cargando proyectos…",
+    "editProject": "Editar proyecto",
+    "editHelp": "Cambia el nombre del proyecto o su carpeta vinculada. La carpeta sigue siendo un enlace: no se copia ni se borra nada.",
+    "unlinkHelp": "Déjalo vacío para desvincular la carpeta. Los archivos del disco nunca se tocan.",
+    "saveChanges": "Guardar cambios",
+    "showAll": "Mostrar las {{count}} sesiones",
+    "showFewer": "Mostrar menos sesiones"
   }
 }

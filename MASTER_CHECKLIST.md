@@ -144,7 +144,11 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 - [x] 3.6.7 Echo transport: `gateway.*` handlers + types, so dev/tests need no sidecar; 245 frontend tests, tsc/lint/prettier/build green
 
 ## Phase 3 — Projects, Subagents & Provenance (Prompt P-03 / P-10)
-- [ ] 3.1 Project dashboard; file browser
+- [x] 3.1 Project dashboard; file browser — **P-14**: projects dashboard with
+  edit/relink/unlink, truthful loading/offline/retry states and bounded session
+  lists; workspace file browser pagination; merge-preserving project
+  persistence, fail-closed corrupt-metadata quarantine, binary-preview refusal,
+  path-depth cap, and a path-free ops log.
 - [ ] 3.2 Subagent monitor
 - [x] 3.3 Run history / provenance viewer — **P-10**: Full tamper-evident SHA-256 provenance logging, artifact sidecar linking, lineage graph & timeline UI, and reproducibility ZIP export.
 

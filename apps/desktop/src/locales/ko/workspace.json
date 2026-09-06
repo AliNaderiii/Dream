@@ -18,7 +18,10 @@
     "copyPath": "경로 복사",
     "copied": "경로를 복사했습니다",
     "global": "작업 공간 루트",
-    "menu": "동작"
+    "menu": "동작",
+    "retry": "다시 시도",
+    "loading": "작업 공간 불러오는 중…",
+    "loadMore": "파일 더 불러오기"
   },
   "preview": {
     "title": "미리보기",

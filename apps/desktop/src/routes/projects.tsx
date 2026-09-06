@@ -11,10 +11,11 @@
  * exactly one project.
  */
 
-import { FolderKanban, FolderOpen, FolderPlus, Plus, Trash2, X } from 'lucide-react';
+import { FolderKanban, FolderOpen, FolderPlus, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { BridgeOfflineBanner } from '@/components/shared/bridge-offline-banner';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,7 @@ import {
   deleteProject,
   listProjects,
   removeSessionFromProject,
+  updateProject,
 } from '@/lib/bridge/projects';
 import { workspaceImportFolder, workspaceProjectSettings } from '@/lib/bridge/workspace';
 import type { BridgeProject } from '@/lib/bridge/types';
@@ -42,6 +44,9 @@ import { useTranslation } from '@/lib/i18n';
 import { dialogApi } from '@/lib/tauri';
 import { isTauri } from '@/utils/platform';
 import { relativeTime } from '@/utils/time';
+
+/** Card session lists stay bounded; the rest is behind an explicit toggle. */
+const SESSION_PREVIEW_LIMIT = 8;
 
 export function ProjectsRoute() {
   const { t } = useTranslation('common');
@@ -54,8 +59,10 @@ export function ProjectsRoute() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<BridgeProject | null>(null);
   const [deleting, setDeleting] = useState<BridgeProject | null>(null);
   const [busy, setBusy] = useState(false);
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -107,6 +114,21 @@ export function ProjectsRoute() {
         await createProject(client, draft);
       }
       setCreateOpen(false);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('projects.loadError'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onEdit = async (draft: { name: string; folder: string | null }) => {
+    if (!editing) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await updateProject(client, editing.id, draft);
+      setEditing(null);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('projects.loadError'));
@@ -176,16 +198,36 @@ export function ProjectsRoute() {
         </Button>
       </header>
 
+      <BridgeOfflineBanner />
+
       {error && (
-        <p
+        <div
           role="alert"
-          className="mb-4 rounded-md border border-border-default bg-surface p-3 text-caption text-fg-secondary"
+          className="mb-4 flex items-center gap-3 rounded-md border border-border-default bg-surface p-3 text-caption text-fg-secondary"
         >
-          {error}
-        </p>
+          <span className="min-w-0 flex-1">{error}</span>
+          <Button size="sm" variant="secondary" onClick={() => void refresh()}>
+            {tp('v2.retry')}
+          </Button>
+        </div>
       )}
 
-      {!loading && projects.length === 0 ? (
+      {loading ? (
+        <div
+          role="status"
+          aria-busy="true"
+          aria-label={tp('v2.loading')}
+          className="grid gap-4 md:grid-cols-2"
+        >
+          {[0, 1].map((index) => (
+            <div
+              key={index}
+              className="h-40 animate-pulse rounded-xl border border-border-default bg-surface"
+            />
+          ))}
+          <span className="sr-only">{tp('v2.loading')}</span>
+        </div>
+      ) : projects.length === 0 ? (
         <EmptyState
           icon={FolderKanban}
           title={t('projects.title')}
@@ -215,14 +257,24 @@ export function ProjectsRoute() {
                     <p className="mt-1 text-micro text-fg-muted">{tp('v2.inPlaceBadge')}</p>
                   )}
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`${t('projects.deleteProject')}: ${project.name}`}
-                  onClick={() => setDeleting(project)}
-                >
-                  <Trash2 className="size-4" aria-hidden />
-                </Button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`${tp('v2.editProject')}: ${project.name}`}
+                    onClick={() => setEditing(project)}
+                  >
+                    <Pencil className="size-4" aria-hidden />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`${t('projects.deleteProject')}: ${project.name}`}
+                    onClick={() => setDeleting(project)}
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                  </Button>
+                </div>
               </div>
 
               <div>
@@ -234,7 +286,10 @@ export function ProjectsRoute() {
                   <p className="text-caption text-fg-muted">{t('projects.sessionsEmpty')}</p>
                 ) : (
                   <ul className="flex flex-col gap-1">
-                    {project.session_ids.map((sessionId) => {
+                    {(expandedSessions.has(project.id)
+                      ? project.session_ids
+                      : project.session_ids.slice(0, SESSION_PREVIEW_LIMIT)
+                    ).map((sessionId) => {
                       const session = sessionById.get(sessionId);
                       return (
                         <li
@@ -266,6 +321,26 @@ export function ProjectsRoute() {
                       );
                     })}
                   </ul>
+                )}
+                {project.session_ids.length > SESSION_PREVIEW_LIMIT && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-1"
+                    aria-expanded={expandedSessions.has(project.id)}
+                    onClick={() =>
+                      setExpandedSessions((previous) => {
+                        const next = new Set(previous);
+                        if (next.has(project.id)) next.delete(project.id);
+                        else next.add(project.id);
+                        return next;
+                      })
+                    }
+                  >
+                    {expandedSessions.has(project.id)
+                      ? tp('v2.showFewer')
+                      : tp('v2.showAll', { count: project.session_ids.length })}
+                  </Button>
                 )}
               </div>
 
@@ -324,6 +399,18 @@ export function ProjectsRoute() {
         onOpenChange={setCreateOpen}
         onCreate={onCreate}
       />
+
+      {editing && (
+        <EditProjectDialog
+          key={editing.id}
+          project={editing}
+          busy={busy}
+          onOpenChange={(open) => {
+            if (!open) setEditing(null);
+          }}
+          onSave={onEdit}
+        />
+      )}
 
       <ConfirmDialog
         open={deleting !== null}
@@ -424,6 +511,84 @@ function CreateProjectDialog({
             }
           >
             {t('projects.create')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Rename a project and relink or unlink its workspace folder.
+ *
+ * Uses `project.update` only: the folder stays a validated path reference —
+ * nothing is copied, and unlinking never touches files on disk.
+ */
+function EditProjectDialog({
+  project,
+  busy,
+  onOpenChange,
+  onSave,
+}: {
+  project: BridgeProject;
+  busy: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (draft: { name: string; folder: string | null }) => Promise<void> | void;
+}) {
+  const { t } = useTranslation('common');
+  const { t: tp } = useTranslation('projects');
+  const [name, setName] = useState(project.name);
+  const [folder, setFolder] = useState(project.folder ?? '');
+
+  const browse = async () => {
+    if (!isTauri()) return; // the text input is the browser fallback
+    const picked = await dialogApi.selectFolder({ title: t('projects.folderLabel') });
+    if (picked) setFolder(picked);
+  };
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="w-[min(30rem,92vw)]">
+        <DialogHeader>
+          <DialogTitle>{tp('v2.editProject')}</DialogTitle>
+          <DialogDescription>{tp('v2.editHelp')}</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1 text-caption font-medium">
+            {t('projects.nameLabel')}
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="h-9 rounded-md border border-border-default bg-canvas px-3 text-body outline-none focus:border-accent"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-caption font-medium">
+            {t('projects.folderLabel')}
+            <span className="flex gap-2">
+              <input
+                value={folder}
+                onChange={(event) => setFolder(event.target.value)}
+                placeholder={t('projects.folderPlaceholder')}
+                dir="ltr"
+                className="ltr-island h-9 min-w-0 flex-1 rounded-md border border-border-default bg-canvas px-3 text-body outline-none focus:border-accent"
+              />
+              <Button variant="secondary" onClick={() => void browse()}>
+                {t('projects.folderBrowse')}
+              </Button>
+            </span>
+            <span className="text-micro font-normal text-fg-muted">{tp('v2.unlinkHelp')}</span>
+          </label>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            {t('projects.cancel')}
+          </Button>
+          <Button
+            variant="primary"
+            disabled={busy || !name.trim()}
+            onClick={() => void onSave({ name: name.trim(), folder: folder.trim() || null })}
+          >
+            {tp('v2.saveChanges')}
           </Button>
         </DialogFooter>
       </DialogContent>

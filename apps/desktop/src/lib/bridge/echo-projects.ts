@@ -17,6 +17,32 @@ let counter = 0;
 
 const nextId = (): string => `prj_echo_${(++counter).toString(16).padStart(4, '0')}`;
 
+/** Sidecar-parity caps (P-14): bounded name/folder, no NUL bytes. */
+const NAME_MAX = 200;
+const FOLDER_MAX = 4096;
+
+function cleanName(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw invalidParams('name must be a non-empty string');
+  }
+  const name = value.trim();
+  if (name.length > NAME_MAX) throw invalidParams(`name must be at most ${NAME_MAX} characters`);
+  if (name.includes('\u0000')) throw invalidParams('name must not contain control characters');
+  return name;
+}
+
+function cleanFolder(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw invalidParams('folder must be a non-empty string when set');
+  }
+  const folder = value.trim();
+  if (folder.length > FOLDER_MAX) {
+    throw invalidParams(`folder must be at most ${FOLDER_MAX} characters`);
+  }
+  if (folder.includes('\u0000')) throw invalidParams('folder must not contain control characters');
+  return folder;
+}
+
 /** Seconds since the epoch, matching the sidecar's float timestamps. */
 const now = (): number => Date.now() / 1000;
 
@@ -58,14 +84,9 @@ export class EchoProjectsRuntime {
   constructor(private readonly sessionExists?: (sessionId: string) => boolean) {}
 
   create(params: RpcParams): BridgeProject {
-    const name = str(params, 'name').trim();
-    if (!name) throw invalidParams('name must be a non-empty string');
+    const name = cleanName(params['name']);
     const folderRaw = params['folder'];
-    if (folderRaw !== undefined && folderRaw !== null) {
-      if (typeof folderRaw !== 'string' || !folderRaw.trim()) {
-        throw invalidParams('folder must be a non-empty string when set');
-      }
-    }
+    if (folderRaw !== undefined && folderRaw !== null) cleanFolder(folderRaw);
     const timestamp = now();
     const project: BridgeProject = {
       project_id: '',
@@ -100,16 +121,14 @@ export class EchoProjectsRuntime {
   update(params: RpcParams): BridgeProject {
     const project = this.require(params);
     if ('name' in params) {
-      const name = str(params, 'name').trim();
-      if (!name) throw invalidParams('name must be a non-empty string');
-      project.name = name;
+      project.name = cleanName(params['name']);
     }
     if ('folder' in params) {
       const folder = params['folder'];
       if (folder === null || (typeof folder === 'string' && !folder.trim())) {
         project.folder = null;
       } else if (typeof folder === 'string') {
-        project.folder = folder.trim();
+        project.folder = cleanFolder(folder);
       } else {
         throw invalidParams('folder must be a string or null');
       }

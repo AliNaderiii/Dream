@@ -18,7 +18,10 @@
     "copyPath": "Copiar ruta",
     "copied": "Ruta copiada",
     "global": "Raíz del espacio",
-    "menu": "Acciones"
+    "menu": "Acciones",
+    "retry": "Reintentar",
+    "loading": "Cargando el espacio de trabajo…",
+    "loadMore": "Cargar más archivos"
   },
   "preview": {
     "title": "Vista previa",

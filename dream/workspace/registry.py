@@ -12,6 +12,7 @@ from typing import Any
 
 from dream.workspace.errors import WorkspaceError
 from dream.workspace.paths import normalize_root
+from dream.workspace.projects import quarantine_corrupt
 
 _DEFAULT_PATH = "data/workspace_registry.json"
 
@@ -31,11 +32,19 @@ class WorkspaceRegistry:
 
     def _load(self) -> None:
         try:
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+            text = self.path.read_text(encoding="utf-8")
+        except OSError:
+            return
+        try:
+            raw = json.loads(text)
+        except ValueError:
+            # Fail closed (P-14): keep the unreadable file as a recovery
+            # artifact instead of letting the next save overwrite it.
+            quarantine_corrupt(self.path)
             return
         rows = raw.get("roots") if isinstance(raw, dict) else raw
         if not isinstance(rows, list):
+            quarantine_corrupt(self.path)
             return
         for row in rows:
             if isinstance(row, dict) and row.get("root_id"):

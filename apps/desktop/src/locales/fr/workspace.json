@@ -18,7 +18,10 @@
     "copyPath": "Copier le chemin",
     "copied": "Chemin copié",
     "global": "Racine de l’espace",
-    "menu": "Actions"
+    "menu": "Actions",
+    "retry": "Réessayer",
+    "loading": "Chargement de l’espace de travail…",
+    "loadMore": "Charger plus de fichiers"
   },
   "preview": {
     "title": "Aperçu",

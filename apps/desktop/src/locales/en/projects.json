@@ -4,6 +4,14 @@
     "importHelp": "The project points at the real folder. Nothing is copied.",
     "openWorkspace": "Open in workspace",
     "settings": "Plan as default mode",
-    "inPlaceBadge": "In place — never copied"
+    "inPlaceBadge": "In place — never copied",
+    "retry": "Retry",
+    "loading": "Loading projects…",
+    "editProject": "Edit project",
+    "editHelp": "Rename the project or change its linked folder. The folder stays a link — nothing is copied or deleted.",
+    "unlinkHelp": "Leave empty to unlink the folder. Files on disk are never touched.",
+    "saveChanges": "Save changes",
+    "showAll": "Show all {{count}} sessions",
+    "showFewer": "Show fewer sessions"
   }
 }

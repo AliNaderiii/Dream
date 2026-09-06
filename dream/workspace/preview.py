@@ -88,6 +88,15 @@ def _read_capped(path: Path, cap: int = PREVIEW_BYTES) -> tuple[bytes, bool]:
     return data[:cap], len(data) > cap
 
 
+def _looks_binary(payload: bytes) -> bool:
+    """True when the payload is not decodable text (NUL byte sniff).
+
+    A binary file renamed ``.txt`` must not be decoded as arbitrary text
+    (P-14): the preview stays metadata-only and says so.
+    """
+    return b"\x00" in payload[:8_192]
+
+
 def _csv_preview(text: str, dialect: str) -> dict[str, Any]:
     reader = csv.reader(io.StringIO(text), delimiter="\t" if dialect == "tsv" else ",")
     rows = []
@@ -189,12 +198,20 @@ def preview_file(root: Path, rel: str) -> dict[str, Any]:
     }
     if kind in {"text", "markdown", "code", "json"}:
         raw, truncated = _read_capped(path)
+        if _looks_binary(raw):
+            payload["type"] = "file"
+            payload["warning"] = "Binary content is not decoded; metadata only."
+            return payload
         text = redact(raw.decode("utf-8", "replace"))[:TEXT_CHARS]
         payload["text"] = text
         payload["truncated"] = truncated or len(text) >= TEXT_CHARS
         return payload
     if kind in {"csv", "tsv"}:
         raw, truncated = _read_capped(path)
+        if _looks_binary(raw):
+            payload["type"] = "file"
+            payload["warning"] = "Binary content is not decoded; metadata only."
+            return payload
         text = raw.decode("utf-8", "replace")
         table = _csv_preview(text, kind)
         payload["table"] = table

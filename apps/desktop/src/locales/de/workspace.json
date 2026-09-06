@@ -18,7 +18,10 @@
     "copyPath": "Pfad kopieren",
     "copied": "Pfad kopiert",
     "global": "Arbeitsbereichswurzel",
-    "menu": "Aktionen"
+    "menu": "Aktionen",
+    "retry": "Erneut versuchen",
+    "loading": "Arbeitsbereich wird geladen…",
+    "loadMore": "Weitere Dateien laden"
   },
   "preview": {
     "title": "Vorschau",

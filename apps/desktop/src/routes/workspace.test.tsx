@@ -36,3 +36,39 @@ describe('Workspace route', () => {
     expect(await screen.findByRole('button', { name: 'todo.md' })).toBeInTheDocument();
   });
 });
+
+describe('Workspace route states (P-14)', () => {
+  beforeEach(() => {
+    resetBridgeClient();
+    resetEchoWorkspace();
+  });
+
+  it('announces a loading state while roots are fetched', async () => {
+    render(<WorkspaceRoute />);
+    // The echo transport resolves fast, so assert the terminal state and
+    // that the loading indicator is gone afterwards (no stuck spinner).
+    expect(await screen.findByText('sales.csv')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('closes the file action menu with Escape', async () => {
+    render(<WorkspaceRoute />);
+    await screen.findByText('sales.csv');
+    const menuButtons = screen.getAllByRole('button', { name: 'Actions' });
+    expect(menuButtons.length).toBeGreaterThan(0);
+    fireEvent.click(menuButtons[0]);
+    const menu = await screen.findByRole('menu');
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('renders correctly in RTL', async () => {
+    document.documentElement.dir = 'rtl';
+    try {
+      render(<WorkspaceRoute />);
+      expect(await screen.findByRole('heading', { name: 'Workspace' })).toBeVisible();
+    } finally {
+      document.documentElement.dir = 'ltr';
+    }
+  });
+});

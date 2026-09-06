@@ -4,6 +4,14 @@
     "importHelp": "Das Projekt zeigt auf den echten Ordner. Nichts wird kopiert.",
     "openWorkspace": "Im Arbeitsbereich öffnen",
     "settings": "Plan als Standardmodus",
-    "inPlaceBadge": "Vor Ort — nie kopiert"
+    "inPlaceBadge": "Vor Ort — nie kopiert",
+    "retry": "Erneut versuchen",
+    "loading": "Projekte werden geladen…",
+    "editProject": "Projekt bearbeiten",
+    "editHelp": "Projekt umbenennen oder den verknüpften Ordner ändern. Der Ordner bleibt eine Verknüpfung — nichts wird kopiert oder gelöscht.",
+    "unlinkHelp": "Leer lassen, um die Ordnerverknüpfung zu lösen. Dateien auf der Festplatte bleiben unberührt.",
+    "saveChanges": "Änderungen speichern",
+    "showAll": "Alle {{count}} Sitzungen anzeigen",
+    "showFewer": "Weniger Sitzungen anzeigen"
   }
 }

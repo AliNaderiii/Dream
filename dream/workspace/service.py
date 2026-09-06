@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 from pathlib import Path
@@ -33,12 +34,17 @@ class WorkspaceService:
         self.last_listing: dict[str, Any] | None = None
 
     def _log(self, action: str, **fields: Any) -> None:
+        """Append one JSON line. Never logs absolute paths or file contents.
+
+        Privacy (P-14): the ops log records ids and actions only — a user's
+        private folder location must not leak into a shareable log file.
+        """
         try:
             self.ops_path.parent.mkdir(parents=True, exist_ok=True)
             line = {"action": action, **fields}
             with self.ops_path.open("a", encoding="utf-8") as handle:
-                handle.write(f"{line}\n")
-        except OSError:
+                handle.write(json.dumps(line, ensure_ascii=False) + "\n")
+        except (OSError, TypeError, ValueError):
             pass
 
     def _root_path(self, root_id: str) -> Path:
@@ -65,7 +71,8 @@ class WorkspaceService:
             root["project_id"] = project["project_id"]
         listing = list_entries(Path(root["path"]), "", cursor=0, limit=min(50, LIST_CAP))
         self.last_listing = listing
-        self._log("import_folder", root_id=root["root_id"], copied=False, path=root["path"])
+        # The absolute folder path is deliberately not logged (P-14 privacy).
+        self._log("import_folder", root_id=root["root_id"], copied=False)
         return {
             "root": root,
             "project": project,
@@ -124,7 +131,8 @@ class WorkspaceService:
     def files_preview(self, root_id: str, rel: str) -> dict[str, Any]:
         preview = preview_file(self._root_path(root_id), rel)
         preview["root_id"] = root_id
-        self._log("preview", root_id=root_id, path=rel, executed=False)
+        # File names are private: log the action and root id only (P-14).
+        self._log("preview", root_id=root_id, executed=False)
         return preview
 
     def files_read(self, root_id: str, rel: str) -> dict[str, Any]:
