@@ -258,6 +258,97 @@ on `67b0623`). Root cause, reproduced locally and pinned:
 ## CI — final results
 
 - **PR:** [#127](https://github.com/AliNaderiii/Dream/pull/127) —
+  `arena/01a0734c-dream` -> `main`, **open and unmerged** (state verified
+  live via the API at head `67b5623`; the branch head was then advanced to
+  the test-fix commit below; not merged, no release tag, no v0.4.7).
+- **Final remote head SHA (push confirmed):**
+  `7d13acf727726c728b6cd1ce3faee9f75bc390a4`
+  (`test(p13): make the kind-filter test independent of wall-clock time`) —
+  commits in the PR:
+  1. `67b5623` feat(memory): add reminder authoring on the existing scheduler (P-13)
+  2. `56c2567` docs(p13): record PR number, final CI results, and local failure set
+  3. `7d13acf` test(p13): make the kind-filter test independent of wall-clock time
+  All three authored `Ali Naderi <alinaderi@users.noreply.github.com>`, zero
+  trailers, `tools/check_commit.py HEAD` passes on each.
+
+### Run A — code commit `67b5623` (all 8 observed PASS)
+
+| Check | Result | URL |
+|---|---|---|
+| test (3.10) | pass, 3m38s | https://github.com/AliNaderiii/Dream/actions/runs/34024943063/job/101466038467 |
+| test (3.11) | pass, 3m22s | https://github.com/AliNaderiii/Dream/actions/runs/34024943063/job/101466038846 |
+| test (3.12) | pass, 3m35s | https://github.com/AliNaderiii/Dream/actions/runs/34024943063/job/101466039013 |
+| test (3.13) | pass, 3m19s | https://github.com/AliNaderiii/Dream/actions/runs/34024943063/job/101466039300 |
+| Frontend checks | pass, 2m25s | https://github.com/AliNaderiii/Dream/actions/runs/34024943006/job/101464139135 |
+| Rust (ubuntu-22.04) | pass, 2m33s | https://github.com/AliNaderiii/Dream/actions/runs/34024943006/job/101464139040 |
+| Rust (windows-latest) | pass, 2m29s | https://github.com/AliNaderiii/Dream/actions/runs/34024943006/job/101464139107 |
+| Rust (macos-latest) | pass, 2m5s | https://github.com/AliNaderiii/Dream/actions/runs/34024943006/job/101464139026 |
+
+(One earlier 3.10 attempt in run A was cancelled mid-step by a GitHub runner
+loss and automatically re-run; the retry passed. Each `test (3.x)` job
+internally ran pytest, ruff, the PR commit-rules gate and the suite-count
+gate — all green.)
+
+### Run B — docs commit `56c2567` (observed: 3 FAIL — see incident below)
+
+test (3.10) / (3.11) / (3.12) failed on the time-of-day flake documented in
+the next section; test (3.13), Frontend and all Rust jobs passed. Run:
+https://github.com/AliNaderiii/Dream/actions/runs/34026084375
+
+### Run C — final head `7d13acf` (observed 7 of 8 PASS; 1 pending observation)
+
+| Check | Result | URL |
+|---|---|---|
+| test (3.11) | **pass**, 3m27s | https://github.com/AliNaderiii/Dream/actions/runs/34026786803/job/101469067158 |
+| test (3.12) | **pass**, 3m22s | https://github.com/AliNaderiii/Dream/actions/runs/34026786803/job/101469067162 |
+| test (3.13) | **pass**, 3m52s | https://github.com/AliNaderiii/Dream/actions/runs/34026786803/job/101469067182 |
+| Frontend checks | **pass**, 3m28s | https://github.com/AliNaderiii/Dream/actions/runs/34026786808/job/101469067350 |
+| Rust (ubuntu-22.04) | **pass**, 2m7s | https://github.com/AliNaderiii/Dream/actions/runs/34026786808/job/101469067239 |
+| Rust (windows-latest) | **pass**, 3m12s | https://github.com/AliNaderiii/Dream/actions/runs/34026786808/job/101469067356 |
+| Rust (macos-latest) | **pass**, 1m49s | https://github.com/AliNaderiii/Dream/actions/runs/34026786808/job/101469067389 |
+| test (3.10) | **pass**, 3m18s | https://github.com/AliNaderiii/Dream/actions/runs/34026786803/job/101472083712 |
+
+Run C observation note: the original run-C 3.10 attempt
+(job 101469067342) was lost to the same GitHub runner issue seen in run A
+and automatically re-run; the retry (job 101472083712) **passed**. The
+status could not be observed live because the sandbox GitHub token expired
+mid-watch; it was independently confirmed after authentication was restored
+(an independent verification by the PM side matched: 3.10 was still in
+progress at that moment, then completed green).
+
+**Result: all eight checks PASS on `7d13acf727726c728b6cd1ce3faee9f75bc390a4`.**
+The final remote head is this documentation commit (production code
+unchanged since `7d13acf`); the definitive merge-gate verification is the
+green CI run covering this commit, whose check-run URLs are attached to
+PR #127.
+
+## CI incident and fix (truthful record)
+
+The **second** CI run (on the docs-only commit `56c2567`, pushed ~10:03 UTC)
+failed `test (3.10)`, `test (3.11)`, `test (3.12)` — while the **identical
+code** had passed all four Pythons forty minutes earlier (run of ~09:32 UTC
+on `67b0623`). Root cause, reproduced locally and pinned:
+
+- `tests/test_p13_reminder_authoring.py::test_kind_filters_the_list` asserted
+  insertion order (`["r1", "r2"]`) over schedules whose crons were
+  `0 10 * * *` and `0 11 * * *`.
+- `list_schedules` correctly orders by **next fire time**; between 10:00 and
+  11:00 local time, "0 11 * * *" fires *today* and sorts first, flipping the
+  assertion. The first CI run executed before 10:00 UTC (green); the second
+  inside the window (red). A time-of-day-dependent test — exactly the class
+  this phase forbids; the production ordering behavior is correct and was
+  not changed.
+- **Fix:** the filter test now compares names as a set, and a new
+  `test_kind_list_order_is_stable_at_any_hour` pins the ordering rule with
+  identical cron expressions (equal `next_run` at any hour, tie broken by
+  `created_at`), which cannot flip with the wall clock.
+- Verified: full P-13 file green under `TZ=UTC`, `Asia/Tehran`,
+  `Pacific/Kiritimati`, and `America/New_York` (20 tests each), plus the
+  227-test targeted run and ruff.
+
+## CI — final results
+
+- **PR:** [#127](https://github.com/AliNaderiii/Dream/pull/127) —
   `arena/01a0734c-dream` -> `main`, **open and unmerged**.
 - **Code SHA fully verified by CI:** `67b062375063f6dc7d106f257d4f9ecc42a29805`
   (`feat(memory): add reminder authoring on the existing scheduler (P-13)`),
