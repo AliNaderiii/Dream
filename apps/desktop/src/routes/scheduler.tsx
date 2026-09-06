@@ -46,7 +46,7 @@ import {
   deleteSchedule,
   getSchedule,
   listApprovals,
-  listSchedules,
+  listSchedulesOfKind,
   previewSchedule,
   runScheduleNow,
   toggleSchedule,
@@ -86,7 +86,9 @@ export function SchedulerRoute() {
       setError(null);
       try {
         const [scheduleResult, approvalResult] = await Promise.all([
-          listSchedules(client, true, options),
+          // Tasks only: reminders (P-13) live on the memory page. One engine,
+          // two views — the kind filter is a server-side list parameter.
+          listSchedulesOfKind(client, 'task', true, options),
           listApprovals(client, options),
         ]);
         setSchedules(scheduleResult.schedules);

@@ -2200,6 +2200,11 @@ class BridgeMethods:
         prompt = params.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip():
             raise invalid_params("prompt must be a non-empty string")
+        # P-13: reminders are schedules of kind 'reminder'. Absent kind keeps
+        # the P-12 behaviour byte-for-byte (a plain task).
+        kind = params.get("kind")
+        if kind is not None and kind not in scheduler.SCHEDULE_KINDS:
+            raise invalid_params(f"kind must be one of {sorted(scheduler.SCHEDULE_KINDS)}")
         try:
             schedule = scheduler.create_schedule(
                 self.store,
@@ -2212,6 +2217,7 @@ class BridgeMethods:
                 enabled=bool(params.get("enabled", True)),
                 max_runs=params.get("max_runs"),
                 require_approval=bool(params.get("require_approval", False)),
+                kind=kind or scheduler.DEFAULT_SCHEDULE_KIND,
             )
         except (ScheduleParseError, ValueError) as exc:
             raise invalid_params(str(exc)) from exc
@@ -2219,9 +2225,17 @@ class BridgeMethods:
 
     def schedule_list(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         params = params or {}
-        schedules = scheduler.list_schedules(
-            self.store, include_disabled=bool(params.get("include_disabled", True))
-        )
+        kind = params.get("kind")
+        if kind is not None and kind not in scheduler.SCHEDULE_KINDS:
+            raise invalid_params(f"kind must be one of {sorted(scheduler.SCHEDULE_KINDS)}")
+        try:
+            schedules = scheduler.list_schedules(
+                self.store,
+                include_disabled=bool(params.get("include_disabled", True)),
+                kind=kind,
+            )
+        except ValueError as exc:
+            raise invalid_params(str(exc)) from exc
         return {"schedules": [schedule_to_dict(s) for s in schedules]}
 
     def schedule_get(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -2247,6 +2261,7 @@ class BridgeMethods:
                 "enabled",
                 "max_runs",
                 "require_approval",
+                "kind",
             )
             if key in params
         }

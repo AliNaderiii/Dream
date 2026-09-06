@@ -8,7 +8,13 @@
  */
 
 import type { BridgeClient, RequestOptions } from './client';
-import type { BridgeApproval, BridgeSchedule, BridgeScheduleRun, SchedulePreview } from './types';
+import type {
+  BridgeApproval,
+  BridgeSchedule,
+  BridgeScheduleRun,
+  ScheduleKind,
+  SchedulePreview,
+} from './types';
 
 /** `schedule.create` params — either rhythm form is accepted. */
 export interface ScheduleDraft {
@@ -21,6 +27,8 @@ export interface ScheduleDraft {
   enabled?: boolean;
   max_runs?: number | null;
   require_approval?: boolean;
+  /** P-13: `reminder` marks schedules authored from the memory page. */
+  kind?: ScheduleKind;
 }
 
 /** `schedule.get` returns the schedule with its recent history joined. */
@@ -79,6 +87,7 @@ export function createSchedule(
   if (draft.enabled !== undefined) params['enabled'] = draft.enabled;
   if (draft.max_runs !== undefined) params['max_runs'] = draft.max_runs;
   if (draft.require_approval !== undefined) params['require_approval'] = draft.require_approval;
+  if (draft.kind !== undefined) params['kind'] = draft.kind;
   return client.call<BridgeSchedule>('schedule.create', params, request);
 }
 
@@ -98,7 +107,25 @@ export function updateSchedule(
   if (patch.enabled !== undefined) params['enabled'] = patch.enabled;
   if (patch.max_runs !== undefined) params['max_runs'] = patch.max_runs;
   if (patch.require_approval !== undefined) params['require_approval'] = patch.require_approval;
+  if (patch.kind !== undefined) params['kind'] = patch.kind;
   return client.call<BridgeSchedule>('schedule.update', params, request);
+}
+
+/**
+ * List only schedules of one kind (P-13): the scheduler page asks for tasks,
+ * the memory page's reminders tab asks for reminders. One engine, two views.
+ */
+export function listSchedulesOfKind(
+  client: BridgeClient,
+  kind: ScheduleKind,
+  includeDisabled = true,
+  request?: RequestOptions,
+): Promise<ScheduleListResult> {
+  return client.call<ScheduleListResult>(
+    'schedule.list',
+    { include_disabled: includeDisabled, kind },
+    request,
+  );
 }
 
 export function toggleSchedule(

@@ -21,6 +21,7 @@ import type {
   CouncilDto,
   CouncilMemberDto,
   RpcParams,
+  ScheduleKind,
   SchedulePreview,
   SubAgentStatus,
 } from './types';
@@ -562,6 +563,7 @@ export class EchoScheduleRuntime {
     if (!name.trim()) throw invalidParams('name must be a non-empty string');
     const prompt = str(params, 'prompt');
     if (!prompt.trim()) throw invalidParams('prompt must be a non-empty string');
+    const kind = this.kindOf(params, 'kind', 'task');
 
     const natural = str(params, 'natural_language') || null;
     const cron = this.resolveCron(str(params, 'cron_expression') || null, natural, true);
@@ -586,16 +588,29 @@ export class EchoScheduleRuntime {
       run_count: 0,
       require_approval: Boolean(params['require_approval']),
       exhausted: false,
+      kind,
     };
     this.schedules.set(id, schedule);
     return { ...schedule };
   }
 
+  /** Reads and validates a `kind` param, defaulting like the sidecar. */
+  private kindOf(params: RpcParams, key: string, fallback: ScheduleKind | null): ScheduleKind {
+    const raw = params[key];
+    if (raw === undefined || raw === null || raw === '') return fallback ?? 'task';
+    if (raw !== 'task' && raw !== 'reminder') {
+      throw invalidParams("kind must be one of ['reminder', 'task']");
+    }
+    return raw;
+  }
+
   list(params: RpcParams): { schedules: BridgeSchedule[] } {
     const includeDisabled =
       params['include_disabled'] === undefined ? true : Boolean(params['include_disabled']);
+    const kind = 'kind' in params ? this.kindOf(params, 'kind', null) : null;
     const rows = [...this.schedules.values()]
       .filter((s) => includeDisabled || s.enabled)
+      .filter((s) => kind === null || (s.kind ?? 'task') === kind)
       .sort((a, b) => a.created_at - b.created_at);
     return { schedules: rows.map((s) => ({ ...s })) };
   }
@@ -614,6 +629,7 @@ export class EchoScheduleRuntime {
     if ('enabled' in params) schedule.enabled = Boolean(params['enabled']);
     if ('require_approval' in params)
       schedule.require_approval = Boolean(params['require_approval']);
+    if ('kind' in params) schedule.kind = this.kindOf(params, 'kind', schedule.kind ?? 'task');
     if ('max_runs' in params) {
       schedule.max_runs = typeof params['max_runs'] === 'number' ? params['max_runs'] : null;
     }

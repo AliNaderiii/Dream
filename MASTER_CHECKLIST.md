@@ -59,7 +59,9 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 ## Phase 2 — Conversation & Memory (Prompt P-02)
 - [x] 2.1 Conversation view: streaming, tool-call cards, approval dialog
 - [x] 2.2 Session manager (list, search, date groups)
-- [ ] 2.3 Memory explorer + timeline; reminders — explorer/timeline complete; reminder authoring remains
+- [x] 2.3 Memory explorer + timeline; reminders — explorer/timeline complete;
+  reminder authoring ships as a Reminders tab on the memory page authoring
+  `kind='reminder'` schedules through the existing P-12 scheduler (P-13)
 - [x] 2.4 Skills manager
 
 ### 2.5 Subagent system (Prompt P-06)

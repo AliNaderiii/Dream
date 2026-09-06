@@ -47,6 +47,12 @@ const BoundedStores = lazy(() =>
   import('@/components/memory/bounded-stores').then((m) => ({ default: m.BoundedStores })),
 );
 
+// P-13: the reminders panel is code-split the same way — authoring reminders
+// never loads with the explorer chunk.
+const RemindersPanel = lazy(() =>
+  import('@/components/memory/reminders-panel').then((m) => ({ default: m.RemindersPanel })),
+);
+
 /** Lightweight status shown while the bounded-stores chunk streams in. */
 function BoundedTabFallback() {
   return (
@@ -65,7 +71,7 @@ export function MemoryRoute() {
   const [filters, setFilters] = useState<MemoryFilters>(DEFAULT_FILTERS);
   const [view, setView] = useState<'list' | 'timeline'>('list');
   const [zoom, setZoom] = useState<TimelineZoom>('day');
-  const [tab, setTab] = useState<'explorer' | 'bounded'>('explorer');
+  const [tab, setTab] = useState<'explorer' | 'bounded' | 'reminders'>('explorer');
 
   const [memories, setMemories] = useState<BridgeMemory[]>([]);
   const [total, setTotal] = useState(0);
@@ -220,6 +226,7 @@ export function MemoryRoute() {
         {(
           [
             { id: 'explorer', label: t('title') },
+            { id: 'reminders', label: t('reminders.tab') },
             { id: 'bounded', label: t('bounded.tab') },
           ] as const
         ).map((entry) => (
@@ -245,6 +252,12 @@ export function MemoryRoute() {
         <div className="min-h-0 flex-1">
           <Suspense fallback={<BoundedTabFallback />}>
             <BoundedStores />
+          </Suspense>
+        </div>
+      ) : tab === 'reminders' ? (
+        <div className="min-h-0 flex-1">
+          <Suspense fallback={<BoundedTabFallback />}>
+            <RemindersPanel />
           </Suspense>
         </div>
       ) : (
