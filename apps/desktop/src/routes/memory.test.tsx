@@ -206,4 +206,21 @@ describe('MemoryRoute', () => {
     await user.click(screen.getByRole('tab', { name: 'Memory explorer' }));
     expect(await screen.findByText(/Dream stores memories as semantic/)).toBeInTheDocument();
   });
+
+  it('switches to the reminders tab and back (P-13)', async () => {
+    const user = userEvent.setup();
+    render(<MemoryRoute />);
+    await screen.findByText(/Dream stores memories as semantic/);
+
+    const remindersTab = screen.getByRole('tab', { name: /reminders/i });
+    await user.click(remindersTab);
+
+    // The lazy panel mounts and shows its empty state over the echo bridge.
+    expect(await screen.findByText(/No reminders yet/i)).toBeInTheDocument();
+    // The explorer's toolbar is unmounted, not merely hidden.
+    expect(screen.queryByRole('searchbox', { name: /search memories/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: /^memory explorer$/i }));
+    expect(await screen.findByText(/Dream stores memories as semantic/)).toBeInTheDocument();
+  });
 });

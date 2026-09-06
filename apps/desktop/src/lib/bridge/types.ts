@@ -400,6 +400,14 @@ export interface CouncilMemberParams extends RpcParams {
 /** Outcome of one scheduled execution. Mirrors `RUN_STATUSES`. */
 export type ScheduleRunStatus = 'running' | 'success' | 'error' | 'approval_denied';
 
+/**
+ * A schedule's class. Mirrors `SCHEDULE_KINDS` in `dream/scheduler.py`: a
+ * plain scheduled task, or a reminder authored from the memory page. Both
+ * are executed by the same single scheduler daemon — the kind only shapes
+ * which surface lists it.
+ */
+export type ScheduleKind = 'task' | 'reminder';
+
 /** A recurring prompt and its next fire time. */
 export interface BridgeSchedule {
   schedule_id: string;
@@ -422,6 +430,8 @@ export interface BridgeSchedule {
   require_approval: boolean;
   /** True once `run_count` has reached `max_runs`. */
   exhausted: boolean;
+  /** `task` (the pre-P-13 default) or `reminder`. Absent on old sidecars. */
+  kind?: ScheduleKind;
   /** Only `schedule.get` includes recent history. */
   runs?: BridgeScheduleRun[];
 }

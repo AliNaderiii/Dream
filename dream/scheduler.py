@@ -33,6 +33,8 @@ from dream.nl_schedule import ScheduleParseError, nl_to_cron
 
 __all__ = [
     "RUN_STATUSES",
+    "SCHEDULE_KINDS",
+    "DEFAULT_SCHEDULE_KIND",
     "Schedule",
     "ScheduleRun",
     "SchedulerDaemon",
@@ -58,6 +60,13 @@ logger = logging.getLogger(__name__)
 
 RUN_STATUSES: frozenset[str] = frozenset({"running", "success", "error", "approval_denied"})
 
+# P-13: a schedule is either a plain task or a reminder. The kind is a label
+# for the authoring surfaces — the daemon, claim path, approval gate and
+# history treat both kinds identically, so a reminder is executed by exactly
+# the same single worker as any other schedule (no second engine).
+SCHEDULE_KINDS: frozenset[str] = frozenset({"task", "reminder"})
+DEFAULT_SCHEDULE_KIND = "task"
+
 DEFAULT_POLL_INTERVAL = 30.0
 DEFAULT_APPROVAL_TIMEOUT = 300.0
 DEFAULT_DRAIN_TIMEOUT = 10.0
@@ -82,6 +91,7 @@ class Schedule:
     max_runs: int | None
     run_count: int
     require_approval: bool
+    kind: str = DEFAULT_SCHEDULE_KIND
 
     @property
     def exhausted(self) -> bool:
@@ -133,6 +143,7 @@ def schedule_to_dict(schedule: Schedule) -> dict[str, Any]:
         "run_count": schedule.run_count,
         "require_approval": schedule.require_approval,
         "exhausted": schedule.exhausted,
+        "kind": schedule.kind,
     }
 
 
@@ -178,7 +189,8 @@ def ensure_schedule_tables(store: MemoryStore) -> None:
                 created_at       REAL    NOT NULL,
                 max_runs         INTEGER,
                 run_count        INTEGER NOT NULL DEFAULT 0,
-                require_approval INTEGER NOT NULL DEFAULT 0
+                require_approval INTEGER NOT NULL DEFAULT 0,
+                kind             TEXT    NOT NULL DEFAULT 'task'
             )"""
         )
         # ON DELETE CASCADE from the start: history rows belong to their
@@ -204,6 +216,8 @@ def ensure_schedule_tables(store: MemoryStore) -> None:
             "max_runs": "INTEGER",
             "run_count": "INTEGER NOT NULL DEFAULT 0",
             "require_approval": "INTEGER NOT NULL DEFAULT 0",
+            # P-13: rows written before kinds existed are tasks by definition.
+            "kind": "TEXT NOT NULL DEFAULT 'task'",
         }
         for column, spec in additions.items():
             if column not in columns:
@@ -219,6 +233,8 @@ def ensure_schedule_tables(store: MemoryStore) -> None:
 
 
 def _row_to_schedule(row: Any) -> Schedule:
+    keys = row.keys()
+    kind = row["kind"] if "kind" in keys else None
     return Schedule(
         id=row["id"],
         name=row["name"],
@@ -234,6 +250,7 @@ def _row_to_schedule(row: Any) -> Schedule:
         max_runs=row["max_runs"],
         run_count=int(row["run_count"] or 0),
         require_approval=bool(row["require_approval"]),
+        kind=kind if kind in SCHEDULE_KINDS else DEFAULT_SCHEDULE_KIND,
     )
 
 
@@ -286,6 +303,7 @@ def create_schedule(
     enabled: bool = True,
     max_runs: int | None = None,
     require_approval: bool = False,
+    kind: str = DEFAULT_SCHEDULE_KIND,
 ) -> Schedule:
     """Insert a schedule and compute its first fire time."""
     ensure_schedule_tables(store)
@@ -299,6 +317,8 @@ def create_schedule(
         max_runs = int(max_runs)
         if max_runs < 1:
             raise ValueError("max_runs must be at least 1 when set")
+    if kind not in SCHEDULE_KINDS:
+        raise ValueError(f"kind must be one of {sorted(SCHEDULE_KINDS)}, got {kind!r}")
     expression, spoken = resolve_cron(
         cron_expression=cron_expression, natural_language=natural_language
     )
@@ -318,14 +338,15 @@ def create_schedule(
         max_runs=max_runs,
         run_count=0,
         require_approval=bool(require_approval),
+        kind=kind,
     )
     with store._lock:  # noqa: SLF001
         store.conn.execute(
             """INSERT INTO schedules (
                 id, user_id, name, description, cron_expression, natural_language, prompt,
                 session_id, enabled, last_run, next_run, created_at, max_runs, run_count,
-                require_approval
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                require_approval, kind
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 schedule.id,
                 store.user_id,
@@ -342,6 +363,7 @@ def create_schedule(
                 schedule.max_runs,
                 schedule.run_count,
                 int(schedule.require_approval),
+                schedule.kind,
             ),
         )
         store.conn.commit()
@@ -359,17 +381,26 @@ def get_schedule(store: MemoryStore, schedule_id: str) -> Schedule | None:
     return _row_to_schedule(row) if row else None
 
 
-def list_schedules(store: MemoryStore, *, include_disabled: bool = True) -> list[Schedule]:
+def list_schedules(
+    store: MemoryStore, *, include_disabled: bool = True, kind: str | None = None
+) -> list[Schedule]:
     """All schedules for the store's user, soonest first.
 
     Rows with no ``next_run`` (a disabled schedule) sort last rather than
     first, which is what a list ordered by "what happens next" should show.
+    When *kind* is given, only schedules of that kind are returned, so the
+    scheduler page can list tasks while the memory page lists reminders.
     """
     ensure_schedule_tables(store)
+    if kind is not None and kind not in SCHEDULE_KINDS:
+        raise ValueError(f"kind must be one of {sorted(SCHEDULE_KINDS)}, got {kind!r}")
     query = "SELECT * FROM schedules WHERE user_id = ?"
     params: list[Any] = [store.user_id]
     if not include_disabled:
         query += " AND enabled = 1"
+    if kind is not None:
+        query += " AND kind = ?"
+        params.append(kind)
     query += " ORDER BY next_run IS NULL, next_run ASC, created_at ASC"
     with store._lock:  # noqa: SLF001
         rows = list(store.conn.execute(query, params))
@@ -394,6 +425,7 @@ _UPDATABLE = (
     "enabled",
     "max_runs",
     "require_approval",
+    "kind",
 )
 
 
@@ -405,25 +437,43 @@ def update_schedule(
     natural_language: str | None = None,
     **fields: Any,
 ) -> Schedule | None:
-    """Patch a schedule in place, recomputing ``next_run`` if the rhythm changed."""
+    """Patch a schedule in place, recomputing ``next_run`` if the rhythm changed.
+
+    ``max_runs`` follows a three-way contract (P-13): omitting the key keeps
+    the stored value; passing ``max_runs=None`` explicitly clears the cap —
+    a one-off becomes repeating again; an integer is validated (≥ 1) and
+    stored. ``fields`` is a keyword dict, so key *presence* is the signal —
+    no plain-``None`` default blurs omitted and explicit-null.
+    """
     existing = get_schedule(store, schedule_id)
     if existing is None:
         return None
     updates: dict[str, Any] = {}
     for key in _UPDATABLE:
-        if key not in fields or fields[key] is None:
+        if key not in fields:
             continue
         value = fields[key]
+        if key == "max_runs":
+            if value is None:
+                updates["max_runs"] = None
+                continue
+            value = int(value)
+            if value < 1:
+                raise ValueError("max_runs must be at least 1 when set")
+            updates["max_runs"] = value
+            continue
+        if value is None:
+            continue
         if key in ("name", "prompt"):
             value = str(value).strip()
             if not value:
                 raise ValueError(f"schedule {key} must not be empty")
         elif key in ("enabled", "require_approval"):
             value = int(bool(value))
-        elif key == "max_runs":
-            value = int(value)
-            if value < 1:
-                raise ValueError("max_runs must be at least 1 when set")
+        elif key == "kind":
+            value = str(value)
+            if value not in SCHEDULE_KINDS:
+                raise ValueError(f"kind must be one of {sorted(SCHEDULE_KINDS)}, got {value!r}")
         updates[key] = value
 
     if cron_expression or natural_language:

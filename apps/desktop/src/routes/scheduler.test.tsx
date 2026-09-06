@@ -26,6 +26,7 @@ class SchedulerStateTransport implements BridgeTransport {
   private readonly echo = new EchoBridgeTransport();
   listCalls = 0;
   previewCalls = 0;
+  listParams: RpcParams[] = [];
   failListOnce = false;
   hangList = false;
   hangFirstPreview = false;
@@ -33,6 +34,7 @@ class SchedulerStateTransport implements BridgeTransport {
   request<T>(id: RpcId, method: string, params: RpcParams, onChunk?: (chunk: StreamChunk) => void) {
     if (method === 'schedule.list') {
       this.listCalls += 1;
+      this.listParams.push(structuredClone(params));
       if (this.hangList) return new Promise<T>(() => {});
       if (this.failListOnce) {
         this.failListOnce = false;
@@ -59,6 +61,17 @@ function renderRoute() {
       <SchedulerRoute />
     </MemoryRouter>,
   );
+}
+
+/** Unmount whatever route renderRoute last mounted (P-13 helper). */
+let lastRoute: ReturnType<typeof render> | null = null;
+function renderRouteTracked() {
+  lastRoute = renderRoute();
+  return lastRoute;
+}
+function unmountRoute() {
+  lastRoute?.unmount();
+  lastRoute = null;
 }
 
 describe('SchedulerRoute (S06)', () => {
@@ -280,5 +293,27 @@ describe('SchedulerRoute (S06)', () => {
 
     // Success status badge is rendered
     expect(await screen.findByText('success')).toBeInTheDocument();
+  });
+
+  it('lists tasks only and keeps reminders off this page (P-13)', async () => {
+    const transport = new SchedulerStateTransport();
+    getBridgeClient().setTransport(transport);
+    renderRouteTracked();
+
+    // The page requests kind 'task' so reminders stay on the memory page.
+    await screen.findByText(/No scheduled tasks/);
+    expect(transport.listParams).toContainEqual({ include_disabled: true, kind: 'task' });
+
+    // A reminder created in the same store is not listed here.
+    await getBridgeClient().call('schedule.create', {
+      name: 'Hidden reminder',
+      prompt: 'Reminder: hidden',
+      cron_expression: '0 9 20 3 *',
+      kind: 'reminder',
+    });
+    unmountRoute();
+    renderRouteTracked();
+    expect(await screen.findByText(/No scheduled tasks/)).toBeInTheDocument();
+    expect(screen.queryByText('Hidden reminder')).not.toBeInTheDocument();
   });
 });

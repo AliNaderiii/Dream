@@ -180,7 +180,14 @@ class StdinLineReader:
         except Exception as exc:  # never let the reader thread die silently
             logger.exception("stdin reader failed: %s", type(exc).__name__)
         finally:
-            # Sentinel: None signals EOF to the consumer.
+            # Sentinel: None signals EOF to the consumer. It must take a
+            # slot like any other item: without one, ``put_nowait`` hits a
+            # full queue when the consumer lags, ``QueueFull`` is swallowed
+            # by the loop's exception handler, the sentinel is lost, and the
+            # consumer blocks on ``queue.get()`` forever (the CI Python-3.10
+            # stall). The acquire can only wait for the consumer to drain
+            # one buffered line, which a live consumer always does.
+            slots.acquire()
             loop.call_soon_threadsafe(queue.put_nowait, None)
 
     def release_slot(self) -> None:

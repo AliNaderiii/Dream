@@ -216,11 +216,45 @@ def test_stdin_line_reader_streams_markers_and_eof(tmp_path):
             got.append(item)
         return got
 
-    got = asyncio.run(collect())
+    # Bounded: a regression in EOF delivery must fail the test in seconds,
+    # never wedge the suite (the CI Python-3.10 stall was exactly that).
+    got = asyncio.run(asyncio.wait_for(collect(), timeout=10))
     assert got[0] == '{"a":1}'
     assert isinstance(got[1], OversizedLine) and got[1].size == 101
     assert got[2] == '{"b":2}'
     assert len(got) == 3  # EOF sentinel terminated the iteration
+
+
+def test_eof_sentinel_survives_a_full_queue(tmp_path):
+    """EOF must arrive even when the queue is full at that exact moment.
+
+    Regression for the CI Python-3.10 stall: the sentinel used to be queued
+    without a buffer slot, so when the consumer lagged a full queue behind,
+    ``put_nowait(None)`` raised ``QueueFull`` inside the loop callback, the
+    sentinel was lost, and ``await queue.get()`` blocked forever. The worst
+    case is forced deterministically — the pump finishes (including its
+    sentinel handoff) before the consumer drains a single item — no sleeps,
+    no timing luck.
+    """
+    data = b'{"a":1}\n{"b":2}\n'  # exactly maxsize lines, then EOF
+    stream = io.BufferedReader(ChunkedStream(data, 4), buffer_size=8)
+    reader = StdinLineReader(maxsize=2, max_line_bytes=16, stream=stream)
+
+    async def collect() -> list[Any]:
+        loop = asyncio.get_running_loop()
+        reader.start(loop)
+        assert reader._thread is not None
+        # Let the pump run to completion first: both items are queued and the
+        # sentinel handoff blocks on the slot semaphore until the consumer
+        # drains — which is exactly the interleaving the race needed.
+        reader._thread.join(timeout=5)
+        got: list[Any] = []
+        async for item in reader:
+            got.append(item)
+        return got
+
+    got = asyncio.run(asyncio.wait_for(collect(), timeout=30))
+    assert got == ['{"a":1}', '{"b":2}']  # both lines AND clean EOF
 
 
 def test_server_reports_oversized_marker_as_invalid_request(tmp_path):

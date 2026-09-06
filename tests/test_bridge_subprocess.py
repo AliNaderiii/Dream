@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 
 import pytest
 
@@ -96,6 +97,36 @@ def test_streaming_conversation_over_subprocess():
     env = _env()
     proc = _start_sidecar(env)
 
+    # Watchdog: every read below blocks until the sidecar answers; if it dies
+    # or wedges, the pipe never delivers EOF and the reads would block
+    # forever. Killing the process closes the pipes, the reads return, and
+    # the assertions fail with a diagnosis instead of hanging the suite.
+    watchdog = threading.Timer(30, proc.kill)
+    watchdog.daemon = True
+    watchdog.start()
+    try:
+        messages = _streaming_conversation(proc)
+    finally:
+        watchdog.cancel()
+
+    proc.stdin.close()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+    methods = [m["method"] for m in messages if "method" in m]
+    assert methods[0] == "stream.start"
+    assert "stream.chunk" in methods
+    assert methods[-1] == "stream.end"
+    chunk_tokens = [m for m in messages if m.get("method") == "stream.chunk"]
+    chunks = "".join(m["params"]["token"] for m in chunk_tokens)
+    final = next(m for m in messages if m.get("id") == 2 and "result" in m)
+    assert chunks == final["result"]["reply"] == "Echo: hello subprocess"
+
+
+def _streaming_conversation(proc: subprocess.Popen) -> list[dict]:
+    """Drive session.create + conversation.send over the live pipes."""
     proc.stdin.write(
         json.dumps({"jsonrpc": "2.0", "id": 1, "method": "session.create"}) + "\n"
     )
@@ -130,21 +161,7 @@ def test_streaming_conversation_over_subprocess():
         messages.append(msg)
         if msg.get("id") == 2 and "result" in msg:
             break
-
-    proc.stdin.close()
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-
-    methods = [m["method"] for m in messages if "method" in m]
-    assert methods[0] == "stream.start"
-    assert "stream.chunk" in methods
-    assert methods[-1] == "stream.end"
-    chunk_tokens = [m for m in messages if m.get("method") == "stream.chunk"]
-    chunks = "".join(m["params"]["token"] for m in chunk_tokens)
-    final = next(m for m in messages if m.get("id") == 2 and "result" in m)
-    assert chunks == final["result"]["reply"] == "Echo: hello subprocess"
+    return messages
 
 
 def test_cli_bridge_flag_is_wired():
