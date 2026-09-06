@@ -324,10 +324,12 @@ fresh-process iterations clean; full local suite failure set identical to
 the known pre-existing 21; `ruff check .` clean; `mypy dream/bridge/server.py`
 0 errors; P-13 suite 20 passed.
 
-**Run-D disposition.** The wedged 3.10 job (run 34028164192, job 101472757123,
-hung >30 min at the race) was cancelled after the fix was pushed; its result
-is recorded as *hung/cancelled, not green*. The definitive verification is
-the fresh CI run on the fix SHA below.
+**Run-D disposition.** The wedged 3.10 job (run 34028164192, job 101472757123)
+stayed hung on the race with nothing to stop it (no faulthandler timeout is
+configured); an attempt to cancel it after pushing the fix was denied to this
+token (`HTTP 403`), so it remains wedged until GitHub's job limit. Its result
+is recorded as **hung — never green**, on `8353beb`. The definitive
+verification is the fresh CI run on the fix SHA (`a2660e2`).
 
 ## CI — final results
 
