@@ -32,6 +32,9 @@
 | `apps/desktop/src/routes/scheduler.test.tsx` | +1 test: page requests `kind=task`, hides reminders |
 | `apps/desktop/src/locales/{en,fa,zh-CN,ja,es,de,fr,ko}/memory.json` | `reminders.*` subtree (50 keys; fa fully translated) |
 | `tests/test_p13_reminder_authoring.py` | **New.** 19 backend tests |
+| `dream/bridge/server.py` | **Fix (proven defect, this investigation):** `StdinLineReader._pump` EOF sentinel now takes a buffer slot — removes the lost-sentinel/`QueueFull` race that wedged CI Python-3.10 at 22% |
+| `tests/test_bridge_transport_hardening.py` | New deterministic regression test for the full-queue EOF race; existing reader test bounded by `wait_for` |
+| `tests/test_bridge_subprocess.py` | Kill-watchdog bounds the manual pipe-read loop (fails with diagnosis instead of hanging) |
 | `MASTER_CHECKLIST.md` | §2.3 checked |
 | `P-13-SYNTHESIS.md`, `P-13-AUDIT.md` | Phase documents |
 
@@ -254,6 +257,77 @@ on `67b0623`). Root cause, reproduced locally and pinned:
 - Verified: full P-13 file green under `TZ=UTC`, `Asia/Tehran`,
   `Pacific/Kiritimati`, and `America/New_York` (20 tests each), plus the
   227-test targeted run and ruff.
+
+## CI Python-3.10 stall — root cause and fix (post-run-D investigation)
+
+**Symptom.** Run D (`8353beb`) Python-3.10 job stopped showing progress at
+~22% right after `tests/test_bridge_subprocess.py .....` and stayed wedged
+(14+ minutes on a ~3.5-minute step). Two earlier full-suite runs in this
+phase's first sandbox instance had stalled in the same region and were
+mis-attributed to sandbox instability.
+
+**Exact test and blocking operation.** The stall is
+`tests/test_bridge_transport_hardening.py::test_stdin_line_reader_streams_markers_and_eof`
+(the file header only prints at its first completed test, so the log froze
+after the *previous* file's marker). The blocking operation is the consumer's
+unbounded `await self._queue.get()` in
+`dream/bridge/server.py::StdinLineReader.__aiter__`, triggered by a
+sentinel-loss race in `_pump`:
+
+- the reader thread queued the EOF sentinel `None` via
+  `loop.call_soon_threadsafe(queue.put_nowait, None)` **without acquiring a
+  buffer slot**;
+- when the consumer lagged a full queue (maxsize=2) behind at EOF,
+  `put_nowait(None)` raised `QueueFull` *inside the loop callback* — the
+  exception is swallowed by the event loop's exception handler, so the
+  sentinel silently disappears;
+- the consumer drains the buffered lines, then awaits `queue.get()` forever.
+  No timeout anywhere on that path: the job wedges until GitHub's 6-hour
+  limit.
+
+**Deterministic proof (no sleeps, no timing luck).** A join-first harness —
+pump runs to completion (both items + sentinel handoff) before the consumer
+drains anything, i.e. the exact worst case, forced deterministically:
+
+- before the fix: `Exception in callback Queue.put_nowait(None) … QueueFull`,
+  iteration never terminates, `wait_for` times out — reproduced on demand;
+- after the fix: `['{"a":1}', '{"b":2}']`, iteration terminates cleanly.
+
+**Why earlier runs missed it.** Pure interleaving race: it needs the consumer
+to be exactly `maxsize` items behind at the EOF instant. Four-plus local full
+runs (unloaded Python 3.11.2) completed green; CI's slower Python-3.10
+runners under load widened the window (the same race also explains the two
+instance-1 stalls). Runs A/C passing and D hanging is expected for a
+timing-dependent defect; the fix removes the race class rather than tuning
+timing.
+
+**Fix (smallest deterministic).**
+1. `dream/bridge/server.py` `_pump`: the sentinel now takes a slot like any
+   other item (`slots.acquire()` before the handoff). The acquire can only
+   wait for the consumer to drain one buffered line, which a live consumer
+   always does; protocol behaviour on every non-race path is unchanged.
+   This is a proven-defect fix in SEC-10 transport code, made under this
+   investigation's directive and disclosed here; no scheduler, memory, or
+   P-12 logic is touched.
+2. `tests/test_bridge_transport_hardening.py`: new
+   `test_eof_sentinel_survives_a_full_queue` (the deterministic red/green
+   harness above); the existing streams-and-eof test is now bounded by
+   `asyncio.wait_for(…, 10)` so any future regression fails in seconds.
+3. `tests/test_bridge_subprocess.py`: the manual `proc.stdout.readline()`
+   loop in `test_streaming_conversation_over_subprocess` is now guarded by a
+   kill-watchdog (`threading.Timer(30, proc.kill)`) — if the sidecar ever
+   wedges, the pipes close, the reads return, and the test fails with a
+   diagnosis instead of hanging. No coordination sleeps anywhere.
+
+**Verification executed.** Both affected files: 53 passed; 15/15 repeated
+fresh-process iterations clean; full local suite failure set identical to
+the known pre-existing 21; `ruff check .` clean; `mypy dream/bridge/server.py`
+0 errors; P-13 suite 20 passed.
+
+**Run-D disposition.** The wedged 3.10 job (run 34028164192, job 101472757123,
+hung >30 min at the race) was cancelled after the fix was pushed; its result
+is recorded as *hung/cancelled, not green*. The definitive verification is
+the fresh CI run on the fix SHA below.
 
 ## CI — final results
 
