@@ -54,6 +54,30 @@ const DEFAULT_MAX_TOKENS = 20_000;
 const DEFAULT_MAX_DURATION = 120;
 const DEFAULT_TOOLS = ['calculate', 'get_datetime', 'remember_fact', 'search_memory'];
 
+/** P-15 bounds, mirrored from `dream/subagents.py` so echo fails like the sidecar. */
+export const SUBAGENT_BOUNDS = {
+  MAX_PROMPT_CHARS: 16_000,
+  MAX_CONTEXT_CHARS: 32_000,
+  MAX_SYSTEM_PROMPT_CHARS: 8_000,
+  MAX_NAME_CHARS: 120,
+  MAX_TOOL_GRANTS: 32,
+  MAX_TOOL_NAME_CHARS: 100,
+  MAX_TURNS_CAP: 100,
+  MAX_TOKENS_CAP: 200_000,
+  MAX_DURATION_CAP: 3_600,
+  MAX_PIPELINE_STAGES: 16,
+  MAX_LOG_ENTRIES: 500,
+  MAX_LOG_MESSAGE_CHARS: 2_000,
+  MAX_RETAINED_SUBAGENTS: 200,
+  MAX_CONCURRENT: 8,
+  MAX_CANCEL_GRACE_SECONDS: 30,
+} as const;
+
+/** Clamp text to a bound with the sidecar's explicit truncation marker. */
+function truncate(text: string, limit: number): string {
+  return text.length <= limit ? text : text.slice(0, Math.max(0, limit - 1)) + '…';
+}
+
 /** Simulated pacing: one turn every `STEP_MS`, `ECHO_TURNS` turns per child. */
 const STEP_MS = 200;
 const ECHO_TURNS = 3;
@@ -80,11 +104,29 @@ function num(params: RpcParams, key: string, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+/**
+ * A `max_*` limit: absent falls back, malformed or non-positive fails closed
+ * with `invalid_params`, above `cap` fails closed too — the sidecar's
+ * `_positive_int/_positive_float` plus the P-15 caps.
+ */
+function boundedLimit(params: RpcParams, key: string, fallback: number, cap: number): number {
+  const value = params[key];
+  if (value === undefined || value === null) return fallback;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw invalidParams(`${key} must be a number`);
+  }
+  if (value < 1) throw invalidParams(`${key} must be at least 1`);
+  if (value > cap) throw invalidParams(`${key} must be at most ${cap}`);
+  return value;
+}
+
 /** Internal bookkeeping the wire shape does not carry. */
 interface EchoAgentState {
   agent: BridgeSubagent;
   /** Spawn order. `created_at` has millisecond resolution and ties too easily. */
   seq: number;
+  /** Next log sequence number (monotonic per agent). */
+  logSeq: number;
   timer: ReturnType<typeof setTimeout> | null;
   pausedAt: number | null;
   pausedSeconds: number;
@@ -122,32 +164,87 @@ export class EchoSubagentRuntime {
     pipelineId: string | null,
     index: number | null,
   ): EchoAgentState {
-    const prompt = str(params, 'prompt') || str(params, 'message');
-    if (!prompt.trim()) throw invalidParams('prompt must be a non-empty string');
+    const prompt = (str(params, 'prompt') || str(params, 'message')).trim();
+    if (!prompt) throw invalidParams('prompt must be a non-empty string');
+    if (prompt.length > SUBAGENT_BOUNDS.MAX_PROMPT_CHARS) {
+      throw invalidParams(
+        `subagent prompt must be at most ${SUBAGENT_BOUNDS.MAX_PROMPT_CHARS} characters`,
+      );
+    }
+    const systemPrompt = str(params, 'system_prompt');
+    if (systemPrompt.length > SUBAGENT_BOUNDS.MAX_SYSTEM_PROMPT_CHARS) {
+      throw invalidParams(
+        `system_prompt must be at most ${SUBAGENT_BOUNDS.MAX_SYSTEM_PROMPT_CHARS} characters`,
+      );
+    }
     const rawTools = params['tools'];
     if (rawTools !== undefined && !Array.isArray(rawTools)) {
       throw invalidParams('tools must be an array of strings');
+    }
+    if (Array.isArray(rawTools)) {
+      if (rawTools.length > SUBAGENT_BOUNDS.MAX_TOOL_GRANTS) {
+        throw invalidParams(`tools must list at most ${SUBAGENT_BOUNDS.MAX_TOOL_GRANTS} names`);
+      }
+      for (const tool of rawTools) {
+        if (String(tool).length > SUBAGENT_BOUNDS.MAX_TOOL_NAME_CHARS) {
+          throw invalidParams(
+            `tool names must be at most ${SUBAGENT_BOUNDS.MAX_TOOL_NAME_CHARS} characters`,
+          );
+        }
+      }
+    }
+    // The concurrency cap counts running/paused children only and applies to
+    // direct spawns, exactly like the sidecar: `SubAgentManager.spawn` gates
+    // on `active_count()` while pipeline stages run one at a time and are
+    // bounded by the stage cap instead.
+    if (pipelineId === null) {
+      const active = [...this.states.values()].filter(
+        (s) => s.agent.status === 'running' || s.agent.status === 'paused',
+      ).length;
+      if (active >= SUBAGENT_BOUNDS.MAX_CONCURRENT) {
+        throw new BridgeRpcError({
+          code: RPC_ERROR.RESOURCE_EXHAUSTED,
+          message: `subagent limit reached: ${active}/${SUBAGENT_BOUNDS.MAX_CONCURRENT} active`,
+        });
+      }
     }
 
     const id = nextId('sub');
     const agent: BridgeSubagent = {
       subagent_id: id,
       id,
-      name: str(params, 'name') || `subagent ${id.slice(-4)}`,
+      name:
+        truncate(str(params, 'name').trim(), SUBAGENT_BOUNDS.MAX_NAME_CHARS) ||
+        `subagent ${id.slice(-4)}`,
       parent_session_id: str(params, 'parent_session_id') || str(params, 'session_id') || null,
       model_provider: str(params, 'model_provider') || str(params, 'provider') || 'echo',
       model_name: str(params, 'model_name') || 'echo',
-      system_prompt: str(params, 'system_prompt'),
+      system_prompt: systemPrompt,
       tools: Array.isArray(rawTools) ? rawTools.map(String) : [...DEFAULT_TOOLS],
       prompt,
-      context: str(params, 'context'),
+      context: truncate(str(params, 'context'), SUBAGENT_BOUNDS.MAX_CONTEXT_CHARS),
       status: 'running',
       created_at: now(),
       started_at: now(),
       finished_at: null,
-      max_turns: num(params, 'max_turns', DEFAULT_MAX_TURNS),
-      max_tokens: num(params, 'max_tokens', DEFAULT_MAX_TOKENS),
-      max_duration: num(params, 'max_duration', DEFAULT_MAX_DURATION),
+      max_turns: boundedLimit(
+        params,
+        'max_turns',
+        DEFAULT_MAX_TURNS,
+        SUBAGENT_BOUNDS.MAX_TURNS_CAP,
+      ),
+      max_tokens: boundedLimit(
+        params,
+        'max_tokens',
+        DEFAULT_MAX_TOKENS,
+        SUBAGENT_BOUNDS.MAX_TOKENS_CAP,
+      ),
+      max_duration: boundedLimit(
+        params,
+        'max_duration',
+        DEFAULT_MAX_DURATION,
+        SUBAGENT_BOUNDS.MAX_DURATION_CAP,
+      ),
       turn_count: 0,
       token_count: 0,
       result: null,
@@ -155,6 +252,7 @@ export class EchoSubagentRuntime {
       pipeline_id: pipelineId,
       pipeline_index: index,
       limit_hit: null,
+      log_dropped: 0,
       elapsed: 0,
       progress: 0,
       log: [],
@@ -162,14 +260,32 @@ export class EchoSubagentRuntime {
     const state: EchoAgentState = {
       agent,
       seq: ++this.spawnSeq,
+      logSeq: 0,
       timer: null,
       pausedAt: null,
       pausedSeconds: 0,
       watchers: new Set(),
     };
     this.states.set(id, state);
+    this.evictTerminal();
     this.append(state, 'info', `spawned with ${agent.tools.length} tools`);
     return state;
+  }
+
+  /** Bound retention like the sidecar: evict the oldest terminal agents only. */
+  private evictTerminal(): void {
+    let excess = this.states.size - SUBAGENT_BOUNDS.MAX_RETAINED_SUBAGENTS;
+    if (excess <= 0) return;
+    const oldestFirst = [...this.states.values()].sort((a, b) => a.seq - b.seq);
+    for (const state of oldestFirst) {
+      if (excess <= 0) break;
+      if (!isTerminalStatus(state.agent.status)) continue;
+      this.clearTimer(state);
+      for (const watcher of [...state.watchers]) watcher(null);
+      state.watchers.clear();
+      this.states.delete(state.agent.subagent_id);
+      excess -= 1;
+    }
   }
 
   /**
@@ -180,6 +296,11 @@ export class EchoSubagentRuntime {
   runCouncil(params: RpcParams): CouncilDto {
     const prompt = str(params, 'prompt');
     if (!prompt.trim()) throw invalidParams('prompt must be a non-empty string');
+    if (prompt.trim().length > SUBAGENT_BOUNDS.MAX_PROMPT_CHARS) {
+      throw invalidParams(
+        `council topic must be at most ${SUBAGENT_BOUNDS.MAX_PROMPT_CHARS} characters`,
+      );
+    }
 
     const memberSpec = (raw: unknown, fallbackProvider: string): RpcParams => {
       if (raw === undefined || raw === null) return { model_provider: fallbackProvider };
@@ -298,6 +419,11 @@ export class EchoSubagentRuntime {
     if (!Array.isArray(stages) || stages.length === 0) {
       throw invalidParams('stages must be a non-empty array');
     }
+    if (stages.length > SUBAGENT_BOUNDS.MAX_PIPELINE_STAGES) {
+      throw invalidParams(
+        `a pipeline may have at most ${SUBAGENT_BOUNDS.MAX_PIPELINE_STAGES} stages`,
+      );
+    }
     const shared: RpcParams = { ...params };
     delete shared['stages'];
     delete shared['name'];
@@ -341,6 +467,20 @@ export class EchoSubagentRuntime {
   /** Cancellation is immediate here; the sidecar's grace period cannot apply. */
   cancel(params: RpcParams): BridgeSubagent {
     const state = this.require(params);
+    const grace = params['grace_seconds'];
+    if (grace !== undefined && grace !== null) {
+      // Contract parity: the value is unused here (echo cancels instantly)
+      // but a malformed or out-of-range value must fail exactly like the
+      // sidecar's `subagent.cancel`.
+      if (typeof grace !== 'number' || !Number.isFinite(grace)) {
+        throw invalidParams('grace_seconds must be a number');
+      }
+      if (grace < 0 || grace > SUBAGENT_BOUNDS.MAX_CANCEL_GRACE_SECONDS) {
+        throw invalidParams(
+          `grace_seconds must be between 0 and ${SUBAGENT_BOUNDS.MAX_CANCEL_GRACE_SECONDS}`,
+        );
+      }
+    }
     if (!isTerminalStatus(state.agent.status)) {
       this.finish(state, 'cancelled', null, 'cancelled by user');
     }
@@ -491,7 +631,10 @@ export class EchoSubagentRuntime {
         next.agent.started_at = now();
         if (agent.result) {
           const base = next.agent.context.trim();
-          next.agent.context = base ? `${base}\n\n${agent.result}` : agent.result;
+          next.agent.context = truncate(
+            base ? `${base}\n\n${agent.result}` : agent.result,
+            SUBAGENT_BOUNDS.MAX_CONTEXT_CHARS,
+          );
         }
         this.schedule(next);
       }
@@ -512,8 +655,20 @@ export class EchoSubagentRuntime {
   }
 
   private append(state: EchoAgentState, level: string, message: string): void {
-    const entry: BridgeLogEntry = { ts: now(), level, message };
-    state.agent.log = [...(state.agent.log ?? []), entry];
+    const entry: BridgeLogEntry = {
+      ts: now(),
+      level,
+      message: truncate(message, SUBAGENT_BOUNDS.MAX_LOG_MESSAGE_CHARS),
+      seq: state.logSeq++,
+    };
+    const log = [...(state.agent.log ?? []), entry];
+    // Bounded ring, mirroring the sidecar: drop from the head and count it.
+    const overflow = log.length - SUBAGENT_BOUNDS.MAX_LOG_ENTRIES;
+    if (overflow > 0) {
+      log.splice(0, overflow);
+      state.agent.log_dropped = (state.agent.log_dropped ?? 0) + overflow;
+    }
+    state.agent.log = log;
     for (const watcher of [...state.watchers]) watcher(entry);
   }
 

@@ -6,6 +6,7 @@
  */
 
 import { Ban, Play, Pause } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { SubagentLogTail } from '@/components/subagents/subagent-log-tail';
 import { ProgressBar, SubagentStatusBadge } from '@/components/subagents/status-badge';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,9 @@ import { useTranslation } from '@/lib/i18n';
 import type { BridgeLogEntry, BridgeSubagent } from '@/lib/bridge/types';
 import { isTerminalStatus } from '@/lib/bridge/types';
 import { formatClock, formatDuration, formatTokens } from '@/utils/format';
+
+/** Where the `subagent.logs` stream stands for the child on screen. */
+export type SubagentStreamPhase = 'connecting' | 'live' | 'ended' | 'disconnected';
 
 /** A labelled counter in the metrics strip. */
 function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -30,6 +34,10 @@ interface SubagentDetailProps {
   agent: BridgeSubagent;
   /** Streamed log lines; falls back to the snapshot's replayed log. */
   log: BridgeLogEntry[];
+  /** Log lines missing from the rendered tail (bounded retention). */
+  logDropped?: number;
+  /** Explicit stream state, rendered beside the activity log. */
+  streamPhase?: SubagentStreamPhase;
   busy?: boolean;
   onCancel: () => void;
   onPause: () => void;
@@ -39,6 +47,8 @@ interface SubagentDetailProps {
 export function SubagentDetail({
   agent,
   log,
+  logDropped = 0,
+  streamPhase,
   busy = false,
   onCancel,
   onPause,
@@ -46,6 +56,30 @@ export function SubagentDetail({
 }: SubagentDetailProps) {
   const { t } = useTranslation('subagents');
   const terminal = isTerminalStatus(agent.status);
+  const paused = agent.status === 'paused';
+
+  // The Pause and Resume buttons swap in place. If the swap happens while the
+  // control is focused, the old node unmounts and keyboard focus falls back
+  // to <body>; restore it onto the replacement so a keyboard user can toggle
+  // pause/resume without re-tabbing to the control.
+  const pauseResumeRef = useRef<HTMLButtonElement | null>(null);
+  const hadFocusRef = useRef(false);
+  useEffect(() => {
+    if (hadFocusRef.current) {
+      hadFocusRef.current = false;
+      pauseResumeRef.current?.focus();
+    }
+  }, [paused]);
+  const markFocused = () => {
+    hadFocusRef.current = document.activeElement === pauseResumeRef.current;
+  };
+
+  const streamLabel: Record<SubagentStreamPhase, string> = {
+    connecting: t('streamConnecting'),
+    live: t('streamLive'),
+    ended: t('streamEnded'),
+    disconnected: t('streamDisconnected'),
+  };
 
   return (
     <section
@@ -65,13 +99,29 @@ export function SubagentDetail({
         </div>
 
         <div className="flex shrink-0 gap-2">
-          {agent.status === 'paused' ? (
-            <Button size="sm" onClick={onResume} disabled={busy}>
+          {paused ? (
+            <Button
+              ref={pauseResumeRef}
+              size="sm"
+              onClick={() => {
+                markFocused();
+                onResume();
+              }}
+              disabled={busy}
+            >
               <Play aria-hidden />
               {t('resume')}
             </Button>
           ) : (
-            <Button size="sm" onClick={onPause} disabled={busy || terminal}>
+            <Button
+              ref={pauseResumeRef}
+              size="sm"
+              onClick={() => {
+                markFocused();
+                onPause();
+              }}
+              disabled={busy || terminal}
+            >
               <Pause aria-hidden />
               {t('pause')}
             </Button>
@@ -171,7 +221,24 @@ export function SubagentDetail({
       )}
 
       <div className="flex min-h-0 flex-1 flex-col gap-1">
-        <h4 className="text-caption font-semibold text-fg-secondary">{t('activityLog')}</h4>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-caption font-semibold text-fg-secondary">{t('activityLog')}</h4>
+          {streamPhase && (
+            <span
+              role="status"
+              className={
+                streamPhase === 'disconnected'
+                  ? 'text-micro text-warning-fg'
+                  : 'text-micro text-fg-muted'
+              }
+            >
+              {streamLabel[streamPhase]}
+            </span>
+          )}
+        </div>
+        {logDropped > 0 && (
+          <p className="text-micro text-fg-muted">{t('logTruncated', { count: logDropped })}</p>
+        )}
         <SubagentLogTail log={log} />
       </div>
     </section>

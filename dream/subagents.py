@@ -41,6 +41,19 @@ __all__ = [
     "DEFAULT_MAX_TOKENS",
     "DEFAULT_MAX_TURNS",
     "DEFAULT_TOOL_GRANT",
+    "MAX_CONTEXT_CHARS",
+    "MAX_DURATION_CAP",
+    "MAX_LOG_ENTRIES",
+    "MAX_LOG_MESSAGE_CHARS",
+    "MAX_NAME_CHARS",
+    "MAX_PIPELINE_STAGES",
+    "MAX_PROMPT_CHARS",
+    "MAX_RETAINED_SUBAGENTS",
+    "MAX_SYSTEM_PROMPT_CHARS",
+    "MAX_TOKENS_CAP",
+    "MAX_TOOL_GRANTS",
+    "MAX_TOOL_NAME_CHARS",
+    "MAX_TURNS_CAP",
     "REGISTRY_LOCK",
     "SUBAGENT_STATUSES",
     "TERMINAL_STATUSES",
@@ -65,6 +78,40 @@ DEFAULT_MAX_TOKENS = 20_000
 DEFAULT_MAX_DURATION = 120.0
 DEFAULT_GRACE_SECONDS = 2.0
 
+# --------------------------------------------------------------------------
+# P-15 explicit bounds. Every subagent operation is bounded: what the parent
+# may hand a child (prompt/context/system/name/tools), how far a child may run
+# (turn/token/duration caps), how much of a run is retained (log ring,
+# terminal-agent retention), and how large a pipeline may be. Oversized input
+# fails closed with a ValueError the bridge maps to invalid_params.
+# --------------------------------------------------------------------------
+
+#: Largest task prompt a parent may delegate. Matches the plan-mode bound.
+MAX_PROMPT_CHARS = 16_000
+#: Largest read-only context a stage may inherit (pipeline results included);
+#: carried context is truncated, never refused, so a long upstream result
+#: cannot kill the downstream stage it feeds.
+MAX_CONTEXT_CHARS = 32_000
+MAX_SYSTEM_PROMPT_CHARS = 8_000
+MAX_NAME_CHARS = 120
+#: A grant is a small allowlist, not a registry dump.
+MAX_TOOL_GRANTS = 32
+MAX_TOOL_NAME_CHARS = 100
+#: Hard ceilings on the per-child budgets a caller may request.
+MAX_TURNS_CAP = 100
+MAX_TOKENS_CAP = 200_000
+MAX_DURATION_CAP = 3_600.0
+#: Stages one ``subagent.pipeline`` call may queue.
+MAX_PIPELINE_STAGES = 16
+#: Log ring size per agent. Older entries are dropped and counted in
+#: ``log_dropped`` so the UI can say "N earlier lines dropped" honestly.
+MAX_LOG_ENTRIES = 500
+#: One log line's message budget; longer messages are truncated with a marker.
+MAX_LOG_MESSAGE_CHARS = 2_000
+#: Terminal agents retained for inspection. Above this, the oldest terminal
+#: agents are evicted (active agents are never evicted).
+MAX_RETAINED_SUBAGENTS = 200
+
 #: Tools a subagent may use when its parent names none. Deliberately excludes
 #: every filesystem, shell, network and mail capability: an unattended child
 #: gets arithmetic, the clock, and the memory of its own ephemeral store.
@@ -83,6 +130,20 @@ REGISTRY_LOCK = threading.RLock()
 _CHARS_PER_TOKEN = 4
 
 
+def _truncate(text: str, limit: int) -> str:
+    """Clamp *text* to *limit* characters with an explicit marker."""
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)] + "…"
+
+
+def _safe_error(exc: BaseException) -> str:
+    """A bounded, secret-free description of a child's failure."""
+    from dream.security.secrets import redact_text
+
+    return _truncate(redact_text(f"{type(exc).__name__}: {exc}"), MAX_LOG_MESSAGE_CHARS)
+
+
 def estimate_tokens(text: str | None) -> int:
     """Approximate a token count from text length.
 
@@ -98,14 +159,21 @@ def estimate_tokens(text: str | None) -> int:
 
 @dataclass(slots=True)
 class LogEntry:
-    """One line of a subagent's execution log."""
+    """One line of a subagent's execution log.
+
+    ``seq`` is a per-agent monotonic sequence number. It makes replay
+    deterministic: a late subscriber replays history and then drops any queued
+    entry whose ``seq`` it has already seen, so the replay/live handover can
+    neither duplicate nor lose a line.
+    """
 
     ts: float
     level: str
     message: str
+    seq: int = 0
 
     def to_dict(self) -> dict[str, Any]:
-        return {"ts": self.ts, "level": self.level, "message": self.message}
+        return {"ts": self.ts, "level": self.level, "message": self.message, "seq": self.seq}
 
 
 @dataclass(slots=True)
@@ -129,10 +197,34 @@ class SubAgentSpec:
         self.prompt = (self.prompt or "").strip()
         if not self.prompt:
             raise ValueError("subagent prompt must not be empty")
-        self.name = (self.name or "").strip() or "subagent"
+        if len(self.prompt) > MAX_PROMPT_CHARS:
+            raise ValueError(f"subagent prompt must be at most {MAX_PROMPT_CHARS} characters")
+        if len(self.system_prompt or "") > MAX_SYSTEM_PROMPT_CHARS:
+            raise ValueError(
+                f"system_prompt must be at most {MAX_SYSTEM_PROMPT_CHARS} characters"
+            )
+        # Context is bounded by truncation, not refusal: a pipeline hands each
+        # stage's result down as the next stage's context, and an oversized
+        # upstream answer must not kill the stage that consumes it.
+        self.context = _truncate(self.context or "", MAX_CONTEXT_CHARS)
+        self.name = _truncate((self.name or "").strip(), MAX_NAME_CHARS) or "subagent"
+        if self.tools is not None:
+            if len(self.tools) > MAX_TOOL_GRANTS:
+                raise ValueError(f"tools must list at most {MAX_TOOL_GRANTS} names")
+            for tool_name in self.tools:
+                if len(tool_name) > MAX_TOOL_NAME_CHARS:
+                    raise ValueError(
+                        f"tool names must be at most {MAX_TOOL_NAME_CHARS} characters"
+                    )
         self.max_turns = max(1, int(self.max_turns))
+        if self.max_turns > MAX_TURNS_CAP:
+            raise ValueError(f"max_turns must be at most {MAX_TURNS_CAP}")
         self.max_tokens = max(1, int(self.max_tokens))
+        if self.max_tokens > MAX_TOKENS_CAP:
+            raise ValueError(f"max_tokens must be at most {MAX_TOKENS_CAP}")
         self.max_duration = max(0.05, float(self.max_duration))
+        if self.max_duration > MAX_DURATION_CAP:
+            raise ValueError(f"max_duration must be at most {MAX_DURATION_CAP} seconds")
 
 
 @dataclass(slots=True)
@@ -163,6 +255,10 @@ class SubAgent:
     pipeline_index: int | None = None
     limit_hit: str | None = None
     log: list[LogEntry] = field(default_factory=list)
+    #: Entries dropped from the head of the bounded log ring.
+    log_dropped: int = 0
+    #: Next log sequence number (monotonic per agent, starts at 0).
+    log_seq: int = 0
     paused_seconds: float = 0.0
     paused_at: float | None = None
 
@@ -230,6 +326,7 @@ def subagent_to_dict(agent: SubAgent, *, include_log: bool = True) -> dict[str, 
         "pipeline_id": agent.pipeline_id,
         "pipeline_index": agent.pipeline_index,
         "limit_hit": agent.limit_hit,
+        "log_dropped": agent.log_dropped,
         "elapsed": agent.elapsed(),
         "progress": agent.progress(),
     }
@@ -393,7 +490,42 @@ class SubAgentManager:
         runtime = _Runtime(agent, spec)
         self._runtimes[agent.id] = runtime
         self._order.append(agent.id)
+        self._evict_terminal()
         return runtime
+
+    def _evict_terminal(self) -> None:
+        """Bound retention: drop the oldest **terminal** agents past the cap.
+
+        Active (idle/running/paused) agents are never evicted, so control
+        methods can always reach live work; only finished history rolls off.
+        """
+        excess = len(self._order) - MAX_RETAINED_SUBAGENTS
+        if excess <= 0:
+            return
+        for subagent_id in list(self._order):
+            if excess <= 0:
+                break
+            runtime = self._runtimes.get(subagent_id)
+            if runtime is None:
+                self._order.remove(subagent_id)
+                excess -= 1
+                continue
+            if not runtime.agent.is_terminal:
+                continue
+            self._close_subscribers(runtime)
+            self._order.remove(subagent_id)
+            del self._runtimes[subagent_id]
+            pipeline_id = runtime.agent.pipeline_id
+            if pipeline_id and pipeline_id in self._pipelines:
+                ids = [i for i in self._pipelines[pipeline_id] if i != subagent_id]
+                if ids:
+                    self._pipelines[pipeline_id] = ids
+                else:
+                    self._pipelines.pop(pipeline_id, None)
+                    task = self._pipeline_tasks.pop(pipeline_id, None)
+                    if task is not None and not task.done():
+                        task.cancel()
+            excess -= 1
 
     def spawn(self, spec: SubAgentSpec) -> SubAgent:
         """Start a child agent and return immediately (fire-and-forget)."""
@@ -421,6 +553,8 @@ class SubAgentManager:
         """Queue a chain where each stage's result becomes the next's context."""
         if not specs:
             raise ValueError("a pipeline needs at least one stage")
+        if len(specs) > MAX_PIPELINE_STAGES:
+            raise ValueError(f"a pipeline may have at most {MAX_PIPELINE_STAGES} stages")
         pipeline_id = f"pipe_{secrets.token_hex(6)}"
         runtimes: list[_Runtime] = []
         for index, spec in enumerate(specs):
@@ -437,6 +571,17 @@ class SubAgentManager:
         return pipeline_id, [r.agent for r in runtimes]
 
     async def _drive_pipeline(self, pipeline_id: str, runtimes: list[_Runtime]) -> None:
+        try:
+            await self._drive_pipeline_stages(runtimes)
+        finally:
+            # Reap the driver record so a long-lived process does not
+            # accumulate one done task per pipeline ever started.
+            task = self._pipeline_tasks.get(pipeline_id)
+            if task is not None and task is asyncio.current_task():
+                self._pipeline_tasks.pop(pipeline_id, None)
+        logger.debug("pipeline %s finished", pipeline_id)
+
+    async def _drive_pipeline_stages(self, runtimes: list[_Runtime]) -> None:
         carried = ""
         for position, runtime in enumerate(runtimes):
             agent = runtime.agent
@@ -445,7 +590,10 @@ class SubAgentManager:
                 return
             if carried:
                 base = agent.context.strip()
-                agent.context = f"{base}\n\n{carried}" if base else carried
+                merged = f"{base}\n\n{carried}" if base else carried
+                # Same bound the spec enforces: an oversized upstream result
+                # is truncated, never allowed to grow the next stage's input.
+                agent.context = _truncate(merged, MAX_CONTEXT_CHARS)
             runtime.loop = asyncio.get_event_loop()
             runtime.task = runtime.loop.create_task(
                 self._run(runtime), name=f"subagent:{agent.id}"
@@ -456,7 +604,6 @@ class SubAgentManager:
                 self._skip_rest(runtimes[position + 1 :], "upstream stage did not complete")
                 return
             carried = agent.result or ""
-        logger.debug("pipeline %s finished", pipeline_id)
 
     def _skip_rest(self, runtimes: Sequence[_Runtime], reason: str) -> None:
         for runtime in runtimes:
@@ -586,39 +733,79 @@ class SubAgentManager:
     # --------------------------------------------------------------- logging
 
     def _log(self, runtime: _Runtime, level: str, message: str) -> None:
-        entry = LogEntry(ts=time.time(), level=level, message=message)
-        runtime.agent.log.append(entry)
-        payload = {"event": "log", "subagent_id": runtime.agent.id, **entry.to_dict()}
+        agent = runtime.agent
+        entry = LogEntry(
+            ts=time.time(),
+            level=level,
+            message=_truncate(message, MAX_LOG_MESSAGE_CHARS),
+            seq=agent.log_seq,
+        )
+        agent.log_seq += 1
+        agent.log.append(entry)
+        # Bounded ring: the record can never grow past MAX_LOG_ENTRIES, and
+        # what rolled off is counted so the UI can state the truncation.
+        overflow = len(agent.log) - MAX_LOG_ENTRIES
+        if overflow > 0:
+            del agent.log[:overflow]
+            agent.log_dropped += overflow
+        payload = {"event": "log", "subagent_id": agent.id, **entry.to_dict()}
         for queue in list(runtime.subscribers):
-            with contextlib.suppress(asyncio.QueueFull):
-                queue.put_nowait(payload)
+            self._offer(queue, payload)
+
+    @staticmethod
+    def _offer(queue: asyncio.Queue[dict[str, Any] | None], item: dict[str, Any] | None) -> None:
+        """Put without blocking; a full queue drops its oldest entry first.
+
+        Dropping the oldest (rather than the newest) keeps the tail current
+        and — critically — guarantees the ``None`` close sentinel always
+        lands, so a slow subscriber can never hold a stream open forever.
+        """
+        while True:
+            try:
+                queue.put_nowait(item)
+                return
+            except asyncio.QueueFull:
+                with contextlib.suppress(asyncio.QueueEmpty):
+                    queue.get_nowait()
 
     def _close_subscribers(self, runtime: _Runtime) -> None:
         for queue in list(runtime.subscribers):
-            with contextlib.suppress(asyncio.QueueFull):
-                queue.put_nowait(None)
+            self._offer(queue, None)
         runtime.subscribers.clear()
 
     async def follow_logs(self, subagent_id: str) -> AsyncIterator[dict[str, Any]]:
         """Yield log entries as they happen, ending when the agent is terminal.
 
         Entries already recorded are replayed first so a late subscriber sees
-        the whole run, not just its tail.
+        the whole retained run, not just its tail. The queue is subscribed
+        *before* the history snapshot is taken, and live entries whose ``seq``
+        the replay already covered are skipped — so the replay/live handover
+        can neither lose a line nor emit one twice, regardless of what the
+        agent logs while the replay is being consumed.
         """
         runtime = self._runtimes.get(subagent_id)
         if runtime is None:
             return
-        for entry in list(runtime.agent.log):
-            yield {"event": "log", "subagent_id": subagent_id, **entry.to_dict()}
-        if runtime.agent.is_terminal:
-            return
         queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue(maxsize=256)
-        runtime.subscribers.append(queue)
+        terminal_at_subscribe = runtime.agent.is_terminal
+        if not terminal_at_subscribe:
+            runtime.subscribers.append(queue)
         try:
+            history = list(runtime.agent.log)
+            next_seq = history[-1].seq + 1 if history else runtime.agent.log_dropped
+            for entry in history:
+                yield {"event": "log", "subagent_id": subagent_id, **entry.to_dict()}
+            if terminal_at_subscribe:
+                return
             while True:
                 item = await queue.get()
                 if item is None:
                     return
+                seq = item.get("seq")
+                if isinstance(seq, int):
+                    if seq < next_seq:
+                        continue  # already replayed from history
+                    next_seq = seq + 1
                 yield item
         finally:
             if queue in runtime.subscribers:
@@ -689,7 +876,10 @@ class SubAgentManager:
             raise
         except Exception as exc:
             logger.debug("subagent %s failed", agent.id, exc_info=True)
-            self._finish(runtime, "failed", error=f"{type(exc).__name__}: {exc}")
+            # Redacted at source: this string is returned by subagent.get/list
+            # as a *result* payload, which the bridge's error-path redaction
+            # never sees. Provider exceptions can embed URLs carrying keys.
+            self._finish(runtime, "failed", error=_safe_error(exc))
         else:
             self._finish(runtime, "completed", result=result)
         finally:

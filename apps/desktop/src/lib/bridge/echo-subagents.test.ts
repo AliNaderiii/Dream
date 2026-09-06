@@ -310,3 +310,134 @@ describe('EchoBridgeTransport schedules', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------- P-15
+// Contract parity with the sidecar's explicit bounds.
+
+describe('EchoBridgeTransport subagent bounds (P-15)', () => {
+  let t: EchoBridgeTransport;
+
+  beforeEach(() => {
+    t = new EchoBridgeTransport();
+  });
+
+  afterEach(() => {
+    t.dispose();
+  });
+
+  const expectInvalidParams = async (promise: Promise<unknown>, match: RegExp) => {
+    await expect(promise).rejects.toMatchObject({
+      code: RPC_ERROR.INVALID_PARAMS,
+      message: expect.stringMatching(match) as unknown,
+    });
+  };
+
+  it('rejects an oversized prompt like the sidecar', async () => {
+    await expectInvalidParams(
+      t.request('1', 'subagent.spawn', { prompt: 'x'.repeat(16_001) }),
+      /prompt/,
+    );
+  });
+
+  it('rejects an oversized system prompt', async () => {
+    await expectInvalidParams(
+      t.request('1', 'subagent.spawn', { prompt: 'ok', system_prompt: 'x'.repeat(8_001) }),
+      /system_prompt/,
+    );
+  });
+
+  it.each([
+    ['max_turns', 101],
+    ['max_tokens', 200_001],
+    ['max_duration', 3_601],
+  ])('rejects %s above the cap', async (key, value) => {
+    await expectInvalidParams(
+      t.request('1', 'subagent.spawn', { prompt: 'ok', [key]: value }),
+      new RegExp(key),
+    );
+  });
+
+  it.each([
+    ['max_turns', 'nope'],
+    ['max_tokens', -5],
+  ])('rejects a malformed %s instead of silently defaulting', async (key, value) => {
+    await expectInvalidParams(
+      t.request('1', 'subagent.spawn', { prompt: 'ok', [key]: value }),
+      new RegExp(key),
+    );
+  });
+
+  it('rejects an oversized tool grant', async () => {
+    const tools = Array.from({ length: 33 }, (_, i) => `tool${i}`);
+    await expectInvalidParams(t.request('1', 'subagent.spawn', { prompt: 'ok', tools }), /tools/);
+  });
+
+  it('rejects a pipeline with too many stages before starting any of them', async () => {
+    const stages = Array.from({ length: 17 }, (_, i) => ({ prompt: `stage ${i}` }));
+    await expectInvalidParams(t.request('1', 'subagent.pipeline', { stages }), /stages/);
+    const listed = await t.request<{ subagents: BridgeSubagent[] }>('2', 'subagent.list', {});
+    expect(listed.subagents).toHaveLength(0);
+  });
+
+  it('rejects a malformed or out-of-range grace_seconds on cancel', async () => {
+    const spawned = await t.request<BridgeSubagent>('1', 'subagent.spawn', { prompt: 'task' });
+    await expectInvalidParams(
+      t.request('2', 'subagent.cancel', {
+        subagent_id: spawned.subagent_id,
+        grace_seconds: 'abc',
+      }),
+      /grace_seconds/,
+    );
+    await expectInvalidParams(
+      t.request('3', 'subagent.cancel', { subagent_id: spawned.subagent_id, grace_seconds: 31 }),
+      /grace_seconds/,
+    );
+    // A valid grace still cancels.
+    const cancelled = await t.request<BridgeSubagent>('4', 'subagent.cancel', {
+      subagent_id: spawned.subagent_id,
+      grace_seconds: 0,
+    });
+    expect(cancelled.status).toBe('cancelled');
+  });
+
+  it('enforces the concurrency cap with RESOURCE_EXHAUSTED', async () => {
+    for (let i = 0; i < 8; i += 1) {
+      await t.request('spawn', 'subagent.spawn', { prompt: `task ${i}` });
+    }
+    await expect(
+      t.request('9', 'subagent.spawn', { prompt: 'one too many' }),
+    ).rejects.toMatchObject({ code: RPC_ERROR.RESOURCE_EXHAUSTED });
+  });
+
+  it('assigns monotonic per-agent log sequence numbers and reports log_dropped', async () => {
+    const spawned = await t.request<BridgeSubagent>('1', 'subagent.spawn', { prompt: 'task' });
+    const finished = await settle(t, spawned.subagent_id);
+    const seqs = (finished.log ?? []).map((entry) => entry.seq);
+    expect(seqs).toEqual([...seqs].sort((a, b) => (a ?? 0) - (b ?? 0)));
+    expect(new Set(seqs).size).toBe(seqs.length);
+    expect(finished.log_dropped).toBe(0);
+  });
+
+  it('replays identical ordered logs to two late subscribers', async () => {
+    const spawned = await t.request<BridgeSubagent>('1', 'subagent.spawn', { prompt: 'task' });
+    await settle(t, spawned.subagent_id);
+    const collect = async (): Promise<(number | undefined)[]> => {
+      const seqs: (number | undefined)[] = [];
+      await t.request('log', 'subagent.logs', { subagent_id: spawned.subagent_id }, (chunk) => {
+        seqs.push(chunk.entry?.seq);
+      });
+      return seqs;
+    };
+    const first = await collect();
+    const second = await collect();
+    expect(first).toEqual(second);
+    expect(first.length).toBeGreaterThan(0);
+  });
+
+  it('truncates an oversized council topic like the sidecar', async () => {
+    await expectInvalidParams(
+      t.request('1', 'council.run', { prompt: 'x'.repeat(16_001) }),
+      /topic/,
+    );
+  });
+});

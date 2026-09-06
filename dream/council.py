@@ -47,7 +47,7 @@ from typing import Any
 from dream.agent import build_backend
 from dream.commerce import Ledger, LedgerError, ledger_attached
 from dream.router import resolve_route
-from dream.subagents import SubAgentManager, SubAgentSpec
+from dream.subagents import MAX_PROMPT_CHARS, SubAgentManager, SubAgentSpec
 
 __all__ = [
     "COUNCIL_MEMBER_COUNT",
@@ -299,6 +299,10 @@ def run_council(manager: SubAgentManager, spec: CouncilSpec) -> CouncilResult:
     topic = (spec.prompt or "").strip()
     if not topic:
         raise ValueError("council topic must not be empty")
+    if len(topic) > MAX_PROMPT_CHARS:
+        # Refused before any quota turn is consumed: _consume_turns runs
+        # after validation, and an oversized topic must not bill the caller.
+        raise ValueError(f"council topic must be at most {MAX_PROMPT_CHARS} characters")
     configs: tuple[tuple[str, CouncilMemberSpec | None], ...] = (
         ("proposer", spec.proposer),
         ("critic", spec.critic),

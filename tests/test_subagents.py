@@ -719,3 +719,340 @@ def test_child_ledger_is_detached_even_under_a_metered_plan(
     assert child.ledger is None
     assert not ledger_path.exists()
     store.close()
+
+
+# ------------------------------------------------------------------ P-15
+# Explicit bounds, deterministic replay, bounded retention, safe errors.
+
+
+def test_spec_rejects_an_oversized_prompt() -> None:
+    from dream.subagents import MAX_PROMPT_CHARS
+
+    with pytest.raises(ValueError, match="prompt"):
+        SubAgentSpec(prompt="x" * (MAX_PROMPT_CHARS + 1))
+
+
+def test_spec_rejects_an_oversized_system_prompt() -> None:
+    from dream.subagents import MAX_SYSTEM_PROMPT_CHARS
+
+    with pytest.raises(ValueError, match="system_prompt"):
+        SubAgentSpec(prompt="ok", system_prompt="x" * (MAX_SYSTEM_PROMPT_CHARS + 1))
+
+
+def test_spec_truncates_oversized_context_instead_of_refusing() -> None:
+    """Context is a hand-me-down (pipeline results); truncation, not refusal."""
+    from dream.subagents import MAX_CONTEXT_CHARS
+
+    s = SubAgentSpec(prompt="ok", context="c" * (MAX_CONTEXT_CHARS + 500))
+    assert len(s.context) == MAX_CONTEXT_CHARS
+    assert s.context.endswith("…")
+
+
+def test_spec_truncates_an_oversized_name() -> None:
+    from dream.subagents import MAX_NAME_CHARS
+
+    s = SubAgentSpec(prompt="ok", name="n" * (MAX_NAME_CHARS + 10))
+    assert len(s.name) == MAX_NAME_CHARS
+
+
+def test_spec_rejects_too_many_or_too_long_tool_grants() -> None:
+    from dream.subagents import MAX_TOOL_GRANTS, MAX_TOOL_NAME_CHARS
+
+    with pytest.raises(ValueError, match="tools"):
+        SubAgentSpec(prompt="ok", tools=[f"t{i}" for i in range(MAX_TOOL_GRANTS + 1)])
+    with pytest.raises(ValueError, match="tool names"):
+        SubAgentSpec(prompt="ok", tools=["x" * (MAX_TOOL_NAME_CHARS + 1)])
+
+
+@pytest.mark.parametrize(
+    ("key", "cap_name"),
+    [
+        ("max_turns", "MAX_TURNS_CAP"),
+        ("max_tokens", "MAX_TOKENS_CAP"),
+        ("max_duration", "MAX_DURATION_CAP"),
+    ],
+)
+def test_spec_rejects_limits_above_the_hard_caps(key: str, cap_name: str) -> None:
+    import dream.subagents as subagents_mod
+
+    cap = getattr(subagents_mod, cap_name)
+    with pytest.raises(ValueError, match=key):
+        SubAgentSpec(prompt="ok", **{key: cap + 1})
+
+
+def test_spec_accepts_limits_exactly_at_the_caps() -> None:
+    from dream.subagents import MAX_DURATION_CAP, MAX_TOKENS_CAP, MAX_TURNS_CAP
+
+    s = SubAgentSpec(
+        prompt="ok",
+        max_turns=MAX_TURNS_CAP,
+        max_tokens=MAX_TOKENS_CAP,
+        max_duration=MAX_DURATION_CAP,
+    )
+    assert (s.max_turns, s.max_tokens, s.max_duration) == (
+        MAX_TURNS_CAP,
+        MAX_TOKENS_CAP,
+        MAX_DURATION_CAP,
+    )
+
+
+def test_pipeline_rejects_too_many_stages() -> None:
+    from dream.subagents import MAX_PIPELINE_STAGES
+
+    specs = [spec() for _ in range(MAX_PIPELINE_STAGES + 1)]
+
+    async def scenario() -> None:
+        SubAgentManager().spawn_pipeline(specs)
+
+    with pytest.raises(ValueError, match="stages"):
+        run(scenario())
+
+
+def test_log_ring_is_bounded_and_counts_drops(monkeypatch: pytest.MonkeyPatch) -> None:
+    from dream.subagents import MAX_LOG_ENTRIES
+
+    patch_backend(monkeypatch, ScriptedBackend([answer("done")]))
+
+    async def scenario() -> Any:
+        manager = SubAgentManager()
+        agent = manager.spawn(spec())
+        runtime = manager._runtimes[agent.id]
+        for i in range(MAX_LOG_ENTRIES + 25):
+            manager._log(runtime, "info", f"line {i}")
+        await manager.wait(agent.id)
+        return agent
+
+    agent = run(scenario())
+    assert len(agent.log) <= MAX_LOG_ENTRIES
+    assert agent.log_dropped > 0
+    # The ring keeps the tail: the last line logged is still present.
+    assert any("status:" in e.message for e in agent.log)
+    payload = subagent_to_dict(agent, include_log=False)
+    assert payload["log_dropped"] == agent.log_dropped
+
+
+def test_log_messages_are_truncated_to_the_message_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dream.subagents import MAX_LOG_MESSAGE_CHARS
+
+    patch_backend(monkeypatch, ScriptedBackend([answer("done")]))
+
+    async def scenario() -> Any:
+        manager = SubAgentManager()
+        agent = manager.spawn(spec())
+        runtime = manager._runtimes[agent.id]
+        manager._log(runtime, "info", "y" * (MAX_LOG_MESSAGE_CHARS * 2))
+        await manager.wait(agent.id)
+        return agent
+
+    agent = run(scenario())
+    assert all(len(e.message) <= MAX_LOG_MESSAGE_CHARS for e in agent.log)
+
+
+def test_log_sequence_numbers_are_monotonic(monkeypatch: pytest.MonkeyPatch) -> None:
+    patch_backend(monkeypatch, ScriptedBackend([answer("done")]))
+
+    async def scenario() -> Any:
+        manager = SubAgentManager()
+        agent = manager.spawn(spec())
+        await manager.wait(agent.id)
+        return agent
+
+    agent = run(scenario())
+    seqs = [e.seq for e in agent.log]
+    assert seqs == sorted(seqs)
+    assert len(set(seqs)) == len(seqs)
+
+
+def test_follow_logs_no_gap_no_duplicate_across_replay_handover(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Lines logged while the replay is being consumed are neither lost nor doubled.
+
+    The subscriber yields control mid-replay (via ``asyncio.sleep(0)`` inside
+    the async-for) while a concurrent task keeps logging. Every seq from the
+    replay start through the close must appear exactly once.
+    """
+    patch_backend(monkeypatch, SlowBackend(delay=5.0))
+
+    async def scenario() -> tuple[list[int], Any]:
+        manager = SubAgentManager()
+        agent = manager.spawn(spec(max_duration=30.0))
+        runtime = manager._runtimes[agent.id]
+        for i in range(5):
+            manager._log(runtime, "info", f"early {i}")
+
+        seen: list[int] = []
+        started = asyncio.Event()
+
+        async def consume() -> None:
+            async for entry in manager.follow_logs(agent.id):
+                seen.append(entry["seq"])
+                started.set()
+                await asyncio.sleep(0)  # deterministic yield inside replay
+
+        consumer = asyncio.create_task(consume())
+        await started.wait()  # replay has begun; now log live lines
+        for i in range(10):
+            manager._log(runtime, "info", f"live {i}")
+            await asyncio.sleep(0)
+        await manager.cancel(agent.id, grace_seconds=0.0)
+        await asyncio.wait_for(consumer, timeout=5.0)
+        return seen, agent
+
+    seen, _agent = run(scenario())
+    assert seen == sorted(seen)
+    assert len(set(seen)) == len(seen), "duplicate log entry crossed the replay handover"
+    # Contiguous: nothing was lost between replay and live streaming.
+    assert seen == list(range(seen[0], seen[0] + len(seen)))
+
+
+def test_follow_logs_terminates_even_when_the_subscriber_queue_is_full(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A slow subscriber cannot hold the stream open: the close sentinel lands."""
+    import contextlib
+
+    patch_backend(monkeypatch, SlowBackend(delay=5.0))
+
+    async def scenario() -> bool:
+        manager = SubAgentManager()
+        agent = manager.spawn(spec(max_duration=30.0))
+        runtime = manager._runtimes[agent.id]
+
+        subscribed = asyncio.Event()
+        finished = asyncio.Event()
+
+        async def consume() -> None:
+            gen = manager.follow_logs(agent.id)
+            # Prime the generator so the queue subscription exists, then stop
+            # reading entirely — the pathological slow client.
+            await gen.__anext__()
+            subscribed.set()
+            with contextlib.suppress(StopAsyncIteration):
+                while True:
+                    await asyncio.wait_for(gen.__anext__(), timeout=5.0)
+            finished.set()
+
+        consumer = asyncio.create_task(consume())
+        await subscribed.wait()
+        # Overflow the 256-slot queue while the consumer is not reading.
+        for i in range(400):
+            manager._log(runtime, "info", f"flood {i}")
+        await manager.cancel(agent.id, grace_seconds=0.0)
+        await asyncio.wait_for(consumer, timeout=5.0)
+        return finished.is_set()
+
+    assert run(scenario()) is True
+
+
+def test_retention_evicts_only_terminal_agents(monkeypatch: pytest.MonkeyPatch) -> None:
+    import dream.subagents as subagents_mod
+
+    patch_backend(monkeypatch, ScriptedBackend([answer("done")]))
+    monkeypatch.setattr(subagents_mod, "MAX_RETAINED_SUBAGENTS", 5)
+
+    async def scenario() -> tuple[int, list[str], str]:
+        manager = SubAgentManager(max_concurrent=100)
+        # An active child that must survive every eviction pass. Paused before
+        # its task gets a loop step, so it deterministically stays non-terminal.
+        first = manager.spawn(spec(name="keeper", max_duration=30.0))
+        manager.pause(first.id)
+        # Terminal churn well past the cap.
+        for i in range(12):
+            agent = manager.spawn(spec(name=f"worker {i}"))
+            await manager.wait(agent.id)
+        statuses = [a.status for a in manager.list()]
+        keeper = manager.get(first.id)
+        keeper_status = keeper.status if keeper else "evicted"
+        await manager.cancel_all()
+        return len(manager.list()), statuses, keeper_status
+
+    count, _statuses, keeper_status = run(scenario())
+    assert count <= 6  # cap + the still-active keeper
+    assert keeper_status == "paused"  # never evicted while active
+
+
+def test_pipeline_driver_tasks_are_reaped_after_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch_backend(monkeypatch, ScriptedBackend([answer("done")]))
+
+    async def scenario() -> int:
+        manager = SubAgentManager()
+        pipeline_id, agents = manager.spawn_pipeline([spec(), spec()])
+        await manager.wait_pipeline(pipeline_id)
+        for agent in agents:
+            await manager.wait(agent.id)
+        # Let the driver's finally block run.
+        await asyncio.sleep(0)
+        return len(manager._pipeline_tasks)
+
+    assert run(scenario()) == 0
+
+
+def test_failure_error_text_is_redacted_and_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A provider exception embedding a key shape never reaches the record."""
+
+    secret = "sk-" + "a" * 40
+
+    class LeakyBackend:
+        def chat(self, messages: Any, tools: Any = None) -> dict[str, Any]:
+            raise RuntimeError(f"auth failed for token {secret} at provider")
+
+    patch_backend(monkeypatch, LeakyBackend())
+
+    async def scenario() -> Any:
+        manager = SubAgentManager()
+        agent = manager.spawn(spec())
+        await manager.wait(agent.id)
+        return agent
+
+    agent = run(scenario())
+    assert agent.status == "failed"
+    assert agent.error is not None
+    assert secret not in agent.error
+    assert "REDACTED" in agent.error
+
+
+def test_pipeline_carried_context_is_truncated(monkeypatch: pytest.MonkeyPatch) -> None:
+    from dream.subagents import MAX_CONTEXT_CHARS
+
+    patch_backend(monkeypatch, ScriptedBackend([answer("r" * (MAX_CONTEXT_CHARS + 400))]))
+
+    async def scenario() -> Any:
+        manager = SubAgentManager()
+        pipeline_id, agents = manager.spawn_pipeline([spec(), spec()])
+        await manager.wait_pipeline(pipeline_id)
+        for agent in agents:
+            await manager.wait(agent.id)
+        return agents[1]
+
+    second = run(scenario())
+    assert len(second.context) <= MAX_CONTEXT_CHARS
+
+
+def test_shutdown_leaves_no_pending_subagent_tasks(monkeypatch: pytest.MonkeyPatch) -> None:
+    patch_backend(monkeypatch, SlowBackend(delay=5.0))
+
+    async def scenario() -> list[str]:
+        manager = SubAgentManager()
+        manager.spawn(spec(max_duration=30.0))
+        manager.spawn(spec(max_duration=30.0))
+        pipeline_id, _agents = manager.spawn_pipeline([spec(max_duration=30.0)])
+        await asyncio.sleep(0.02)
+        await manager.cancel_all(grace_seconds=0.0)
+        assert manager._pipeline_tasks == {}
+        leftovers = [
+            t.get_name()
+            for t in asyncio.all_tasks()
+            if t is not asyncio.current_task()
+            and (t.get_name().startswith("subagent:") or t.get_name().startswith("pipeline:"))
+            and not t.done()
+        ]
+        return leftovers
+
+    assert run(scenario()) == []
