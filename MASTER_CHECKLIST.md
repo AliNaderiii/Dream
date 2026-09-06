@@ -1,8 +1,11 @@
 # Dream — Master Checklist
 
 > Source of truth for phase gating. A phase item is checked only when its gate
-> artifacts exist in the repository and have been reviewed. No frontend code is
-> written before Phase 0 is signed off (Gate G9).
+> artifacts exist in the repository and have been reviewed. Phase 0 was gated by
+> Gate G9 for the original desktop-UI sequence; later prompts (P-01 onward)
+> proceeded under separately approved scopes. Gate G9 is still open as of P-16 —
+> see `docs/design/approval-signoff.md` — so this document does not claim client
+> sign-off exists.
 
 Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 
@@ -51,10 +54,13 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 - [x] 1.2 App shell: title bar, activity rail, session sidebar, status bar
 - [x] 1.3 Theme engine (light/dark/system) + direction engine (LTR/RTL) from day one
 - [x] 1.4 Multi-pane layout manager (2/3/4 panes, drag handles, keyboard resize)
-- [~] 1.5 IPC bridge to Python core (sidecar or service) — **P-02**: JSON-RPC
-  bridge implemented across Python (`dream/bridge/`), Rust (`src-tauri/src/bridge/`),
-  and TypeScript (`src/lib/bridge/`); spec at `docs/bridge/protocol.md`. Python +
-  frontend tested green; Rust written pending CI compile. See `docs/STATUS.md` (P-02).
+- [x] 1.5 IPC bridge to Python core (sidecar or service) — **P-02**: JSON-RPC
+  bridge implemented across Python (`dream/bridge/`), Rust
+  (`apps/desktop/src-tauri/src/bridge/`), and TypeScript
+  (`apps/desktop/src/lib/bridge/`); spec at `docs/bridge/protocol.md`. **P-16**:
+  Rust compiled and tested green in Desktop CI (ubuntu/macos/windows) on the
+  exact merged `main` SHA `8838466128a6da944ce440a869b0e161a5c00709`; the
+  earlier `docs/STATUS.md` “Rust pending CI compile” note is superseded.
 
 ## Phase 2 — Conversation & Memory (Prompt P-02)
 - [x] 2.1 Conversation view: streaming, tool-call cards, approval dialog
@@ -215,7 +221,12 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 ## Phase 5 — Providers, MCP & Web Gateway (Prompt P-05 / P-10)
 - [x] 5.1 Provider configuration + connection test — **P-10**: Model provider manager with ACP backends, OpenAI, Ollama, and Echo.
 - [x] 5.2 MCP server configuration — **P-10**: Multi-server MCP manager (stdio, SSE, WebSocket), tool discovery, resource access, and settings UI.
-- [ ] 5.3 Web gateway (mobile/tablet responsive) + authentication
+- [~] 5.3 Web gateway (mobile/tablet responsive) + authentication — **P-08**
+  implemented the FastAPI SPA server and bearer-token auth
+  (`dream/gateway_server.py`), and that scope is CI/test-verified. **P-16**:
+  the mobile/tablet responsive half for the shipped SPA is **not** evidenced
+  (no viewport-responsive layout or responsive test in `apps/desktop/src`), so
+  this combined item remains open; do not mark complete from the P-08 rows.
 
 ## Phase 3.7–3.9 — Docker Sandbox, Chrome Control & Web Gateway (Prompt P-08)
 ### Docker Sandbox Core (Task 1)
@@ -273,6 +284,10 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 - [x] 6.3 QR code for easy mobile connection
 - [x] **Gate** — Settings render, token management works, connections visible, QR code
 
+> **P-16 boundary note.** The P-08 Web Gateway rows above are complete for the
+> server, SPA serving, token/scope authentication, and settings scope (`G7–G10`).
+> They do **not** close Phase 5 item 5.3 (mobile/tablet responsive web gateway),
+> which remains open pending responsive evidence in the shipped app.
 
 ## MP-02 — Durable memory, skills and search (MEM Stages A–F)
 
