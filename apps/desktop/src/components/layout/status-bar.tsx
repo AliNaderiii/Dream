@@ -1,6 +1,10 @@
 /**
  * Token-sized status bar: agent status, provider reachability, workspace, language,
  * sandbox, browser, and gateway indicators.
+ *
+ * At narrow viewports the status bar wraps so the agent status indicator and
+ * the bridge indicator stay visible; the language menu remains reachable at the
+ * inline-end edge.
  */
 
 import { Circle, Globe, HardDrive, Languages } from 'lucide-react';
@@ -46,7 +50,7 @@ export function StatusBar() {
   const activeLanguage = LANGUAGES.find((l) => l.code === locale);
 
   return (
-    <footer className="flex h-6 shrink-0 items-center gap-3 border-t border-border-default bg-surface-raised px-3 text-caption text-fg-secondary">
+    <footer className="flex flex-wrap h-6 shrink-0 items-center gap-3 border-t border-border-default bg-surface-raised px-3 text-caption text-fg-secondary">
       {agentStatus === 'running' && (
         <span className="activity-travel h-0.5 w-8 rounded-full bg-surface-2" aria-hidden />
       )}

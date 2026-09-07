@@ -14,12 +14,13 @@ import { useTranslation } from '@/lib/i18n';
 import { windowApi } from '@/lib/tauri';
 import { useAppStore } from '@/stores/use-app-store';
 import { cn } from '@/utils/cn';
-import { isMacOS } from '@/utils/platform';
+import { isMacOS, isTauri } from '@/utils/platform';
 
 /** Height must match `--spacing-titlebar`. */
 export function TitleBar() {
   const { t } = useTranslation('common');
   const mac = isMacOS();
+  const tauri = isTauri();
   const [maximized, setMaximized] = useState(false);
   const pendingApprovals = useAppStore((s) => s.pendingApprovals);
 
@@ -58,7 +59,10 @@ export function TitleBar() {
         )}
       </div>
 
-      {!mac && (
+      {/* Native window controls only when there is a Tauri backend.  The web
+          gateway, browser dev server, and unit tests have no window-api surface,
+          so the buttons are omitted entirely (no greyed-out placeholders). */}
+      {tauri && !mac && (
         <div className="no-drag flex items-center">
           <Button
             variant="ghost"

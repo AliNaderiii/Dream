@@ -1,5 +1,11 @@
 /**
  * Top bar: sidebar toggle, page title, model selector and quick actions.
+ *
+ * At narrow viewports the secondary actions (choose workspace, theme toggle)
+ * move behind a single overflow menu so the title and new-session button stay
+ * visible and tappable. The model provider dropdown and the approvals bell stay
+ * inline at every width because they carry the primary model choice and a live
+ * badge respectively.
  */
 
 import { Bell, FolderOpen, Moon, PanelLeftOpen, Plus, Sun } from 'lucide-react';
@@ -9,8 +15,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -21,6 +27,7 @@ import { dialogApi } from '@/lib/tauri';
 import { useAppStore } from '@/stores/use-app-store';
 import { useProviderStore } from '@/stores/use-provider-store';
 import { useSessionStore } from '@/stores/use-session-store';
+import { useViewport } from '@/hooks/use-viewport';
 import { formatShortcut } from '@/utils/platform';
 
 interface TopBarProps {
@@ -32,6 +39,8 @@ export function TopBar({ title }: TopBarProps) {
   const { t } = useTranslation('common');
   const navigate = useNavigate();
   const location = useLocation();
+  const viewport = useViewport();
+  const isNarrow = viewport.breakpoint === 'phonePortrait' || viewport.breakpoint === 'phoneLandscape' || viewport.breakpoint === 'tabletPortrait';
   const isPaneWorkspace = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
   const collapsed = useAppStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
@@ -129,58 +138,103 @@ export function TopBar({ title }: TopBarProps) {
         </TooltipContent>
       </Tooltip>
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t('topbar.chooseWorkspace')}
-            onClick={() => void chooseWorkspace()}
-          >
-            <FolderOpen aria-hidden />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{t('topbar.chooseWorkspace')}</TooltipContent>
-      </Tooltip>
+      {/* Secondary actions: inline on wide screens, behind an overflow menu on
+          narrow screens. The approvals bell stays inline at every width because
+          it carries the live badge. */}
+      {isNarrow ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t('topbar.moreActions')}
+              aria-haspopup="true"
+            >
+              <FolderOpen aria-hidden className="rtl:rotate-180" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => void chooseWorkspace()}>
+              <FolderOpen aria-hidden className="mr-2" />
+              {t('topbar.chooseWorkspace')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <button
+                type="button"
+                className="w-full flex items-center gap-2 rounded-md text-fg-primary hover:bg-surface-2"
+                onClick={() => {
+                  const next = resolvedTheme === 'dark' ? 'light' : 'dark';
+                  useAppStore.getState().setResolvedTheme(next as 'light' | 'dark');
+                  toggleTheme();
+                }}
+              >
+                {resolvedTheme === 'dark' ? (
+                  <Sun aria-hidden className="size-3" />
+                ) : (
+                  <Moon aria-hidden className="size-3" />
+                )}
+                {resolvedTheme === 'dark' ? t('topbar.switchToLight') : t('topbar.switchToDark')}
+              </button>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        <>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t('topbar.chooseWorkspace')}
+                onClick={() => void chooseWorkspace()}
+              >
+                <FolderOpen aria-hidden />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t('topbar.chooseWorkspace')}</TooltipContent>
+          </Tooltip>
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t('topbar.approvals', { count: pendingApprovals })}
-            className="relative"
-          >
-            <Bell aria-hidden />
-            {pendingApprovals > 0 && (
-              <span className="absolute end-0.5 top-0.5 size-2 rounded-full bg-danger-fg" />
-            )}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {pendingApprovals === 0
-            ? t('topbar.noApprovals')
-            : t('topbar.approvals', { count: pendingApprovals })}
-        </TooltipContent>
-      </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t('topbar.approvals', { count: pendingApprovals })}
+                className="relative"
+              >
+                <Bell aria-hidden />
+                {pendingApprovals > 0 && (
+                  <span className="absolute end-0.5 top-0.5 size-2 rounded-full bg-danger-fg" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {pendingApprovals === 0
+                ? t('topbar.noApprovals')
+                : t('topbar.approvals', { count: pendingApprovals })}
+            </TooltipContent>
+          </Tooltip>
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={
-              resolvedTheme === 'dark' ? t('topbar.switchToLight') : t('topbar.switchToDark')
-            }
-            onClick={toggleTheme}
-          >
-            {resolvedTheme === 'dark' ? <Sun aria-hidden /> : <Moon aria-hidden />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {t('topbar.toggleTheme')} {formatShortcut(['mod', 'shift', 'l'])}
-        </TooltipContent>
-      </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={
+                  resolvedTheme === 'dark' ? t('topbar.switchToLight') : t('topbar.switchToDark')
+                }
+                onClick={toggleTheme}
+              >
+                {resolvedTheme === 'dark' ? <Sun aria-hidden /> : <Moon aria-hidden />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {t('topbar.toggleTheme')} {formatShortcut(['mod', 'shift', 'l'])}
+            </TooltipContent>
+          </Tooltip>
+        </>
+      )}
     </div>
   );
 }

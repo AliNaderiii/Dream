@@ -221,12 +221,14 @@ Legend: `[x]` complete · `[~]` in progress · `[ ]` not started
 ## Phase 5 — Providers, MCP & Web Gateway (Prompt P-05 / P-10)
 - [x] 5.1 Provider configuration + connection test — **P-10**: Model provider manager with ACP backends, OpenAI, Ollama, and Echo.
 - [x] 5.2 MCP server configuration — **P-10**: Multi-server MCP manager (stdio, SSE, WebSocket), tool discovery, resource access, and settings UI.
-- [~] 5.3 Web gateway (mobile/tablet responsive) + authentication — **P-08**
-  implemented the FastAPI SPA server and bearer-token auth
-  (`dream/gateway_server.py`), and that scope is CI/test-verified. **P-16**:
-  the mobile/tablet responsive half for the shipped SPA is **not** evidenced
-  (no viewport-responsive layout or responsive test in `apps/desktop/src`), so
-  this combined item remains open; do not mark complete from the P-08 rows.
+- [~] 5.3 Web gateway (mobile/tablet responsive) + authentication — **P-17**
+  Implementation complete: `apps/desktop/src/hooks/use-viewport.ts`,
+  `apps/desktop/src/components/responsive/` (BottomNav + SidebarDrawer),
+  updates to `app-shell.tsx`, `top-bar.tsx`, `status-bar.tsx`, `title-bar.tsx`,
+  `gateway-settings.tsx`, and `apps/desktop/src/components/layout/responsive.test.tsx`
+  (451 lines of deterministic bounded tests). Auth preservation evidenced in
+  `P-17-AUDIT.md`. **Awaiting CI green on the final pushed SHA** before marking
+  `[x]`. See `P-17-AUDIT.md` §4, §7.
 
 ## Phase 3.7–3.9 — Docker Sandbox, Chrome Control & Web Gateway (Prompt P-08)
 ### Docker Sandbox Core (Task 1)
