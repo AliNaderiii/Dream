@@ -166,7 +166,7 @@ export function TopBar({ title }: TopBarProps) {
                 className="w-full flex items-center gap-2 rounded-md text-fg-primary hover:bg-surface-2"
                 onClick={() => {
                   const next = resolvedTheme === 'dark' ? 'light' : 'dark';
-                  useAppStore.getState().setResolvedTheme(next as 'light' | 'dark');
+                  useAppStore.getState().setResolvedTheme(next);
                   toggleTheme();
                 }}
               >

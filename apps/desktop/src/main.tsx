@@ -7,6 +7,7 @@ import { ErrorBoundary } from '@/components/shared/error-boundary';
 import { applyAppearance } from '@/hooks/use-theme';
 import { initI18n, resolveInitialLocale } from '@/lib/i18n';
 import { useAppStore } from '@/stores/use-app-store';
+import { ViewportProvider } from '@/hooks/use-viewport';
 import '@/styles/theme.css';
 
 const container = document.getElementById('root');
@@ -28,7 +29,9 @@ void (async () => {
     <StrictMode>
       <ErrorBoundary>
         <HashRouter>
-          <App />
+          <ViewportProvider>
+            <App />
+          </ViewportProvider>
         </HashRouter>
       </ErrorBoundary>
     </StrictMode>,
