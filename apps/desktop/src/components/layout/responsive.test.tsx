@@ -38,7 +38,7 @@ import { SidebarDrawer } from '@/components/responsive/sidebar-drawer';
  */
 function renderApp(initialPath = '/', width?: number) {
   if (width !== undefined && typeof window !== 'undefined') {
-    // @ts-expect-error jsdom allows this assignment in tests
+    // jsdom allows innerWidth assignment in tests
     window.innerWidth = width;
     window.dispatchEvent(new Event('resize'));
   }
@@ -267,7 +267,7 @@ describe('responsive shell — viewport behaviour', () => {
 
   it('renders each route at desktop width', async () => {
     renderApp('/', 1280);
-      for (const [, heading] of [
+    for (const [, heading] of [
       ['/projects', 'Projects'],
       ['/subagents', 'Subagents'],
       ['/provenance', 'Provenance'],
