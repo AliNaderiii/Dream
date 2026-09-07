@@ -18,32 +18,32 @@
  * or unbounded waits. Token values in tests are fake/deterministic.
  */
 
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import App from '@/App';
 import { useAppStore } from '@/stores/use-app-store';
 import { useSessionStore } from '@/stores/use-session-store';
-import { useViewport, isBottomNavBreakpoint, isDrawerBreakpoint, Breakpoint } from '@/hooks/use-viewport';
+import { isBottomNavBreakpoint, isDrawerBreakpoint } from '@/hooks/use-viewport';
 import { BottomNav } from '@/components/responsive/bottom-nav';
 import { SidebarDrawer } from '@/components/responsive/sidebar-drawer';
 
 /**
- * Render the whole shell at `route`, exactly as `main.tsx` does, with an
+ * Render the whole shell at `initialPath`, exactly as `main.tsx` does, with an
  * injectable viewport width. In jsdom, `window.innerWidth` is the lever we
  * pull to simulate a viewport; `useViewport` reads it during render and on
  * the resize event.
  */
-function renderApp(route = '/', width?: number) {
+function renderApp(initialPath = '/', width?: number) {
   if (width !== undefined && typeof window !== 'undefined') {
     // @ts-expect-error jsdom allows this assignment in tests
     window.innerWidth = width;
     window.dispatchEvent(new Event('resize'));
   }
   return render(
-    <MemoryRouter initialEntries={[route]}>
+    <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="*" element={<App />} />
       </Routes>
@@ -267,7 +267,7 @@ describe('responsive shell — viewport behaviour', () => {
 
   it('renders each route at desktop width', async () => {
     renderApp('/', 1280);
-    for (const [route, heading] of [
+      for (const [, heading] of [
       ['/projects', 'Projects'],
       ['/subagents', 'Subagents'],
       ['/provenance', 'Provenance'],
@@ -337,7 +337,7 @@ describe('responsive shell — viewport behaviour', () => {
     expect(screen.getByText('No sessions yet. Start one to begin.')).toBeInTheDocument();
   });
 
-  it('renders the dashboard heading at phone width', () => {
+  it('renders the dashboard heading at phone width', async () => {
     renderApp('/', 320);
     expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
   });
@@ -372,7 +372,7 @@ describe('BottomNav', () => {
     expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
   });
 
-  it('navigates on destination click', () => {
+  it('navigates on destination click', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/']}>
