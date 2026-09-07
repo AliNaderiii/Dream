@@ -38,8 +38,9 @@ import { SidebarDrawer } from '@/components/responsive/sidebar-drawer';
  */
 function renderApp(initialPath = '/', width?: number) {
   if (width !== undefined && typeof window !== 'undefined') {
-    // jsdom allows innerWidth assignment in tests
-    window.innerWidth = width;
+    // jsdom allows innerWidth assignment in tests; cast to any to avoid
+    // readonly-property disputes under verbatimModuleSyntax.
+    (window as any).innerWidth = width;
     window.dispatchEvent(new Event('resize'));
   }
   return render(
