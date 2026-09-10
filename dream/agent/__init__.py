@@ -63,7 +63,12 @@ from urllib.request import Request, urlopen  # noqa: F401
 
 from dream.agent.approval import INSTANCE_BOUND_TOOL_NAMES, ApprovalPolicy
 from dream.agent.backends import (
+    AnthropicBackend,
+    BaseLLMBackend,
     EchoBackend,
+    FallbackBackend,
+    GeminiBackend,
+    GoogleBackend,
     OllamaBackend,
     OpenAIBackend,
     build_backend,
@@ -156,7 +161,12 @@ __all__ = [
     "INSTANCE_BOUND_TOOL_NAMES",
     "cli_approver",
     # Backends
+    "AnthropicBackend",
+    "BaseLLMBackend",
     "EchoBackend",
+    "FallbackBackend",
+    "GeminiBackend",
+    "GoogleBackend",
     "OllamaBackend",
     "OpenAIBackend",
     "build_backend",

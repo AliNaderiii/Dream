@@ -39,8 +39,12 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from dream.agent.approval import ApprovalPolicy
+from dream.agent.backends.anthropic import AnthropicBackend
+from dream.agent.backends.base import BaseLLMBackend
 from dream.agent.backends.echo import EchoBackend
 from dream.agent.backends.factory import build_backend
+from dream.agent.backends.fallback import FallbackBackend
+from dream.agent.backends.gemini import GeminiBackend
 from dream.agent.backends.ollama import OllamaBackend
 from dream.agent.backends.openai import OpenAIBackend
 from dream.agent.constants import (
@@ -138,7 +142,16 @@ class Dream:
     def __init__(
         self,
         store: MemoryStore | None = None,
-        backend: OpenAIBackend | OllamaBackend | EchoBackend | None = None,
+        backend: (
+            BaseLLMBackend
+            | OpenAIBackend
+            | AnthropicBackend
+            | GeminiBackend
+            | OllamaBackend
+            | EchoBackend
+            | FallbackBackend
+            | None
+        ) = None,
         approval_policy: ApprovalPolicy | None = None,
         max_iterations: int = 4,
         manager: ProviderManager | None = None,
@@ -851,7 +864,7 @@ class Dream:
         must never retry a rate limit into that budget.
         """
         backend = self.backend
-        if isinstance(backend, OpenAIBackend):
+        if isinstance(backend, (OpenAIBackend, AnthropicBackend, GeminiBackend)):
             colder = copy.copy(backend)
             colder.temperature = EXTRACTION_TEMPERATURE
             colder.max_retries = 0

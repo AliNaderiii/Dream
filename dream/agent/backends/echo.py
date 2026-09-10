@@ -26,16 +26,19 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_MATH = re.compile(r"[0-9۰-۹٠-٩][0-9۰-۹٠-٩\s+\-*/×÷().]*[+\-*/×÷]")
+from dream.agent.backends.base import BaseLLMBackend
 
 
-class EchoBackend:
+class EchoBackend(BaseLLMBackend):
     """Offline deterministic backend used for tests and local demos."""
 
     _MATH = re.compile(r"[0-9۰-۹٠-٩][0-9۰-۹٠-٩\s+\-*/×÷().]*[+\-*/×÷]")
 
     def chat(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        max_retries: int | None = None,
     ) -> dict[str, Any]:
         """Return one deterministic response for the latest user turn.
 
@@ -43,7 +46,7 @@ class EchoBackend:
         back as the assistant text, so a tool call in a previous turn
         yields a readable next turn without a real model.
         """
-        del tools
+        del tools, max_retries
         if messages and messages[-1].get("role") == "tool":
             result = messages[-1].get("content", "")
             return {"content": f"Result: {result}", "tool_calls": []}
