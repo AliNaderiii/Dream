@@ -1,8 +1,8 @@
-"""Deterministic, provider-neutral conversation context accounting and compaction facade."""
+"""Dream Context Compression & Compaction System."""
 
 from __future__ import annotations
 
-from dream.compression import (
+from dream.compression.base import (
     CHARS_PER_TOKEN,
     DEFAULT_ECHO_CONTEXT_TOKENS,
     DEFAULT_HEADROOM_TOKENS,
@@ -11,15 +11,19 @@ from dream.compression import (
     DEFAULT_TOOL_PRUNE_THRESHOLD_CHARS,
     CompactionResult,
     ContextBudget,
-    ContextCompressionEngine,
     ContextUsage,
-    deterministic_summary,
+)
+from dream.compression.engine import (
+    ContextCompressionEngine,
     estimate_tokens,
-    extract_persian_timeline,
-    generate_structured_summary,
-    prune_tool_observations,
     split_for_compaction,
     usage,
+)
+from dream.compression.pruner import prune_tool_observations
+from dream.compression.summarizer import (
+    deterministic_summary,
+    extract_persian_timeline,
+    generate_structured_summary,
 )
 
 __all__ = [
