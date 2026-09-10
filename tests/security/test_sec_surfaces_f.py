@@ -113,10 +113,11 @@ def test_audit_script_fails_when_a_layer_breaks(tmp_path) -> None:
     # so we sabotage via a sitecustomize-free shim: write a wrapper script.
     shim = tmp_path / "sabotage.py"
     shim.write_text(
+        "import sys\n"
+        f"sys.path.insert(0, r'{REPO_ROOT}')\n"
         "import dream.security.blocklist as bl\n"
         "bl.scan = lambda command: None\n"
         "import runpy\n"
-        "import sys\n"
         "sys.argv = ['security_audit.py']\n"
         "try:\n"
         "    runpy.run_path('tools/security_audit.py', run_name='__main__')\n"
