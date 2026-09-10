@@ -1,4 +1,4 @@
-﻿"""Dream Command-Line Interface (CLI) package."""
+"""Dream Command-Line Interface (CLI) package."""
 
 from __future__ import annotations
 

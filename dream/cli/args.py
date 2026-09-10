@@ -1,4 +1,4 @@
-﻿"""Command-line argument parser construction."""
+"""Command-line argument parser construction."""
 
 from __future__ import annotations
 

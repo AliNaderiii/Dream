@@ -1,4 +1,4 @@
-﻿"""Main CLI and TUI execution runners."""
+"""Main CLI and TUI execution runners."""
 
 from __future__ import annotations
 

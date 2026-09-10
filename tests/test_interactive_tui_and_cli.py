@@ -1,4 +1,4 @@
-﻿"""Tests for Interactive TUI, ColorManager, Banner, and Enhanced CLI Commands."""
+"""Tests for Interactive TUI, ColorManager, Banner, and Enhanced CLI Commands."""
 
 from __future__ import annotations
 
@@ -195,8 +195,15 @@ def test_phone_and_terminal_parity_remains_intact():
         assert cmd in _PHONE_POLICY, f"{cmd} missing phone policy entry"
         allowed, reason = _PHONE_POLICY[cmd]
         assert isinstance(allowed, bool)
-        if not allowed:
-            assert len(reason.strip()) > 10
+
+    for cmd in _PHONE_REFUSED_CANONICAL:
+        allowed, reason = _PHONE_POLICY[cmd]
+        assert allowed is False
+        assert len(reason.strip()) > 10
+
+    for cmd in _PHONE_ALLOWED_CANONICAL:
+        allowed, reason = _PHONE_POLICY[cmd]
+        assert allowed is True
 
     # Ensure all canonical allowed commands are in phone help
     for cmd in _PHONE_ALLOWED_CANONICAL:

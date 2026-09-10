@@ -1,4 +1,4 @@
-﻿"""Slash command registry, phone policy definitions, and interactive command dispatcher."""
+"""Slash command registry, phone policy definitions, and interactive command dispatcher."""
 
 from __future__ import annotations
 
