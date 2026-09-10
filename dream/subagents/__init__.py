@@ -1,4 +1,4 @@
-"""Backward-compatibility facade for the modular subagents package."""
+"""Hierarchical Multi-Subagent system for isolated, coordinated execution."""
 
 from __future__ import annotations
 
@@ -62,6 +62,7 @@ __all__ = [
     "SUBAGENT_STATUSES",
     "SubAgent",
     "SubAgentManager",
+    "SubAgentRole",
     "SubAgentSpec",
     "SubAgentStatus",
     "SubagentCoordinator",
