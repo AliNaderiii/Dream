@@ -1,4 +1,4 @@
-"""Backward-compatibility facade for dream.memory package."""
+"""Modular, Persian-aware associative and 4-tier persistent memory package."""
 
 from __future__ import annotations
 
