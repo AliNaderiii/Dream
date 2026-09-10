@@ -304,6 +304,7 @@ def dispatch_command(
     raw_cmd: str,
     dream: Dream,
     output: Callable[[str], None] = print,
+    quiet: bool = False,
     colors: ColorManager | None = None,
 ) -> bool:
     """Dispatch an interactive slash command."""
@@ -453,9 +454,18 @@ def dispatch_command(
         return True
 
     if cmd == "/context":
-        from dream.context_files import get_all_context_files_stats
+        from dream.memory.context_files import ContextFileManager
 
-        files_stats = get_all_context_files_stats(getattr(store, "data_dir", "data"))
+        mgr = ContextFileManager(getattr(store, "data_dir", "data"))
+        report = mgr.load_all()
+        files_stats = {}
+        for name, cf in report.files.items():
+            filename = f"{name.upper()}.md"
+            files_stats[filename] = {
+                "chars": len(cf.content),
+                "max_chars": cf.capacity_limit,
+                "description": f"{name.capitalize()} context file",
+            }
         output(cm.bold("Tier-4 Persistent Context Files (Dialectical User Model):"))
         output(format_context_files_table(files_stats, cm))
         return True
