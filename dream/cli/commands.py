@@ -9,13 +9,12 @@ from collections.abc import Callable
 from typing import Any
 
 from dream.agent import Dream
-from dream.memory import MemoryStore, normalize_fa
+from dream.memory import normalize_fa
 from dream.tools import REGISTRY
 from dream.tui.colors import ColorManager
 from dream.tui.formatters import (
     format_context_files_table,
     format_subagents_table,
-    report_turn_activity,
 )
 
 KNOWN_COMMANDS: tuple[str, ...] = (
@@ -425,7 +424,8 @@ def dispatch_command(
     if cmd == "/remind":
         parsed = _parse_remind_args(args)
         if not parsed:
-            output(cm.yellow("Usage: /remind in <duration> <message> (e.g. /remind in 10m call Ali)"))
+            msg = "Usage: /remind in <duration> <message> (e.g. /remind in 10m call Ali)"
+            output(cm.yellow(msg))
             return True
         output(cm.green(f"Reminder scheduled: '{parsed['message']}' (when: {parsed['when']})"))
         return True
@@ -448,7 +448,8 @@ def dispatch_command(
         try:
             new_backend = build_backend(args)
             dream.backend = new_backend
-            output(cm.green(f"Successfully switched backend to '{args}' ({type(new_backend).__name__})."))
+            b_type = type(new_backend).__name__
+            output(cm.green(f"Successfully switched backend to '{args}' ({b_type})."))
         except Exception as exc:
             output(cm.red(f"Failed to switch backend to '{args}': {exc}"))
         return True
