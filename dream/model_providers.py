@@ -30,6 +30,12 @@ from urllib.request import Request, urlopen
 from authlib.common.security import generate_token
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
 
+from dream.agent.backends import (
+    AnthropicBackend,
+    GeminiBackend,
+    GoogleBackend,
+)
+
 KEYCHAIN_SERVICE = "Dream Model Providers"
 PROVIDER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 NETWORK_TIMEOUT_SECONDS = 15.0
@@ -688,130 +694,6 @@ class OAuthPKCEManager:
         return {"connected": True, "provider": provider_id, "expires_in": tokens.get("expires_in")}
 
 
-class AnthropicBackend:
-    """Dream backend adapter for Anthropic's Messages API."""
-
-    def __init__(
-        self,
-        model: str,
-        api_key: str,
-        base_url: str,
-        *,
-        reasoning_effort: str | None = None,
-    ) -> None:
-        self.model = model
-        self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
-        self.reasoning_effort = reasoning_effort
-
-    def chat(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
-    ) -> dict[str, Any]:
-        system = "\n\n".join(
-            str(message.get("content") or "")
-            for message in messages
-            if message.get("role") == "system"
-        )
-        conversation = [
-            message for message in messages if message.get("role") in {"user", "assistant"}
-        ]
-        payload: dict[str, Any] = {
-            "model": self.model,
-            "max_tokens": 4096,
-            "messages": conversation,
-        }
-        if system:
-            payload["system"] = system
-        if self.reasoning_effort:
-            budget = {"low": 1024, "medium": 4096, "high": 8192}.get(self.reasoning_effort, 1024)
-            payload["thinking"] = {"type": "enabled", "budget_tokens": budget}
-            payload["max_tokens"] = budget + 4096
-        if tools:
-            payload["tools"] = [
-                {
-                    "name": tool.get("function", {}).get("name"),
-                    "description": tool.get("function", {}).get("description", ""),
-                    "input_schema": tool.get("function", {}).get("parameters", {}),
-                }
-                for tool in tools
-            ]
-        request = Request(
-            f"{self.base_url}/v1/messages",
-            data=json.dumps(payload).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": self.api_key,
-                "anthropic-version": "2023-06-01",
-            },
-            method="POST",
-        )
-        try:
-            with urlopen(request, timeout=60) as response:  # nosec B310: configured endpoint
-                data = json.loads(response.read().decode())
-            blocks = data.get("content", [])
-            text = "".join(
-                str(block.get("text") or "")
-                for block in blocks
-                if isinstance(block, dict) and block.get("type") == "text"
-            )
-            calls = [
-                {
-                    "id": str(block.get("id") or ""),
-                    "name": str(block.get("name") or ""),
-                    "arguments": block.get("input") or {},
-                }
-                for block in blocks
-                if isinstance(block, dict) and block.get("type") == "tool_use"
-            ]
-            return {"content": text or None, "tool_calls": calls}
-        except (HTTPError, URLError, OSError, ValueError, TypeError):
-            return {
-                "content": "The provider request failed. Check the provider connection.",
-                "tool_calls": [],
-            }
-
-
-class GoogleBackend:
-    """Dream backend adapter for Google's Generative Language API."""
-
-    def __init__(self, model: str, credential: str, base_url: str, *, oauth: bool = False) -> None:
-        self.model = model
-        self.credential = credential
-        self.base_url = base_url.rstrip("/")
-        self.oauth = oauth
-
-    def chat(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
-    ) -> dict[str, Any]:
-        del tools  # Tool schema translation is intentionally deferred until Google supports parity.
-        contents = [
-            {
-                "role": "model" if message.get("role") == "assistant" else "user",
-                "parts": [{"text": str(message.get("content") or "")}],
-            }
-            for message in messages
-        ]
-        query = "" if self.oauth else f"?{urlencode({'key': self.credential})}"
-        headers = {"Content-Type": "application/json"}
-        if self.oauth:
-            headers["Authorization"] = f"Bearer {self.credential}"
-        request = Request(
-            f"{self.base_url}/models/{quote(self.model, safe='')}:generateContent{query}",
-            data=json.dumps({"contents": contents}).encode(),
-            headers=headers,
-            method="POST",
-        )
-        try:
-            with urlopen(request, timeout=60) as response:  # nosec B310: configured endpoint
-                data = json.loads(response.read().decode())
-            parts = data["candidates"][0]["content"]["parts"]
-            text = "".join(str(part.get("text") or "") for part in parts)
-            return {"content": text, "tool_calls": []}
-        except (HTTPError, URLError, OSError, KeyError, IndexError, ValueError, TypeError):
-            return {
-                "content": "The provider request failed. Check the provider connection.",
-                "tool_calls": [],
-            }
 
 
 def _validate_provider_id(provider_id: str) -> None:
@@ -851,3 +733,16 @@ def _http_failure_label(status: int) -> str:
     if status == 429:
         return "Provider rate limit reached"
     return f"Provider returned HTTP {status}"
+
+__all__ = [
+    "KEYCHAIN_SERVICE",
+    "PROVIDER_CATALOG",
+    "PROVIDER_ID_RE",
+    "CredentialStoreUnavailable",
+    "KeychainCredentialStore",
+    "ProviderRegistry",
+    "OAuthPKCEManager",
+    "AnthropicBackend",
+    "GeminiBackend",
+    "GoogleBackend",
+]
