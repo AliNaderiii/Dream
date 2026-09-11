@@ -83,6 +83,16 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "subagent_terminate",
         ),
     ),
+    "scheduler": Toolset(
+        name="scheduler",
+        description="Autonomous cron scheduling, reminders, and multi-channel delivery",
+        tools=(
+            "schedule_task",
+            "list_schedules",
+            "cancel_schedule",
+            "trigger_schedule",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)

@@ -1,12 +1,4 @@
-"""A small five-field cron parser, matcher and next-fire calculator.
-
-Dream schedules are stored as standard cron expressions because that is the
-format users can read, edit and paste elsewhere. Only the classic five fields
-are supported — minute, hour, day-of-month, month, day-of-week — with ``*``,
-``*/n``, ``a-b``, ``a-b/n`` and comma lists. No seconds field, no ``@hourly``
-aliases, no ``L``/``W``/``#`` extensions: the scheduler polls every thirty
-seconds, so sub-minute precision would be a promise it cannot keep.
-"""
+"""A small five-field cron parser, matcher and next-fire calculator."""
 
 from __future__ import annotations
 
@@ -57,9 +49,7 @@ _WEEKDAY_NAMES = (
 )
 
 #: Four years of minutes is the bound on the forward walk in
-#: :func:`next_run_after`. It comfortably covers the longest real schedule (29
-#: February, which recurs at most every four years) while guaranteeing that an
-#: impossible expression such as ``0 0 30 2 *`` terminates.
+#: :func:`next_run_after`.
 _SEARCH_LIMIT_DAYS = 366 * 4
 
 
@@ -82,9 +72,6 @@ class CronExpression:
             return False
         if moment.month not in self.months:
             return False
-        # Vixie cron: when both day-of-month and day-of-week are restricted the
-        # expression fires on either, not on their intersection. "1st of the
-        # month and every Monday" must not silently mean "Monday the 1st".
         day_ok = moment.day in self.days
         weekday_ok = ((moment.weekday() + 1) % 7) in self.weekdays
         if self.day_restricted and self.weekday_restricted:
@@ -126,10 +113,8 @@ def _parse_field(raw: str, name: str, low: int, high: int) -> tuple[frozenset[in
             start = end = _int(part, name)
             restricted = True
         if name == "weekday":
-            # Both 0 and 7 mean Sunday in every cron dialect worth matching.
             start, end = (0 if start == 7 else start), (0 if end == 7 else end)
             if end < start:
-                # A wrapping range such as fri-mon (5-1).
                 values.update(range(start, 7, step))
                 values.update(range(0, end + 1, step))
                 continue
@@ -188,11 +173,7 @@ def cron_matches(expression: str | CronExpression, moment: datetime) -> bool:
 
 
 def next_run_after(expression: str | CronExpression, after: datetime) -> datetime:
-    """The first minute strictly after ``after`` at which the expression fires.
-
-    Walks forward a minute at a time, skipping whole days when the date fields
-    cannot match, which keeps even a yearly schedule well under a millisecond.
-    """
+    """The first minute strictly after ``after`` at which the expression fires."""
     parsed = expression if isinstance(expression, CronExpression) else parse_cron(expression)
     moment = (after + timedelta(minutes=1)).replace(second=0, microsecond=0)
     limit = after + timedelta(days=_SEARCH_LIMIT_DAYS)
@@ -214,11 +195,6 @@ def _date_could_match(parsed: CronExpression, moment: datetime) -> bool:
     if parsed.day_restricted and parsed.weekday_restricted:
         return day_ok or weekday_ok
     return day_ok and weekday_ok
-
-
-# --------------------------------------------------------------------------
-# Human-readable rendering
-# --------------------------------------------------------------------------
 
 
 def _ordinal(n: int) -> str:
@@ -256,11 +232,7 @@ def _weekday_phrase(field: str, weekdays: frozenset[int]) -> str:
 
 
 def describe_cron(expression: str) -> str:
-    """Render a cron expression as an English sentence for the UI.
-
-    Covers the shapes :func:`dream.scheduler.nl_to_cron` can emit precisely,
-    and degrades to a field-by-field reading for anything hand-written.
-    """
+    """Render a cron expression as an English sentence for the UI."""
     parsed = parse_cron(expression)
     minute_f, hour_f, day_f, month_f, weekday_f = parsed.expression.split()
 

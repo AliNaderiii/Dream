@@ -24,7 +24,7 @@ import secrets
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from dream.cron import describe_cron, next_run_after, validate_cron
@@ -266,8 +266,14 @@ def _row_to_run(row: Any) -> ScheduleRun:
 
 
 def _compute_next_run(cron_expression: str, after: float | None = None) -> float:
-    moment = datetime.fromtimestamp(after if after is not None else time.time())
-    return next_run_after(cron_expression, moment).timestamp()
+    ts = after if after is not None else time.time()
+    try:
+        moment = datetime.fromtimestamp(ts, tz=timezone.utc).replace(tzinfo=None)
+        next_dt = next_run_after(cron_expression, moment)
+        return next_dt.replace(tzinfo=timezone.utc).timestamp()
+    except (OSError, OverflowError, ValueError):
+        moment = datetime.fromtimestamp(ts)
+        return next_run_after(cron_expression, moment).timestamp()
 
 
 def resolve_cron(
