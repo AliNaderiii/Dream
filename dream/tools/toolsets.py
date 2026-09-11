@@ -115,6 +115,29 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "eval_run_benchmark",
         ),
     ),
+    "profiles": Toolset(
+        name="profiles",
+        description="Multi-profile persona scoping and isolated workspace management",
+        tools=(
+            "profile_list",
+            "profile_get_current",
+            "profile_switch",
+            "profile_create",
+        ),
+    ),
+    "swarm": Toolset(
+        name="swarm",
+        description="Distributed swarm orchestration, DAG task execution, and consensus",
+        tools=(
+            "swarm_spawn_node",
+            "swarm_plan_workflow",
+            "swarm_execute_step",
+            "swarm_run_all",
+            "swarm_reach_consensus",
+            "swarm_get_status",
+            "swarm_broadcast_message",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
