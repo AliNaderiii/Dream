@@ -351,8 +351,10 @@ class InMemoryTransport(MCPTransport):
                 result = handler(**args) if isinstance(args, dict) else handler()
                 if asyncio.iscoroutine(result):
                     result = await result
-                return {"content": [{"type": "text", "text": str(result)}], "isError": False}
-            return {"content": [{"type": "text", "text": str(handler)}], "isError": False}
+                text_out = json.dumps(result) if isinstance(result, (dict, list)) else str(result)
+                return {"content": [{"type": "text", "text": text_out}], "isError": False}
+            text_out = json.dumps(handler) if isinstance(handler, (dict, list)) else str(handler)
+            return {"content": [{"type": "text", "text": text_out}], "isError": False}
         if method == "resources/list":
             return {"resources": [dict(r, _content=None) for r in self._resources.values()]}
         if method == "resources/read":

@@ -89,7 +89,10 @@ class MCPServerManager:
 
         if client and client.is_connected:
             try:
-                asyncio.create_task(client.disconnect())
+                loop = asyncio.get_running_loop()
+                loop.create_task(client.disconnect())
+            except RuntimeError:
+                asyncio.run(client.disconnect())
             except Exception:
                 pass
         return cfg is not None
@@ -105,7 +108,10 @@ class MCPServerManager:
             if not enabled and server_id in self._clients:
                 client = self._clients.pop(server_id)
                 try:
-                    asyncio.create_task(client.disconnect())
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(client.disconnect())
+                except RuntimeError:
+                    asyncio.run(client.disconnect())
                 except Exception:
                     pass
             return cfg
@@ -158,6 +164,20 @@ class MCPServerManager:
             cfg = self._servers.get(server_id_or_config)
             if not cfg:
                 return {"ok": False, "error": f"Server {server_id_or_config} not found"}
+            existing_client = self._clients.get(server_id_or_config)
+            if existing_client and existing_client.is_connected:
+                tools = await existing_client.list_tools()
+                resources = await existing_client.list_resources()
+                latency_ms = round((time.monotonic() - started) * 1000, 2)
+                return {
+                    "ok": True,
+                    "server_id": cfg.id,
+                    "name": cfg.name,
+                    "type": cfg.type,
+                    "tools_count": len(tools),
+                    "resources_count": len(resources),
+                    "latency_ms": latency_ms,
+                }
         else:
             cfg = server_id_or_config
 
