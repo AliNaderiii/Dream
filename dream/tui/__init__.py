@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dream.tui.approval import TerminalApprovalPrompt
 from dream.tui.banner import DREAM_VERSION, render_banner, render_status_bar
 from dream.tui.colors import ColorManager, style
 from dream.tui.formatters import (
@@ -19,6 +20,7 @@ __all__ = [
     "DREAM_VERSION",
     "ColorManager",
     "InteractiveSession",
+    "TerminalApprovalPrompt",
     "TerminalPrompter",
     "format_context_files_table",
     "format_extraction_line",
