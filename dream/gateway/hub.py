@@ -101,6 +101,11 @@ class GatewayHub:
 
         self.delivery_router.stop()
 
+    @property
+    def is_running(self) -> bool:
+        """Return True if gateway hub is active."""
+        return self._is_running
+
         for platform, adapter in list(self._adapters.items()):
             try:
                 adapter.disconnect()

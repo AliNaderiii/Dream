@@ -16,6 +16,9 @@ class PlatformType(str, Enum):
     SLACK = "slack"
     WEBHOOK = "webhook"
     MATRIX = "matrix"
+    WHATSAPP = "whatsapp"
+    EMAIL = "email"
+    SIGNAL = "signal"
     API = "api"
     CONSOLE = "console"
 

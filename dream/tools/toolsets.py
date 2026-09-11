@@ -125,6 +125,17 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "profile_create",
         ),
     ),
+    "context": Toolset(
+        name="context",
+        description="Prioritized context files (SOUL, AGENTS, USER, MEMORY) and budgeting",
+        tools=(
+            "context_get_tier",
+            "context_update_tier",
+            "context_get_budget_report",
+            "context_assemble_prompt",
+            "context_reload_all",
+        ),
+    ),
     "swarm": Toolset(
         name="swarm",
         description="Distributed swarm orchestration, DAG task execution, and consensus",
