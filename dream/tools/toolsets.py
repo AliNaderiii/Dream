@@ -38,7 +38,7 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
     ),
     "skills": Toolset(
         name="skills",
-        description="Reusable skill management and lifecycle",
+        description="Reusable skill management, hub discovery, and autonomous evolution",
         tools=(
             "save_skill",
             "use_skill",
@@ -49,6 +49,11 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "save_skill_bundle",
             "apply_skill_proposal",
             "discard_skill_proposal",
+            "hub_search_skills",
+            "hub_install_skill",
+            "skill_evolve_optimize",
+            "skill_export_bundle",
+            "skill_import_bundle",
         ),
     ),
     "reminders": Toolset(
