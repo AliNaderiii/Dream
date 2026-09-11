@@ -136,6 +136,17 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "context_reload_all",
         ),
     ),
+    "dialectic": Toolset(
+        name="dialectic",
+        description="Self-reflective dialectic user modeling and knowledge synthesis",
+        tools=(
+            "dialectic_observe",
+            "dialectic_reflect",
+            "dialectic_get_belief_graph",
+            "dialectic_reconcile",
+            "dialectic_query_traits",
+        ),
+    ),
     "browser": Toolset(
         name="browser",
         description="Multi-driver browser control, DOM extraction, and visual screenshot interaction",
