@@ -1,1 +1,0 @@
-__SCRIPT_PAYLOAD__
