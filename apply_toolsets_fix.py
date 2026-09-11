@@ -1,4 +1,15 @@
-"""Toolset categorization, grouping, and dynamic tool management."""
+#!/usr/bin/env python3
+"""apply_toolsets_fix.py - Fix toolsets.py registration for Phase 18 and Phase 19.
+
+This script updates dream/tools/toolsets.py with complete BUILTIN_TOOLSETS definitions
+including 'profiles' and 'swarm'.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+TOOLSETS_PY_CONTENT = r'''"""Toolset categorization, grouping, and dynamic tool management."""
 
 from __future__ import annotations
 
@@ -125,40 +136,6 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "profile_create",
         ),
     ),
-    "context": Toolset(
-        name="context",
-        description="Prioritized context files (SOUL, AGENTS, USER, MEMORY) and budgeting",
-        tools=(
-            "context_get_tier",
-            "context_update_tier",
-            "context_get_budget_report",
-            "context_assemble_prompt",
-            "context_reload_all",
-        ),
-    ),
-    "browser": Toolset(
-        name="browser",
-        display_name="Browser Automation & Vision",
-        description="Multi-driver browser control, DOM extraction, and visual screenshot interaction",
-        tools=[
-            "browser_navigate",
-            "browser_click",
-            "browser_type",
-            "browser_screenshot",
-            "browser_extract_content",
-            "browser_close",
-            "browser_get_status",
-        ],
-    ),
-    "terminal": Toolset(
-        name="terminal",
-        description="Multi-backend isolated execution (Local, Docker, SSH, Cloud Sandboxes)",
-        tools=(
-            "terminal_execute",
-            "terminal_list_backends",
-            "terminal_switch_backend",
-        ),
-    ),
     "swarm": Toolset(
         name="swarm",
         description="Distributed swarm orchestration, DAG task execution, and consensus",
@@ -242,3 +219,20 @@ def filter_tools(
         allowed_names.difference_update(exclude_tools)
 
     return {name: tool for name, tool in source.items() if name in allowed_names}
+'''
+
+
+def main() -> None:
+    repo_dir = Path(__file__).resolve().parent / "dream-repo"
+    if not repo_dir.exists():
+        repo_dir = Path.cwd()
+
+    print(f"Updating dream/tools/toolsets.py in: {repo_dir}")
+    toolsets_py = repo_dir / "dream" / "tools" / "toolsets.py"
+    toolsets_py.parent.mkdir(parents=True, exist_ok=True)
+    toolsets_py.write_text(TOOLSETS_PY_CONTENT, encoding="utf-8")
+    print("  ✓ dream/tools/toolsets.py successfully updated with profiles and swarm toolsets!")
+
+
+if __name__ == "__main__":
+    main()
