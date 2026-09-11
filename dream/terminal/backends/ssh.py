@@ -20,7 +20,7 @@ class SSHRemoteBackend(BaseTerminalBackend):
 
     def __init__(
         self,
-        host: str,
+        host: str = "localhost",
         port: int = 22,
         user: str | None = None,
         key_path: str | None = None,
@@ -153,3 +153,6 @@ class SSHRemoteBackend(BaseTerminalBackend):
         target = f"{self.user}@{self.host}" if self.user else self.host
         args.extend([target, command])
         return args
+
+
+SSHTerminalBackend = SSHRemoteBackend

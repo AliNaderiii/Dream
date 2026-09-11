@@ -14,6 +14,10 @@ class TerminalBackendType(str, Enum):
     LOCAL = "local"
     DOCKER = "docker"
     SSH = "ssh"
+    SINGULARITY = "singularity"
+    MODAL = "modal"
+    DAYTONA = "daytona"
+    VERCEL = "vercel"
     MOCK = "mock"
 
 

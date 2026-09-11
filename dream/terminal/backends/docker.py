@@ -179,3 +179,6 @@ class DockerSandboxBackend(BaseTerminalBackend):
                 backend=self.backend_type,
                 error_message=str(exc),
             )
+
+
+DockerTerminalBackend = DockerSandboxBackend

@@ -136,6 +136,15 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "context_reload_all",
         ),
     ),
+    "terminal": Toolset(
+        name="terminal",
+        description="Multi-backend isolated execution (Local, Docker, SSH, Cloud Sandboxes)",
+        tools=(
+            "terminal_execute",
+            "terminal_list_backends",
+            "terminal_switch_backend",
+        ),
+    ),
     "swarm": Toolset(
         name="swarm",
         description="Distributed swarm orchestration, DAG task execution, and consensus",

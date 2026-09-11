@@ -8,7 +8,13 @@ from typing import Any
 
 from dream.security.blocklist import scan as floor_scan
 from dream.terminal.backends.base import BaseTerminalBackend
+from dream.terminal.backends.daytona import DaytonaTerminalBackend
+from dream.terminal.backends.docker import DockerTerminalBackend
 from dream.terminal.backends.local import LocalTerminalBackend
+from dream.terminal.backends.modal import ModalTerminalBackend
+from dream.terminal.backends.singularity import SingularityTerminalBackend
+from dream.terminal.backends.ssh import SSHTerminalBackend
+from dream.terminal.backends.vercel import VercelTerminalBackend
 from dream.terminal.types import (
     CommandExecutionRequest,
     CommandExecutionResult,
@@ -30,6 +36,7 @@ class TerminalManager:
         self,
         default_backend: TerminalBackendType = TerminalBackendType.LOCAL,
         enable_security_scan: bool = True,
+        auto_bootstrap_all: bool = True,
     ) -> None:
         self.active_backend_type = default_backend
         self.enable_security_scan = enable_security_scan
@@ -38,6 +45,14 @@ class TerminalManager:
 
         # Register default local backend
         self.register_backend(LocalTerminalBackend())
+
+        if auto_bootstrap_all:
+            self.register_backend(DockerTerminalBackend())
+            self.register_backend(SSHTerminalBackend())
+            self.register_backend(SingularityTerminalBackend())
+            self.register_backend(ModalTerminalBackend())
+            self.register_backend(DaytonaTerminalBackend())
+            self.register_backend(VercelTerminalBackend())
 
     def register_backend(self, backend: BaseTerminalBackend) -> None:
         """Register a terminal backend in the pool."""
@@ -90,7 +105,13 @@ class TerminalManager:
                     finding.rule.name_en if hasattr(finding, "rule") else "destructive command"
                 )
                 err_msg = (
-                    f"⛔ اجرای دستور به دلیل نقض قوانین امنیتی مسدود شد: {rule_id}\n"
+                    f"\u26d4 \u0627\u062c\u0631\u0627\u06cc "
+                    f"\u062f\u0633\u062a\u0648\u0631 "
+                    f"\u0628\u0647 \u062f\u0644\u06cc\u0644 "
+                    f"\u0646\u0642\u0636 \u0642\u0648\u0627\u0646\u06cc\u0646 "
+                    f"\u0627\u0645\u0646\u06cc\u062a\u06cc "
+                    f"\u0645\u0633\u062f\u0648\u062f "
+                    f"\u0634\u062f: {rule_id}\n"
                     f"Command blocked by security rule: {name_en}"
                 )
                 logger.warning(f"Terminal command blocked: {command} -> {rule_id}")
