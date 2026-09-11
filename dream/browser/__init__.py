@@ -61,7 +61,6 @@ try:
                 "browser_close",
                 "browser_get_status",
             ],
-            display_name="Browser Automation & Vision",
             description="Multi-driver browser control, DOM extraction, and visual interaction",
         )
 except Exception:

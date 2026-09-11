@@ -138,7 +138,6 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
     ),
     "browser": Toolset(
         name="browser",
-        display_name="Browser Automation & Vision",
         description="Multi-driver browser control, DOM extraction, and visual screenshot interaction",
         tools=[
             "browser_navigate",

@@ -156,6 +156,16 @@ def is_sensitive_path(path: str | os.PathLike[str]) -> SensitiveHit | None:
             "\u0634\u0627\u062e\u0647\u200c\u06cc AppData \u0648\u06cc\u0646\u062f\u0648\u0632",
         )
 
+    # POSIX system locations — also string-checked against flat so the rule
+    # holds on a Windows box examining a POSIX-shaped path like /etc/passwd.
+    for system_dir in _SYSTEM_DIRS_POSIX:
+        if flat == system_dir or flat.startswith(system_dir + "/"):
+            return _refuse(
+                system_dir,
+                "a system directory",
+                "\u067e\u0648\u0634\u0647\u200c\u06cc \u0633\u06cc\u0633\u062a\u0645\u06cc",
+            )
+
     # Resolve symlinks for the filesystem checks: a link that points at a
     # secret directory is the secret directory.
     try:
