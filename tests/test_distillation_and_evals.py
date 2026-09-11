@@ -61,14 +61,16 @@ def test_trajectory_recorder_lifecycle_and_scoring(tmp_path):
 
 def test_dataset_distiller_formats_and_sanitization(tmp_path):
     """Verify export to OpenAI, ShareGPT, ChatML, and Alpaca formats with secret redaction."""
+    dummy_key = "sk-" + "samplekeyfortest" * 2
+    dummy_bearer = "Bearer " + "secrettokenfortest" * 2
     with TrajectoryRecorder() as recorder:
         sid = recorder.start_trajectory(
-            task_prompt="My secret key is sk-1234567890abcdef1234567890"
+            task_prompt=f"My secret key is {dummy_key}"
         )
         recorder.add_step(
             session_id=sid,
             role="assistant",
-            content="Received token Bearer abcdef1234567890abcdef1234567890",
+            content=f"Received token {dummy_bearer}",
         )
         trace = recorder.complete_trajectory(
             session_id=sid,
@@ -78,7 +80,7 @@ def test_dataset_distiller_formats_and_sanitization(tmp_path):
         assert trace is not None
 
         # Sanitize check
-        redacted = sanitize_trace_text("API: sk-1234567890abcdef1234567890")
+        redacted = sanitize_trace_text(f"API: {dummy_key}")
         assert "[REDACTED_API_KEY]" in redacted
 
         # Export OpenAI
