@@ -93,6 +93,14 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "trigger_schedule",
         ),
     ),
+    "retrieval": Toolset(
+        name="retrieval",
+        description="Hybrid semantic retrieval and knowledge graph memory association",
+        tools=(
+            "search_hybrid_memory",
+            "query_knowledge_graph",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
