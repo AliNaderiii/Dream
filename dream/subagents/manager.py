@@ -176,13 +176,20 @@ class SubAgentManager:
         return runtime.agent
 
     def _launch(self, runtime: _Runtime) -> None:
-        loop = asyncio.get_event_loop()
-        runtime.loop = loop
-        runtime.agent.status = "running"
-        runtime.agent.started_at = time.time()
-        runtime.task = loop.create_task(
-            self._run(runtime), name=f"subagent:{runtime.agent.id}"
-        )
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            runtime.loop = loop
+            runtime.agent.status = "running"
+            runtime.agent.started_at = time.time()
+            runtime.task = loop.create_task(
+                self._run(runtime), name=f"subagent:{runtime.agent.id}"
+            )
+        else:
+            runtime.agent.status = "idle"
 
     def spawn_pipeline(
         self, specs: Sequence[SubAgentSpec], *, name: str = ""
@@ -339,6 +346,14 @@ class SubAgentManager:
         runtime = self._runtimes.get(subagent_id)
         if runtime is None:
             return None
+        if runtime.task is None and not runtime.agent.is_terminal:
+            loop = asyncio.get_running_loop()
+            runtime.loop = loop
+            runtime.agent.status = "running"
+            runtime.agent.started_at = time.time()
+            runtime.task = loop.create_task(
+                self._run(runtime), name=f"subagent:{runtime.agent.id}"
+            )
         task = runtime.task
         if task is not None:
             with contextlib.suppress(

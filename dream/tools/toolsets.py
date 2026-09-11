@@ -72,6 +72,17 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "mcp_reload",
         ),
     ),
+    "subagents": Toolset(
+        name="subagents",
+        description="Multi-agent orchestration, delegation, and worker lifecycle",
+        tools=(
+            "subagent_spawn",
+            "subagent_wait",
+            "subagent_delegate_task",
+            "subagent_list",
+            "subagent_terminate",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)

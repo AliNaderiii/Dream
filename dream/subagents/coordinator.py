@@ -39,6 +39,18 @@ BUILTIN_ROLES: dict[str, SubagentRole] = {
         system_prompt="You are a data scientist. Compute and explain metrics clearly.",
         tools=("calculate", "read_note", "list_notes"),
     ),
+    "planner": SubagentRole(
+        name="planner",
+        description="Goal decomposition, task structuring, and execution planning",
+        system_prompt="You are an expert project planner. Break down goals into ordered steps.",
+        tools=("get_datetime", "calculate", "list_notes", "read_note"),
+    ),
+    "reviewer": SubagentRole(
+        name="reviewer",
+        description="Code and security review, quality validation, and correctness checking",
+        system_prompt="You are a senior code and security reviewer. Validate accuracy and safety.",
+        tools=("read_note", "list_notes", "calculate"),
+    ),
 }
 
 
