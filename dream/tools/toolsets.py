@@ -61,6 +61,17 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
         description="System commands and external communication",
         tools=("run_shell", "send_email"),
     ),
+    "mcp": Toolset(
+        name="mcp",
+        description="Model Context Protocol servers, discovery, and tool execution",
+        tools=(
+            "mcp_list_servers",
+            "mcp_list_tools",
+            "mcp_call_tool",
+            "mcp_read_resource",
+            "mcp_reload",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
