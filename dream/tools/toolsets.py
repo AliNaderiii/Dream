@@ -136,6 +136,17 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "context_reload_all",
         ),
     ),
+    "plugins": Toolset(
+        name="plugins",
+        description="Dynamic plugin installation, lifecycle management, and extension hooks",
+        tools=(
+            "plugin_list",
+            "plugin_install",
+            "plugin_enable",
+            "plugin_disable",
+            "plugin_get_info",
+        ),
+    ),
     "dialectic": Toolset(
         name="dialectic",
         description="Self-reflective dialectic user modeling and knowledge synthesis",
