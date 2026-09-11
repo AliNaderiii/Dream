@@ -29,6 +29,17 @@ from dream.subagents.constants import (
 from dream.subagents.coordinator import BUILTIN_ROLES, SubagentCoordinator, SubagentRole
 from dream.subagents.isolation import _build_backend, build_child_tools
 from dream.subagents.manager import SubAgentManager
+from dream.subagents.slash import handle_subagent_command
+from dream.subagents.tools import (
+    get_subagent_coordinator,
+    get_subagent_manager,
+    reset_subagent_manager,
+    subagent_delegate_task,
+    subagent_list,
+    subagent_spawn,
+    subagent_terminate,
+    subagent_wait,
+)
 from dream.subagents.types import (
     LogEntry,
     SubAgent,
@@ -70,5 +81,14 @@ __all__ = [
     "_build_backend",
     "build_child_tools",
     "estimate_tokens",
+    "get_subagent_coordinator",
+    "get_subagent_manager",
+    "handle_subagent_command",
+    "reset_subagent_manager",
+    "subagent_delegate_task",
+    "subagent_list",
+    "subagent_spawn",
+    "subagent_terminate",
     "subagent_to_dict",
+    "subagent_wait",
 ]
