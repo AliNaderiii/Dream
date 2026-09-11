@@ -106,6 +106,15 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "query_knowledge_graph",
         ),
     ),
+    "distill": Toolset(
+        name="distill",
+        description="Autonomous trajectory recording, distillation, and evaluation benchmarks",
+        tools=(
+            "distill_record_trajectory",
+            "distill_export_dataset",
+            "eval_run_benchmark",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
