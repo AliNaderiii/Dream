@@ -1,78 +1,78 @@
-"""Dream's autonomous data-science research engine.
-
-A self-directed analyst: it plans an open-ended study, discovers and profiles
-the data in a workspace, iterates *plan → code → execute → observe →
-self-correct* with real runtime feedback, and compiles a grounded, reproducible
-report (Markdown + PDF) with provenance behind every number.
-
-Quick start::
-
-    from dream.research import ResearchEngine
-
-    engine = ResearchEngine()                 # offline-capable
-    session = engine.run("Why did revenue dip in Q3?", "data/space")
-    print(session.record.report.markdown_path)
-
-The engine is deliberately layered so each piece is testable on its own:
-
-============================  ======================================
-:mod:`~dream.research.session`   state machine, persistence, pipeline
-:mod:`~dream.research.planner`   topic + sources → study plan
-:mod:`~dream.research.iterate`   the per-section research loop
-:mod:`~dream.research.discovery` multi-source discovery + relevance
-:mod:`~dream.research.prep`      execution-grounded data preparation
-:mod:`~dream.research.analyze`   analyses, anomalies, tables, charts
-:mod:`~dream.research.executor`  AST-gated, sandboxed CodeAct
-:mod:`~dream.research.writer`    findings → analyst prose
-:mod:`~dream.research.proofread` the grounding guard
-:mod:`~dream.research.report`    Markdown + PDF + provenance
-============================  ======================================
-
-Nothing here imports pandas or matplotlib at module scope; the heavy stack is
-reached only through :mod:`dream.skills.data_science`, inside the sandbox.
-"""
+"""Autonomous Deep Research, Multi-Source Fact Gathering, and Intelligence Synthesis Subsystem."""
 
 from __future__ import annotations
 
-from dream.research.errors import (
-    ResearchCancelled,
-    ResearchError,
-    ResearchSecurityError,
-    ResearchTimeout,
+from dream.research.collector import MultiSourceCollector
+from dream.research.engine import DeepResearchEngine
+from dream.research.planner import ResearchPlanner
+from dream.research.slash import handle_research_slash_command
+from dream.research.synthesizer import ResearchSynthesizer
+from dream.research.tools import (
+    get_global_research_engine,
+    get_research_tools,
+    research_add_source,
+    research_export_report,
+    research_get_status,
+    research_list_sessions,
+    research_plan_investigation,
+    research_run_autonomous,
+    research_synthesize_report,
+    reset_global_research_engine,
 )
-from dream.research.schemas import (
-    Finding,
-    Iteration,
-    Observation,
-    Plan,
-    ReportRef,
-    ResearchConfig,
-    Section,
-    SessionRecord,
-)
-from dream.research.session import (
-    ResearchEngine,
-    ResearchSession,
-    RunContext,
-    SessionStore,
+from dream.research.types import (
+    ResearchFinding,
+    ResearchPlan,
+    ResearchReport,
+    ResearchSource,
+    ResearchStatus,
+    SourceCitation,
+    SourceCredibility,
 )
 
+# Register toolset if toolset registry is present
+try:
+    from dream.tools.toolsets import Toolset, register_toolset
+
+    register_toolset(
+        Toolset(
+            name="research",
+            description="Autonomous deep research, evidence collection, and multi-source synthesis.",
+            tools=[
+                "research_plan_investigation",
+                "research_add_source",
+                "research_synthesize_report",
+                "research_run_autonomous",
+                "research_export_report",
+                "research_get_status",
+                "research_list_sessions",
+            ],
+            metadata={"category": "research", "builtin": True},
+        )
+    )
+except Exception:
+    pass
+
 __all__ = [
-    "Finding",
-    "Iteration",
-    "Observation",
-    "Plan",
-    "ReportRef",
-    "ResearchCancelled",
-    "ResearchConfig",
-    "ResearchEngine",
-    "ResearchError",
-    "ResearchSecurityError",
-    "ResearchSession",
-    "ResearchTimeout",
-    "ReportRef",
-    "RunContext",
-    "Section",
-    "SessionRecord",
-    "SessionStore",
+    "DeepResearchEngine",
+    "MultiSourceCollector",
+    "ResearchFinding",
+    "ResearchPlan",
+    "ResearchPlanner",
+    "ResearchReport",
+    "ResearchSource",
+    "ResearchStatus",
+    "ResearchSynthesizer",
+    "SourceCitation",
+    "SourceCredibility",
+    "get_global_research_engine",
+    "get_research_tools",
+    "handle_research_slash_command",
+    "research_add_source",
+    "research_export_report",
+    "research_get_status",
+    "research_list_sessions",
+    "research_plan_investigation",
+    "research_run_autonomous",
+    "research_synthesize_report",
+    "reset_global_research_engine",
 ]

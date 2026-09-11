@@ -149,7 +149,9 @@ def is_sensitive_path(path: str | os.PathLike[str]) -> SensitiveHit | None:
                 "\u067e\u0648\u0634\u0647\u200c\u06cc \u0633\u06cc\u0633\u062a\u0645\u06cc "
                 "\u0648\u06cc\u0646\u062f\u0648\u0632",
             )
-    if "/appdata/" in f"/{flat}/" or "/appdata roaming/" in f"/{flat}/":
+    if (
+        "/appdata/" in f"/{flat}/" or "/appdata roaming/" in f"/{flat}/"
+    ) and "/appdata/local/temp/" not in f"/{flat}/":
         return _refuse(
             "AppData",
             "the Windows AppData tree",
