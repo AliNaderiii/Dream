@@ -23,6 +23,19 @@ from dream.distill.types import (
     TrajectoryStep,
     TrajectoryTrace,
 )
+from dream.tools.toolsets import get_toolset, register_toolset
+
+# Ensure distill toolset is registered
+if get_toolset("distill") is None:
+    register_toolset(
+        "distill",
+        (
+            "distill_record_trajectory",
+            "distill_export_dataset",
+            "eval_run_benchmark",
+        ),
+        description="Autonomous trajectory recording, distillation, and evaluation benchmarks",
+    )
 
 __all__ = [
     "DEFAULT_BENCHMARK_SUITE",
