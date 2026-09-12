@@ -128,7 +128,7 @@ def vision_reset() -> dict[str, Any]:
     reset_global_vision_engine()
     return {
         "success": True,
-        "message": "سامانه بینایی و حافظه مکانی بازنմانی شدند.",
+        "message": "سامانه بینایی و حافظه مکانی بازنشانی شدند.",
     }
 
 
