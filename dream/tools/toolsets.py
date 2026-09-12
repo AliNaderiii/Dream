@@ -480,4 +480,33 @@ def filter_tools(
     if exclude_tools is not None:
         allowed_names.difference_update(exclude_tools)
 
-    return {name: tool for name, tool in source.items() if name in allowed_names}
+    return {name: tool for name, tool in source.items() if name in allowed_names
+    "evals": Toolset(
+        name="evals",
+        description=(
+            "Comprehensive agent benchmarking, tool calling accuracy, and Persian fluency evals"
+        ),
+        tools=(
+            "evals_run_suite",
+            "evals_list_suites",
+            "evals_compare_baseline",
+            "evals_export_report",
+            "evals_get_status",
+            "evals_reset",
+        ),
+    ),
+    "evolution": Toolset(
+        name="evolution",
+        description=(
+            "Autonomous self-evolution, heuristic policy distillation, and strategy Elo arena"
+        ),
+        tools=(
+            "evolution_distill_heuristics",
+            "evolution_run_tournament",
+            "evolution_get_leaderboard",
+            "evolution_export_policy",
+            "evolution_get_status",
+            "evolution_reset",
+        ),
+    ),
+}
