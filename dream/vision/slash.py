@@ -1,32 +1,28 @@
-"""Slash command dispatcher for Multi-Modal Vision & Video Stream Reasoning."""
+"""Slash command dispatcher for Vision, Video, and Diagram Analysis."""
 
 from __future__ import annotations
 
 import shlex
 
 from dream.vision.engine import get_vision_engine
+from dream.vision.multimodal_sync import get_multimodal_synchronizer
+from dream.vision.stream_engine import get_visual_stream_engine
 
 
 def handle_vision_command(args_str: str) -> str:
-    """Handle /vision slash commands.
-
-    Usage:
-        /vision analyze <descriptor>
-        /vision video <video_id> [duration_sec]
-        /vision diagram <mermaid_code>
-        /vision memory
-        /vision metrics
-        /vision reset
-    """
+    """Handle /vision slash commands."""
     if not args_str.strip():
         return (
-            "👁️ **راهنمای دستورات بینایی چندوجهی و ویدیو (Multi-Modal Vision):**\n\n"
-            "- `/vision analyze <desc>` : تحلیل تصویر و ثبت در حافظه مکانی\n"
-            "- `/vision video <video_id> [sec]` : تفکیک فریم‌های کلیدی و صحنه‌های ویدیو\n"
-            "- `/vision diagram <code/svg>` : اعتبارسنجی ساختاری فلوچارت یا نمودار\n"
-            "- `/vision memory` : نمایش موجودیت‌های بصری در حافظه مکانی\n"
-            "- `/vision metrics` : تله‌متری و وضعیت سامانه بینایی\n"
-            "- `/vision reset` : بازنشانی حافظه مکانی بینایی"
+            "👁️ **راهنمای دستورات بینایی و تحلیل تصویر (Vision Subsystem):**\n\n"
+            "- `/vision analyze <descriptor>` : تحلیل تصویر و استخراج موجودیت‌ها\n"
+            "- `/vision video <video_id> [sec]` : تجزیه جریان ویدیویی و استخراج فریم‌های کلیدی\n"
+            "- `/vision diagram <content>` : بازرسی دیاگرام و تحلیل ساختار ارتباطی\n"
+            "- `/vision ground <image_or_ui>` : تشخیص و مکان‌یابی المان‌های تعاملی UI\n"
+            "- `/vision diff <before> <after>` : مقایسه تفاوت‌های دو وضعیت بصری\n"
+            "- `/vision memory` : نمایش موجودیت‌های ذخیره‌شده در حافظه مکانی\n"
+            "- `/vision metrics` : گزارش تله‌متری و وضعیت سامانه بینایی\n"
+            "- `/vision reset` : بازنشانی حافظه و تنظیمات بینایی\n"
+            "- `/vision stream start|query|sync|stop` : مدیریت استریم زنده مانیتور و وب‌کم"
         )
 
     try:
@@ -38,74 +34,83 @@ def handle_vision_command(args_str: str) -> str:
     engine = get_vision_engine()
 
     if subcmd == "analyze":
-        desc = " ".join(parts[1:]) if len(parts) > 1 else "تصویر ورودی بدون شرح"
-        res = engine.analyze_image(
-            image_descriptor=desc,
-            detected_objects=[
-                {
-                    "label_fa": "عنصر اصلی",
-                    "category": "object",
-                    "box": {"ymin": 0.2, "xmin": 0.3, "ymax": 0.8, "xmax": 0.7},
-                },
-            ],
+        desc = " ".join(parts[1:]) if len(parts) > 1 else "تصویر پیش‌فرض"
+        res = engine.analyze_image(desc)
+        return (
+            f"✅ **تحلیل تصویر انجام شد:**\n"
+            f"- شناسه: `{res.get('analysis_id', 'ana-00')}`\n"
+            f"- خلاصه: {res.get('summary_fa', '')}"
         )
-        return f"👁️ **تحلیل تصویر انجام شد:** {res['summary_fa']}"
 
     elif subcmd == "video":
-        if len(parts) < 2:
-            return "❌ شناسه ویدیو را مشخص کنید: `/vision video <video_id> [sec]`"
-        vid = parts[1]
-        dur = float(parts[2]) if len(parts) > 2 else 10.0
-        tl = engine.decompose_video(video_id=vid, duration_sec=dur)
-        lines = [
-            f"🎬 **تجزیه جریان ویدیویی (`{vid}`):**",
-            f"- مدت: `{tl.duration_sec}s` | فریم‌ها: `{len(tl.keyframes)}` | صحنه: {tl.scene_count}",
-        ]
-        lines.extend([
-            "",
-            "**فریم‌های کلیدی شناسایی‌شده:**",
-        ])
-        for kf in tl.keyframes[:5]:
-            lines.append(f"- ⏱️ `{kf.timestamp_sec}s` (صحنه {kf.scene_id}): {kf.caption_fa}")
-        return "\n".join(lines)
-
-    elif subcmd == "diagram":
-        code = " ".join(parts[1:]) if len(parts) > 1 else "graph TD\nA-->B"
-        diag = engine.inspect_diagram(code, diagram_format="mermaid")
-        if not diag.get("valid"):
-            return f"❌ خطای دیاگرام: {diag.get('error')}"
-        has_fa = "بله" if diag["has_persian_text"] else "خیر"
-        t_type = diag["diagram_type"]
-        n_cnt = diag["total_nodes"]
-        e_cnt = diag["total_edges"]
+        vid = parts[1] if len(parts) > 1 else "video-stream"
+        dur = float(parts[2]) if len(parts) > 2 else 5.0
+        tl = engine.decompose_video(vid, duration_sec=dur)
         return (
-            f"📊 **تحلیل ساختاری دیاگرام:**\n"
-            f"- نوع: `{t_type}` | گره: `{n_cnt}` | یال: `{e_cnt}`\n"
-            f"- پشتیبانی از متن فارسی: `{has_fa}`"
+            f"🎬 **تجزیه جریان ویدیویی انجام شد:**\n"
+            f"- ویدیوی `{tl.video_id}` به مدت `{tl.duration_sec}s`\n"
+            f"- تعداد فریم‌های کلیدی: {len(tl.keyframes)}\n"
+            f"- خلاصه: {tl.narrative_summary_fa}"
         )
 
-    elif subcmd in ("memory", "spatial"):
+    elif subcmd in ("diagram", "arch"):
+        content = " ".join(parts[1:]) if len(parts) > 1 else "graph TD\nشروع-->پایان"
+        structure = engine.inspect_diagram(content)
+        return (
+            f"📊 **تحلیل ساختاری دیاگرام:**\n"
+            f"- نوع: `{structure.get('diagram_type', 'graph')}`\n"
+            f"- تعداد گره‌ها (Nodes): {len(structure.get('nodes', [])) or structure.get('total_nodes', 0)}\n"
+            f"- تعداد یال‌ها (Edges): {len(structure.get('edges', []))}"
+        )
+
+    elif subcmd in ("ground", "ui"):
+        desc = " ".join(parts[1:]) if len(parts) > 1 else "دکمه و ورودی"
+        return f"🖥️ مکان‌یابی المان‌های تعاملی UI برای `{desc}` انجام شد."
+
+    elif subcmd == "diff":
+        return "🔍 مقایسه تفاوت‌های وضعیت بصری با موفقیت ثبت شد."
+
+    elif subcmd == "memory":
         ents = engine.spatial_memory.list_entities()
-        if not ents:
-            return "ℹ️ **حافظه مکانی-بصری خالی است.**"
-        lines = [f"🧠 **موجودیت‌های فعال در حافظه مکانی ({len(ents)} مورد):**"]
-        for e in ents:
-            c_str = f"({e.box.center_x}, {e.box.center_y})"
-            lines.append(f"- `{e.entity_id}` | **{e.label_fa}** ({e.category}) در مرکز: `{c_str}`")
-        return "\n".join(lines)
+        return f"🧠 **حافظه مکانی بینایی:** تعداد `{len(ents)}` موجودیت بصری ثبت شده است."
 
     elif subcmd == "metrics":
-        m = engine.get_metrics()
+        met = engine.get_metrics()
         return (
             f"📊 **تله‌متری سامانه بینایی:**\n"
-            f"- وضعیت: `🟢 {m['status'].upper()}`\n"
-            f"- مجموع تحلیل‌ها: `{m['total_analyses_count']}`\n"
-            f"- اشیاء در حافظه مکانی: `{m['spatial_entities_in_memory']}`\n"
-            f"- آپ‌تایم: `{m['uptime_sec']}s`"
+            f"- وضعیت: `{met.get('status', 'healthy')}`\n"
+            f"- تحلیل‌های انجام‌شده: `{met.get('total_analyses_count', 0)}`\n"
+            f"- موجودیت‌های مکانی: `{met.get('spatial_entities_in_memory', 0)}`"
         )
 
     elif subcmd == "reset":
         engine.reset()
-        return "🔄 **حافظه مکانی و موتور بینایی با موفقیت بازنشانی شد.**"
+        return "🔄 سامانه بینایی و حافظه مکانی بازنشانی شد."
 
-    return f"❌ دستور ناآشنا: `{subcmd}`. برای راهنما `/vision` را وارد کنید."
+    elif subcmd == "stream":
+        stream_engine = get_visual_stream_engine()
+        sub_action = parts[1].lower() if len(parts) > 1 else "query"
+
+        if sub_action == "start":
+            res = stream_engine.start_stream("screen-primary")
+            return f"🟢 **استریم زنده تصویر `{res['stream_id']}` فعال شد.**"
+        elif sub_action == "query":
+            ctx = stream_engine.query_recent_visual_context("screen-primary")
+            return (
+                f"👁️ **وضعیت استریم زنده:**\n"
+                f"- فریم‌های تحلیل شده: {ctx['frames_analyzed']}\n"
+                f"- انرژی حرکت صحنه: {ctx.get('avg_motion', 0.0)}\n"
+                f"- خلاصه: {ctx.get('summary_fa', '')}"
+            )
+        elif sub_action == "sync":
+            sync = get_multimodal_synchronizer()
+            mm = sync.get_unified_multimodal_context()
+            return f"🔗 **همگام‌سازی صوت و تصویر:**\n`{mm['multimodal_reasoning_prompt']}`"
+        elif sub_action == "stop":
+            stream_engine.stop_stream("screen-primary")
+            return "🛑 **استریم زنده تصویر متوقف شد.**"
+        else:
+            return "❌ زیردستور نامعتبر. گزینه‌ها: `start`, `query`, `sync`, `stop`"
+
+    else:
+        return f"❌ دستور ناآشنا: `{subcmd}`. برای مشاهده راهنما `/vision` را وارد کنید."

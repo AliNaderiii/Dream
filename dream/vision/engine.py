@@ -184,3 +184,9 @@ def get_vision_engine() -> VisionEngine:
     if _GLOBAL_VISION_ENGINE is None:
         _GLOBAL_VISION_ENGINE = VisionEngine()
     return _GLOBAL_VISION_ENGINE
+
+
+def reset_global_vision_engine() -> None:
+    """Reset global singleton VisionEngine instance."""
+    global _GLOBAL_VISION_ENGINE
+    _GLOBAL_VISION_ENGINE = None

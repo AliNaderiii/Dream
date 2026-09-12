@@ -326,21 +326,6 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "debate_reset_all",
         ),
     ),
-    "reasoning": Toolset(
-        name="reasoning",
-        description=(
-            "Tree-of-Thought exploration, strategy branching, and metacognitive self-evaluation"
-        ),
-        tools=(
-            "reasoning_create_thought_tree",
-            "reasoning_expand_node",
-            "reasoning_evaluate_node",
-            "reasoning_solve_goal",
-            "reasoning_get_best_path",
-            "reasoning_get_status",
-            "reasoning_reset_all",
-        ),
-    ),
     "healing": Toolset(
         name="healing",
         description=(
@@ -537,6 +522,23 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "vision_ground_ui_elements",
             "vision_inspect_diagram",
             "vision_diff_visual_states",
+            "vision_start_live_stream",
+            "vision_ingest_stream_frame",
+            "vision_query_live_stream",
+            "vision_get_multimodal_context",
+            "vision_stop_live_stream",
+        ),
+    ),
+    "telephony": Toolset(
+        name="telephony",
+        description=(
+            "Telephony, VoIP, SIP signaling, and Twilio bi-directional audio streaming gateway"
+        ),
+        tools=(
+            "telephony_initiate_call",
+            "telephony_hangup_call",
+            "telephony_get_call_status",
+            "telephony_export_call_record",
         ),
     ),
     "federation": Toolset(
