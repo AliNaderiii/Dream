@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import re
 import time
-from typing import Any
 import uuid
+from typing import Any
 
 from dream.cache.types import SpeculativePrediction
 

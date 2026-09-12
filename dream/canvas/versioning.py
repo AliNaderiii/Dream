@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import difflib
 import time
-from typing import Any
 import uuid
 
 from dream.canvas.types import ArtifactVersion, CanvasArtifact
@@ -41,7 +40,7 @@ class ArtifactVersionManager:
                 ArtifactVersion(
                     version_number=artifact.version,
                     content=artifact.content,
-                    diff_summary="\u0646\u0633\u062e\u0647 \u0627\u0648\u0644\u06cc\u0647",
+                    diff_summary="نسخه اولیه",
                     timestamp=artifact.created_at,
                     author=author,
                 )
@@ -70,14 +69,16 @@ class ArtifactVersionManager:
         target_version: int,
     ) -> CanvasArtifact:
         """Rollback artifact content to a previous version and record rollback."""
-        matched = next((v for v in artifact.versions if v.version_number == target_version), None)
+        matched = next(
+            (v for v in artifact.versions if v.version_number == target_version), None
+        )
         if not matched:
             raise ValueError(f"Version {target_version} does not exist in artifact history.")
 
         return self.record_update(
             artifact=artifact,
             new_content=matched.content,
-            diff_summary=f"\u0628\u0627\u0632\u06af\u0631\u062f\u0627\u0646\u06cc \u0628\u0647 \u0646\u0633\u062e\u0647 {target_version}",
+            diff_summary=f"بازگردانی به نسخه {target_version}",
         )
 
     def fork_artifact(
@@ -87,12 +88,12 @@ class ArtifactVersionManager:
     ) -> CanvasArtifact:
         """Create an independent fork/branch of an existing artifact."""
         fork_id = f"art-{uuid.uuid4().hex[:8]}"
-        title = new_title or f"{artifact.title} (\u0627\u0646\u0634\u0639\u0627\u0628)"
+        title = new_title or f"{artifact.title} (انشعاب)"
         now = time.time()
         initial_v = ArtifactVersion(
             version_number=1,
             content=artifact.content,
-            diff_summary=f"\u0627\u0646\u0634\u0639\u0627\u0628 \u0627\u0632 {artifact.id} (v{artifact.version})",
+            diff_summary=f"انشعاب از {artifact.id} (v{artifact.version})",
             timestamp=now,
         )
         return CanvasArtifact(

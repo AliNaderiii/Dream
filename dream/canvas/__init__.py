@@ -35,7 +35,10 @@ try:
     register_toolset(
         Toolset(
             name="canvas",
-            description="Interactive visual artifacts, diagrams, standalone previews, and versioning.",
+            description=(
+                "Interactive visual artifacts, diagrams, standalone "
+                "previews, and versioning."
+            ),
             tools=[
                 "canvas_create_artifact",
                 "canvas_update_artifact",

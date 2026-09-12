@@ -1,10 +1,32 @@
-"""Autonomous Deep Research, Multi-Source Fact Gathering, and Intelligence Synthesis Subsystem."""
+"""Deep Research, Fact Gathering & Multi-Source Synthesis Subsystem."""
 
 from __future__ import annotations
 
 from dream.research.collector import MultiSourceCollector
 from dream.research.engine import DeepResearchEngine
+from dream.research.errors import (
+    ResearchCancelled,
+    ResearchError,
+    ResearchSecurityError,
+    ResearchTimeout,
+)
 from dream.research.planner import ResearchPlanner
+from dream.research.schemas import (
+    Finding,
+    Iteration,
+    Observation,
+    Plan,
+    ReportRef,
+    ResearchConfig,
+    Section,
+    SessionRecord,
+)
+from dream.research.session import (
+    ResearchEngine,
+    ResearchSession,
+    RunContext,
+    SessionStore,
+)
 from dream.research.slash import handle_research_slash_command
 from dream.research.synthesizer import ResearchSynthesizer
 from dream.research.tools import (
@@ -36,7 +58,10 @@ try:
     register_toolset(
         Toolset(
             name="research",
-            description="Autonomous deep research, evidence collection, and multi-source synthesis.",
+            description=(
+                "Autonomous deep research, evidence collection, and "
+                "multi-source synthesis."
+            ),
             tools=[
                 "research_plan_investigation",
                 "research_add_source",
@@ -54,14 +79,30 @@ except Exception:
 
 __all__ = [
     "DeepResearchEngine",
+    "Finding",
+    "Iteration",
     "MultiSourceCollector",
+    "Observation",
+    "Plan",
+    "ReportRef",
+    "ResearchCancelled",
+    "ResearchConfig",
+    "ResearchEngine",
+    "ResearchError",
     "ResearchFinding",
     "ResearchPlan",
     "ResearchPlanner",
     "ResearchReport",
+    "ResearchSecurityError",
+    "ResearchSession",
     "ResearchSource",
     "ResearchStatus",
     "ResearchSynthesizer",
+    "ResearchTimeout",
+    "RunContext",
+    "Section",
+    "SessionRecord",
+    "SessionStore",
     "SourceCitation",
     "SourceCredibility",
     "get_global_research_engine",

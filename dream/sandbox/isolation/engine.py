@@ -1,16 +1,15 @@
-"""Isolated Execution Engine: Coordinates Seccomp filtering, WASM virtualization, and watchdog."""
+"""Isolated Execution Engine: Coordinates Seccomp filtering and WASM virtualization."""
 
 from __future__ import annotations
 
 import time
-from typing import Any
 import uuid
+from typing import Any
 
 from dream.sandbox.isolation.seccomp_filter import SyscallFilterEngine
 from dream.sandbox.isolation.types import (
     IsolationExecutionResult,
     IsolationLevel,
-    ResourceQuota,
     SyscallPolicy,
 )
 from dream.sandbox.isolation.wasm_runtime import WasmMicroSandbox
@@ -18,7 +17,7 @@ from dream.sandbox.isolation.watchdog import ResourceWatchdog
 
 
 class IsolatedExecutionEngine:
-    """Unified coordinator for kernel syscall filtering, WASM micro-sandbox, and resource watchdog."""
+    """Unified coordinator for kernel syscall filtering, WASM sandbox, and resource watchdog."""
 
     def __init__(
         self,
@@ -52,7 +51,7 @@ class IsolatedExecutionEngine:
                 execution_id=exec_id,
                 isolation_level=isolation_level,
                 policy=policy,
-                exit_code=126,  # Command invoked cannot execute (permission/policy denied)
+                exit_code=126,  # Command invoked cannot execute (policy denied)
                 stdout="",
                 stderr="\n".join(violations),
                 syscalls_blocked=blocked_syscalls,
@@ -117,15 +116,15 @@ class IsolatedExecutionEngine:
         """Format security audit log and sandbox status into Markdown."""
         stats = self.get_security_stats()
         lines = [
-            "## \U0001f6e1\ufe0f \u06af\u0632\u0627\u0631\u0634 \u0627\u06cc\u0632\u0648\u0644\u0627\u0633\u06cc\u0648\u0646 \u0648 \u0627\u0645\u0646\u06cc\u062a \u0633\u0646\u062f\u0628\u0627\u06a9\u0633 (Micro-Isolation & Seccomp)",
-            f"- **\u062a\u0639\u062f\u0627\u062f \u06a9\u0644 \u0627\u062c\u0631\u0627\u0647\u0627\u06cc \u0627\u06cc\u0632\u0648\u0644\u0647:** {stats['total_executions']}",
-            f"- **\u0627\u062c\u0631\u0627\u0647\u0627\u06cc \u0645\u0648\u0641\u0642 \u0648 \u0627\u0645\u0646:** {stats['successful_executions']}",
-            f"- **\u062a\u0644\u0627\u0634\u200c\u0647\u0627\u06cc \u0645\u0633\u062f\u0648\u062f\u0634\u062f\u0647 (Blocked Violations):** {stats['blocked_violations']}",
-            f"- **\u0645\u06cc\u0627\u0646\u06af\u06cc\u0646 \u0632\u0645\u0627\u0646 \u0627\u062c\u0631\u0627:** {stats['average_execution_ms']:.2f} ms",
+            "## 🛡️ گزارش ایزولاسیون و امنیت سندباکس (Micro-Isolation & Seccomp)",
+            f"- **تعداد کل اجراهای ایزوله:** {stats['total_executions']}",
+            f"- **اجراهای موفق و امن:** {stats['successful_executions']}",
+            f"- **تلاش‌های مسدودشده (Blocked Violations):** {stats['blocked_violations']}",
+            f"- **میانگین زمان اجرا:** {stats['average_execution_ms']:.2f} ms",
             "",
-            "### \U0001f510 \u0648\u0636\u0639\u06cc\u062a \u0641\u06cc\u0644\u062a\u0631 Syscall:",
-            "- \u0633\u06cc\u0633\u200c\u06a9\u0627\u0644\u200c\u0647\u0627\u06cc \u0645\u0645\u0646\u0648\u0639: `ptrace, mount, socket, execve, fork, clone, kill`",
-            "- \u0645\u062d\u06cc\u0637 \u0645\u062c\u0627\u0632\u06cc: `WASM Memory-Confined Virtual Namespace`",
+            "### 🔑 وضعیت فیلتر Syscall:",
+            "- سیس‌کال‌های ممنوع: `ptrace, mount, socket, execve, fork, clone, kill`",
+            "- محیط مجازی: `WASM Memory-Confined Virtual Namespace`",
         ]
         return "\n".join(lines)
 

@@ -1,4 +1,4 @@
-"""Autonomous Multi-Agent Debate, Delphi Consensus & Verifiable Fact-Checking Subsystem."""
+"""Multi-Agent Debate, Delphi Consensus & Verifiable Fact-Checking Subsystem."""
 
 from __future__ import annotations
 
@@ -34,7 +34,10 @@ try:
     register_toolset(
         Toolset(
             name="debate",
-            description="Multi-agent debate rounds, Delphi consensus evaluation, and fact verification.",
+            description=(
+                "Multi-agent debate rounds, Delphi consensus evaluation, "
+                "and fact verification."
+            ),
             tools=[
                 "debate_create_session",
                 "debate_add_turn",

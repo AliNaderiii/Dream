@@ -1,4 +1,4 @@
-"""Autonomous Self-Healing, Chaos Fault Injection & Telemetry Observability Subsystem."""
+"""Autonomous Self-Healing, Fault Injection & Telemetry Observability Subsystem."""
 
 from __future__ import annotations
 
@@ -33,7 +33,10 @@ try:
     register_toolset(
         Toolset(
             name="healing",
-            description="Autonomous error diagnosis, self-healing recovery, telemetry, and chaos testing.",
+            description=(
+                "Autonomous error diagnosis, self-healing recovery, "
+                "telemetry, and chaos testing."
+            ),
             tools=[
                 "healing_diagnose_failure",
                 "healing_run_chaos_test",

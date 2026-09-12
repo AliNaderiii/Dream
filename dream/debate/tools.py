@@ -30,7 +30,7 @@ def debate_create_session(topic: str) -> dict[str, Any]:
     return {
         "success": True,
         "session": session.to_dict(),
-        "message": f"\u0646\u0634\u0633\u062a \u0645\u0646\u0627\u0638\u0631\u0647 '{topic}' \u0627\u06cc\u062c\u0627\u062f \u0634\u062f.",
+        "message": f"نشست مناظره '{topic}' ایجاد شد.",
     }
 
 
@@ -117,7 +117,7 @@ def debate_reset_all() -> dict[str, Any]:
     """Reset debate engine and clear session history."""
     engine = get_global_debate_engine()
     engine.reset()
-    return {"success": True, "message": "\u062a\u0645\u0627\u0645 \u0646\u0634\u0633\u062a\u200c\u0647\u0627\u06cc \u0645\u0646\u0627\u0638\u0631\u0647 \u067e\u0627\u06a9\u0633\u0627\u0632\u06cc \u0634\u062f\u0646\u062f."}
+    return {"success": True, "message": "تمام نشست‌های مناظره پاکسازی شدند."}
 
 
 def get_debate_tools() -> list[Any]:

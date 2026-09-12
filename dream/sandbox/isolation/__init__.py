@@ -1,4 +1,4 @@
-"""Kernel-Level Micro-Isolation, Syscall Filtering & WASM Virtualization Subsystem."""
+"""Micro-Isolation, Syscall Filtering & WASM Virtualization Subsystem."""
 
 from __future__ import annotations
 
@@ -32,7 +32,10 @@ try:
     register_toolset(
         Toolset(
             name="isolation",
-            description="Kernel-level micro-isolation, Seccomp syscall filtering, and WASM virtualization.",
+            description=(
+                "Kernel-level micro-isolation, Seccomp syscall filtering, "
+                "and WASM virtualization."
+            ),
             tools=[
                 "sandbox_isolate_execute",
                 "sandbox_wasm_execute",

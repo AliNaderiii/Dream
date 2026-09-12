@@ -30,7 +30,7 @@ def canvas_create_artifact(
     language: str = "",
     description_fa: str = "",
 ) -> dict[str, Any]:
-    """Create a new interactive visual artifact (code, HTML, SVG, Mermaid diagram, markdown)."""
+    """Create a new interactive visual artifact (code, HTML, SVG, Mermaid diagram)."""
     engine = get_global_canvas_engine()
     try:
         art = engine.create_artifact(
@@ -43,7 +43,7 @@ def canvas_create_artifact(
         return {
             "success": True,
             "artifact": art.to_dict(),
-            "message": f"\u0622\u0631\u062a\u06cc\u0641\u06a9\u062a '{art.title}' ({art.id}) \u0627\u06cc\u062c\u0627\u062f \u0634\u062f.",
+            "message": f"آرتیفکت '{art.title}' ({art.id}) ایجاد شد.",
         }
     except Exception as exc:
         return {"success": False, "error": str(exc)}
@@ -65,7 +65,7 @@ def canvas_update_artifact(
         return {
             "success": True,
             "artifact": updated.to_dict(),
-            "message": f"\u0622\u0631\u062a\u06cc\u0641\u06a9\u062a '{updated.title}' \u0628\u0647 \u0646\u0633\u062e\u0647 v{updated.version} \u0628\u0647\u200c\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06cc \u0634\u062f.",
+            "message": f"آرتیفکت '{updated.title}' به نسخه v{updated.version} به‌روزرسانی شد.",
         }
     except Exception as exc:
         return {"success": False, "error": str(exc)}
@@ -133,7 +133,7 @@ def canvas_reset_session() -> dict[str, Any]:
     """Reset canvas session and delete all artifacts."""
     engine = get_global_canvas_engine()
     engine.reset()
-    return {"success": True, "message": "\u0628\u0648\u0645 \u062a\u0639\u0627\u0645\u0644\u06cc \u0628\u0627\u0632\u0646\u0634\u0627\u0646\u06cc \u0634\u062f."}
+    return {"success": True, "message": "بوم تعاملی بازنشانی شد."}
 
 
 def canvas_get_status() -> dict[str, Any]:

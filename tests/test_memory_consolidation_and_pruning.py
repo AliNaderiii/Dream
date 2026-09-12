@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 import pytest
 
 from dream.consolidation import (
@@ -15,7 +14,6 @@ from dream.consolidation import (
     consolidation_distill_session,
     consolidation_export_report,
     consolidation_get_stats,
-    consolidation_reset_all,
     consolidation_run_cycle,
     get_consolidation_tools,
     handle_consolidation_slash_command,
@@ -104,8 +102,18 @@ def test_deduplication_and_contradiction_resolution() -> None:
     distiller = EpistemicDistiller()
 
     # 1. Deduplication
-    mem1 = MemoryItem("m1", MemoryNodeType.SEMANTIC_FACT, "User prefers dark mode in VS Code", importance=0.7)
-    mem2 = MemoryItem("m2", MemoryNodeType.SEMANTIC_FACT, "User prefers dark mode in VS Code editor", importance=0.8)
+    mem1 = MemoryItem(
+        "m1",
+        MemoryNodeType.SEMANTIC_FACT,
+        "User prefers dark mode in VS Code",
+        importance=0.7,
+    )
+    mem2 = MemoryItem(
+        "m2",
+        MemoryNodeType.SEMANTIC_FACT,
+        "User prefers dark mode in VS Code editor",
+        importance=0.8,
+    )
     deduped, count = pruner.deduplicate([mem1, mem2], similarity_threshold=0.6)
     assert len(deduped) == 1
     assert count == 1
@@ -134,9 +142,21 @@ def test_consolidation_engine_full_cycle() -> None:
     """Verify autonomous sleep cycle compresses memory repository and computes health score."""
     engine = ConsolidationEngine()
 
-    engine.add_memory("User likes green tea", node_type=MemoryNodeType.USER_TRAIT, importance=0.8)
-    engine.add_memory("System booted successfully", node_type=MemoryNodeType.EPHEMERAL_SCRATCHPAD, importance=0.1)
-    engine.add_memory("Dream adheres strictly to ethics", node_type=MemoryNodeType.CORE_BELIEF, importance=1.0)
+    engine.add_memory(
+        "User likes green tea",
+        node_type=MemoryNodeType.USER_TRAIT,
+        importance=0.8,
+    )
+    engine.add_memory(
+        "System booted successfully",
+        node_type=MemoryNodeType.EPHEMERAL_SCRATCHPAD,
+        importance=0.1,
+    )
+    engine.add_memory(
+        "Dream adheres strictly to ethics",
+        node_type=MemoryNodeType.CORE_BELIEF,
+        importance=1.0,
+    )
 
     # Run consolidation cycle
     report = engine.run_consolidation_cycle(decay_constant=10.0, dry_run=False)
@@ -152,7 +172,11 @@ def test_consolidation_engine_full_cycle() -> None:
 def test_synthetic_dream_simulation() -> None:
     """Verify synthetic dream generates reflective scenarios for core memories."""
     distiller = EpistemicDistiller()
-    core = MemoryItem("c1", MemoryNodeType.CORE_BELIEF, "Ensure all calculations are mathematically verified.")
+    core = MemoryItem(
+        "c1",
+        MemoryNodeType.CORE_BELIEF,
+        "Ensure all calculations are mathematically verified.",
+    )
     sims = distiller.run_synthetic_dream_simulation([core], num_scenarios=1)
 
     assert len(sims) == 1
@@ -161,12 +185,15 @@ def test_synthetic_dream_simulation() -> None:
 
 
 def test_consolidation_tools_and_slash_commands() -> None:
-    """Verify LLM agent tools and /consolidate, /distill_memory, /memory_health slash commands."""
+    """Verify LLM agent tools and /consolidate, /distill_memory slash commands."""
     tools = get_consolidation_tools()
     assert len(tools) >= 5
 
     # Tool: add memory
-    res_add = consolidation_add_memory(content="کاربر به مباحث هوش مصنوعی علاقه‌مند است.", node_type="user_trait")
+    res_add = consolidation_add_memory(
+        content="کاربر به مباحث هوش مصنوعی علاقه‌مند است.",
+        node_type="user_trait",
+    )
     assert res_add["success"] is True
 
     # Tool: distill session
@@ -197,7 +224,9 @@ def test_consolidation_tools_and_slash_commands() -> None:
     assert "نتیجه چرخه تثبیت حافظه" in slash_c
 
     # Slash: /distill_memory
-    slash_d = handle_consolidation_slash_command("/distill_memory کاربر ترجیح می‌دهد خروجی‌ها کوتاه باشند.")
+    slash_d = handle_consolidation_slash_command(
+        "/distill_memory کاربر ترجیح می‌دهد خروجی‌ها کوتاه باشند."
+    )
     assert "تقطیر با موفقیت انجام شد" in slash_d
 
     # Slash: /memory_health

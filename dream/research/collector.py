@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 import time
+import uuid
 from typing import Any
 from urllib.parse import urlparse
-import uuid
 
 from dream.research.types import ResearchSource, SourceCredibility
 
@@ -53,10 +53,12 @@ class MultiSourceCollector:
         if domain.endswith(".edu") or domain.endswith(".gov"):
             return SourceCredibility.PRIMARY_ACADEMIC, 0.96
 
-        if any(news in domain for news in ["reuters.com", "bloomberg.com", "bbc.com", "techcrunch.com"]):
+        news_domains = ["reuters.com", "bloomberg.com", "bbc.com", "techcrunch.com"]
+        if any(news in domain for news in news_domains):
             return SourceCredibility.NEWS_ORGANIZATION, 0.88
 
-        if any(comm in domain for comm in ["reddit.com", "medium.com", "forum", "blog", "x.com"]):
+        comm_domains = ["reddit.com", "medium.com", "forum", "blog", "x.com"]
+        if any(comm in domain for comm in comm_domains):
             return SourceCredibility.COMMUNITY_FORUM, 0.60
 
         return SourceCredibility.EXPERT_ANALYSIS, 0.80

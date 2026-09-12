@@ -1,4 +1,4 @@
-"""Unit and integration tests for Multi-Modal Interactive Canvas & Visual Artifact Studio."""
+"""Unit and integration tests for Multi-Modal Interactive Canvas & Artifact Studio."""
 
 from __future__ import annotations
 
@@ -6,18 +6,11 @@ import pytest
 
 from dream.canvas import (
     ArtifactType,
-    ArtifactVersionManager,
-    CanvasArtifact,
     CanvasEngine,
-    CanvasRenderer,
     canvas_create_artifact,
     canvas_diff_versions,
-    canvas_export_bundle,
-    canvas_get_artifact,
     canvas_get_status,
     canvas_list_artifacts,
-    canvas_render_preview,
-    canvas_reset_session,
     canvas_update_artifact,
     handle_canvas_slash_command,
     reset_global_canvas_engine,
@@ -50,7 +43,7 @@ def test_canvas_artifact_creation_and_retrieval() -> None:
         title="Dashboard Architecture",
         artifact_type=ArtifactType.MERMAID,
         content="graph TD\n  A[Client] --> B[Gateway]\n  B --> C[Agent Core]",
-        description_fa="\u0646\u0645\u0648\u062f\u0627\u0631 \u0645\u0639\u0645\u0627\u0631\u06cc",
+        description_fa="نمودار معماری",
     )
 
     assert art.id.startswith("art-")
@@ -114,9 +107,12 @@ def test_canvas_html_and_markdown_rendering() -> None:
     """Verify standalone HTML generation with RTL support and markdown bundles."""
     engine = CanvasEngine()
 
-    svg_content = '<svg width="100" height="100"><circle cx="50" cy="50" r="40" fill="blue"/></svg>'
+    svg_content = (
+        '<svg width="100" height="100">'
+        '<circle cx="50" cy="50" r="40" fill="blue"/></svg>'
+    )
     art_svg = engine.create_artifact(
-        title="\u0646\u0645\u0648\u062f\u0627\u0631 \u062f\u0627\u06cc\u0631\u0647\u200c\u0627\u06cc",
+        title="نمودار دایره‌ای",
         artifact_type=ArtifactType.SVG,
         content=svg_content,
     )
@@ -129,7 +125,7 @@ def test_canvas_html_and_markdown_rendering() -> None:
 
     # Test markdown bundle export
     bundle_md = engine.export_bundle(format_type="markdown")
-    assert "# \U0001f3a8" in bundle_md
+    assert "# 🎨" in bundle_md
     assert art_svg.id in bundle_md
 
 
@@ -200,8 +196,8 @@ def test_canvas_tools_and_slash_commands() -> None:
 
     # Slash: /canvas status
     slash_st = handle_canvas_slash_command("/canvas status")
-    assert "\u0648\u0636\u0639\u06cc\u062a \u0628\u0648\u0645" in slash_st
+    assert "وضعیت بوم" in slash_st
 
     # Slash: /canvas reset
     slash_reset = handle_canvas_slash_command("/canvas reset")
-    assert "\u0628\u0627\u0632\u0646\u0634\u0627\u0646\u06cc \u0634\u062f" in slash_reset
+    assert "بازنشانی شد" in slash_reset

@@ -38,7 +38,7 @@ def healing_run_chaos_test(
     fault_type: str = "rate_limit",
     target_name: str = "web_search",
 ) -> dict[str, Any]:
-    """Inject a synthetic failure (rate limit, timeout, schema mismatch) to verify self-recovery."""
+    """Inject a synthetic failure (rate limit, timeout, schema) to verify self-recovery."""
     engine = get_global_healing_engine()
     report = engine.run_chaos_test(fault_type_str=fault_type, target_name=target_name)
     return {"success": True, "report": report.to_dict()}
@@ -69,7 +69,7 @@ def telemetry_reset_all() -> dict[str, Any]:
     """Reset telemetry metrics and fault logs."""
     engine = get_global_healing_engine()
     engine.reset()
-    return {"success": True, "message": "\u062f\u0627\u062f\u0647\u200c\u0647\u0627\u06cc \u067e\u0627\u06cc\u0634 \u0648 \u062a\u0644\u0645\u062a\u0631\u06cc \u0628\u0627\u0632\u0646\u0634\u0627\u0646\u06cc \u0634\u062f\u0646\u062f."}
+    return {"success": True, "message": "داده‌های پایش و تلمتری بازنشانی شدند."}
 
 
 def get_healing_tools() -> list[Any]:

@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any
 import uuid
+from typing import Any
 
 from dream.canvas.renderer import CanvasRenderer
 from dream.canvas.types import (
     ArtifactType,
     ArtifactVersion,
     CanvasArtifact,
-    CanvasExportFormat,
     CanvasSession,
 )
 from dream.canvas.versioning import ArtifactVersionManager

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import time
-from typing import Any
 import uuid
+from typing import Any
 
 from dream.debate.factchecker import FactChecker
 from dream.debate.moderator import DebateModerator
@@ -18,7 +18,7 @@ from dream.debate.types import (
 
 
 class DebateEngine:
-    """Coordinates multi-perspective deliberations, argument verification, and consensus synthesis."""
+    """Coordinates multi-perspective deliberations and consensus synthesis."""
 
     def __init__(
         self,

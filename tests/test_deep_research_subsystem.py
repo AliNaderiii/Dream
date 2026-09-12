@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
 import pytest
 
 from dream.research import (
@@ -14,13 +15,9 @@ from dream.research import (
     ResearchSynthesizer,
     SourceCredibility,
     handle_research_slash_command,
-    research_add_source,
-    research_export_report,
     research_get_status,
     research_list_sessions,
-    research_plan_investigation,
     research_run_autonomous,
-    research_synthesize_report,
     reset_global_research_engine,
 )
 from dream.tools.toolsets import BUILTIN_TOOLSETS, get_toolset

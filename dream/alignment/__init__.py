@@ -1,4 +1,4 @@
-"""Continuous Self-Improving Alignment, Preference Pair Generation, Multi-Dimensional Scoring, and Critique Engine."""
+"""Continuous Self-Improving Alignment, Preference Generation & Critique Engine."""
 
 from __future__ import annotations
 
@@ -32,7 +32,10 @@ try:
     register_toolset(
         Toolset(
             name="alignment",
-            description="Self-improving alignment, rubric scoring, self-critique, and DPO dataset export tools.",
+            description=(
+                "Self-improving alignment, rubric scoring, self-critique, "
+                "and DPO dataset export tools."
+            ),
             tools=[
                 "alignment_record_feedback",
                 "alignment_critique_and_refine",

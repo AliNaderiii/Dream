@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import os
+import secrets
 import time
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-from authlib.common.security import generate_token
-from authlib.oauth2.rfc7636 import create_s256_code_challenge
+try:
+    from authlib.common.security import generate_token
+    from authlib.oauth2.rfc7636 import create_s256_code_challenge
+except ImportError:
+    def generate_token(length: int = 48) -> str:  # type: ignore[misc]
+        return secrets.token_urlsafe(length)[:length]
+
+    def create_s256_code_challenge(code_verifier: str) -> str:  # type: ignore[misc]
+        hashed = hashlib.sha256(code_verifier.encode("ascii")).digest()
+        return base64.urlsafe_b64encode(hashed).decode("ascii").rstrip("=")
 
 from dream.gws.errors import GwsSecurityError
 from dream.gws.http import form_body, request_json

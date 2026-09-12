@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dream.router.types import IntentComplexity, ModelTier, RoutingDecision
+from dream.router.types import ModelTier, RoutingDecision
 
 
 class ModelCascader:
@@ -16,7 +16,11 @@ class ModelCascader:
 
         escalation_path: list[ModelTier] = []
         if primary_tier == ModelTier.FAST_EDGE:
-            escalation_path = [ModelTier.FAST_EDGE, ModelTier.STANDARD_CHAT, ModelTier.REASONING_HEAVY]
+            escalation_path = [
+                ModelTier.FAST_EDGE,
+                ModelTier.STANDARD_CHAT,
+                ModelTier.REASONING_HEAVY,
+            ]
         elif primary_tier == ModelTier.STANDARD_CHAT:
             escalation_path = [ModelTier.STANDARD_CHAT, ModelTier.REASONING_HEAVY]
         else:

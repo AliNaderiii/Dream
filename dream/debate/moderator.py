@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from typing import Any
 
 from dream.debate.factchecker import FactChecker
 from dream.debate.types import (
@@ -53,11 +52,13 @@ class DebateModerator:
     def evaluate_consensus(self, session: DebateSession) -> tuple[DebateStatus, float, str]:
         """Compute consensus score across all debate turns and claims."""
         if not session.claims:
-            return DebateStatus.OPEN, 0.5, "\u0647\u0646\u0648\u0632 \u0627\u062f\u0639\u0627\u06cc \u0642\u0627\u0628\u0644 \u0628\u0631\u0631\u0633\u06cc \u062b\u0628\u062a \u0646\u0634\u062f\u0647 \u0627\u0633\u062a."
+            return DebateStatus.OPEN, 0.5, "هنوز ادعای قابل بررسی ثبت نشده است."
 
         total_claims = len(session.claims)
         verified_count = sum(
-            1 for c in session.claims.values() if c.verification_status == VerificationStatus.VERIFIED
+            1
+            for c in session.claims.values()
+            if c.verification_status == VerificationStatus.VERIFIED
         )
         fallacy_count = sum(len(c.fallacies_detected) for c in session.claims.values())
 
@@ -76,14 +77,14 @@ class DebateModerator:
 
         # Generate summary synthesis
         summary = (
-            f"\U0001f3db \u06af\u0632\u0627\u0631\u0634 \u0627\u062c\u0645\u0627\u0639 \u062f\u0644\u0641\u06cc (Delphi Consensus Report):\n"
-            f"- \u0645\u0648\u0636\u0648\u0639: {session.topic}\n"
-            f"- \u062a\u0639\u062f\u0627\u062f \u0646\u0648\u0628\u062a\u200c\u0647\u0627\u06cc \u0645\u0646\u0627\u0638\u0631\u0647: {len(session.turns)}\n"
-            f"- \u062a\u0639\u062f\u0627\u062f \u06a9\u0644 \u06af\u0632\u0627\u0631\u0647\u200c\u0647\u0627 (Claims): {total_claims}\n"
-            f"- \u06af\u0632\u0627\u0631\u0647\u200c\u0647\u0627\u06cc \u062a\u0627\u06cc\u06cc\u062f\u0634\u062f\u0647: {verified_count}\n"
-            f"- \u0645\u063a\u0627\u0644\u0637\u0627\u062a \u0634\u0646\u0627\u0633\u0627\u06cc\u06cc\u200c\u0634\u062f\u0647: {fallacy_count}\n"
-            f"- \u0636\u0631\u06cc\u0628 \u0627\u0637\u0645\u06cc\u0646\u0627\u0646 \u0646\u0647\u0627\u06cc\u06cc: {consensus_score:.2f}\n"
-            f"- \u0648\u0636\u0639\u06cc\u062a: {status.value}"
+            "🏛 گزارش اجماع دلفی (Delphi Consensus Report):\n"
+            f"- موضوع: {session.topic}\n"
+            f"- تعداد نوبت‌های مناظره: {len(session.turns)}\n"
+            f"- تعداد کل گزاره‌ها (Claims): {total_claims}\n"
+            f"- گزاره‌های تاییدشده: {verified_count}\n"
+            f"- مغالطات شناسایی‌شده: {fallacy_count}\n"
+            f"- ضریب اطمینان نهایی: {consensus_score:.2f}\n"
+            f"- وضعیت: {status.value}"
         )
 
         session.status = status

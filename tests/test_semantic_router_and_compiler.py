@@ -9,7 +9,6 @@ from dream.router import (
     ModelCascader,
     ModelTier,
     PromptCompiler,
-    PromptSection,
     RoutingEngine,
     SemanticRouter,
     get_router_tools,
@@ -20,7 +19,6 @@ from dream.router import (
     router_evaluate_query,
     router_export_report,
     router_get_stats,
-    router_reset_all,
 )
 from dream.tools.toolsets import BUILTIN_TOOLSETS, get_toolset
 

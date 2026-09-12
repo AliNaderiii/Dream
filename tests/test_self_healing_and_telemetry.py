@@ -16,9 +16,7 @@ from dream.healing import (
     healing_run_chaos_test,
     reset_global_healing_engine,
     telemetry_export_report,
-    telemetry_export_spans,
     telemetry_get_health_metrics,
-    telemetry_reset_all,
 )
 from dream.tools.toolsets import BUILTIN_TOOLSETS, get_toolset
 

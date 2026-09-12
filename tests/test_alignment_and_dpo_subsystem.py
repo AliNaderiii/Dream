@@ -1,10 +1,11 @@
-"""Unit and integration tests for Self-Improving Alignment, Multi-Dimensional Scoring, and DPO Dataset Subsystem."""
+"""Unit and integration tests for Self-Improving Alignment & DPO Dataset Subsystem."""
 
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
 import pytest
 
 from dream.alignment import (
@@ -13,9 +14,7 @@ from dream.alignment import (
     MultiDimensionalScorer,
     RubricDimension,
     SelfCritiqueEngine,
-    alignment_critique_and_refine,
     alignment_evaluate_response,
-    alignment_export_dataset,
     alignment_get_stats,
     alignment_record_feedback,
     handle_alignment_slash_command,
@@ -46,7 +45,10 @@ def test_multidimensional_scorer_eval() -> None:
     scorer = MultiDimensionalScorer()
     scores = scorer.score_response(
         prompt="Explain quantum entanglement",
-        response="Quantum entanglement is a physical phenomenon occurring when pairs or groups of particles interact.",
+        response=(
+            "Quantum entanglement is a physical phenomenon occurring "
+            "when pairs or groups of particles interact."
+        ),
     )
     assert len(scores) == 6
     dimensions = {s.dimension for s in scores}
@@ -79,12 +81,14 @@ def test_scorer_safety_and_conciseness_penalties() -> None:
     # Verbosity penalty
     verbose_response = "word " * 600
     verbose_scores = scorer.score_response("Short question", verbose_response)
-    conciseness_score = next(s for s in verbose_scores if s.dimension == RubricDimension.CONCISENESS)
+    conciseness_score = next(
+        s for s in verbose_scores if s.dimension == RubricDimension.CONCISENESS
+    )
     assert conciseness_score.score <= 0.6
 
 
 def test_self_critique_engine_refinement() -> None:
-    """Verify SelfCritiqueEngine identifies flaws and produces a refined response with a preference pair."""
+    """Verify SelfCritiqueEngine identifies flaws and produces a refined response."""
     scorer = MultiDimensionalScorer()
     engine = SelfCritiqueEngine(scorer)
 
@@ -100,7 +104,7 @@ def test_self_critique_engine_refinement() -> None:
 
 
 def test_alignment_engine_feedback_and_implicit_correction() -> None:
-    """Verify AlignmentEngine records feedback and extracts implicit correction preference pairs."""
+    """Verify AlignmentEngine records feedback and extracts implicit correction."""
     engine = AlignmentEngine()
 
     # Thumbs up does not create negative preference pair
@@ -123,7 +127,7 @@ def test_alignment_engine_feedback_and_implicit_correction() -> None:
 
     # Implicit Persian correction detection
     p_corr = engine.detect_implicit_correction(
-        user_input="\u0627\u0634\u062a\u0628\u0627\u0647 \u06af\u0641\u062a\u06cc\u060c \u0627\u0635\u0644\u0627\u062d\u0634 \u06a9\u0646",
+        user_input="اشتباه گفتی، اصلاحش کن",
         previous_prompt="Convert 5kg to grams",
         previous_response="5kg is 500 grams",
     )
@@ -162,7 +166,9 @@ def test_dpo_dataset_export_and_path_safety() -> None:
 def test_alignment_tools_and_slash_commands() -> None:
     """Verify LLM tool wrappers and /align CLI slash command handlers."""
     # Tool: evaluate
-    eval_res = alignment_evaluate_response("What is Python?", "Python is a programming language.")
+    eval_res = alignment_evaluate_response(
+        "What is Python?", "Python is a programming language."
+    )
     assert eval_res["success"] is True
     assert "composite_reward" in eval_res
 
@@ -191,4 +197,4 @@ def test_alignment_tools_and_slash_commands() -> None:
 
     # Slash: critique
     critique_msg = handle_alignment_slash_command("/align critique Some test response")
-    assert "\u06af\u0632\u0627\u0631\u0634 \u062e\u0648\u062f\u0627\u0646\u062a\u0642\u0627\u062f\u06cc" in critique_msg
+    assert "گزارش خودانتقادی" in critique_msg

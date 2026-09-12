@@ -1,12 +1,10 @@
-"""Metacognitive Evaluator: Real-time self-monitoring and reasoning trajectory assessment."""
+"""Metacognitive Evaluator: Real-time self-monitoring and trajectory assessment."""
 
 from __future__ import annotations
 
-import time
-from typing import Any
 import uuid
 
-from dream.reasoning.types import MetacognitiveEvaluation, ThoughtNode
+from dream.reasoning.types import MetacognitiveEvaluation
 
 
 class MetacognitiveEvaluator:
@@ -32,8 +30,10 @@ class MetacognitiveEvaluator:
         # Check for circular reasoning in history
         hallucination_risk = 0.1
         is_repetitive = False
+        t_clean = thought_text.strip().lower()
         for prev in history:
-            if thought_text.strip().lower() in prev.lower() or prev.lower() in thought_text.strip().lower():
+            p_clean = prev.lower()
+            if t_clean in p_clean or p_clean in t_clean:
                 is_repetitive = True
                 hallucination_risk = 0.7
                 break
@@ -41,13 +41,13 @@ class MetacognitiveEvaluator:
         # Suggest next strategic action
         if is_repetitive:
             action = "backtrack"
-            critique = "\u0627\u062d\u062a\u0645\u0627\u0644 \u062a\u06a9\u0631\u0627\u0631 \u06cc\u0627 \u062d\u0644\u0642\u0647 \u0645\u0646\u0637\u0642\u06cc \u062a\u0634\u062e\u06cc\u0635 \u062f\u0627\u062f\u0647 \u0634\u062f."
+            critique = "احتمال تکرار یا حلقه منطقی تشخیص داده شد."
         elif depth >= 3 and coherence >= 0.8:
             action = "ready_for_conclusion"
-            critique = "\u0639\u0645\u0642 \u0627\u0633\u062a\u062f\u0644\u0627\u0644 \u06a9\u0627\u0641\u06cc \u0627\u0633\u062a \u0648 \u0622\u0645\u0627\u062f\u0647 \u0646\u062a\u06cc\u062c\u0647\u200c\u06af\u06cc\u0631\u06cc \u0645\u06cc\u200c\u0628\u0627\u0634\u062f."
+            critique = "عمق استدلال کافی است و آماده نتیجه‌گیری می‌باشد."
         else:
             action = "continue_exploration"
-            critique = "\u0627\u0633\u062a\u062f\u0644\u0627\u0644 \u0645\u0646\u0633\u062c\u0645 \u0627\u0633\u062a. \u0628\u0647 \u06a9\u0627\u0648\u0634 \u0634\u0627\u062e\u0647\u200c\u0647\u0627 \u0627\u062f\u0627\u0645\u0647 \u062f\u0647\u06cc\u062f."
+            critique = "استدلال منسجم است. به کاوش شاخه‌ها ادامه دهید."
 
         return MetacognitiveEvaluation(
             evaluation_id=eid,

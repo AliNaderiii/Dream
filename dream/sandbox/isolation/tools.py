@@ -71,7 +71,7 @@ def sandbox_reset_isolation() -> dict[str, Any]:
     """Reset sandbox isolation logs and execution metrics."""
     engine = get_global_isolation_engine()
     engine.reset()
-    return {"success": True, "message": "\u062a\u0627\u0631\u06cc\u062e\u0686\u0647 \u0627\u062c\u0631\u0627\u0647\u0627\u06cc \u0627\u06cc\u0632\u0648\u0644\u0647 \u0628\u0627\u0632\u0646\u0634\u0627\u0646\u06cc \u0634\u062f."}
+    return {"success": True, "message": "تاریخچه اجراهای ایزوله بازنشانی شد."}
 
 
 def get_isolation_tools() -> list[Any]:

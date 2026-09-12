@@ -1,10 +1,10 @@
-"""Domain models and data structures for Semantic Caching, Speculative Execution, and Token Economics."""
+"""Domain models and data structures for Semantic Caching & Token Economics."""
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from enum import Enum
-import time
 from typing import Any
 
 

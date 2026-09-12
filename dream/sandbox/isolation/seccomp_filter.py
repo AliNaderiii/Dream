@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import Any
 
-from dream.sandbox.isolation.types import IsolationProfile, SyscallPolicy
+from dream.sandbox.isolation.types import IsolationProfile
 
 
 class SyscallFilterEngine:
@@ -16,7 +15,7 @@ class SyscallFilterEngine:
         self.profile = default_profile or IsolationProfile.strict()
 
     def audit_code_safety(self, python_code: str) -> tuple[bool, list[str], list[str]]:
-        """Perform static AST and opcode inspection for prohibited syscalls and dangerous calls.
+        """Perform static AST inspection for prohibited syscalls and dangerous calls.
 
         Returns:
             (is_safe, blocked_syscalls_found, violations_list)
@@ -62,10 +61,10 @@ class SyscallFilterEngine:
                         violations.append(f"Disallowed import from '{node.module}'")
                 # Check dangerous builtins
                 elif isinstance(node, ast.Call):
-                    if isinstance(node.func, ast.Name) and node.func.id in ("eval", "exec", "__import__"):
-                        violations.append(f"Restricted dynamic evaluation builtin '{node.func.id}'")
+                    dangerous_builtins = ("eval", "exec", "__import__")
+                    if isinstance(node.func, ast.Name) and node.func.id in dangerous_builtins:
+                        violations.append(f"Restricted dynamic builtin '{node.func.id}'")
         except SyntaxError:
-            # Code cannot parse; let runtime handler handle or reject
             violations.append("Syntax error in payload preventing AST verification")
 
         is_safe = len(violations) == 0

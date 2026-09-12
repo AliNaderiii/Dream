@@ -1,22 +1,22 @@
-"""Domain models and data structures for Memory Consolidation, Entropy Pruning, and Epistemic Distillation."""
+"""Domain models and data structures for Memory Consolidation & Distillation."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import Enum
 import math
 import time
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 
 class MemoryNodeType(str, Enum):
     """Classification of stored memory items."""
 
-    EPISODIC = "episodic"                    # Raw conversational turn or event log
-    SEMANTIC_FACT = "semantic_fact"          # Distilled timeless factual statement
-    CORE_BELIEF = "core_belief"              # High-priority user premise or core invariant
-    USER_TRAIT = "user_trait"                # User preference, behavioral habit, or style
-    EPHEMERAL_SCRATCHPAD = "ephemeral_scratchpad"  # Intermediate thoughts, tool scratchpad
+    EPISODIC = "episodic"  # Raw conversational turn or event log
+    SEMANTIC_FACT = "semantic_fact"  # Distilled timeless factual statement
+    CORE_BELIEF = "core_belief"  # High-priority user premise or core invariant
+    USER_TRAIT = "user_trait"  # User preference, behavioral habit, or style
+    EPHEMERAL_SCRATCHPAD = "ephemeral_scratchpad"  # Intermediate thoughts
 
 
 class ConsolidationStage(str, Enum):
@@ -38,11 +38,11 @@ class MemoryItem:
     memory_id: str
     node_type: MemoryNodeType
     content: str
-    importance: float = 0.5          # Value between 0.0 (trivial) and 1.0 (vital)
+    importance: float = 0.5  # Value between 0.0 (trivial) and 1.0 (vital)
     access_count: int = 1
     created_at: float = field(default_factory=time.time)
     last_accessed_at: float = field(default_factory=time.time)
-    decay_score: float = 1.0         # Retrievability R = e^(-t/S)
+    decay_score: float = 1.0  # Retrievability R = e^(-t/S)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def calculate_decay(self, current_time: float, decay_constant: float = 86400.0) -> float:
@@ -114,7 +114,7 @@ class ConsolidationStats:
     total_pruned_historical: int
     total_distilled_facts: int
     average_compression_ratio: float
-    memory_health_score: float  # 0.0 to 1.0 (Higher means compact, high-value, low noise)
+    memory_health_score: float  # 0.0 to 1.0 (Higher means compact, low noise)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize consolidation statistics."""

@@ -1,4 +1,4 @@
-"""Metacognitive Reasoning, Dynamic Strategy Tree & Tree-of-Thought Subsystem."""
+"""Metacognitive Reasoning, Strategy Tree & Tree-of-Thought Subsystem."""
 
 from __future__ import annotations
 
@@ -33,7 +33,10 @@ try:
     register_toolset(
         Toolset(
             name="reasoning",
-            description="Tree-of-Thought exploration, strategy branching, and metacognitive self-evaluation.",
+            description=(
+                "Tree-of-Thought exploration, strategy branching, and "
+                "metacognitive self-evaluation."
+            ),
             tools=[
                 "reasoning_create_thought_tree",
                 "reasoning_expand_node",

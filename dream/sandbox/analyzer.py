@@ -7,7 +7,6 @@ import io
 import json
 import math
 from pathlib import Path
-from typing import Any
 
 from dream.sandbox.types import DatasetSummary
 from dream.security.pathsafety import is_sensitive_path
@@ -26,7 +25,6 @@ class DataScienceAnalyzer:
         content = ""
         is_path = False
 
-        # Safe path detection without triggering Windows [WinError 123] invalid filename syntax
         raw_str = data_content_or_path.strip()
         if (
             "\n" not in data_content_or_path
@@ -132,14 +130,14 @@ class DataScienceAnalyzer:
         )
 
     def format_summary_markdown(self, summary: DatasetSummary) -> str:
-        """Format dataset profiling summary into a clean Persian/English Markdown report."""
+        """Format dataset profiling summary into a clean Markdown report."""
         lines = [
-            f"## \U0001f4ca \u06af\u0632\u0627\u0631\u0634 \u062a\u062d\u0644\u06cc\u0644 \u062f\u0627\u062f\u0647\u200c\u0647\u0627 (Dataset Profile)",
-            f"- \u062a\u0639\u062f\u0627\u062f \u0633\u0637\u0631\u0647\u0627 (Rows): {summary.total_rows:,}",
-            f"- \u062a\u0639\u062f\u0627\u062f \u0633\u062a\u0648\u0646\u200c\u0647\u0627 (Columns): {summary.total_columns}",
+            "## 📊 گزارش تحلیل داده‌ها (Dataset Profile)",
+            f"- تعداد سطرها (Rows): {summary.total_rows:,}",
+            f"- تعداد ستون‌ها (Columns): {summary.total_columns}",
             "",
-            "### \U0001f4cb \u062c\u062f\u0648\u0644 \u0645\u0634\u062e\u0635\u0627\u062a \u0633\u062a\u0648\u0646\u200c\u0647\u0627",
-            "| \u0633\u062a\u0648\u0646 | \u0646\u0648\u0639 \u062f\u0627\u062f\u0647 | \u0645\u0642\u0627\u062f\u06cc\u0631 \u062e\u0627\u0644\u06cc (Nulls) | \u0645\u06cc\u0627\u0646\u06af\u06cc\u0646 (Mean) | \u062d\u062f\u0627\u0642\u0644-\u062d\u062f\u0627\u06a9\u062b\u0631 (Min-Max) |",
+            "### 📋 جدول مشخصات ستون‌ها",
+            "| ستون | نوع داده | مقادیر خالی (Nulls) | میانگین (Mean) | حداقل-حداکثر (Min-Max) |",
             "|---|---|---|---|---|",
         ]
 

@@ -10,7 +10,6 @@ from dream.alignment.types import (
     CritiqueReport,
     FeedbackType,
     PreferencePair,
-    RubricDimension,
 )
 
 

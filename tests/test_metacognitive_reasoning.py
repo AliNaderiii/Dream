@@ -1,4 +1,4 @@
-"""Unit and integration tests for Metacognitive Reasoning, Strategy Trees, and Tree-of-Thought."""
+"""Unit and integration tests for Metacognitive Reasoning, Trees & Tree-of-Thought."""
 
 from __future__ import annotations
 
@@ -16,8 +16,6 @@ from dream.reasoning import (
     reasoning_expand_node,
     reasoning_get_best_path,
     reasoning_get_status,
-    reasoning_reset_all,
-    reasoning_solve_goal,
     reset_global_reasoning_engine,
 )
 from dream.tools.toolsets import BUILTIN_TOOLSETS, get_toolset
@@ -92,8 +90,12 @@ def test_metacognitive_evaluator_and_loop_detection() -> None:
     evaluator = MetacognitiveEvaluator()
 
     # Coherent step
+    thought_text = (
+        "با توجه به داده‌های ورودی، ابتدا باید اعتبارسنجی طرح انجام شود "
+        "و سپس تراکنش ثبت گردد."
+    )
     eval1 = evaluator.evaluate_thought_step(
-        thought_text="با توجه به داده‌های ورودی، ابتدا باید اعتبارسنجی طرح انجام شود و سپس تراکنش ثبت گردد.",
+        thought_text=thought_text,
         depth=2,
     )
     assert eval1.coherence_score >= 0.8

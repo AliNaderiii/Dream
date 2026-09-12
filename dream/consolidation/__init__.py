@@ -1,4 +1,4 @@
-"""Autonomous Sleep-Phase Memory Consolidation, Entropy Pruning, and Epistemic Distillation Subsystem."""
+"""Autonomous Sleep-Phase Memory Consolidation & Epistemic Distillation."""
 
 from __future__ import annotations
 
@@ -32,7 +32,10 @@ try:
     register_toolset(
         Toolset(
             name="consolidation",
-            description="Autonomous sleep-phase memory consolidation, Ebbinghaus decay, entropy pruning, and contradiction resolution.",
+            description=(
+                "Autonomous sleep-phase memory consolidation, Ebbinghaus "
+                "decay, entropy pruning, and contradiction resolution."
+            ),
             tools=[
                 "consolidation_add_memory",
                 "consolidation_run_cycle",

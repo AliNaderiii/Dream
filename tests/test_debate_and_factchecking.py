@@ -1,4 +1,4 @@
-"""Unit and integration tests for Autonomous Multi-Agent Debate & Fact-Checking Subsystem."""
+"""Unit and integration tests for Multi-Agent Debate & Fact-Checking Subsystem."""
 
 from __future__ import annotations
 
@@ -6,16 +6,11 @@ import pytest
 
 from dream.debate import (
     DebateEngine,
-    DebateModerator,
     DebateRole,
     DebateStatus,
     FactChecker,
     VerificationStatus,
-    debate_add_turn,
-    debate_create_session,
     debate_list_sessions,
-    debate_reach_consensus,
-    debate_reset_all,
     debate_run_autonomous,
     debate_verify_statement,
     handle_debate_slash_command,
@@ -49,7 +44,11 @@ def test_factchecker_fallacy_detection_and_claims() -> None:
     fallacies = checker.detect_fallacies(statement_fallacy)
     assert len(fallacies) >= 2
 
-    claims = checker.extract_claims("زبان پایتون سرعت اجرای بالایی در محاسبات عددی دارد. این موضوع در مقالات معتبر اثبات شده است.")
+    test_stmt = (
+        "زبان پایتون سرعت اجرای بالایی در محاسبات عددی دارد. "
+        "این موضوع در مقالات معتبر اثبات شده است."
+    )
+    claims = checker.extract_claims(test_stmt)
     assert len(claims) >= 1
     assert claims[0].verification_status == VerificationStatus.UNVERIFIED
 
@@ -64,7 +63,10 @@ def test_factchecker_evidence_verification() -> None:
         claim,
         evidence="بر اساس قوانین کپلر، زمین در یک مدار بیضوی به دور خورشید گردش می‌کند.",
     )
-    assert verified_claim.verification_status in (VerificationStatus.VERIFIED, VerificationStatus.PARTIAL)
+    assert verified_claim.verification_status in (
+        VerificationStatus.VERIFIED,
+        VerificationStatus.PARTIAL,
+    )
     assert verified_claim.confidence_score >= 0.5
 
     # Contradiction verification
@@ -107,11 +109,15 @@ def test_delphi_moderator_and_consensus_computation() -> None:
 def test_debate_engine_autonomous_rounds() -> None:
     """Verify autonomous debate rounds and session lifecycle."""
     engine = DebateEngine()
+    p_arg = "ابزارهای هوش مصنوعی بهره‌وری توسعه‌دهندگان را به میزان چشمگیری افزایش می‌دهند."
+    o_arg = "کدهای تولیدشده توسط هوش مصنوعی ممکن است دارای باگ‌های امنیتی باشند."
+    evi = "هوش مصنوعی بهره‌وری توسعه‌دهندگان را افزایش می‌دهد اما ممکن است باگ امنیتی داشته باشد."
+
     session, summary = engine.run_autonomous_debate(
         topic="استفاده از هوش مصنوعی در کدنویسی",
-        proponent_arg="ابزارهای هوش مصنوعی بهره‌وری توسعه‌دهندگان را به میزان چشمگیری افزایش می‌دهند.",
-        opponent_arg="کدهای تولیدشده توسط هوش مصنوعی ممکن است دارای باگ‌های امنیتی باشند.",
-        evidence="هوش مصنوعی بهره‌وری توسعه‌دهندگان را افزایش می‌دهد اما ممکن است باگ امنیتی داشته باشد.",
+        proponent_arg=p_arg,
+        opponent_arg=o_arg,
+        evidence=evi,
     )
 
     assert session.status in (DebateStatus.CONVERGED, DebateStatus.IN_PROGRESS)

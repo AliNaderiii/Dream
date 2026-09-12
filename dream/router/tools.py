@@ -80,7 +80,7 @@ def router_reset_all() -> dict[str, Any]:
     """Reset router history and metrics."""
     engine = get_global_routing_engine()
     engine.reset()
-    return {"success": True, "message": "\u0622\u0645\u0627\u0631 \u0648 \u062a\u0627\u0631\u06cc\u062e\u0686\u0647 \u0645\u0633\u06cc\u0631\u06cc\u0627\u0628\u06cc \u0628\u0627\u0632\u0646\u0634\u0627\u0646\u06cc \u0634\u062f."}
+    return {"success": True, "message": "آمار و تاریخچه مسیریابی بازنشانی شد."}
 
 
 def get_router_tools() -> list[Any]:

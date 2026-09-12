@@ -372,7 +372,8 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
     "consolidation": Toolset(
         name="consolidation",
         description=(
-            "Autonomous sleep-phase memory consolidation, Ebbinghaus decay, entropy pruning, and contradiction resolution"
+            "Autonomous sleep-phase memory consolidation, Ebbinghaus decay, "
+            "entropy pruning, and contradiction resolution"
         ),
         tools=(
             "consolidation_add_memory",

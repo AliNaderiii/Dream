@@ -1,10 +1,10 @@
-"""Consolidation Engine Coordinator: Sleep-phase memory consolidation, pruning, and health metrics."""
+"""Consolidation Engine Coordinator: Sleep-phase memory consolidation."""
 
 from __future__ import annotations
 
 import time
-from typing import Any
 import uuid
+from typing import Any
 
 from dream.consolidation.distiller import EpistemicDistiller
 from dream.consolidation.pruner import EntropyPruner
@@ -17,7 +17,7 @@ from dream.consolidation.types import (
 
 
 class ConsolidationEngine:
-    """Orchestrates sleep-phase memory consolidation, entropy pruning, and contradiction resolution."""
+    """Orchestrates sleep-phase memory consolidation, entropy pruning & distillation."""
 
     def __init__(
         self,
@@ -83,7 +83,7 @@ class ConsolidationEngine:
                 conflicts_resolved_count=0,
                 compression_ratio=1.0,
                 entropy_reduction_pct=0.0,
-                summary_fa="\u062d\u0627\u0641\u0638\u0647 \u062e\u0627\u0644\u06cc \u0627\u0633\u062a\u061b \u0686\u0631\u062e\u0647 \u062a\u062b\u0628\u06cc\u062a \u0628\u062f\u0648\u0646 \u062a\u063a\u06cc\u06cc\u0631 \u067e\u0627\u06cc\u0627\u0646 \u06cc\u0627\u0641\u062a.",
+                summary_fa="حافظه خالی است؛ چرخه تثبیت بدون تغییر پایان یافت.",
                 duration_ms=(time.time() - start_time) * 1000,
             )
             if not dry_run:
@@ -91,7 +91,9 @@ class ConsolidationEngine:
             return rep
 
         # 1. Apply Ebbinghaus decay
-        decayed_items = self.pruner.apply_decay(initial_items, current_time=now, decay_constant=decay_constant)
+        decayed_items = self.pruner.apply_decay(
+            initial_items, current_time=now, decay_constant=decay_constant
+        )
 
         # 2. Prune low-entropy and decayed memories
         retained_items, pruned_items = self.pruner.prune_low_entropy_nodes(decayed_items)
@@ -101,10 +103,13 @@ class ConsolidationEngine:
         deduped_items, dedup_merged = self.pruner.deduplicate(retained_items)
 
         # 4. Resolve contradictions
-        reconciled_items, conflicts_resolved = self.distiller.reconcile_contradictions(deduped_items)
+        reconciled_items, conflicts_resolved = self.distiller.reconcile_contradictions(
+            deduped_items
+        )
 
         # 5. Dream simulation
-        core_memories = [m for m in reconciled_items if m.node_type in (MemoryNodeType.CORE_BELIEF, MemoryNodeType.USER_TRAIT)]
+        core_types = (MemoryNodeType.CORE_BELIEF, MemoryNodeType.USER_TRAIT)
+        core_memories = [m for m in reconciled_items if m.node_type in core_types]
         self.distiller.run_synthetic_dream_simulation(core_memories)
 
         final_count = len(reconciled_items)
@@ -112,27 +117,30 @@ class ConsolidationEngine:
         entropy_reduction_pct = max(0.0, (1.0 - compression_ratio) * 100)
         duration_ms = (time.time() - start_time) * 1000
 
+        total_pruned = pruned_count + dedup_merged
+        summary_fa = (
+            f"🧠 چرخه تثبیت حافظه با موفقیت انجام شد: {total_pruned} گره هرس و "
+            f"{conflicts_resolved} تعارض حل گردید "
+            f"(کاهش آنتروپی: {entropy_reduction_pct:.1f}%)."
+        )
+
         report = ConsolidationReport(
             cycle_id=cycle_id,
             initial_memory_count=initial_count,
             final_memory_count=final_count,
-            pruned_nodes_count=pruned_count + dedup_merged,
+            pruned_nodes_count=total_pruned,
             consolidated_facts_count=final_count,
             conflicts_resolved_count=conflicts_resolved,
             compression_ratio=compression_ratio,
             entropy_reduction_pct=entropy_reduction_pct,
-            summary_fa=(
-                f"\U0001f9e0 \u0686\u0631\u062e\u0647 \u062a\u062b\u0628\u06cc\u062a \u062d\u0627\u0641\u0638\u0647 \u0628\u0627 \u0645\u0648\u0641\u0642\u06cc\u062a \u0627\u0646\u062c\u0627\u0645 \u0634\u062f: "
-                f"{pruned_count + dedup_merged} \u06af\u0631\u0647 \u0647\u0631\u0633 \u0648 {conflicts_resolved} \u062a\u0639\u0627\u0631\u0636 \u062d\u0644 \u06af\u0631\u062f\u06cc\u062f "
-                f"(\u06a9\u0627\u0647\u0634 \u0622\u0646\u062a\u0631\u0648\u067e\u06cc: {entropy_reduction_pct:.1f}%)."
-            ),
+            summary_fa=summary_fa,
             duration_ms=duration_ms,
         )
 
         if not dry_run:
             self._memories = {m.memory_id: m for m in reconciled_items}
             self._reports_history.append(report)
-            self._historical_pruned_count += (pruned_count + dedup_merged)
+            self._historical_pruned_count += total_pruned
             self._historical_distilled_count += final_count
 
         return report
@@ -168,27 +176,30 @@ class ConsolidationEngine:
         """Format consolidation status and memory metrics into Markdown."""
         stats = self.get_health_stats()
         lines = [
-            "## \U0001f9e0 \u06af\u0632\u0627\u0631\u0634 \u062a\u062b\u0628\u06cc\u062a \u0648 \u0633\u0644\u0627\u0645\u062a \u062d\u0627\u0641\u0638\u0647 (Memory Consolidation & Health)",
-            f"- **\u0634\u0627\u062e\u0635 \u0633\u0644\u0627\u0645\u062a \u062d\u0627\u0641\u0638\u0647 (Health Score):** `{stats.memory_health_score * 100:.1f}%`",
-            f"- **\u062a\u0639\u062f\u0627\u062f \u06af\u0631\u0647\u200c\u0647\u0627\u06cc \u0641\u0639\u0627\u0644:** {stats.total_memories_stored}",
-            f"- **\u0686\u0631\u062e\u0647\u200c\u0647\u0627\u06cc \u0627\u062c\u0631\u0624\u0634\u062f\u0647:** {stats.total_cycles_executed}",
-            f"- **\u0645\u062c\u0645\u0648\u0639 \u06af\u0631\u0647\u200c\u0647\u0627\u06cc \u0647\u0631\u0633\u200c\u0634\u062f\u0647 \u062a\u0627\u0631\u06cc\u062e\u06cc:** {stats.total_pruned_historical}",
-            f"- **\u0645\u06cc\u0627\u0646\u06af\u06cc\u0646 \u0646\u0631\u062e \u0641\u0634\u0631\u062f\u0647\u200c\u0633\u0627\u0632\u06cc:** {stats.average_compression_ratio:.2f}",
+            "## 🧠 گزارش تثبیت و سلامت حافظه (Memory Consolidation & Health)",
+            f"- **شاخص سلامت حافظه (Health Score):** `{stats.memory_health_score * 100:.1f}%`",
+            f"- **تعداد گره‌های فعال:** {stats.total_memories_stored}",
+            f"- **چرخه‌های اجرا‌شده:** {stats.total_cycles_executed}",
+            f"- **مجموع گره‌های هرس‌شده تاریخی:** {stats.total_pruned_historical}",
+            f"- **میانگین نرخ فشرده‌سازی:** {stats.average_compression_ratio:.2f}",
             "",
-            "### \U0001f4ca \u06af\u0632\u0627\u0631\u0634 \u0622\u062e\u0631\u06cc\u0646 \u0686\u0631\u062e\u0647:",
+            "### 📊 گزارش آخرین چرخه:",
         ]
 
         if not self._reports_history:
-            lines.append("- \u0647\u0646\u0648\u0632 \u0686\u0631\u062e\u0647 \u062a\u062b\u0628\u06cc\u062a\u06cc \u0627\u062c\u0631\u0627 \u0646\u0634\u062f\u0647 \u0627\u0633\u062a.")
+            lines.append("- هنوز چرخه تثبیتی اجرا نشده است.")
         else:
             latest = self._reports_history[-1]
             lines.extend(
                 [
-                    f"- \u0634\u0646\u0627\u0633\u0647: `{latest.cycle_id}`",
-                    f"- \u06af\u0631\u0647\u200c\u0647\u0627\u06cc \u0627\u0648\u0644\u06cc\u0647: {latest.initial_memory_count} -> \u0646\u0647\u0627\u06cc\u06cc: {latest.final_memory_count}",
-                    f"- \u062a\u0639\u062f\u0627\u062f \u0647\u0631\u0633 \u0634\u062f\u0647: {latest.pruned_nodes_count}",
-                    f"- \u062a\u0639\u0627\u0631\u0636\u200c\u0647\u0627\u06cc \u062d\u0644\u200c\u0634\u062f\u0647: {latest.conflicts_resolved_count}",
-                    f"- \u06a9\u0627\u0647\u0634 \u0622\u0646\u062a\u0631\u0648\u067e\u06cc: {latest.entropy_reduction_pct:.1f}%",
+                    f"- شناسه: `{latest.cycle_id}`",
+                    (
+                        f"- گره‌های اولیه: {latest.initial_memory_count} -> "
+                        f"نهایی: {latest.final_memory_count}"
+                    ),
+                    f"- تعداد هرس شده: {latest.pruned_nodes_count}",
+                    f"- تعارض‌های حل‌شده: {latest.conflicts_resolved_count}",
+                    f"- کاهش آنتروپی: {latest.entropy_reduction_pct:.1f}%",
                 ]
             )
 

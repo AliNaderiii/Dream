@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 
 OFFICIAL_BASE_URLS = ("https://api.openai.com/v1", "https://api.openai.com/v1/")
 

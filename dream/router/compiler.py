@@ -1,4 +1,4 @@
-"""Dynamic Prompt Compiler: Token budgeting, AST section assembly, and template rendering."""
+"""Dynamic Prompt Compiler: Token budgeting, AST section assembly, and rendering."""
 
 from __future__ import annotations
 
@@ -35,21 +35,30 @@ class PromptCompiler:
             PromptSection(
                 section_id="persian_excellence",
                 title="Language & Cultural Nuance",
-                content="Respond fluently, naturally, and accurately in Persian with proper Persian grammar and typography.",
+                content=(
+                    "Respond fluently, naturally, and accurately in Persian "
+                    "with proper Persian grammar and typography."
+                ),
                 priority=900,
                 is_mandatory=True,
             ),
             PromptSection(
                 section_id="context_calendar",
                 title="Temporal Grounding",
-                content="Current Jalali Date: {jalali_date}. Always ground chronological assertions.",
+                content=(
+                    "Current Jalali Date: {jalali_date}. Always ground "
+                    "chronological assertions."
+                ),
                 priority=700,
                 is_mandatory=False,
             ),
             PromptSection(
                 section_id="tool_guidelines",
                 title="Tool Calling Protocol",
-                content="Use available tools judiciously. Validate arguments before dispatching calls.",
+                content=(
+                    "Use available tools judiciously. Validate arguments "
+                    "before dispatching calls."
+                ),
                 priority=500,
                 is_mandatory=False,
             ),

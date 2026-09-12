@@ -1,9 +1,9 @@
-"""Deep Research Engine Coordinator: Autonomous multi-step investigation and synthesis."""
+"""Deep Research Engine Coordinator: Autonomous multi-step investigation."""
 
 from __future__ import annotations
 
-from pathlib import Path
 import time
+from pathlib import Path
 from typing import Any
 
 from dream.research.collector import MultiSourceCollector
@@ -19,7 +19,7 @@ from dream.security.pathsafety import is_sensitive_path
 
 
 class DeepResearchEngine:
-    """Orchestrates end-to-end deep research planning, evidence collection, and multi-source synthesis."""
+    """Orchestrates end-to-end deep research planning, evidence collection & synthesis."""
 
     def __init__(
         self,
@@ -92,7 +92,7 @@ class DeepResearchEngine:
             focus_areas=focus_areas,
         )
 
-        # Ingest baseline sources
+        topic_slug = topic.lower().replace(" ", "_")
         default_sources = [
             (
                 f"https://arxiv.org/abs/2608.research.{plan.session_id[:6]}",
@@ -100,14 +100,14 @@ class DeepResearchEngine:
                 f"Comprehensive architectural study and empirical benchmarks on {topic}.",
             ),
             (
-                f"https://github.com/AliNaderiii/Dream/docs/{topic.lower().replace(' ', '_')}",
+                f"https://github.com/AliNaderiii/Dream/docs/{topic_slug}",
                 f"Dream Technical Documentation: {topic}",
-                f"Production deployment patterns and verified system specifications for {topic}.",
+                f"Production deployment patterns and specifications for {topic}.",
             ),
             (
-                f"https://nature.com/articles/{topic.lower().replace(' ', '-')}",
+                f"https://nature.com/articles/{topic_slug}",
                 f"Scientific Evaluation of {topic}",
-                f"Peer-reviewed methodology, baseline comparative analysis, and accuracy guarantees.",
+                "Peer-reviewed methodology, comparative analysis, and accuracy guarantees.",
             ),
         ]
 

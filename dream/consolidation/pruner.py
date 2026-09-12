@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from typing import Any
 
 from dream.consolidation.types import MemoryItem, MemoryNodeType
 
@@ -85,7 +84,9 @@ class EntropyPruner:
                         # Merge into existing item
                         existing.access_count += item.access_count
                         existing.importance = max(existing.importance, item.importance)
-                        existing.last_accessed_at = max(existing.last_accessed_at, item.last_accessed_at)
+                        existing.last_accessed_at = max(
+                            existing.last_accessed_at, item.last_accessed_at
+                        )
                         existing.decay_score = max(existing.decay_score, item.decay_score)
                         matched = True
                         merged_count += 1

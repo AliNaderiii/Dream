@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from dream.cache.semantic import SemanticCache
@@ -110,16 +109,16 @@ class CacheEngine:
         """Prime cache with standard conversational greetings and system FAQs."""
         warmups = [
             (
-                "\u0633\u0644\u0627\u0645",
-                "\u0633\u0644\u0627\u0645! \u0686\u06af\u0648\u0646\u0647 \u0645\u06cc\u200c\u062a\u0648\u0627\u0646\u0645 \u0627\u0645\u0631\u0648\u0632 \u0628\u0647 \u0634\u0645\u0627 \u06a9\u0645\u06a9 \u06a9\u0646\u0645\u061f",
+                "سلام",
+                "سلام! چگونه می‌توانم امروز به شما کمک کنم؟",
             ),
             (
                 "hello",
                 "Hello! How can I assist you today?",
             ),
             (
-                "\u062a\u0648 \u06a9\u06cc\u0633\u062a\u06cc\u061f",
-                "\u0645\u0646 \u062f\u0631\u06cc\u0645 (Dream) \u0647\u0633\u062a\u0645\u060c \u062f\u0633\u062a\u06cc\u0627\u0631 \u0647\u0648\u0634\u0645\u0646\u062f \u0639\u0627\u0645\u0644\u200c\u067e\u0627\u06cc\u0647 \u0634\u0645\u0627.",
+                "تو کیستی؟",
+                "من دریم (Dream) هستم، دستیار هوشمند عامل‌پایه شما.",
             ),
         ]
         for q, r in warmups:

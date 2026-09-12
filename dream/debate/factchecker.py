@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 import time
-from typing import Any
 import uuid
 
 from dream.debate.types import FactClaim, VerificationStatus
@@ -16,19 +15,19 @@ class FactChecker:
     FALLACY_PATTERNS = [
         (
             r"(یا\s+باید\s+.*\s+یا\s+نابودی|either\s+.*\s+or\s+total\s+ruin)",
-            "\u0645\u063a\u0627\u0644\u0637\u0647 \u062f\u0648\u0631\u0627\u0647\u06cc \u06a9\u0627\u0632\u0628 (False Dilemma)",
+            "مغالطه دوراهی کاذب (False Dilemma)",
         ),
         (
             r"(همه\s+می\u200cدانند|everyone\s+knows|بدون\s+شک\s+همه)",
-            "\u0645\u063a\u0627\u0644\u0637\u0647 \u062a\u0639\u0645\u06cc\u0645 \u0634\u062a\u0627\u0628\u200c\u0632\u062f\u0647 (Hasty Generalization)",
+            "مغالطه تعمیم شتاب‌زده (Hasty Generalization)",
         ),
         (
             r"(تو\s+نمی\u200cفهمی|شما\s+صلاحیت\s+ندارید|you\s+are\s+ignorant)",
-            "\u0645\u063a\u0627\u0644\u0637\u0647 \u062d\u0645\u0644\u0647 \u0628\u0647 \u0634\u062e\u0635 (Ad Hominem)",
+            "مغالطه حمله به شخص (Ad Hominem)",
         ),
         (
             r"(چون\s+من\s+می\u200cگویم\s+پس\s+درست\s+است|because\s+i\s+said\s+so)",
-            "\u0645\u063a\u0627\u0644\u0637\u0647 \u0627\u0633\u062a\u062f\u0644\u0627\u0644 \u062f\u0627\u06cc\u0631\u0647\u200c\u0627\u06cc (Circular Reasoning)",
+            "مغالطه استدلال دایره‌ای (Circular Reasoning)",
         ),
     ]
 
@@ -85,8 +84,18 @@ class FactChecker:
         ratio = overlap / len(claim_words)
 
         # Check contradiction negation keywords
-        contradiction_markers = ["غلط", "نادرست", "رد شده", "false", "incorrect", "refuted", "disproven"]
-        has_contradiction = any(m in evidence.lower() for m in contradiction_markers) and ratio > 0.3
+        contradiction_markers = [
+            "غلط",
+            "نادرست",
+            "رد شده",
+            "false",
+            "incorrect",
+            "refuted",
+            "disproven",
+        ]
+        has_contradiction = (
+            any(m in evidence.lower() for m in contradiction_markers) and ratio > 0.3
+        )
 
         if has_contradiction:
             claim.verification_status = VerificationStatus.CONTRADICTED

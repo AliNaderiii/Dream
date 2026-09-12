@@ -74,3 +74,9 @@ def get_plugin_tools() -> list[Any]:
         plugin_disable,
         plugin_get_info,
     ]
+
+
+# Backward-compatibility aliases
+get_plugin_manager = get_global_plugin_manager
+reset_plugin_manager = reset_global_plugin_manager
+plugin_info = plugin_get_info

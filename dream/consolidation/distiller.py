@@ -1,17 +1,17 @@
-"""Epistemic Distiller: Fact crystallization, contradiction reconciliation, and dream simulation."""
+"""Epistemic Distiller: Fact crystallization & contradiction reconciliation."""
 
 from __future__ import annotations
 
 import re
 import time
-from typing import Any
 import uuid
+from typing import Any
 
 from dream.consolidation.types import MemoryItem, MemoryNodeType
 
 
 class EpistemicDistiller:
-    """Transforms raw conversation turns into semantic facts and resolves epistemic contradictions."""
+    """Transforms raw conversation turns into semantic facts and resolves contradictions."""
 
     def distill_transcript(
         self,
@@ -20,6 +20,16 @@ class EpistemicDistiller:
         """Extract atomic semantic facts and user traits from raw conversation transcript."""
         lines = [line.strip() for line in transcript_text.splitlines() if line.strip()]
         distilled: list[MemoryItem] = []
+
+        trait_keywords = [
+            "علاقه‌مند",
+            "ترجیح",
+            "دوست دارد",
+            "prefer",
+            "like",
+            "interest",
+        ]
+        belief_keywords = ["همیشه", "قانون", "اصول", "must", "always", "rule"]
 
         for line in lines:
             line_clean = re.sub(r"^[0-9\-\*\.\:\s]+", "", line).strip()
@@ -30,10 +40,10 @@ class EpistemicDistiller:
             importance = 0.60
 
             # Detect user traits / preferences
-            if any(k in line_clean.lower() for k in ["علاقه‌مند", "ترجیح", "دوست دارد", "prefer", "like", "interest"]):
+            if any(k in line_clean.lower() for k in trait_keywords):
                 node_type = MemoryNodeType.USER_TRAIT
                 importance = 0.80
-            elif any(k in line_clean.lower() for k in ["همیشه", "قانون", "اصول", "must", "always", "rule"]):
+            elif any(k in line_clean.lower() for k in belief_keywords):
                 node_type = MemoryNodeType.CORE_BELIEF
                 importance = 0.90
 
@@ -97,14 +107,15 @@ class EpistemicDistiller:
 
         for i in range(min(num_scenarios, len(core_memories))):
             mem = core_memories[i]
+            prefix = mem.content[:30]
             sim = {
                 "simulation_id": f"dream-{uuid.uuid4().hex[:6]}",
                 "focus_memory": mem.content,
                 "hypothetical_scenario": (
-                    f"Scenario: User asks complex task involving '{mem.content[:40]}...'"
+                    f"Scenario: User asks complex task involving '{prefix}...'"
                 ),
                 "synthesized_reinforcement_fa": (
-                    f"\u062a\u062b\u0628\u06cc\u062a \u062e\u0648\u062f\u06a9\u0627\u0631 \u0627\u0631\u062a\u0628\u0627\u0637 \u0628\u0627\u0648\u0631: '{mem.content[:30]}...'"
+                    f"تثبیت خودکار ارتباط باور: '{prefix}...'"
                 ),
                 "timestamp": round(time.time(), 2),
             }

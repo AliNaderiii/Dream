@@ -54,7 +54,7 @@ py-modules = ["cli", "doctor", "dream_serve"]
 include = ["dream*"]
 
 [tool.ruff]
-exclude = ["docs"]
+exclude = ["docs", "apply_*.py", "fix_*.py"]
 line-length = 100
 target-version = "py310"
 

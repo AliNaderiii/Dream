@@ -1,29 +1,29 @@
-"""Domain models and data structures for Semantic Routing, Dynamic Prompt Compiler, and Cascading."""
+"""Domain models and data structures for Semantic Routing & Prompt Compiler."""
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from enum import Enum
-import time
 from typing import Any
 
 
 class IntentComplexity(str, Enum):
     """Categorization of user prompt cognitive complexity."""
 
-    DIRECT_ANSWER = "direct_answer"  # Fast, no tools needed (e.g. greeting, basic factual)
-    SIMPLE_TOOL = "simple_tool"      # Single tool call (e.g. time, simple search)
+    DIRECT_ANSWER = "direct_answer"  # Fast, no tools needed (e.g. greeting)
+    SIMPLE_TOOL = "simple_tool"  # Single tool call (e.g. time, simple search)
     REASONING_CHAIN = "reasoning_chain"  # Multi-step reasoning / debate
-    DEEP_RESEARCH = "deep_research"    # In-depth synthesis, web crawling
+    DEEP_RESEARCH = "deep_research"  # In-depth synthesis, web crawling
     CODE_EXECUTION = "code_execution"  # Python interpreter, math proofs
 
 
 class ModelTier(str, Enum):
     """LLM cost and capability tiers for cascading execution."""
 
-    FAST_EDGE = "fast_edge"          # e.g. 8B / flash model (Low latency, high throughput)
-    STANDARD_CHAT = "standard_chat"  # e.g. 70B / Sonnet (General conversational & tools)
-    REASONING_HEAVY = "reasoning_heavy"  # e.g. o1 / R1 / Opus (Deep cognitive logic)
+    FAST_EDGE = "fast_edge"  # e.g. 8B / flash model (Low latency)
+    STANDARD_CHAT = "standard_chat"  # e.g. 70B / Sonnet (General conversational)
+    REASONING_HEAVY = "reasoning_heavy"  # e.g. o1 / R1 / Opus (Deep logic)
 
 
 @dataclass(slots=True)

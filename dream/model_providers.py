@@ -27,8 +27,19 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
-from authlib.common.security import generate_token
-from authlib.oauth2.rfc7636 import create_s256_code_challenge
+try:
+    from authlib.common.security import generate_token
+    from authlib.oauth2.rfc7636 import create_s256_code_challenge
+except ImportError:
+    import base64
+    import hashlib
+
+    def generate_token(length: int = 30) -> str:
+        return secrets.token_urlsafe(length)[:length]
+
+    def create_s256_code_challenge(verifier: str) -> str:
+        digest = hashlib.sha256(verifier.encode("ascii")).digest()
+        return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
 from dream.agent.backends import (
     AnthropicBackend,

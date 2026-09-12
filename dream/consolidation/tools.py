@@ -1,4 +1,4 @@
-"""LLM tool bindings for Memory Consolidation, Entropy Pruning, and Epistemic Distillation."""
+"""LLM tool bindings for Memory Consolidation & Epistemic Distillation."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ def consolidation_add_memory(
 
 
 def consolidation_run_cycle(dry_run: bool = False) -> dict[str, Any]:
-    """Run full sleep-phase memory consolidation, Ebbinghaus decay, and entropy pruning cycle."""
+    """Run full sleep-phase memory consolidation, decay, and entropy pruning cycle."""
     engine = get_global_consolidation_engine()
     report = engine.run_consolidation_cycle(dry_run=dry_run)
     return {"success": True, "report": report.to_dict()}
@@ -78,7 +78,7 @@ def consolidation_reset_all() -> dict[str, Any]:
     """Reset all stored memories and consolidation history."""
     engine = get_global_consolidation_engine()
     engine.reset()
-    return {"success": True, "message": "\u062d\u0627\u0641\u0638\u0647 \u0648 \u062a\u0627\u0631\u06cc\u062e\u0686\u0647 \u062a\u062b\u0628\u06cc\u062a \u0628\u0627\u0632\u0646\u0634\u0627\u0646\u06cc \u0634\u062f."}
+    return {"success": True, "message": "حافظه و تاریخچه تثبیت بازنشانی شد."}
 
 
 def get_consolidation_tools() -> list[Any]:

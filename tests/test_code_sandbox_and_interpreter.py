@@ -1,14 +1,13 @@
-"""Unit and integration tests for Code Interpreter, Dataset Analysis, and Sandbox Subsystem."""
+"""Unit and integration tests for Code Interpreter, Dataset Analysis & Sandbox."""
 
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
+
 import pytest
 
 from dream.sandbox import (
     DataScienceAnalyzer,
-    ExecutionLanguage,
     ExecutionStatus,
     SandboxEngine,
     SandboxExecutor,
@@ -17,8 +16,6 @@ from dream.sandbox import (
     sandbox_analyze_dataset,
     sandbox_execute_python,
     sandbox_get_status,
-    sandbox_list_artifacts,
-    sandbox_reset_session,
 )
 from dream.tools.toolsets import BUILTIN_TOOLSETS, get_toolset
 
@@ -153,8 +150,8 @@ def test_sandbox_tools_and_slash_commands() -> None:
 
     # Slash: /sandbox status
     slash_status = handle_sandbox_slash_command("/sandbox status")
-    assert "\u0648\u0636\u0639\u06cc\u062a \u0633\u0646\u062f\u0628\u0627\u06a9\u0633" in slash_status
+    assert "وضعیت سندباکس" in slash_status
 
     # Slash: /sandbox reset
     slash_reset = handle_sandbox_slash_command("/sandbox reset")
-    assert "\u0628\u0627\u0632\u0646\u0634\u0627\u0646\u06cc \u0634\u062f" in slash_reset
+    assert "بازنشانی شد" in slash_reset

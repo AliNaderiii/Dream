@@ -1,9 +1,8 @@
-"""Healing Engine Coordinator: Automated fault diagnosis, recovery strategies, and observability."""
+"""Healing Engine Coordinator: Automated fault diagnosis, recovery strategies."""
 
 from __future__ import annotations
 
 import time
-from typing import Any
 import uuid
 
 from dream.healing.chaos import ChaosSimulator
@@ -64,6 +63,11 @@ class HealingEngine:
 
         latency_ms = (time.time() - start_time) * 1000
 
+        summary_fa = (
+            f"🩹 خودترمیم خطا: {fault_type.value} در '{target_name}' "
+            f"با استراتژی {action.value} انجام شد."
+        )
+
         report = HealingReport(
             incident_id=incident_id,
             fault_type=fault_type,
@@ -71,10 +75,7 @@ class HealingEngine:
             action_taken=action,
             success=True,
             recovery_latency_ms=latency_ms,
-            summary_fa=(
-                f"\U0001fa79 \u062e\u0648\u062f\u062a\u0631\u0645\u06cc\u0645\u06cc \u062e\u0637\u0627\u06cc {fault_type.value} \u062f\u0631 '{target_name}' "
-                f"\u0628\u0627 \u0627\u0633\u062a\u0631\u0627\u062a\u0698\u06cc {action.value} \u0627\u0646\u062c\u0627\u0645 \u0634\u062f."
-            ),
+            summary_fa=summary_fa,
         )
         self._reports.append(report)
         return report
@@ -105,19 +106,23 @@ class HealingEngine:
         """Format operational telemetry and resilience stats into Markdown report."""
         metrics = self.get_health_metrics()
         lines = [
-            "## \U0001f4ca \u06af\u0632\u0627\u0631\u0634 \u067e\u0627\u06cc\u0634 \u0648 \u062e\u0648\u062f\u062a\u0631\u0645\u06cc\u0645\u06cc \u0633\u06cc\u0633\u062a\u0645 (Telemetry & Health)",
-            f"- **\u0636\u0631\u06cc\u0628 \u062a\u0627\u0628\u200c\u0622\u0648\u0631\u06cc (Resilience Score):** `{metrics.resilience_score * 100:.1f}%`",
-            f"- **\u062a\u0639\u062f\u0627\u062f \u06a9\u0644 \u062a\u0631\u0627\u06a9\u0646\u0634\u200c\u0647\u0627 (Total Spans):** {metrics.total_spans}",
-            f"- **\u062e\u0637\u0627\u0647\u0627\u06cc \u062a\u0631\u0645\u06cc\u0645\u200c\u0634\u062f\u0647 (Recovered):** {metrics.recovered_count}",
-            f"- **\u062a\u0627\u062e\u06cc\u0631 p50:** {metrics.p50_latency_ms:.1f} ms | **\u062a\u0627\u062e\u06cc\u0631 p95:** {metrics.p95_latency_ms:.1f} ms",
+            "## 📊 گزارش پایش و خودترمیمی سیستم (Telemetry & Health)",
+            f"- **ضریب تاب‌آوری (Resilience Score):** `{metrics.resilience_score * 100:.1f}%`",
+            f"- **تعداد کل تراکنش‌ها (Total Spans):** {metrics.total_spans}",
+            f"- **خطاهای ترمیم‌شده (Recovered):** {metrics.recovered_count}",
+            f"- **تاخیر p50:** {metrics.p50_latency_ms:.1f} ms | "
+            f"**تاخیر p95:** {metrics.p95_latency_ms:.1f} ms",
             "",
-            "### \U0001fa79 \u062a\u0627\u0631\u06cc\u062e\u0686\u0647 \u062a\u0631\u0645\u06cc\u0645\u200c\u0647\u0627\u06cc \u0627\u062e\u06cc\u0631:",
+            "### 🩹 تاریخچه ترمیم‌های اخیر:",
         ]
         if not self._reports:
-            lines.append("- \u0647\u06cc\u0686 \u062e\u0637\u0627\u06cc\u06cc \u062b\u0628\u062a \u0646\u0634\u062f\u0647 \u0648 \u0633\u06cc\u0633\u062a\u0645 \u06a9\u0627\u0645\u0644\u0627\u064b \u0633\u0627\u0644\u0645 \u0627\u0633\u062a.")
+            lines.append("- هیچ خطایی ثبت نشده و سیستم کاملاً سالم است.")
         else:
             for r in self._reports[-5:]:
-                lines.append(f"- `{r.incident_id}`: **{r.fault_type.value}** -> `{r.action_taken.value}` (\u0645\u0648\u0641\u0642)")
+                lines.append(
+                    f"- `{r.incident_id}`: **{r.fault_type.value}** -> "
+                    f"`{r.action_taken.value}` (موفق)"
+                )
 
         return "\n".join(lines)
 

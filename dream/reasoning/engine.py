@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import time
-from typing import Any
 import uuid
+from typing import Any
 
 from dream.reasoning.evaluator import MetacognitiveEvaluator
 from dream.reasoning.tree import StrategyTree
 from dream.reasoning.types import (
-    MetacognitiveEvaluation,
-    NodeStatus,
     ReasoningStrategy,
     ReasoningTrajectory,
     ThoughtNode,
@@ -113,7 +111,7 @@ class ReasoningEngine:
 
         # Evaluate Level 1 branches
         best_node: ThoughtNode | None = None
-        for i, child in enumerate(children):
+        for _i, child in enumerate(children):
             critique = self.evaluator.evaluate_thought_step(
                 thought_text=child.thought_content,
                 depth=1,
@@ -137,13 +135,14 @@ class ReasoningEngine:
         traj.confidence = best_node.score if best_node else 0.5
         traj.final_answer = best_node.thought_content if best_node else hypotheses[0]
 
+        path_str = " -> ".join(traj.selected_path)
         summary = (
-            f"\U0001f9e0 \u062f\u0631\u062e\u062a \u0627\u0633\u062a\u062f\u0644\u0627\u0644 \u0648 \u062d\u0644 \u0645\u0633\u0626\u0644\u0647 (Tree-of-Thought Report):\n"
-            f"- \u0647\u062f\u0641: {goal}\n"
-            f"- \u062a\u0639\u062f\u0627\u062f \u06af\u0631\u0647\u200c\u0647\u0627\u06cc \u0628\u0631\u0631\u0633\u06cc\u200c\u0634\u062f\u0647: {len(traj.nodes)}\n"
-            f"- \u0645\u0633\u06cc\u0631 \u0628\u0631\u06af\u0632\u06cc\u062f\u0647: {' -> '.join(traj.selected_path)}\n"
-            f"- \u067e\u0627\u0633\u062e \u0628\u0647\u06cc\u0646\u0647: {traj.final_answer}\n"
-            f"- \u0636\u0631\u06cc\u0628 \u0627\u0637\u0645\u06cc\u0646\u0627\u0646: {traj.confidence:.2f}"
+            "🧠 درخت استدلال و حل مسئله (Tree-of-Thought Report):\n"
+            f"- هدف: {goal}\n"
+            f"- تعداد گره‌های بررسی‌شده: {len(traj.nodes)}\n"
+            f"- مسیر برگزیده: {path_str}\n"
+            f"- پاسخ بهینه: {traj.final_answer}\n"
+            f"- ضریب اطمینان: {traj.confidence:.2f}"
         )
 
         return traj, summary

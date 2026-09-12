@@ -5,12 +5,10 @@ from __future__ import annotations
 import contextlib
 import io
 import math
-from pathlib import Path
 import re
-import sys
 import time
+from pathlib import Path
 from typing import Any
-import uuid
 
 from dream.sandbox.types import (
     ExecutionArtifact,
@@ -18,7 +16,6 @@ from dream.sandbox.types import (
     ExecutionResult,
     ExecutionStatus,
 )
-from dream.security.pathsafety import is_sensitive_path
 
 
 class SandboxExecutor:
@@ -71,7 +68,7 @@ class SandboxExecutor:
                     status=ExecutionStatus.BLOCKED,
                     exit_code=1,
                     stdout="",
-                    stderr="\u062f\u0633\u062a\u0648\u0631 \u0628\u0647 \u062f\u0644\u06cc\u0644 \u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0627\u0645\u0646\u06cc\u062a\u06cc \u0645\u0633\u062f\u0648\u062f \u0634\u062f.",
+                    stderr="دستور به دلیل ملاحظات امنیتی مسدود شد.",
                     duration_ms=(time.monotonic() - start_time) * 1000,
                     error_message="Security Policy Refusal: Destructive pattern detected.",
                 )
@@ -103,7 +100,9 @@ class SandboxExecutor:
                 stderr_buf.write(f"\nTraceback: {err_msg}")
 
         duration = (time.monotonic() - start_time) * 1000
-        new_keys = [k for k in self._namespace.keys() if k not in initial_keys and not k.startswith("_")]
+        new_keys = [
+            k for k in self._namespace.keys() if k not in initial_keys and not k.startswith("_")
+        ]
 
         # Discover new generated artifacts in workspace
         current_files = set(self.workspace_dir.glob("*")) if self.workspace_dir.exists() else set()
@@ -119,7 +118,7 @@ class SandboxExecutor:
                         file_path=str(f),
                         mime_type=mime,
                         size_bytes=f.stat().st_size,
-                        description_fa=f"\u0641\u0627\u06cc\u0644 \u062a\u0648\u0644\u06cc\u062f\u0634\u062f\u0647: {f.name}",
+                        description_fa=f"فایل تولیدشده: {f.name}",
                     )
                 )
 

@@ -1,4 +1,4 @@
-"""LLM Tool bindings for Self-Improving Alignment, Feedback Collection, and DPO Fine-Tuning."""
+"""LLM Tool bindings for Self-Improving Alignment, Feedback & DPO Fine-Tuning."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def alignment_record_feedback(
     feedback_type: str = "thumbs_up",
     comment: str = "",
 ) -> dict[str, Any]:
-    """Record user feedback (thumbs_up, thumbs_down, user_correction) and update preference model."""
+    """Record user feedback (thumbs_up, thumbs_down) and update preference model."""
     engine = get_global_alignment_engine()
 
     fb_enum = FeedbackType.THUMBS_UP
@@ -58,7 +58,7 @@ def alignment_critique_and_refine(
     prompt: str,
     response: str,
 ) -> dict[str, Any]:
-    """Perform self-critique on an assistant response and produce a higher-aligned refined version."""
+    """Perform self-critique on a response and produce a higher-aligned refined version."""
     engine = get_global_alignment_engine()
     report = engine.critique_response(prompt, response)
     return {"success": True, "critique_report": report.to_dict()}
@@ -68,7 +68,7 @@ def alignment_evaluate_response(
     prompt: str,
     response: str,
 ) -> dict[str, Any]:
-    """Score response across all 6 rubric dimensions (fluency, accuracy, safety, conciseness, etc.)."""
+    """Score response across all 6 rubric dimensions (fluency, accuracy, safety, etc.)."""
     engine = get_global_alignment_engine()
     scores = engine.scorer.score_response(prompt, response)
     reward = engine.scorer.compute_composite_reward(scores)

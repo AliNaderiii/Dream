@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import math
-import time
-from typing import Any
 import uuid
 
 from dream.reasoning.types import NodeStatus, ThoughtNode
@@ -23,7 +21,7 @@ class StrategyTree:
         root = ThoughtNode(
             node_id=nid,
             parent_id=None,
-            thought_content=f"\u0647\u062f\u0641: {goal}",
+            thought_content=f"هدف: {goal}",
             score=1.0,
             depth=0,
             status=NodeStatus.SELECTED,
@@ -72,7 +70,9 @@ class StrategyTree:
         if node.visits == 0:
             return float("inf")
         exploitation = node.score
-        exploration = exploration_constant * math.sqrt(math.log(max(1, parent_visits)) / node.visits)
+        exploration = exploration_constant * math.sqrt(
+            math.log(max(1, parent_visits)) / node.visits
+        )
         return exploitation + exploration
 
     def select_best_child(self, parent_id: str) -> ThoughtNode | None:

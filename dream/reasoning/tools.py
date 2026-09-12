@@ -34,7 +34,7 @@ def reasoning_create_thought_tree(
         "success": True,
         "trajectory": traj.to_dict(),
         "root_node_id": root_id,
-        "message": f"\u062f\u0631\u062e\u062a \u0627\u0633\u062a\u062f\u0644\u0627\u0644 \u0628\u0631\u0627\u06cc \u0647\u062f\u0641 '{goal}' \u0627\u06cc\u062c\u0627\u062f \u0634\u062f.",
+        "message": f"درخت استدلال برای هدف '{goal}' ایجاد شد.",
     }
 
 
@@ -112,7 +112,7 @@ def reasoning_reset_all() -> dict[str, Any]:
     """Reset all reasoning trees and state."""
     engine = get_global_reasoning_engine()
     engine.reset()
-    return {"success": True, "message": "\u062f\u0631\u062e\u062a\u200c\u0647\u0627\u06cc \u0627\u0633\u062a\u062f\u0644\u0627\u0644 \u0628\u0627\u0632\u0646\u0634\u0627\u0646\u06cc \u0634\u062f\u0646\u062f."}
+    return {"success": True, "message": "درخت‌های استدلال بازنشانی شدند."}
 
 
 def get_reasoning_tools() -> list[Any]:

@@ -1,8 +1,7 @@
-"""Routing Engine Coordinator: Links semantic routing, prompt compilation, and cascading."""
+"""Routing Engine Coordinator: Links semantic routing, prompt compilation & cascading."""
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from dream.router.cascade import ModelCascader
@@ -11,7 +10,6 @@ from dream.router.semantic import SemanticRouter
 from dream.router.types import (
     CompiledPrompt,
     IntentComplexity,
-    ModelTier,
     RouterStats,
     RoutingDecision,
 )
@@ -73,11 +71,21 @@ class RoutingEngine:
                 average_latency_ms=0.0,
             )
 
-        direct = sum(1 for d in self._decisions_history if d.intent == IntentComplexity.DIRECT_ANSWER)
-        simple = sum(1 for d in self._decisions_history if d.intent == IntentComplexity.SIMPLE_TOOL)
-        reasoning = sum(1 for d in self._decisions_history if d.intent == IntentComplexity.REASONING_CHAIN)
-        deep = sum(1 for d in self._decisions_history if d.intent == IntentComplexity.DEEP_RESEARCH)
-        code = sum(1 for d in self._decisions_history if d.intent == IntentComplexity.CODE_EXECUTION)
+        direct = sum(
+            1 for d in self._decisions_history if d.intent == IntentComplexity.DIRECT_ANSWER
+        )
+        simple = sum(
+            1 for d in self._decisions_history if d.intent == IntentComplexity.SIMPLE_TOOL
+        )
+        reasoning = sum(
+            1 for d in self._decisions_history if d.intent == IntentComplexity.REASONING_CHAIN
+        )
+        deep = sum(
+            1 for d in self._decisions_history if d.intent == IntentComplexity.DEEP_RESEARCH
+        )
+        code = sum(
+            1 for d in self._decisions_history if d.intent == IntentComplexity.CODE_EXECUTION
+        )
         tokens_saved = sum(d.estimated_tokens_saved for d in self._decisions_history)
         avg_latency = self._total_latency_ms / total
 
@@ -96,17 +104,17 @@ class RoutingEngine:
         """Format routing decisions and economics into Markdown."""
         stats = self.get_stats()
         lines = [
-            "## \U0001f6e4\ufe0f \u06af\u0632\u0627\u0631\u0634 \u0645\u0633\u06cc\u0631\u06cc\u0627\u0628\u06cc \u0645\u0639\u0646\u0627\u06cc\u06cc \u0648 \u0622\u0628\u0634\u0627\u0631 \u0645\u062f\u0644\u200c\u0647\u0627 (Semantic Router & Cascading)",
-            f"- **\u062a\u0639\u062f\u0627\u062f \u06a9\u0644 \u062f\u0631\u062e\u0648\u0627\u0633\u062a\u200c\u0647\u0627\u06cc \u0645\u0633\u06cc\u0631\u06cc\u0627\u0628\u06cc\u200c\u0634\u062f\u0647:** {stats.total_routed}",
-            f"- **\u0635\u0631\u0641\u0647\u200c\u062c\u0648\u06cc\u06cc \u062a\u062e\u0645\u06cc\u0646\u06cc \u062a\u0648\u06a9\u0646:** {stats.total_tokens_saved:,} \u062a\u0648\u06a9\u0646",
-            f"- **\u0645\u06cc\u0627\u0646\u06af\u06cc\u0646 \u0632\u0645\u0627\u0646 \u062a\u0635\u0645\u06cc\u0645\u200c\u06af\u06cc\u0631\u06cc:** {stats.average_latency_ms:.2f} ms",
+            "## 🛣️ گزارش مسیریابی معنایی و آبشار مدل‌ها (Semantic Router & Cascading)",
+            f"- **تعداد کل درخواست‌های مسیریابی‌شده:** {stats.total_routed}",
+            f"- **صرفه‌جویی تخمینی توکن:** {stats.total_tokens_saved:,} توکن",
+            f"- **میانگین زمان تصمیم‌گیری:** {stats.average_latency_ms:.2f} ms",
             "",
-            "### \U0001f4ca \u062a\u0641\u06a9\u06cc\u06a9 \u0642\u0635\u062f\u0647\u0627 (Intents):",
-            f"- \u067e\u0627\u0633\u062e \u0645\u0633\u062a\u0642\u06cc\u0645 (Direct): {stats.direct_answers}",
-            f"- \u062a\u06a9\u200c\u0627\u0628\u0632\u0627\u0631\u06cc (Simple Tool): {stats.simple_tools}",
-            f"- \u0627\u0633\u062a\u062f\u0644\u0627\u0644 \u067e\u06cc\u0686\u06cc\u062f\u0647 (Reasoning): {stats.reasoning_chains}",
-            f"- \u062a\u062d\u0642\u06cc\u0642 \u0639\u0645\u06cc\u0642 (Deep Research): {stats.deep_researches}",
-            f"- \u0627\u062c\u0631\u0627\u06cc \u06a9\u062f (Code Execution): {stats.code_executions}",
+            "### 📊 تفکیک قصدها (Intents):",
+            f"- پاسخ مستقیم (Direct): {stats.direct_answers}",
+            f"- تک‌ابزاری (Simple Tool): {stats.simple_tools}",
+            f"- استدلال پیچیده (Reasoning): {stats.reasoning_chains}",
+            f"- تحقیق عمیق (Deep Research): {stats.deep_researches}",
+            f"- اجرای کد (Code Execution): {stats.code_executions}",
         ]
         return "\n".join(lines)
 

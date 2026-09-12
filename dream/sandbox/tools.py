@@ -53,7 +53,7 @@ def sandbox_reset_session() -> dict[str, Any]:
     """Reset the sandbox stateful namespace and purge local artifacts."""
     engine = get_global_sandbox_engine()
     engine.reset()
-    return {"success": True, "message": "\u0645\u062d\u06cc\u0637 \u0633\u0646\u062f\u0628\u0627\u06a9\u0633 \u0628\u0627\u0632\u0646\u0634\u0627\u0646\u06cc \u0634\u062f."}
+    return {"success": True, "message": "محیط سندباکس بازنشانی شد."}
 
 
 def sandbox_list_artifacts() -> dict[str, Any]:

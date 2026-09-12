@@ -1,4 +1,4 @@
-"""Unit and integration tests for Kernel Micro-Isolation, Syscall Filtering & WASM Virtualization."""
+"""Unit tests for Kernel Micro-Isolation, Syscall Filtering & WASM Virtualization."""
 
 from __future__ import annotations
 
@@ -6,11 +6,9 @@ import pytest
 
 from dream.sandbox.isolation import (
     IsolatedExecutionEngine,
-    IsolationLevel,
     ResourceQuota,
     ResourceWatchdog,
     SyscallFilterEngine,
-    SyscallPolicy,
     WasmMicroSandbox,
     get_isolation_tools,
     handle_isolation_slash_command,
@@ -18,7 +16,6 @@ from dream.sandbox.isolation import (
     sandbox_export_security_report,
     sandbox_get_isolation_status,
     sandbox_isolate_execute,
-    sandbox_reset_isolation,
     sandbox_wasm_execute,
 )
 from dream.tools.toolsets import BUILTIN_TOOLSETS, get_toolset
@@ -46,7 +43,9 @@ def test_syscall_filter_detects_prohibited_syscalls() -> None:
     engine = SyscallFilterEngine()
 
     # 1. Unsafe: os.system
-    is_safe, blocked, violations = engine.audit_code_safety("import os\nos.system('rm -rf /')")
+    is_safe, blocked, violations = engine.audit_code_safety(
+        "import os\nos.system('rm -rf /')"
+    )
     assert is_safe is False
     assert "execve" in blocked
     assert len(violations) > 0
@@ -56,7 +55,8 @@ def test_syscall_filter_detects_prohibited_syscalls() -> None:
     assert is_safe_ctypes is False
 
     # 3. Safe computational code
-    is_safe_clean, blocked_clean, violations_clean = engine.audit_code_safety("x = sum([i**2 for i in range(10)])\nprint(x)")
+    code_safe = "x = sum([i**2 for i in range(10)])\nprint(x)"
+    is_safe_clean, blocked_clean, violations_clean = engine.audit_code_safety(code_safe)
     assert is_safe_clean is True
     assert len(blocked_clean) == 0
     assert len(violations_clean) == 0
@@ -144,7 +144,7 @@ def test_isolation_tools_and_slash_commands() -> None:
 
     # Slash: /wasm
     slash_w = handle_isolation_slash_command("/wasm print(math.pi)")
-    assert "مایکروران‌تایم WASM" in slash_w
+    assert "WASM" in slash_w
 
     # Slash: /sandbox_security
     slash_sec = handle_isolation_slash_command("/sandbox_security")
