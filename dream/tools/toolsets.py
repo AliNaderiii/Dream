@@ -509,6 +509,7 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "reactive_get_metrics",
         ),
     ),
+<<<<<<< HEAD
     "dashboard": Toolset(
         name="dashboard",
         description=(
@@ -522,6 +523,8 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "dashboard_get_alerts",
         ),
     ),
+=======
+>>>>>>> origin/main
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
