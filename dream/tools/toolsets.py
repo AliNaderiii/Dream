@@ -496,6 +496,19 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "rbac_export_audit_log",
         ),
     ),
+    "reactive": Toolset(
+        name="reactive",
+        description=(
+            "Autonomous event-driven reactive engine, pub-sub event bus, and webhook verification"
+        ),
+        tools=(
+            "reactive_register_rule",
+            "reactive_ingest_event",
+            "reactive_verify_webhook",
+            "reactive_list_rules",
+            "reactive_get_metrics",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
