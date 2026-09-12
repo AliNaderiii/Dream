@@ -128,7 +128,7 @@ def vision_reset() -> dict[str, Any]:
     reset_global_vision_engine()
     return {
         "success": True,
-        "message": "?????? ?????? ? ????? ????? ???????? ????.",
+        "message": "سامانه بینایی و حافظه مکانی بازنմانی شدند.",
     }
 
 
@@ -179,7 +179,7 @@ def vision_get_multimodal_context(
     duplex_session_id: str = "default-duplex",
     visual_stream_id: str = "screen-primary",
 ) -> dict[str, Any]:
-    """Retrieve synchronized audio turn and visual stream context."""
+    """Retrieve synchronized audio turn and contemporaneous visual stream context."""
     sync = get_multimodal_synchronizer()
     ctx = sync.get_unified_multimodal_context(
         duplex_session_id=duplex_session_id,
