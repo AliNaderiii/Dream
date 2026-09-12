@@ -453,6 +453,21 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "workflow_reset",
         ),
     ),
+    "refactor": Toolset(
+        name="refactor",
+        description=(
+            "Code intelligence, AST structural symbol indexing, and deterministic patch synthesis"
+        ),
+        tools=(
+            "refactor_index_symbols",
+            "refactor_find_symbol",
+            "refactor_generate_patch",
+            "refactor_apply_patch",
+            "refactor_rollback_patch",
+            "refactor_get_status",
+            "refactor_reset",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
