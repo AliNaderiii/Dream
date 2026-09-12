@@ -397,6 +397,19 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "sandbox_reset_isolation",
         ),
     ),
+    "migration": Toolset(
+        name="migration",
+        description=(
+            "Universal migration toolkit from Hermes Agent, OpenClaw, and markdown workspaces"
+        ),
+        tools=(
+            "migration_analyze_source",
+            "migration_execute",
+            "migration_get_status",
+            "migration_export_report",
+            "migration_reset",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
