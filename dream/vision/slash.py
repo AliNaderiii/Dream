@@ -10,7 +10,19 @@ from dream.vision.stream_engine import get_visual_stream_engine
 
 
 def handle_vision_command(args_str: str) -> str:
-    """Handle /vision slash commands."""
+    """Handle /vision slash commands.
+
+    Usage:
+        /vision analyze <image_descriptor>
+        /vision video <video_id> [duration_sec]
+        /vision diagram <mermaid_or_svg>
+        /vision ground <elements_or_image>
+        /vision diff <before> <after>
+        /vision memory
+        /vision metrics
+        /vision reset
+        /vision stream start|query|sync|stop
+    """
     if not args_str.strip():
         return (
             "👁️ **راهنمای دستورات بینایی و تحلیل تصویر (Vision Subsystem):**\n\n"
@@ -56,10 +68,11 @@ def handle_vision_command(args_str: str) -> str:
     elif subcmd in ("diagram", "arch"):
         content = " ".join(parts[1:]) if len(parts) > 1 else "graph TD\nشروع-->پایان"
         structure = engine.inspect_diagram(content)
+        node_count = len(structure.get("nodes", [])) or structure.get("total_nodes", 0)
         return (
             f"📊 **تحلیل ساختاری دیاگرام:**\n"
             f"- نوع: `{structure.get('diagram_type', 'graph')}`\n"
-            f"- تعداد گره‌ها (Nodes): {len(structure.get('nodes', [])) or structure.get('total_nodes', 0)}\n"
+            f"- تعداد گره‌ها (Nodes): {node_count}\n"
             f"- تعداد یال‌ها (Edges): {len(structure.get('edges', []))}"
         )
 

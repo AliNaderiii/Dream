@@ -38,7 +38,9 @@ def vision_decompose_video(
     """Decompose a video stream into distinct visual keyframes and scene events."""
     engine = get_vision_engine()
     vid = video_id or video_path or "video-stream"
-    timeline = engine.decompose_video(video_id=vid, duration_sec=duration_sec, fps=fps, frames=frames)
+    timeline = engine.decompose_video(
+        video_id=vid, duration_sec=duration_sec, fps=fps, frames=frames
+    )
     return {
         "success": True,
         "video_id": vid,
@@ -58,7 +60,8 @@ def vision_ground_ui_elements(
     engine = get_vision_engine()
     specs = elements or elements_spec or []
     if not specs and image_path:
-        specs = [{"id": "elem_1", "label_fa": element_type, "box": {"ymin": 0.1, "xmin": 0.1, "ymax": 0.5, "xmax": 0.5}}]
+        box_d = {"ymin": 0.1, "xmin": 0.1, "ymax": 0.5, "xmax": 0.5}
+        specs = [{"id": "elem_1", "label_fa": element_type, "box": box_d}]
     return engine.ground_ui_elements(elements_spec=specs, intent_fa=intent_fa)
 
 
@@ -240,7 +243,7 @@ def get_vision_tools() -> list[dict[str, Any]]:
         },
         {
             "name": "vision_inspect_diagram",
-            "description": "Inspect and extract structure from architecture diagrams and flowcharts",
+            "description": "Inspect and extract structure from architecture diagrams",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -302,7 +305,7 @@ def get_vision_tools() -> list[dict[str, Any]]:
         },
         {
             "name": "vision_get_multimodal_context",
-            "description": "Retrieve synchronized audio turn and contemporaneous visual stream context",
+            "description": "Retrieve synchronized audio turn and visual stream context",
             "parameters": {
                 "type": "object",
                 "properties": {
