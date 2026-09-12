@@ -560,6 +560,18 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "synthetic_get_batch_status",
         ),
     ),
+    "kernel": Toolset(
+        name="kernel",
+        description=(
+            "Dream kernel lifecycle management, lazy loading registry, and runtime hot reload"
+        ),
+        tools=(
+            "kernel_get_status",
+            "kernel_trigger_hot_reload",
+            "kernel_list_subsystems",
+            "kernel_get_memory_profile",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
