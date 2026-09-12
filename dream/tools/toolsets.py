@@ -548,6 +548,18 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "federation_trigger_election",
         ),
     ),
+    "synthetic": Toolset(
+        name="synthetic",
+        description=(
+            "Autonomous synthetic dataset generation, DPO preference distillation, and curation"
+        ),
+        tools=(
+            "synthetic_generate_samples",
+            "synthetic_curate_and_filter",
+            "synthetic_export_dataset",
+            "synthetic_get_batch_status",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
