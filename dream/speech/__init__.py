@@ -1,5 +1,17 @@
 """Speech Synthesis (TTS), Recognition (STT), and Emotion Modeling Subsystem."""
 
+from .adapters import (
+    AdapterCapabilities,
+    BaseSpeechAdapter,
+    FasterWhisperSTTAdapter,
+    KokoroTTSAdapter,
+    ParakeetTDTAdapter,
+    Qwen3GGMLTTSAdapter,
+    SileroVADv5Adapter,
+    SpeechAdapterKind,
+    SpeechAdapterRegistry,
+    get_speech_adapter_registry,
+)
 from .engine import BUILTIN_VOICES, SpeechEngine
 from .slash import handle_speech_command
 from .tools import (
@@ -25,19 +37,29 @@ from .types import (
 )
 
 __all__ = [
-    "BUILTIN_VOICES",
+    "AdapterCapabilities",
     "AudioFormat",
+    "BUILTIN_VOICES",
+    "BaseSpeechAdapter",
     "EmotionBlend",
     "EmotionTrajectorySegment",
     "EmotionType",
+    "FasterWhisperSTTAdapter",
+    "KokoroTTSAdapter",
+    "ParakeetTDTAdapter",
+    "Qwen3GGMLTTSAdapter",
     "STTRequest",
     "STTResult",
     "STTSegment",
+    "SileroVADv5Adapter",
+    "SpeechAdapterKind",
+    "SpeechAdapterRegistry",
     "SpeechEngine",
     "TTSRequest",
     "TTSResult",
     "VoicePersona",
     "get_global_speech_engine",
+    "get_speech_adapter_registry",
     "get_speech_tools",
     "handle_speech_command",
     "reset_global_speech_engine",
