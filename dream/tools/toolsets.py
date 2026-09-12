@@ -136,15 +136,26 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "context_reload_all",
         ),
     ),
-    "plugins": Toolset(
-        name="plugins",
-        description="Dynamic plugin installation, lifecycle management, and extension hooks",
+    "terminal": Toolset(
+        name="terminal",
+        description="Multi-backend isolated execution (Local, Docker, SSH, Cloud Sandboxes)",
         tools=(
-            "plugin_list",
-            "plugin_install",
-            "plugin_enable",
-            "plugin_disable",
-            "plugin_get_info",
+            "terminal_execute",
+            "terminal_list_backends",
+            "terminal_switch_backend",
+        ),
+    ),
+    "browser": Toolset(
+        name="browser",
+        description="Multi-driver browser control, DOM extraction, and visual interaction",
+        tools=(
+            "browser_navigate",
+            "browser_click",
+            "browser_type",
+            "browser_screenshot",
+            "browser_extract_content",
+            "browser_close",
+            "browser_get_status",
         ),
     ),
     "dialectic": Toolset(
@@ -158,26 +169,26 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "dialectic_query_traits",
         ),
     ),
-    "browser": Toolset(
-        name="browser",
-        description="Multi-driver browser control, DOM extraction, and visual screenshot interaction",
-        tools=[
-            "browser_navigate",
-            "browser_click",
-            "browser_type",
-            "browser_screenshot",
-            "browser_extract_content",
-            "browser_close",
-            "browser_get_status",
-        ],
-    ),
-    "terminal": Toolset(
-        name="terminal",
-        description="Multi-backend isolated execution (Local, Docker, SSH, Cloud Sandboxes)",
+    "acp": Toolset(
+        name="acp",
+        description="Agent Client Protocol (ACP) IDE integration and diff tools",
         tools=(
-            "terminal_execute",
-            "terminal_list_backends",
-            "terminal_switch_backend",
+            "acp_apply_diff",
+            "acp_read_diagnostics",
+            "acp_get_session_status",
+            "acp_list_agents",
+            "acp_call_agent",
+        ),
+    ),
+    "plugins": Toolset(
+        name="plugins",
+        description="Dynamic plugin installation, lifecycle management, and extension hooks",
+        tools=(
+            "plugin_list",
+            "plugin_install",
+            "plugin_enable",
+            "plugin_disable",
+            "plugin_get_info",
         ),
     ),
     "swarm": Toolset(
@@ -191,6 +202,198 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "swarm_reach_consensus",
             "swarm_get_status",
             "swarm_broadcast_message",
+        ),
+    ),
+    "speech": Toolset(
+        name="speech",
+        description="Voice synthesis (TTS), recognition (STT), and HybridEmo emotion modeling",
+        tools=(
+            "speech_text_to_speech",
+            "speech_speech_to_text",
+            "speech_analyze_voice_emotion",
+            "speech_list_voices",
+        ),
+    ),
+    "ocr": Toolset(
+        name="ocr",
+        description="Persian document OCR, receipt parsing, and invoice field extraction",
+        tools=(
+            "ocr_extract_document",
+            "ocr_extract_invoice",
+        ),
+    ),
+    "knowledge": Toolset(
+        name="knowledge",
+        description=(
+            "Multimodal temporal knowledge graph, timeline reasoning, "
+            "and cross-modal entity linking"
+        ),
+        tools=(
+            "knowledge_add_entity",
+            "knowledge_add_relation",
+            "knowledge_query_temporal",
+            "knowledge_get_entity_timeline",
+            "knowledge_link_multimodal_artifact",
+            "knowledge_get_stats",
+        ),
+    ),
+    "alignment": Toolset(
+        name="alignment",
+        description=(
+            "Continuous self-improving alignment, multi-dimensional scoring, "
+            "self-critique, and DPO dataset generation"
+        ),
+        tools=(
+            "alignment_record_feedback",
+            "alignment_critique_and_refine",
+            "alignment_evaluate_response",
+            "alignment_export_dataset",
+            "alignment_get_stats",
+        ),
+    ),
+    "research": Toolset(
+        name="research",
+        description=(
+            "Autonomous multi-step deep research, evidence collection, "
+            "and multi-source intelligence synthesis"
+        ),
+        tools=(
+            "research_plan_investigation",
+            "research_add_source",
+            "research_synthesize_report",
+            "research_run_autonomous",
+            "research_export_report",
+            "research_get_status",
+            "research_list_sessions",
+        ),
+    ),
+    "cache": Toolset(
+        name="cache",
+        description=(
+            "Semantic caching, speculative pre-fetching, and token economics optimization"
+        ),
+        tools=(
+            "cache_lookup_query",
+            "cache_store_entry",
+            "cache_predict_tool",
+            "cache_get_economics",
+            "cache_clear",
+            "cache_warmup",
+        ),
+    ),
+    "sandbox": Toolset(
+        name="sandbox",
+        description=(
+            "Isolated Python code execution, dataset analysis, and REPL interpreter"
+        ),
+        tools=(
+            "sandbox_execute_python",
+            "sandbox_analyze_dataset",
+            "sandbox_reset_session",
+            "sandbox_list_artifacts",
+            "sandbox_get_status",
+        ),
+    ),
+    "canvas": Toolset(
+        name="canvas",
+        description=(
+            "Interactive visual artifacts, diagrams, standalone previews, and versioning"
+        ),
+        tools=(
+            "canvas_create_artifact",
+            "canvas_update_artifact",
+            "canvas_get_artifact",
+            "canvas_list_artifacts",
+            "canvas_diff_versions",
+            "canvas_render_preview",
+            "canvas_export_bundle",
+            "canvas_reset_session",
+            "canvas_get_status",
+        ),
+    ),
+    "debate": Toolset(
+        name="debate",
+        description=(
+            "Multi-agent debate rounds, Delphi consensus evaluation, and fact verification"
+        ),
+        tools=(
+            "debate_create_session",
+            "debate_add_turn",
+            "debate_run_autonomous",
+            "debate_verify_statement",
+            "debate_reach_consensus",
+            "debate_list_sessions",
+            "debate_reset_all",
+        ),
+    ),
+    "reasoning": Toolset(
+        name="reasoning",
+        description=(
+            "Tree-of-Thought exploration, strategy branching, and metacognitive self-evaluation"
+        ),
+        tools=(
+            "reasoning_create_thought_tree",
+            "reasoning_expand_node",
+            "reasoning_evaluate_node",
+            "reasoning_solve_goal",
+            "reasoning_get_best_path",
+            "reasoning_get_status",
+            "reasoning_reset_all",
+        ),
+    ),
+    "healing": Toolset(
+        name="healing",
+        description=(
+            "Autonomous error diagnosis, self-healing recovery, telemetry, and chaos testing"
+        ),
+        tools=(
+            "healing_diagnose_failure",
+            "healing_run_chaos_test",
+            "telemetry_get_health_metrics",
+            "telemetry_export_report",
+            "telemetry_export_spans",
+            "telemetry_reset_all",
+        ),
+    ),
+    "router": Toolset(
+        name="router",
+        description=(
+            "Adaptive semantic routing, prompt compilation, and cascading execution"
+        ),
+        tools=(
+            "router_evaluate_query",
+            "router_compile_prompt",
+            "router_cascade_plan",
+            "router_get_stats",
+            "router_export_report",
+            "router_reset_all",
+        ),
+    ),
+    "consolidation": Toolset(
+        name="consolidation",
+        description=(
+            "Autonomous sleep-phase memory consolidation, Ebbinghaus decay, entropy pruning, and contradiction resolution"
+        ),
+        tools=(
+            "consolidation_add_memory",
+            "consolidation_run_cycle",
+            "consolidation_distill_session",
+            "consolidation_get_stats",
+            "consolidation_export_report",
+            "consolidation_reset_all",
+        ),
+    ),
+    "isolation": Toolset(
+        name="isolation",
+        description=(
+            "Kernel-level micro-isolation, Seccomp syscall filtering, and WASM virtualization"
+        ),
+        tools=(
+            "sandbox_isolate_execute",
+            "sandbox_wasm_execute",
+            "sandbox_get_isolation_status",
+            "sandbox_export_security_report",
+            "sandbox_reset_isolation",
         ),
     ),
 }
@@ -257,7 +460,8 @@ def filter_tools(
         allowed_names.update(include_tools)
 
     if toolsets is None and include_tools is None:
-        allowed_names.update(source.keys())
+        names = source.keys()
+        allowed_names.update(names)
 
     if exclude_tools is not None:
         allowed_names.difference_update(exclude_tools)
