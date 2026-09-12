@@ -480,6 +480,10 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "duplex_get_session_metrics",
             "duplex_export_transcript",
             "duplex_reset_session",
+            "voice_realtime_server_start",
+            "voice_speech_adapter_list",
+            "voice_speech_adapter_benchmark",
+            "voice_speech_adapter_select",
         ),
     ),
     "rbac": Toolset(
