@@ -482,6 +482,20 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "duplex_reset_session",
         ),
     ),
+    "rbac": Toolset(
+        name="rbac",
+        description=(
+            "Enterprise multi-tenant role-based access control, token quotas, and audit logging"
+        ),
+        tools=(
+            "rbac_create_tenant",
+            "rbac_create_user",
+            "rbac_verify_access",
+            "rbac_record_usage",
+            "rbac_get_quota_status",
+            "rbac_export_audit_log",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
