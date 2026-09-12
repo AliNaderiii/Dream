@@ -509,6 +509,19 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "reactive_get_metrics",
         ),
     ),
+    "dashboard": Toolset(
+        name="dashboard",
+        description=(
+            "Unified web dashboard, real-time agent control tower, and visual metrics studio"
+        ),
+        tools=(
+            "dashboard_get_overview",
+            "dashboard_get_subsystem_telemetry",
+            "dashboard_render_html",
+            "dashboard_export_metrics",
+            "dashboard_get_alerts",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
