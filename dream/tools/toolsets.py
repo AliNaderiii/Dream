@@ -522,6 +522,19 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "dashboard_get_alerts",
         ),
     ),
+    "vision": Toolset(
+        name="vision",
+        description=(
+            "Multi-modal vision perception, video stream decomposition, and UI element grounding"
+        ),
+        tools=(
+            "vision_analyze_image",
+            "vision_decompose_video",
+            "vision_ground_ui_elements",
+            "vision_inspect_diagram",
+            "vision_diff_visual_states",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
