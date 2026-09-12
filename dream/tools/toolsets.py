@@ -535,6 +535,19 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "vision_diff_visual_states",
         ),
     ),
+    "federation": Toolset(
+        name="federation",
+        description=(
+            "Multi-agent neural mesh federation, epidemic gossip, and distributed consensus"
+        ),
+        tools=(
+            "federation_register_peer",
+            "federation_broadcast_gossip",
+            "federation_delegate_task",
+            "federation_get_topology",
+            "federation_trigger_election",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
