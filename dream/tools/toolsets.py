@@ -438,6 +438,21 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "evolution_reset",
         ),
     ),
+    "workflow": Toolset(
+        name="workflow",
+        description=(
+            "Long-horizon workflow orchestration, persistent saga state machine, and auto-rollback"
+        ),
+        tools=(
+            "workflow_create_plan",
+            "workflow_execute_step",
+            "workflow_approve_step",
+            "workflow_rollback",
+            "workflow_get_status",
+            "workflow_export_diagram",
+            "workflow_reset",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
