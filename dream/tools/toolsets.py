@@ -468,6 +468,20 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "refactor_reset",
         ),
     ),
+    "duplex": Toolset(
+        name="duplex",
+        description=(
+            "Real-time bi-directional streaming audio duplex agent, VAD, and barge-in interruption"
+        ),
+        tools=(
+            "duplex_start_session",
+            "duplex_push_audio_frame",
+            "duplex_inject_interruption",
+            "duplex_get_session_metrics",
+            "duplex_export_transcript",
+            "duplex_reset_session",
+        ),
+    ),
 }
 
 _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
