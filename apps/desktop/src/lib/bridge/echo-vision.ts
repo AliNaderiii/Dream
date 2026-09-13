@@ -1,4 +1,4 @@
-﻿/** Fallback offline mock implementations for vision.* methods. */
+/** Fallback offline mock implementations for vision.* methods. */
 
 import type {
   BoundingBox,
@@ -26,11 +26,11 @@ export function echoVisionAnalyzeImage(
 
   return {
     success: true,
-    analysis_id: `ana-${Math.random().toString(16).slice(2, 8)}`,
+    analysis_id: na-,
     total_objects_detected: count,
     objects: objects.length
       ? objects.map((o, idx) => ({
-          entity_id: `ent-${idx + 1}`,
+          entity_id: ent-,
           label_fa: o.label_fa,
           box: o.box,
         }))
@@ -41,7 +41,7 @@ export function echoVisionAnalyzeImage(
             box: { ymin: 0.1, xmin: 0.1, ymax: 0.2, xmax: 0.3 },
           },
         ],
-    summary_fa: `تحلیل تصویر با شناسایی ${count} موجودیت بصری و ثبت در حافظه مکانی انجام شد.`,
+    summary_fa: تحلیل تصویر با شناسایی  موجودیت بصری و ثبت در حافظه مکانی انجام شد.,
   };
 }
 
@@ -89,7 +89,7 @@ export function echoVisionGroundUIElements(elements?: UIElementGrounding[], inte
   ];
 
   const resElements = elements && elements.length ? elements : defaultElements;
-  const actions = intentFa ? [`کلیک روی ${resElements[0].label_fa}`] : [];
+  const actions = intentFa ? [کلیک روی ] : [];
 
   return {
     success: true,
@@ -107,7 +107,7 @@ export function echoVisionInspectDiagram(content: string, diagramFormat = 'merma
     total_nodes: 3,
     total_edges: 2,
     has_persian_text: content.includes('فارسی') || content.includes('نمودار'),
-    summary_fa: `نمودار ${diagramFormat} با ۳ گره و ۲ اتصال شناسایی و اعتبارسنجی شد.`,
+    summary_fa: نمودار  با ۳ گره و ۲ اتصال شناسایی و اعتبارسنجی شد.,
   };
 }
 
@@ -118,7 +118,7 @@ export function echoVisionDiffVisualStates(
   mockAnalysesCount += 1;
   const changed = beforeState.length !== afterState.length;
   return {
-    diff_id: `diff-${Math.random().toString(16).slice(2, 8)}`,
+    diff_id: diff-,
     similarity_score: changed ? 0.75 : 1.0,
     has_significant_change: changed,
     added_elements: changed ? ['عنصر جدید شناسایی‌شده'] : [],
