@@ -1,4 +1,4 @@
-"""Toolset categorization, grouping, and dynamic tool management."""
+﻿"""Toolset categorization, grouping, and dynamic tool management."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ class Toolset:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-# Default built-in toolsets matching Dream\'s core capabilities
+# Default built-in toolsets matching Dream's core capabilities
 BUILTIN_TOOLSETS: dict[str, Toolset] = {
     "core": Toolset(
         name="core",
@@ -601,7 +601,7 @@ _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
 def register_toolset(
     name: str,
     tools: Collection[str],
-    description: str = ",
+    description: str = "",
     metadata: dict[str, Any] | None = None,
 ) -> Toolset:
     """Register a new named toolset or update an existing one."""
