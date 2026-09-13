@@ -108,10 +108,12 @@ def test_audit_script_exits_zero_on_the_merged_tree() -> None:
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=180,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "AUDIT CLEAN" in result.stdout
+    assert result.stdout and "AUDIT CLEAN" in result.stdout
 
 
 def test_audit_script_fails_when_a_layer_breaks(tmp_path) -> None:
@@ -143,7 +145,9 @@ def test_audit_script_fails_when_a_layer_breaks(tmp_path) -> None:
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=180,
     )
     assert result.returncode == 1
-    assert "AUDIT FAILED" in result.stdout
+    assert result.stdout and "AUDIT FAILED" in result.stdout

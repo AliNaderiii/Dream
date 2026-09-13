@@ -53,6 +53,8 @@ def _run_audit(sabotage: str, tmp_path: Path) -> subprocess.CompletedProcess[str
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=300,
     )
 
@@ -74,10 +76,12 @@ def test_the_audit_is_clean_on_this_tree() -> None:
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=300,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "AUDIT CLEAN" in result.stdout
+    assert result.stdout and "AUDIT CLEAN" in result.stdout
 
 
 def test_the_audit_covers_every_new_layer() -> None:
@@ -92,6 +96,8 @@ def test_the_audit_covers_every_new_layer() -> None:
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=300,
     )
     for layer in ("L9-A", "L9-B", "L9-C", "L9-D", "L9-E"):
@@ -210,7 +216,7 @@ def test_the_audit_fails_when_a_control_breaks(
         f"sabotage {name!r} did not turn the audit red\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
-    assert "AUDIT FAILED" in result.stdout
+    assert result.stdout and "AUDIT FAILED" in result.stdout
     layer = name.split()[0]
     assert f"[FINDING] {layer}" in result.stdout, (
         f"sabotage {name!r} was caught, but not by {layer}\n{result.stdout}"
@@ -224,4 +230,4 @@ def test_the_baseline_layers_still_alarm(tmp_path: Path) -> None:
         "import dream.security.blocklist as bl\nbl.scan = lambda command: None\n", tmp_path
     )
     assert result.returncode == 1
-    assert "[FINDING] L3" in result.stdout
+    assert result.stdout and "[FINDING] L3" in result.stdout

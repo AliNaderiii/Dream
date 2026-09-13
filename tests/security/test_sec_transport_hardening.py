@@ -265,6 +265,8 @@ def test_legacy_desktop_refuses_to_start_without_the_flag(tmp_path) -> None:
         [sys.executable, "desktop.py"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=60,
         cwd=str(Path(__file__).resolve().parents[2]),
         env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)},

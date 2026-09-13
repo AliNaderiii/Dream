@@ -26,6 +26,8 @@ def _start_sidecar(env: dict[str, str]) -> subprocess.Popen:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         env=env,
         cwd=tempfile.mkdtemp(),
     )
