@@ -19,7 +19,7 @@ class Toolset:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-# Default built-in toolsets matching Dream's core capabilities
+# Default built-in toolsets matching Dream\'s core capabilities
 BUILTIN_TOOLSETS: dict[str, Toolset] = {
     "core": Toolset(
         name="core",
@@ -326,6 +326,21 @@ BUILTIN_TOOLSETS: dict[str, Toolset] = {
             "debate_reset_all",
         ),
     ),
+    "reasoning": Toolset(
+        name="reasoning",
+        description=(
+            "Tree-of-Thought exploration, strategy branching, and metacognitive self-evaluation"
+        ),
+        tools=(
+            "reasoning_create_thought_tree",
+            "reasoning_expand_node",
+            "reasoning_evaluate_node",
+            "reasoning_solve_goal",
+            "reasoning_get_best_path",
+            "reasoning_get_status",
+            "reasoning_reset_all",
+        ),
+    ),
     "healing": Toolset(
         name="healing",
         description=(
@@ -586,7 +601,7 @@ _TOOLSETS: dict[str, Toolset] = dict(BUILTIN_TOOLSETS)
 def register_toolset(
     name: str,
     tools: Collection[str],
-    description: str = "",
+    description: str = ",
     metadata: dict[str, Any] | None = None,
 ) -> Toolset:
     """Register a new named toolset or update an existing one."""
