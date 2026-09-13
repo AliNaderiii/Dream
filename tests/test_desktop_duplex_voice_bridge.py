@@ -36,11 +36,13 @@ def test_duplex_bridge_extension_discovery():
 def test_duplex_start_valid_and_invalid_params():
     """Test starting a duplex session with valid and invalid sample rates."""
     async def _test():
+        # Valid start
         res = await duplex_start({"session_id": "test-voice-sess", "sample_rate": 16000})
         assert res["status"] == "connected"
         assert res["session_id"] == "test-voice-sess"
         assert res["sample_rate"] == 16000
 
+        # Invalid sample rate
         with pytest.raises(BridgeError):
             await duplex_start({"sample_rate": 12345})
 
@@ -54,10 +56,12 @@ def test_duplex_push_mic_chunk_and_visualizer_pipeline():
     async def _test():
         await duplex_start({"session_id": "test-mic-stream", "sample_rate": 16000})
 
+        # Generate fake 16kHz PCM audio chunk (320 samples = 20ms)
         pcm_samples = [1000] * 320
         pcm_bytes = struct.pack("<320h", *pcm_samples)
         b64_chunk = base64.b64encode(pcm_bytes).decode("utf-8")
 
+        # Push chunk
         push_res = await duplex_push_mic_chunk({"chunk_b64": b64_chunk})
         assert push_res["status"] == "ok"
         assert "visualizer" in push_res
@@ -67,6 +71,7 @@ def test_duplex_push_mic_chunk_and_visualizer_pipeline():
         assert len(v_frame["frequency_bins"]) == 8
         assert v_frame["rms_volume"] > 0.0
 
+        # Poll latest visualizer
         polled = duplex_get_visualizer()
         assert len(polled["waveform_peaks"]) == 16
         assert len(polled["frequency_bins"]) == 8
@@ -81,10 +86,12 @@ def test_duplex_inject_interruption_and_metrics():
     async def _test():
         await duplex_start({"session_id": "test-interruption"})
 
+        # Inject interruption
         intr_res = await duplex_inject_interruption({"session_id": "test-interruption"})
         assert intr_res["session_id"] == "test-interruption"
         assert "interrupted" in intr_res
 
+        # Retrieve metrics
         metrics_res = duplex_get_metrics({"session_id": "test-interruption"})
         assert metrics_res["status"] == "ok"
         assert "stats" in metrics_res
@@ -99,6 +106,7 @@ def test_duplex_export_transcript_lifecycle():
     async def _test():
         await duplex_start({"session_id": "test-transcript-session"})
 
+        # Export transcript
         trans_res = duplex_export_transcript({
             "session_id": "test-transcript-session",
             "format": "markdown",

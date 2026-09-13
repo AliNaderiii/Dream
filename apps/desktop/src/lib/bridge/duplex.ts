@@ -68,35 +68,24 @@ export function duplexStart(
   sampleRate = 16000,
   vadThreshold = 0.5,
 ): Promise<DuplexStartResult> {
-  return echoOr(
-    client,
-    () => echo.echoDuplexStart(sessionId),
-    'duplex.start',
-    { session_id: sessionId, sample_rate: sampleRate, vad_threshold: vadThreshold },
-  );
+  return echoOr(client, () => echo.echoDuplexStart(sessionId), 'duplex.start', {
+    session_id: sessionId,
+    sample_rate: sampleRate,
+    vad_threshold: vadThreshold,
+  });
 }
 
 export function duplexPushMicChunk(
   client: BridgeClient,
   chunkB64: string,
 ): Promise<DuplexMicResult> {
-  return echoOr(
-    client,
-    () => echo.echoDuplexPushMicChunk(chunkB64),
-    'duplex.push_mic_chunk',
-    { chunk_b64: chunkB64 },
-  );
+  return echoOr(client, () => echo.echoDuplexPushMicChunk(chunkB64), 'duplex.push_mic_chunk', {
+    chunk_b64: chunkB64,
+  });
 }
 
-export function duplexGetVisualizer(
-  client: BridgeClient,
-): Promise<DuplexVisualizerFrame> {
-  return echoOr(
-    client,
-    () => echo.echoDuplexGetVisualizer(),
-    'duplex.get_visualizer',
-    {},
-  );
+export function duplexGetVisualizer(client: BridgeClient): Promise<DuplexVisualizerFrame> {
+  return echoOr(client, () => echo.echoDuplexGetVisualizer(), 'duplex.get_visualizer', {});
 }
 
 export function duplexInjectInterruption(
@@ -115,12 +104,9 @@ export function duplexGetMetrics(
   client: BridgeClient,
   sessionId = 'desktop-live-voice',
 ): Promise<DuplexMetricsResult> {
-  return echoOr(
-    client,
-    () => echo.echoDuplexGetMetrics(sessionId),
-    'duplex.get_metrics',
-    { session_id: sessionId },
-  );
+  return echoOr(client, () => echo.echoDuplexGetMetrics(sessionId), 'duplex.get_metrics', {
+    session_id: sessionId,
+  });
 }
 
 export function duplexExportTranscript(
@@ -140,10 +126,7 @@ export function duplexStop(
   client: BridgeClient,
   sessionId = 'desktop-live-voice',
 ): Promise<{ status: string; session_id: string }> {
-  return echoOr(
-    client,
-    () => echo.echoDuplexStop(sessionId),
-    'duplex.stop',
-    { session_id: sessionId },
-  );
+  return echoOr(client, () => echo.echoDuplexStop(sessionId), 'duplex.stop', {
+    session_id: sessionId,
+  });
 }

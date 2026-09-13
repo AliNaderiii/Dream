@@ -31,7 +31,7 @@ export function echoDuplexPushMicChunk(chunkB64 = ''): DuplexMicResult {
     mockIsSpeaking ? Math.sin(i * 0.4) * 0.7 : 0.05,
   );
   const bins = Array.from({ length: 8 }, (_, i) =>
-    mockIsSpeaking ? Math.min(1.0, 0.2 + (i * 0.1)) : 0.02,
+    mockIsSpeaking ? Math.min(1.0, 0.2 + i * 0.1) : 0.02,
   );
 
   return {
