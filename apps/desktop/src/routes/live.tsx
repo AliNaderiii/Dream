@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { VoiceStudio } from '@/components/live/voice-studio';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
@@ -59,13 +60,16 @@ export default function LiveRoute() {
   };
 
   return (
-    <main className="flex h-full flex-col gap-4 overflow-y-auto p-4" aria-labelledby="live-title">
+    <main className="flex h-full flex-col gap-6 overflow-y-auto p-4" aria-labelledby="live-title">
       <header>
         <h1 id="live-title" className="text-h2 font-semibold">
           {t('title')}
         </h1>
         <p className="text-body text-fg-muted">{t('subtitle')}</p>
       </header>
+
+      {/* Real-time Duplex Voice Studio & Waveform Visualizer */}
+      <VoiceStudio />
 
       {error && (
         <p role="alert" className="rounded-lg border border-danger-fg p-3 text-body text-danger-fg">
