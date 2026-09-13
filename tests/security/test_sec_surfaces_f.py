@@ -96,9 +96,16 @@ def test_injection_quarantine_lists_flagged_originals(tmp_path, monkeypatch) -> 
 
 
 def test_audit_script_exits_zero_on_the_merged_tree() -> None:
+    import os
+    env = dict(os.environ)
+    ppath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{REPO_ROOT}{os.pathsep}{ppath}" if ppath else str(REPO_ROOT)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     result = subprocess.run(
         [sys.executable, "tools/security_audit.py"],
         cwd=REPO_ROOT,
+        env=env,
         capture_output=True,
         text=True,
         timeout=180,
@@ -125,9 +132,15 @@ def test_audit_script_fails_when_a_layer_breaks(tmp_path) -> None:
         "    raise SystemExit(exc.code)\n",
         encoding="utf-8",
     )
+    env = dict(os.environ)
+    ppath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{REPO_ROOT}{os.pathsep}{ppath}" if ppath else str(REPO_ROOT)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     result = subprocess.run(
         [sys.executable, str(shim)],
         cwd=REPO_ROOT,
+        env=env,
         capture_output=True,
         text=True,
         timeout=180,

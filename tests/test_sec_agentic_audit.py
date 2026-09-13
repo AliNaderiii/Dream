@@ -9,6 +9,7 @@ instead.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -19,8 +20,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 AUDIT = REPO_ROOT / "tools" / "security_audit.py"
 
 _RUNNER = """
+import os
 import runpy
 import sys
+from pathlib import Path
+
+sys.path.insert(0, {repo_root!r})
 
 {sabotage}
 
@@ -35,11 +40,17 @@ except SystemExit as exc:
 def _run_audit(sabotage: str, tmp_path: Path) -> subprocess.CompletedProcess[str]:
     script = tmp_path / "sabotage_runner.py"
     script.write_text(
-        _RUNNER.format(sabotage=sabotage, audit=str(AUDIT)), encoding="utf-8"
+        _RUNNER.format(sabotage=sabotage, audit=str(AUDIT), repo_root=str(REPO_ROOT)), encoding="utf-8"
     )
+    env = dict(os.environ)
+    ppath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{REPO_ROOT}{os.pathsep}{ppath}" if ppath else str(REPO_ROOT)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     return subprocess.run(
         [sys.executable, str(script)],
         cwd=REPO_ROOT,
+        env=env,
         capture_output=True,
         text=True,
         timeout=300,
@@ -52,9 +63,15 @@ def _run_audit(sabotage: str, tmp_path: Path) -> subprocess.CompletedProcess[str
 
 
 def test_the_audit_is_clean_on_this_tree() -> None:
+    env = dict(os.environ)
+    ppath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{REPO_ROOT}{os.pathsep}{ppath}" if ppath else str(REPO_ROOT)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     result = subprocess.run(
         [sys.executable, str(AUDIT)],
         cwd=REPO_ROOT,
+        env=env,
         capture_output=True,
         text=True,
         timeout=300,
@@ -64,9 +81,15 @@ def test_the_audit_is_clean_on_this_tree() -> None:
 
 
 def test_the_audit_covers_every_new_layer() -> None:
+    env = dict(os.environ)
+    ppath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{REPO_ROOT}{os.pathsep}{ppath}" if ppath else str(REPO_ROOT)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     result = subprocess.run(
         [sys.executable, str(AUDIT)],
         cwd=REPO_ROOT,
+        env=env,
         capture_output=True,
         text=True,
         timeout=300,

@@ -43,6 +43,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Force UTF-8
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -52,7 +60,14 @@ _FINDINGS: list[str] = []
 
 def _check(name: str, condition: bool, detail: str = "") -> None:
     status = "ok" if condition else "FINDING"
-    print(f"[{status:>7}] {name}" + (f" — {detail}" if detail and not condition else ""))
+    try:
+        suffix = f" — {detail}" if detail and not condition else ""
+        print(f"[{status:>7}] {name}{suffix}")
+    except UnicodeEncodeError:
+        c_name = name.encode("ascii", errors="backslashreplace").decode("ascii")
+        c_det = detail.encode("ascii", errors="backslashreplace").decode("ascii") if detail else ""
+        suffix = f" — {c_det}" if c_det and not condition else ""
+        print(f"[{status:>7}] {c_name}{suffix}")
     if not condition:
         _FINDINGS.append(name)
 
