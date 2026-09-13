@@ -1,4 +1,4 @@
-"""P6 — the audit alarm must actually be wired to the new layers.
+﻿"""P6 — the audit alarm must actually be wired to the new layers.
 
 A smoke alarm that only ever answers "clean" is decoration. Every check
 in this file breaks one L9 control in a subprocess and asserts the audit
@@ -25,6 +25,7 @@ import runpy
 import sys
 from pathlib import Path
 
+# Ensure repo root is explicitly on sys.path
 sys.path.insert(0, {repo_root!r})
 
 {sabotage}
@@ -40,7 +41,8 @@ except SystemExit as exc:
 def _run_audit(sabotage: str, tmp_path: Path) -> subprocess.CompletedProcess[str]:
     script = tmp_path / "sabotage_runner.py"
     script.write_text(
-        _RUNNER.format(sabotage=sabotage, audit=str(AUDIT), repo_root=str(REPO_ROOT)), encoding="utf-8"
+        _RUNNER.format(sabotage=sabotage, audit=str(AUDIT), repo_root=str(REPO_ROOT)),
+        encoding="utf-8",
     )
     env = dict(os.environ)
     ppath = env.get("PYTHONPATH", "")
@@ -80,7 +82,7 @@ def test_the_audit_is_clean_on_this_tree() -> None:
         errors="replace",
         timeout=300,
     )
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode == 0, (result.stdout or "") + (result.stderr or "")
     assert result.stdout and "AUDIT CLEAN" in result.stdout
 
 
@@ -100,6 +102,7 @@ def test_the_audit_covers_every_new_layer() -> None:
         errors="replace",
         timeout=300,
     )
+    assert result.stdout, "audit output was empty"
     for layer in ("L9-A", "L9-B", "L9-C", "L9-D", "L9-E"):
         assert layer in result.stdout, f"the audit never exercises {layer}"
 
