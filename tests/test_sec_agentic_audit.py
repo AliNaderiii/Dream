@@ -1,4 +1,4 @@
-﻿"""P6 — the audit alarm must actually be wired to the new layers.
+"""P6 — the audit alarm must actually be wired to the new layers.
 
 A smoke alarm that only ever answers "clean" is decoration. Every check
 in this file breaks one L9 control in a subprocess and asserts the audit

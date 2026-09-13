@@ -1,4 +1,4 @@
-﻿"""Toolset categorization, grouping, and dynamic tool management."""
+"""Toolset categorization, grouping, and dynamic tool management."""
 
 from __future__ import annotations
 
