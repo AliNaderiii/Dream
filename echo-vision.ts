@@ -1,4 +1,4 @@
-﻿/** Fallback offline mock implementations for vision.* methods. */
+/** Fallback offline mock implementations for vision.* methods. */
 
 import type {
   BoundingBox,
