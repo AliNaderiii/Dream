@@ -8,9 +8,14 @@ from typing import Any
 from dream.vision.types import BoundingBox, ElementType, UIElementGrounding
 
 
-class UIGrounder:
-    """Detects and grounds interactive GUI elements with normalized bounding boxes."""
+def _safe_float(val: Any, default: float) -> float:
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
 
+
+class UIGrounder:
     def __init__(self) -> None:
         self._grounded_history: list[UIElementGrounding] = []
 
@@ -18,12 +23,13 @@ class UIGrounder:
         self,
         elements_spec: list[dict[str, Any]],
     ) -> list[UIElementGrounding]:
-        """Convert visual detection descriptors into structured UI element groundings."""
         grounded: list[UIElementGrounding] = []
 
-        for spec in elements_spec:
-            elem_id = spec.get("id") or f"elem-{uuid.uuid4().hex[:6]}"
-            label = spec.get("label_fa") or spec.get("label") or "عنصر بصری"
+        for spec in (elements_spec or []):
+            if not isinstance(spec, dict):
+                continue
+            elem_id = str(spec.get("id") or f"elem-{uuid.uuid4().hex[:6]}")
+            label = str(spec.get("label_fa") or spec.get("label") or "عنصر بصری")
             type_str = str(spec.get("type", "custom")).lower()
 
             try:
@@ -31,11 +37,11 @@ class UIGrounder:
             except ValueError:
                 el_type = ElementType.CUSTOM
 
-            box_raw = spec.get("box", {})
-            ymin = float(box_raw.get("ymin", 0.0))
-            xmin = float(box_raw.get("xmin", 0.0))
-            ymax = float(box_raw.get("ymax", 1.0))
-            xmax = float(box_raw.get("xmax", 1.0))
+            box_raw = spec.get("box") if isinstance(spec.get("box"), dict) else {}
+            ymin = _safe_float(box_raw.get("ymin"), 0.0)
+            xmin = _safe_float(box_raw.get("xmin"), 0.0)
+            ymax = _safe_float(box_raw.get("ymax"), 1.0)
+            xmax = _safe_float(box_raw.get("xmax"), 1.0)
 
             box = BoundingBox(
                 ymin=max(0.0, min(1.0, ymin)),
@@ -44,21 +50,22 @@ class UIGrounder:
                 xmax=max(0.0, min(1.0, xmax)),
             )
 
-            action = spec.get("suggested_action") or (
-                "type" if el_type == ElementType.INPUT_FIELD else "click"
+            action = str(
+                spec.get("suggested_action")
+                or ("type" if el_type == ElementType.INPUT_FIELD else "click")
             )
-            text_val = spec.get("text_content", "")
+            text_val = str(spec.get("text_content", ""))
 
             item = UIElementGrounding(
                 element_id=elem_id,
                 label_fa=label,
                 element_type=el_type,
                 box=box,
-                confidence=float(spec.get("confidence", 0.95)),
+                confidence=_safe_float(spec.get("confidence"), 0.95),
                 interactive=bool(spec.get("interactive", True)),
                 suggested_action=action,
                 text_content=text_val,
-                metadata=spec.get("metadata", {}),
+                metadata=spec.get("metadata") if isinstance(spec.get("metadata"), dict) else {},
             )
             grounded.append(item)
             self._grounded_history.append(item)
@@ -70,7 +77,6 @@ class UIGrounder:
         elements: list[UIElementGrounding],
         query_text: str,
     ) -> UIElementGrounding | None:
-        """Find grounded element matching query label or text content."""
         clean_query = query_text.strip().lower()
         for el in elements:
             if clean_query in el.label_fa.lower() or clean_query in el.text_content.lower():
@@ -82,10 +88,8 @@ class UIGrounder:
         elements: list[UIElementGrounding],
         intent_fa: str,
     ) -> list[dict[str, Any]]:
-        """Synthesize interactive click/type action sequence to achieve visual user intent."""
         actions: list[dict[str, Any]] = []
 
-        # Simple semantic intent matching heuristics: type in inputs first, then click buttons
         if any(w in intent_fa for w in ["ورود", "login", "ثبت نام", "signup", "جستجو", "search"]):
             input_elements = [e for e in elements if e.element_type == ElementType.INPUT_FIELD]
             button_elements = [e for e in elements if e.element_type == ElementType.BUTTON]
@@ -96,7 +100,7 @@ class UIGrounder:
                     "action": "type",
                     "element_id": el.element_id,
                     "target_coords": {"x": el.box.center_x, "y": el.box.center_y},
-                    "description_fa": f"ورود متن در فیلد `{el.label_fa}`",
+                    "description_fa": f"ورود متن در فیلد {el.label_fa}",
                 })
 
             for el in button_elements:
@@ -105,10 +109,9 @@ class UIGrounder:
                     "action": "click",
                     "element_id": el.element_id,
                     "target_coords": {"x": el.box.center_x, "y": el.box.center_y},
-                    "description_fa": f"کلیک روی دکمه `{el.label_fa}`",
+                    "description_fa": f"کلیک روی دکمه {el.label_fa}",
                 })
         else:
-            # Default action on highest confidence interactive element
             interactive = [e for e in elements if e.interactive]
             if interactive:
                 first = interactive[0]
@@ -117,7 +120,7 @@ class UIGrounder:
                     "action": first.suggested_action,
                     "element_id": first.element_id,
                     "target_coords": {"x": first.box.center_x, "y": first.box.center_y},
-                    "description_fa": f"تعامل با `{first.label_fa}`",
+                    "description_fa": f"تعامل با {first.label_fa}",
                 })
 
         return actions

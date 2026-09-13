@@ -17,9 +17,30 @@ from dream.vision.types import (
 from dream.vision.ui_grounder import UIGrounder
 
 
-class VisionEngine:
-    """Master engine orchestrating multi-modal vision perception and video stream reasoning."""
+def _parse_box(raw_box: Any) -> BoundingBox:
+    if not isinstance(raw_box, dict):
+        return BoundingBox(ymin=0.0, xmin=0.0, ymax=1.0, xmax=1.0)
 
+    def _to_float(val: Any, default: float) -> float:
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return default
+
+    ymin = _to_float(raw_box.get("ymin"), 0.0)
+    xmin = _to_float(raw_box.get("xmin"), 0.0)
+    ymax = _to_float(raw_box.get("ymax"), 1.0)
+    xmax = _to_float(raw_box.get("xmax"), 1.0)
+
+    return BoundingBox(
+        ymin=max(0.0, min(1.0, ymin)),
+        xmin=max(0.0, min(1.0, xmin)),
+        ymax=max(0.0, min(1.0, ymax)),
+        xmax=max(0.0, min(1.0, xmax)),
+    )
+
+
+class VisionEngine:
     def __init__(self) -> None:
         self.keyframe_extractor = KeyframeExtractor()
         self.ui_grounder = UIGrounder()
@@ -33,26 +54,22 @@ class VisionEngine:
         image_descriptor: dict[str, Any] | str,
         detected_objects: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """Perform multi-modal visual analysis and ground objects in spatial memory."""
         self._total_analyses_count += 1
         objects = detected_objects or []
 
         registered_entities = []
         for obj in objects:
-            label = obj.get("label_fa") or obj.get("label") or "شیء بصری"
-            cat = obj.get("category", "general")
-            b_raw = obj.get("box", {})
-            box = BoundingBox(
-                ymin=float(b_raw.get("ymin", 0.0)),
-                xmin=float(b_raw.get("xmin", 0.0)),
-                ymax=float(b_raw.get("ymax", 1.0)),
-                xmax=float(b_raw.get("xmax", 1.0)),
-            )
+            if not isinstance(obj, dict):
+                continue
+            label = str(obj.get("label_fa") or obj.get("label") or "شیء بصری")
+            cat = str(obj.get("category", "general"))
+            box = _parse_box(obj.get("box"))
+            attrs = obj.get("attributes") if isinstance(obj.get("attributes"), dict) else {}
             ent = self.spatial_memory.register_entity(
                 label_fa=label,
                 category=cat,
                 box=box,
-                attributes=obj.get("attributes", {}),
+                attributes=attrs,
             )
             registered_entities.append(ent)
 
@@ -76,7 +93,6 @@ class VisionEngine:
         fps: float = 30.0,
         frames: list[bytes | str] | None = None,
     ) -> VideoTimeline:
-        """Decompose video into keyframes, scenes, and narrative events."""
         self._total_analyses_count += 1
         if frames:
             return self.keyframe_extractor.extract_from_stream(
@@ -95,7 +111,6 @@ class VisionEngine:
         elements_spec: list[dict[str, Any]],
         intent_fa: str = "",
     ) -> dict[str, Any]:
-        """Ground interactive screen elements and propose visual action sequence."""
         self._total_analyses_count += 1
         grounded = self.ui_grounder.ground_elements_from_descriptors(elements_spec)
         actions = self.ui_grounder.propose_action_sequence(grounded, intent_fa) if intent_fa else []
@@ -112,54 +127,45 @@ class VisionEngine:
         content: str,
         diagram_format: str = "mermaid",
     ) -> dict[str, Any]:
-        """Inspect architectural diagram or SVG structure."""
         self._total_analyses_count += 1
-        if diagram_format.lower() == "svg":
-            return self.diagram_inspector.inspect_svg_elements(content)
-        return self.diagram_inspector.inspect_mermaid_source(content)
+        fmt = str(diagram_format).lower() if diagram_format else "mermaid"
+        cnt = str(content) if content is not None else ""
+        if fmt == "svg":
+            return self.diagram_inspector.inspect_svg_elements(cnt)
+        return self.diagram_inspector.inspect_mermaid_source(cnt)
 
     def diff_visual_states(
         self,
         before_state: list[dict[str, Any]],
         after_state: list[dict[str, Any]],
     ) -> VisualDiffResult:
-        """Compute state transitions and visual diffs."""
         self._total_analyses_count += 1
         mem_before = SpatialMemory()
         mem_after = SpatialMemory()
 
         ents_before = [
             mem_before.register_entity(
-                label_fa=s.get("label_fa", "عنصر"),
-                category=s.get("category", "general"),
-                box=BoundingBox(
-                    ymin=s.get("box", {}).get("ymin", 0.0),
-                    xmin=s.get("box", {}).get("xmin", 0.0),
-                    ymax=s.get("box", {}).get("ymax", 1.0),
-                    xmax=s.get("box", {}).get("xmax", 1.0),
-                ),
+                label_fa=str(s.get("label_fa", "عنصر")) if isinstance(s, dict) else "عنصر",
+                category=str(s.get("category", "general")) if isinstance(s, dict) else "general",
+                box=_parse_box(s.get("box") if isinstance(s, dict) else {}),
             )
-            for s in before_state
+            for s in (before_state or [])
+            if isinstance(s, dict)
         ]
 
         ents_after = [
             mem_after.register_entity(
-                label_fa=s.get("label_fa", "عنصر"),
-                category=s.get("category", "general"),
-                box=BoundingBox(
-                    ymin=s.get("box", {}).get("ymin", 0.0),
-                    xmin=s.get("box", {}).get("xmin", 0.0),
-                    ymax=s.get("box", {}).get("ymax", 1.0),
-                    xmax=s.get("box", {}).get("xmax", 1.0),
-                ),
+                label_fa=str(s.get("label_fa", "عنصر")) if isinstance(s, dict) else "عنصر",
+                category=str(s.get("category", "general")) if isinstance(s, dict) else "general",
+                box=_parse_box(s.get("box") if isinstance(s, dict) else {}),
             )
-            for s in after_state
+            for s in (after_state or [])
+            if isinstance(s, dict)
         ]
 
         return self.spatial_memory.compare_visual_states(ents_before, ents_after)
 
     def get_metrics(self) -> dict[str, Any]:
-        """Return operational telemetry for the vision subsystem."""
         uptime = time.time() - self._start_time
         return {
             "uptime_sec": round(uptime, 2),
@@ -169,24 +175,18 @@ class VisionEngine:
         }
 
     def reset(self) -> None:
-        """Reset spatial memory and internal states."""
         self.spatial_memory.clear()
         self._total_analyses_count = 0
 
 
-# Global singleton
 _GLOBAL_VISION_ENGINE: VisionEngine | None = None
 
-
 def get_vision_engine() -> VisionEngine:
-    """Retrieve global singleton VisionEngine instance."""
     global _GLOBAL_VISION_ENGINE
     if _GLOBAL_VISION_ENGINE is None:
         _GLOBAL_VISION_ENGINE = VisionEngine()
     return _GLOBAL_VISION_ENGINE
 
-
 def reset_global_vision_engine() -> None:
-    """Reset global singleton VisionEngine instance."""
     global _GLOBAL_VISION_ENGINE
     _GLOBAL_VISION_ENGINE = None
