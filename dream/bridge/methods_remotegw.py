@@ -26,7 +26,7 @@ def _wrap(call):  # type: ignore[no-untyped-def]
         raise invalid_params(str(exc)) from None
     except BridgeError:
         raise
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OSError) as exc:
         raise invalid_params(str(exc)) from None
 
 
