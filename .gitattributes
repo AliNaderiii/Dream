@@ -1,4 +1,4 @@
-﻿# Auto-enforce LF line endings across all platforms (Windows, macOS, Linux)
+# Auto-enforce LF line endings across all platforms (Windows, macOS, Linux)
 * text=auto eol=lf
 *.ts text eol=lf
 *.tsx text eol=lf

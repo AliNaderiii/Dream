@@ -3,7 +3,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Tests](https://img.shields.io/badge/tests-4050%2B%20passed-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/release-v3.0.0-purple.svg)]()
+[![Release](https://img.shields.io/badge/release-v3.1.0-purple.svg)]()
 [![Persian](https://img.shields.io/badge/language-Persian%20%7C%20English-orange.svg)](README_FA.md)
 
 **Dream** is an ultra-intelligent, enterprise-grade autonomous multi-agent cognitive architecture built for complex long-horizon problem solving, distributed peer mesh federation, multi-modal vision and video stream reasoning, real-time duplex voice interaction, and native Persian/English bilingual intelligence.

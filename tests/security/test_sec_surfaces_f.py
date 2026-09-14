@@ -1,6 +1,6 @@
 """Stage F — security transparency surfaces + the audit smoke alarm.
 
-The bridge\'s read-only security surface (status with injection mode and
+The bridge's read-only security surface (status with injection mode and
 quarantine depth, the blocklist viewer data, the injection quarantine
 list) and tools/security_audit.py itself: it must exit 0 on the merged
 tree and exit 1 when a layer is broken (simulated by a poisoned floor).
@@ -117,16 +117,19 @@ def test_audit_script_exits_zero_on_the_merged_tree() -> None:
 
 
 def test_audit_script_fails_when_a_layer_breaks(tmp_path) -> None:
+    # Simulate a broken floor: an env-patched scan that lets everything
+    # through must turn the audit red. The audit imports the real module,
+    # so we sabotage via a sitecustomize-free shim: write a wrapper script.
     shim = tmp_path / "sabotage.py"
     shim.write_text(
         "import sys\n"
-        f"sys.path.insert(0, r\'{REPO_ROOT}\')\n"
+        f"sys.path.insert(0, r'{REPO_ROOT}')\n"
         "import dream.security.blocklist as bl\n"
         "bl.scan = lambda command: None\n"
         "import runpy\n"
-        "sys.argv = [\'security_audit.py\']\n"
+        "sys.argv = ['security_audit.py']\n"
         "try:\n"
-        "    runpy.run_path(\'tools/security_audit.py\', run_name=\'__main__\')\n"
+        "    runpy.run_path('tools/security_audit.py', run_name='__main__')\n"
         "except SystemExit as exc:\n"
         "    raise SystemExit(exc.code)\n",
         encoding="utf-8",

@@ -3,7 +3,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Tests](https://img.shields.io/badge/tests-4050%2B%20passed-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/release-v3.0.0-purple.svg)]()
+[![Release](https://img.shields.io/badge/release-v3.1.0-purple.svg)]()
 
 **دریم (Dream)** یک معماری شناختی و پلتفرم پیشرفته چندعاملی مستقل در سطح کلاس سازمانی (Enterprise-Grade) است که برای حل مسائل افق‌بلند، فدراسیون توزیع‌شده مش عصبی، ادراک چندوجهی بینایی و ویدیو، گفتگوی صوتی زنده دوطرفه (Full-Duplex) و هوش بومی دوزبانه فارسی و انگلیسی طراحی شده است.
 

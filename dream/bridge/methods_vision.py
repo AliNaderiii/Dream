@@ -1,4 +1,18 @@
-"""`vision.*` JSON-RPC bridge methods."""
+"""``vision.*`` JSON-RPC bridge methods.
+
+Discovered automatically by :mod:`dream.bridge.extensions`.
+Exposes the Multi-Modal Vision & Video Stream Reasoning Subsystem:
+
+================================  ================================================
+``vision.analyze_image``          Perform visual perception and spatial grounding
+``vision.decompose_video``        Extract keyframes, detect scenes, build narrative
+``vision.ground_ui_elements``     Ground interactive GUI elements and click targets
+``vision.inspect_diagram``        Inspect architectural diagrams and SVG trees
+``vision.diff_visual_states``     Compute visual differences between screen states
+``vision.get_metrics``            Retrieve operational telemetry for vision subsystem
+``vision.reset``                  Clear spatial memory and caches
+================================  ================================================
+"""
 
 from __future__ import annotations
 
@@ -23,6 +37,7 @@ def _params(params: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
 
 
 async def vision_analyze_image(params: Any = None, **kwargs: Any) -> dict[str, Any]:
+    """Analyze image and ground objects. Params: ``image_descriptor``, ``objects``."""
     data = _params(params, kwargs)
     img_desc = data.get("image_descriptor")
     if img_desc is not None and not isinstance(img_desc, str):
@@ -44,6 +59,7 @@ async def vision_analyze_image(params: Any = None, **kwargs: Any) -> dict[str, A
 
 
 async def vision_decompose_video(params: Any = None, **kwargs: Any) -> dict[str, Any]:
+    """Decompose video into timeline. Params: ``video_id``, ``duration_sec``, ``fps``."""
     data = _params(params, kwargs)
     video_id = data.get("video_id")
     if video_id is not None and not isinstance(video_id, str):
@@ -69,6 +85,7 @@ async def vision_decompose_video(params: Any = None, **kwargs: Any) -> dict[str,
 
 
 async def vision_ground_ui_elements(params: Any = None, **kwargs: Any) -> dict[str, Any]:
+    """Ground GUI elements. Params: ``elements``, optional ``intent_fa``."""
     data = _params(params, kwargs)
     elements = data.get("elements")
     if elements is not None:
@@ -108,12 +125,12 @@ async def vision_ground_ui_elements(params: Any = None, **kwargs: Any) -> dict[s
 
 
 async def vision_inspect_diagram(params: Any = None, **kwargs: Any) -> dict[str, Any]:
+    """Inspect diagram source or SVG. Params: ``content``, ``diagram_format``."""
     data = _params(params, kwargs)
     content = data.get("content")
     if content is not None and not isinstance(content, str):
         raise invalid_params("content must be a string")
-    content = content or "graph TD
-  A --> B"
+    content = content or "graph TD\n  A --> B"
 
     fmt = data.get("diagram_format", "mermaid")
     if fmt is not None and not isinstance(fmt, str):
@@ -130,6 +147,7 @@ async def vision_inspect_diagram(params: Any = None, **kwargs: Any) -> dict[str,
 
 
 async def vision_diff_visual_states(params: Any = None, **kwargs: Any) -> dict[str, Any]:
+    """Diff two visual screen states. Params: ``before_state``, ``after_state``."""
     data = _params(params, kwargs)
     before = data.get("before_state")
     after = data.get("after_state")
@@ -153,12 +171,14 @@ async def vision_diff_visual_states(params: Any = None, **kwargs: Any) -> dict[s
 
 
 async def vision_get_metrics(params: Any = None, **kwargs: Any) -> dict[str, Any]:
+    """Retrieve vision telemetry metrics."""
     engine = get_vision_engine()
     res = await asyncio.to_thread(engine.get_metrics)
     return res
 
 
 async def vision_reset(params: Any = None, **kwargs: Any) -> dict[str, Any]:
+    """Reset vision state and spatial memory."""
     engine = get_vision_engine()
     await asyncio.to_thread(engine.reset)
     return {"status": "reset", "spatial_entities_in_memory": 0}

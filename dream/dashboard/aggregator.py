@@ -77,7 +77,7 @@ class DashboardAggregator:
             subsystems=subsystems,
             active_alerts=alerts,
             token_economics=economics,
-            metadata={"uptime_total_sec": round(uptime, 1), "agent_version": "v3.0.0-rc1"},
+            metadata={"uptime_total_sec": round(uptime, 1), "agent_version": "v3.1.0"},
         )
 
     def _collect_swarm(self, uptime: float) -> SubsystemStatus:

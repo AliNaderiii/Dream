@@ -16,6 +16,8 @@ def _safe_float(val: Any, default: float) -> float:
 
 
 class UIGrounder:
+    """Detects and grounds interactive GUI elements with normalized bounding boxes."""
+
     def __init__(self) -> None:
         self._grounded_history: list[UIElementGrounding] = []
 
@@ -23,6 +25,7 @@ class UIGrounder:
         self,
         elements_spec: list[dict[str, Any]],
     ) -> list[UIElementGrounding]:
+        """Convert visual detection descriptors into structured UI element groundings."""
         grounded: list[UIElementGrounding] = []
 
         for spec in (elements_spec or []):
@@ -77,6 +80,7 @@ class UIGrounder:
         elements: list[UIElementGrounding],
         query_text: str,
     ) -> UIElementGrounding | None:
+        """Find grounded element matching query label or text content."""
         clean_query = query_text.strip().lower()
         for el in elements:
             if clean_query in el.label_fa.lower() or clean_query in el.text_content.lower():
@@ -88,8 +92,10 @@ class UIGrounder:
         elements: list[UIElementGrounding],
         intent_fa: str,
     ) -> list[dict[str, Any]]:
+        """Synthesize interactive click/type action sequence to achieve visual user intent."""
         actions: list[dict[str, Any]] = []
 
+        # Simple semantic intent matching heuristics: type in inputs first, then click buttons
         if any(w in intent_fa for w in ["ورود", "login", "ثبت نام", "signup", "جستجو", "search"]):
             input_elements = [e for e in elements if e.element_type == ElementType.INPUT_FIELD]
             button_elements = [e for e in elements if e.element_type == ElementType.BUTTON]
@@ -100,7 +106,7 @@ class UIGrounder:
                     "action": "type",
                     "element_id": el.element_id,
                     "target_coords": {"x": el.box.center_x, "y": el.box.center_y},
-                    "description_fa": f"ورود متن در فیلد {el.label_fa}",
+                    "description_fa": f"ورود متن در فیلد `{el.label_fa}`",
                 })
 
             for el in button_elements:
@@ -109,9 +115,10 @@ class UIGrounder:
                     "action": "click",
                     "element_id": el.element_id,
                     "target_coords": {"x": el.box.center_x, "y": el.box.center_y},
-                    "description_fa": f"کلیک روی دکمه {el.label_fa}",
+                    "description_fa": f"کلیک روی دکمه `{el.label_fa}`",
                 })
         else:
+            # Default action on highest confidence interactive element
             interactive = [e for e in elements if e.interactive]
             if interactive:
                 first = interactive[0]
@@ -120,7 +127,7 @@ class UIGrounder:
                     "action": first.suggested_action,
                     "element_id": first.element_id,
                     "target_coords": {"x": first.box.center_x, "y": first.box.center_y},
-                    "description_fa": f"تعامل با {first.label_fa}",
+                    "description_fa": f"تعامل با `{first.label_fa}`",
                 })
 
         return actions

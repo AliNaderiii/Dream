@@ -124,5 +124,30 @@
     "timedOut": "Research timed out. The engine may be busy — try again.",
     "notComplete": "Only a complete session can be exported.",
     "unknown": "An unexpected error occurred."
+  },
+  "dialectic": {
+    "title": "3-Agent Dialectic Studio",
+    "subtitle": "Self-reflective cognitive debate loop, belief knowledge graph, and tension reconciliation.",
+    "topic": "Debate Topic / Proposition",
+    "topicPlaceholder": "e.g. Distributed Consensus vs Centralized Event Mesh",
+    "domain": "Domain",
+    "domainPlaceholder": "e.g. architecture, performance, security",
+    "startDebate": "Run Dialectic Debate",
+    "debating": "Debating…",
+    "thesis": "Thesis (Agent 1)",
+    "antithesis": "Antithesis (Agent 2)",
+    "synthesis": "Synthesis (Agent 3)",
+    "beliefs": "Belief Knowledge Graph",
+    "tensions": "Detected Contradictions & Tensions",
+    "reconcile": "Reconcile Tension",
+    "reconciling": "Reconciling…",
+    "nuancedStatement": "Nuanced Synthesis Proposition",
+    "nuancedPlaceholder": "State the nuanced proposition harmonizing the opposing views…",
+    "reset": "Reset Dialectic Memory",
+    "nodesCount": "{{count}} Belief Nodes",
+    "tensionsCount": "{{count}} Tensions Detected",
+    "noBeliefs": "No beliefs recorded yet. Start a dialectic debate above.",
+    "noTensions": "No unresolved tensions detected in the belief network.",
+    "reconciledSuccess": "Tension reconciled into higher-order belief."
   }
 }

@@ -14,7 +14,6 @@
   "tokens": "Tokens",
   "duration": "Duration",
   "estimatedCost": "Estimated cost",
-
   "status": {
     "IDLE": "Idle",
     "PLANNING": "Planning",
@@ -26,7 +25,6 @@
     "FAILED": "Failed",
     "CANCELLED": "Cancelled"
   },
-
   "composer": {
     "topic": "Research topic",
     "topicPlaceholder": "e.g. Customer churn & onboarding friction",
@@ -43,7 +41,6 @@
     "maxIterations": "Max iterations",
     "maxTime": "Max time"
   },
-
   "depth": {
     "brief": "Brief",
     "briefDesc": "Quick analysis, ~5 minutes, 3 sections.",
@@ -52,12 +49,10 @@
     "deep": "Deep",
     "deepDesc": "Exhaustive analysis, ~30 minutes, 10 sections."
   },
-
   "privacy": {
     "leavesMachine": "Data leaves this machine for this route.",
     "staysLocal": "All data stays on this machine."
   },
-
   "plan": {
     "generating": "Generating research plan…",
     "topic": "Topic",
@@ -72,7 +67,6 @@
     "editPlan": "Edit plan",
     "saveChanges": "Save changes"
   },
-
   "trace": {
     "stop": "Stop research",
     "stopping": "Stopping…",
@@ -94,9 +88,7 @@
       "restart": "Restart engine"
     }
   },
-
   "traceInspector": "Trace inspector",
-
   "report": {
     "view": "Report",
     "figures": "Figures",
@@ -111,12 +103,10 @@
     "pdfEchoOnly": "PDF export requires the sidecar engine.",
     "zipEchoOnly": "ZIP export requires the sidecar engine."
   },
-
   "figures": {
     "gallery": "Figure gallery",
     "none": "No figures in this report."
   },
-
   "integrity": {
     "claims": "Claims & Evidence",
     "summary": "Integrity summary",
@@ -126,7 +116,6 @@
     "grounded": "Grounded",
     "ungrounded": "Ungrounded"
   },
-
   "errors": {
     "sessionNotFound": "Research session not found.",
     "notApproved": "The plan must be approved before starting.",
@@ -135,5 +124,30 @@
     "timedOut": "Research timed out. The engine may be busy — try again.",
     "notComplete": "Only a complete session can be exported.",
     "unknown": "An unexpected error occurred."
+  },
+  "dialectic": {
+    "title": "3-Agent Dialectic Studio",
+    "subtitle": "Self-reflective cognitive debate loop, belief knowledge graph, and tension reconciliation.",
+    "topic": "Debate Topic / Proposition",
+    "topicPlaceholder": "e.g. Distributed Consensus vs Centralized Event Mesh",
+    "domain": "Domain",
+    "domainPlaceholder": "e.g. architecture, performance, security",
+    "startDebate": "Run Dialectic Debate",
+    "debating": "Debating…",
+    "thesis": "Thesis (Agent 1)",
+    "antithesis": "Antithesis (Agent 2)",
+    "synthesis": "Synthesis (Agent 3)",
+    "beliefs": "Belief Knowledge Graph",
+    "tensions": "Detected Contradictions & Tensions",
+    "reconcile": "Reconcile Tension",
+    "reconciling": "Reconciling…",
+    "nuancedStatement": "Nuanced Synthesis Proposition",
+    "nuancedPlaceholder": "State the nuanced proposition harmonizing the opposing views…",
+    "reset": "Reset Dialectic Memory",
+    "nodesCount": "{{count}} Belief Nodes",
+    "tensionsCount": "{{count}} Tensions Detected",
+    "noBeliefs": "No beliefs recorded yet. Start a dialectic debate above.",
+    "noTensions": "No unresolved tensions detected in the belief network.",
+    "reconciledSuccess": "Tension reconciled into higher-order belief."
   }
 }

@@ -126,6 +126,7 @@ class DialecticMemorySnapshot:
             "tensions_count": self.tensions_count,
             "unresolved_tensions": self.unresolved_tensions,
             "top_beliefs": self.top_beliefs,
+            "beliefs": self.top_beliefs,
             "synthesized_summary": self.synthesized_summary,
             "timestamp": self.timestamp,
         }

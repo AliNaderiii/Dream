@@ -57,7 +57,7 @@ def _params(params: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
 
 
 async def dialectic_observe(params: Any = None, **kwargs: Any) -> dict[str, Any]:
-    """Observe a statement. Params: ``statement`` (str), ``domain`` (str, default 'general')."""
+    """Observe a statement. Params: ``statement`` (str), ``domain`` (str)."""
     data = _params(params, kwargs)
     stmt = data.get("statement")
     if not isinstance(stmt, str) or not stmt.strip():
@@ -73,7 +73,7 @@ async def dialectic_observe(params: Any = None, **kwargs: Any) -> dict[str, Any]
 
 
 async def dialectic_add_belief(params: Any = None, **kwargs: Any) -> dict[str, Any]:
-    """Register a belief. Params: ``statement``, ``domain``, optional ``confidence``, ``evidence``."""
+    """Register a belief. Params: ``statement``, ``domain``, ``confidence``, ``evidence``."""
     data = _params(params, kwargs)
     stmt = data.get("statement")
     if not isinstance(stmt, str) or not stmt.strip():
@@ -102,7 +102,7 @@ async def dialectic_add_belief(params: Any = None, **kwargs: Any) -> dict[str, A
 
 
 async def dialectic_link_beliefs(params: Any = None, **kwargs: Any) -> dict[str, Any]:
-    """Link two beliefs. Params: ``source_id``, ``target_id``, ``relation_type``, optional ``notes``."""
+    """Link two beliefs. Params: ``source_id``, ``target_id``, ``relation_type``, ``notes``."""
     data = _params(params, kwargs)
     src = data.get("source_id")
     tgt = data.get("target_id")
@@ -149,7 +149,7 @@ async def dialectic_detect_tensions(params: Any = None, **kwargs: Any) -> dict[s
 
 
 async def dialectic_reconcile_tension(params: Any = None, **kwargs: Any) -> dict[str, Any]:
-    """Reconcile a tension into a higher-order belief. Params: ``tension_id``, ``nuanced_statement``."""
+    """Reconcile a tension into a higher belief. Params: ``tension_id``, ``nuanced_statement``."""
     data = _params(params, kwargs)
     t_id = data.get("tension_id")
     nuance = data.get("nuanced_statement")
@@ -212,9 +212,12 @@ async def dialectic_debate_turn(params: Any = None, **kwargs: Any) -> dict[str, 
     if not isinstance(topic, str) or not topic.strip():
         raise invalid_params("topic must be a non-empty string")
     domain = str(data.get("domain", "general")).strip() or "general"
+    clean_topic = topic.strip()
 
     # Step 1: Thesis Agent proposes primary proposition
-    thesis_text = f"پروپوزال اولیه (Thesis): {topic.strip()} بر پایه داده‌های موجود رویکرد بهینه و استراتژیک است."
+    thesis_text = (
+        f"پروپوزال اولیه (Thesis): {clean_topic} بر پایه داده‌های موجود رویکرد بهینه است."
+    )
     engine = get_dialectic_engine()
     thesis_node = await asyncio.to_thread(
         engine.add_belief,
@@ -225,7 +228,9 @@ async def dialectic_debate_turn(params: Any = None, **kwargs: Any) -> dict[str, 
     )
 
     # Step 2: Antithesis Agent cross-examines and points out risks and edge cases
-    antithesis_text = f"نقد و چالش (Antithesis): در نظر گرفتن محدودیت‌های منابع، چالش‌های پیاده‌سازی و نقاط ضعف فرضیه {topic.strip()} ضروری است."
+    antithesis_text = (
+        f"نقد و چالش (Antithesis): ارزیابی ریسک‌ها و محدودیت‌های فرضیه {clean_topic} ضروری است."
+    )
     antithesis_node = await asyncio.to_thread(
         engine.add_belief,
         domain=domain,
@@ -245,8 +250,8 @@ async def dialectic_debate_turn(params: Any = None, **kwargs: Any) -> dict[str, 
 
     # Step 3: Synthesis Agent harmonizes thesis and antithesis
     synthesis_text = (
-        f"سنتز و جمع‌بندی نهایی (Synthesis): ترکیب نقاط قوت فرضیه ({topic.strip()}) "
-        f"با کنترل ریسک‌های شناسایی‌شده و اجرای گام‌به‌گام با پایش بلادرنگ شاخص‌ها."
+        f"سنتز نهایی (Synthesis): ترکیب نقاط قوت ({clean_topic}) "
+        f"با کنترل ریسک‌ها و پایش بلادرنگ شاخص‌ها."
     )
     synthesis_node = await asyncio.to_thread(
         engine.add_belief,
@@ -276,7 +281,7 @@ async def dialectic_debate_turn(params: Any = None, **kwargs: Any) -> dict[str, 
 
     return {
         "status": "completed",
-        "topic": topic.strip(),
+        "topic": clean_topic,
         "domain": domain,
         "thesis": thesis_node.to_dict(),
         "antithesis": antithesis_node.to_dict(),

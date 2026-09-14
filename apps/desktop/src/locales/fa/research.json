@@ -124,5 +124,30 @@
     "timedOut": "Research timed out. The engine may be busy — try again.",
     "notComplete": "Only a complete session can be exported.",
     "unknown": "An unexpected error occurred."
+  },
+  "dialectic": {
+    "title": "استودیوی دیالکتیک سه‌عاملی (Dialectic Studio)",
+    "subtitle": "حلقه مناظره شناختی تز-آنتی‌تز-سنتز، گراف دانش باورها و حل تعارضات فکری.",
+    "topic": "موضوع یا گزاره مناظره",
+    "topicPlaceholder": "مثلاً اجماع توزیع‌شده در برابر مش رویدادمحور متمرکز",
+    "domain": "حوزه دانش",
+    "domainPlaceholder": "مثلاً معماری، عملکرد، امنیت",
+    "startDebate": "اجرای مناظره دیالکتیک",
+    "debating": "در حال مناظره…",
+    "thesis": "تز - عامل اول (Thesis)",
+    "antithesis": "آنتی‌تز - عامل دوم (Antithesis)",
+    "synthesis": "سنتز - عامل سوم (Synthesis)",
+    "beliefs": "گراف دانش و باورهای مدل ذهنی",
+    "tensions": "تعارضات و تنش‌های شناسایی‌شده",
+    "reconcile": "حل تعارض و سنتز نهایی",
+    "reconciling": "در حال بازتلفیق…",
+    "nuancedStatement": "گزاره دقیق و یکپارچه‌ساز",
+    "nuancedPlaceholder": "گزاره دقیق برای ترکیب دیدگاه‌های متقابل را وارد کنید…",
+    "reset": "پاکسازی حافظه دیالکتیک",
+    "nodesCount": "{{count}} گره باور",
+    "tensionsCount": "{{count}} تنش شناسایی‌شده",
+    "noBeliefs": "هنوز باوری ثبت نشده است. از بالا یک مناظره آغاز کنید.",
+    "noTensions": "هیچ تعارض حل‌نشده‌ای در شبکه باورها وجود ندارد.",
+    "reconciledSuccess": "تنش با موفقیت به باور سطح بالاتر تبدیل شد."
   }
 }

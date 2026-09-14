@@ -43,7 +43,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Force UTF-8
+# Force UTF-8 on stdout/stderr to prevent Windows charmap/cp1252 UnicodeEncodeError
 if hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -64,6 +64,7 @@ def _check(name: str, condition: bool, detail: str = "") -> None:
         suffix = f" — {detail}" if detail and not condition else ""
         print(f"[{status:>7}] {name}{suffix}")
     except UnicodeEncodeError:
+        # Fallback for environments with strict non-UTF8 charmap
         c_name = name.encode("ascii", errors="backslashreplace").decode("ascii")
         c_det = detail.encode("ascii", errors="backslashreplace").decode("ascii") if detail else ""
         suffix = f" — {c_det}" if c_det and not condition else ""

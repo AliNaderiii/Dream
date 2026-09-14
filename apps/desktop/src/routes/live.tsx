@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { VisionStudio } from '@/components/live/vision-studio';
 import { VoiceStudio } from '@/components/live/voice-studio';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -70,6 +71,9 @@ export default function LiveRoute() {
 
       {/* Real-time Duplex Voice Studio & Waveform Visualizer */}
       <VoiceStudio />
+
+      {/* Multi-Modal Vision & Screen Grounding Studio */}
+      <VisionStudio />
 
       {error && (
         <p role="alert" className="rounded-lg border border-danger-fg p-3 text-body text-danger-fg">

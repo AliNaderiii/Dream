@@ -25,9 +25,10 @@ class DiagramInspector:
         nodes: set[str] = set()
         edges: list[tuple[str, str]] = []
 
-        # Simple regex for node connections: A --> B, A --- B, A -.-> B
+        # Regex for node connections: A[Client] --> B[Server] or A --> B
         edge_pattern = re.compile(
-            r"([A-Za-z0-9_\u0600-\u06FF]+)\s*[-.=]+>\s*([A-Za-z0-9_\u0600-\u06FF]+)"
+            r"([A-Za-z0-9_\u0600-\u06FF]+)(?:\[[^\]]*\]|\([^\)]*\)|\{[^\}]*\})?\s*[-.=]+>\s*"
+            r"([A-Za-z0-9_\u0600-\u06FF]+)"
         )
 
         for line in lines[1:]:

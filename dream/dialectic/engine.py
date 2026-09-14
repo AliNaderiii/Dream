@@ -72,6 +72,23 @@ class DialecticEngine:
             notes=notes,
         )
         self._relations[rel_id] = relation
+
+        if relation_type == RelationType.CONTRADICTS:
+            ten_id = f"t_{source_id}_{target_id}"
+            if ten_id not in self._tensions:
+                desc = (
+                    f"Contradiction between '{self._nodes[source_id].statement}' and "
+                    f"'{self._nodes[target_id].statement}'"
+                )
+                ten = DialecticTension(
+                    tension_id=ten_id,
+                    belief_ids=[source_id, target_id],
+                    description=desc,
+                )
+                self._tensions[ten_id] = ten
+                self._nodes[source_id].status = DialecticStatus.CONTRADICTED
+                self._nodes[target_id].status = DialecticStatus.CONTRADICTED
+
         return relation
 
     def observe_statement(self, statement: str, domain: str = "general") -> BeliefNode:
@@ -185,16 +202,13 @@ class DialecticEngine:
     def reflect_and_synthesize(self) -> DialecticMemorySnapshot:
         """Perform autonomous self-reflection over beliefs and output structured mental model."""
         self.detect_tensions()
-        active_nodes = [
-            n for n in self._nodes.values()
-            if n.status in (DialecticStatus.ACTIVE, DialecticStatus.NUANCED)
-        ]
-        active_nodes.sort(key=lambda n: n.confidence, reverse=True)
+        all_nodes = list(self._nodes.values())
+        all_nodes.sort(key=lambda n: n.confidence, reverse=True)
 
         unresolved = sum(1 for t in self._tensions.values() if not t.resolved)
 
         top_statements = [f"- [{n.domain}] {n.statement} (conf: {n.confidence:.2f})"
-                          for n in active_nodes[:8]]
+                          for n in all_nodes[:8]]
         summary_text = (
             "Dialectic Mental Model Summary:\n" + "\n".join(top_statements)
             if top_statements
@@ -205,7 +219,7 @@ class DialecticEngine:
             nodes_count=len(self._nodes),
             tensions_count=len(self._tensions),
             unresolved_tensions=unresolved,
-            top_beliefs=[n.to_dict() for n in active_nodes[:10]],
+            top_beliefs=[n.to_dict() for n in all_nodes[:10]],
             synthesized_summary=summary_text,
             timestamp=time.time(),
         )
