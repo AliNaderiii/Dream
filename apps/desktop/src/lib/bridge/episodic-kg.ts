@@ -182,7 +182,12 @@ export function episodicConsolidate(
 }
 
 export function episodicGetHierarchyStats(client: BridgeClient): Promise<HierarchyStatsResult> {
-  return echoOr(client, () => echo.echoEpisodicGetHierarchyStats(), 'episodic.get_hierarchy_stats', {});
+  return echoOr(
+    client,
+    () => echo.echoEpisodicGetHierarchyStats(),
+    'episodic.get_hierarchy_stats',
+    {},
+  );
 }
 
 export function episodicReset(

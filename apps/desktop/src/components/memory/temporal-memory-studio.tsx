@@ -46,7 +46,9 @@ export function TemporalMemoryStudio() {
   const { t } = useTranslation('memory');
   const { client } = useBridge();
 
-  const [activeTab, setActiveTab] = useState<'hierarchy' | 'timeline' | 'graph' | 'persona'>('hierarchy');
+  const [activeTab, setActiveTab] = useState<'hierarchy' | 'timeline' | 'graph' | 'persona'>(
+    'hierarchy',
+  );
   const [stats, setStats] = useState<HierarchyStatsResult | null>(null);
   const [episodes, setEpisodes] = useState<EpisodeRecord[]>([]);
   const [persona, setPersona] = useState<ConsolidatedPersona | null>(null);
@@ -233,27 +235,39 @@ export function TemporalMemoryStudio() {
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
           <Card className="p-3 text-center">
-            <span className="text-xs text-muted-foreground">{t('temporalStudio.stats.l0Working')}</span>
+            <span className="text-xs text-muted-foreground">
+              {t('temporalStudio.stats.l0Working')}
+            </span>
             <p className="text-lg font-bold text-primary">{stats.tier_0_working_turns}</p>
           </Card>
           <Card className="p-3 text-center">
-            <span className="text-xs text-muted-foreground">{t('temporalStudio.stats.l1Episodes')}</span>
+            <span className="text-xs text-muted-foreground">
+              {t('temporalStudio.stats.l1Episodes')}
+            </span>
             <p className="text-lg font-bold text-emerald-500">{stats.tier_1_episodes_count}</p>
           </Card>
           <Card className="p-3 text-center">
-            <span className="text-xs text-muted-foreground">{t('temporalStudio.stats.l2Facts')}</span>
+            <span className="text-xs text-muted-foreground">
+              {t('temporalStudio.stats.l2Facts')}
+            </span>
             <p className="text-lg font-bold text-amber-500">{stats.tier_2_temporal_facts_count}</p>
           </Card>
           <Card className="p-3 text-center">
-            <span className="text-xs text-muted-foreground">{t('temporalStudio.stats.kgNodes')}</span>
+            <span className="text-xs text-muted-foreground">
+              {t('temporalStudio.stats.kgNodes')}
+            </span>
             <p className="text-lg font-bold text-violet-500">{stats.total_knowledge_graph_nodes}</p>
           </Card>
           <Card className="p-3 text-center">
-            <span className="text-xs text-muted-foreground">{t('temporalStudio.stats.kgEdges')}</span>
+            <span className="text-xs text-muted-foreground">
+              {t('temporalStudio.stats.kgEdges')}
+            </span>
             <p className="text-lg font-bold text-cyan-500">{stats.total_knowledge_graph_edges}</p>
           </Card>
           <Card className="p-3 text-center">
-            <span className="text-xs text-muted-foreground">{t('temporalStudio.stats.compressionRatio')}</span>
+            <span className="text-xs text-muted-foreground">
+              {t('temporalStudio.stats.compressionRatio')}
+            </span>
             <p className="text-lg font-bold text-rose-500">{stats.compression_ratio}x</p>
           </Card>
         </div>
@@ -336,7 +350,8 @@ export function TemporalMemoryStudio() {
             <h3 className="font-bold text-base">{t('temporalStudio.tier2Heading')}</h3>
             <p className="text-sm text-muted-foreground">{t('temporalStudio.tier2Desc')}</p>
             <div className="rounded-lg bg-muted/30 p-3 text-xs font-mono">
-              {stats?.total_knowledge_graph_nodes ?? 0} Nodes · {stats?.total_knowledge_graph_edges ?? 0} Edges
+              {stats?.total_knowledge_graph_nodes ?? 0} Nodes ·{' '}
+              {stats?.total_knowledge_graph_edges ?? 0} Edges
             </div>
           </Card>
 
@@ -443,7 +458,9 @@ export function TemporalMemoryStudio() {
                 <span className="text-xs text-muted-foreground block">Episodic Entity</span>
                 <span className="font-bold text-sm">زیرسیستم حافظه سلسله‌مراتبی</span>
               </div>
-              <div className="text-muted-foreground text-xs font-mono">──── [anchored_at] ────►</div>
+              <div className="text-muted-foreground text-xs font-mono">
+                ──── [anchored_at] ────►
+              </div>
               <div className="rounded-xl bg-violet-500/20 border border-violet-500/40 px-4 py-2 text-center">
                 <span className="text-xs text-muted-foreground block">Temporal Horizon</span>
                 <span className="font-bold text-sm">۱۴۰۳/۰۶/۲۵</span>
@@ -465,7 +482,8 @@ export function TemporalMemoryStudio() {
               <div>
                 <h3 className="font-bold text-base">{persona.user_title_fa}</h3>
                 <span className="text-xs text-muted-foreground">
-                  {t('temporalStudio.synthesizedFrom')} {persona.total_episodes_synthesized} {t('temporalStudio.episodes')}
+                  {t('temporalStudio.synthesizedFrom')} {persona.total_episodes_synthesized}{' '}
+                  {t('temporalStudio.episodes')}
                 </span>
               </div>
             </div>

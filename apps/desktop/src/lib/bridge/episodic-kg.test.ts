@@ -24,13 +24,7 @@ describe('Episodic Memory & Temporal KG Bridge Client', () => {
   });
 
   it('records working turns into Tier 0 buffer', async () => {
-    const res = await episodicRecordEvent(
-      client,
-      'test_sess',
-      'user',
-      'تست ثبت رویداد کاری',
-      0.8,
-    );
+    const res = await episodicRecordEvent(client, 'test_sess', 'user', 'تست ثبت رویداد کاری', 0.8);
     expect(res.status).toBe('recorded');
     expect(res.turn.speaker).toBe('user');
     expect(res.turn.sentiment).toBe(0.8);
