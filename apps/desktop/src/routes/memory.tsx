@@ -53,6 +53,12 @@ const RemindersPanel = lazy(() =>
   import('@/components/memory/reminders-panel').then((m) => ({ default: m.RemindersPanel })),
 );
 
+const TemporalMemoryStudio = lazy(() =>
+  import('@/components/memory/temporal-memory-studio').then((m) => ({
+    default: m.TemporalMemoryStudio,
+  })),
+);
+
 /** Lightweight status shown while the bounded-stores chunk streams in. */
 function BoundedTabFallback() {
   return (
@@ -71,7 +77,7 @@ export function MemoryRoute() {
   const [filters, setFilters] = useState<MemoryFilters>(DEFAULT_FILTERS);
   const [view, setView] = useState<'list' | 'timeline'>('list');
   const [zoom, setZoom] = useState<TimelineZoom>('day');
-  const [tab, setTab] = useState<'explorer' | 'bounded' | 'reminders'>('explorer');
+  const [tab, setTab] = useState<'explorer' | 'bounded' | 'reminders' | 'temporal'>('explorer');
 
   const [memories, setMemories] = useState<BridgeMemory[]>([]);
   const [total, setTotal] = useState(0);
@@ -228,6 +234,7 @@ export function MemoryRoute() {
             { id: 'explorer', label: t('title') },
             { id: 'reminders', label: t('reminders.tab') },
             { id: 'bounded', label: t('bounded.tab') },
+            { id: 'temporal', label: t('temporalStudio.tab') },
           ] as const
         ).map((entry) => (
           <button
@@ -248,7 +255,13 @@ export function MemoryRoute() {
         ))}
       </div>
 
-      {tab === 'bounded' ? (
+      {tab === 'temporal' ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <Suspense fallback={<BoundedTabFallback />}>
+            <TemporalMemoryStudio />
+          </Suspense>
+        </div>
+      ) : tab === 'bounded' ? (
         <div className="min-h-0 flex-1">
           <Suspense fallback={<BoundedTabFallback />}>
             <BoundedStores />

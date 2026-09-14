@@ -223,4 +223,19 @@ describe('MemoryRoute', () => {
     await user.click(screen.getByRole('tab', { name: /^memory explorer$/i }));
     expect(await screen.findByText(/Dream stores memories as semantic/)).toBeInTheDocument();
   });
+
+  it('switches to the temporal knowledge studio tab and back', async () => {
+    const user = userEvent.setup();
+    render(<MemoryRoute />);
+    await screen.findByText(/Dream stores memories as semantic/);
+
+    const temporalTab = screen.getByRole('tab', { name: /temporal/i });
+    await user.click(temporalTab);
+
+    expect(await screen.findByText(/Hierarchical Episodic Memory/i)).toBeInTheDocument();
+    expect(screen.queryByRole('searchbox', { name: /search memories/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: /^memory explorer$/i }));
+    expect(await screen.findByText(/Dream stores memories as semantic/)).toBeInTheDocument();
+  });
 });
