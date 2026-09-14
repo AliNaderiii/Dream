@@ -67,4 +67,16 @@ describe('Research & Dialectic Studio Route', () => {
       await screen.findByText('No beliefs recorded yet. Start a dialectic debate above.'),
     ).toBeInTheDocument();
   });
+
+  it('switches to Tree of Thoughts view and initializes planning', async () => {
+    render(<ResearchRoute />);
+    fireEvent.click(screen.getByRole('button', { name: 'Tree of Thoughts' }));
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Tree-of-Thought & Self-Reflective MCTS Studio',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Initialize Tree' })).toBeInTheDocument();
+  });
 });

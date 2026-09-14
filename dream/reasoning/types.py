@@ -114,3 +114,9 @@ class ReasoningTrajectory:
             "created_at": round(self.created_at, 2),
             "updated_at": round(self.updated_at, 2),
         }
+
+    def to_tree_dict(self) -> dict[str, Any]:
+        """Serialize full trajectory with all node details."""
+        data = self.to_dict()
+        data["nodes"] = [node.to_dict() for node in self.nodes.values()]
+        return data

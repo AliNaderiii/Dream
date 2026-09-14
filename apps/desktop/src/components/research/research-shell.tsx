@@ -5,7 +5,7 @@
  * 3-Agent Dialectic Debate & Self-Reflective Mental Model Studio.
  */
 
-import { BrainCircuit, ListOrdered, Plus } from 'lucide-react';
+import { Brain, BrainCircuit, ListOrdered, Plus } from 'lucide-react';
 import { useEffect } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import { PlanPanel } from './plan-panel';
 import { ReportViewer } from './report-viewer';
 import { ResearchComposer } from './research-composer';
 import { ResearchSessionList } from './research-session-list';
+import { ThoughtTreeStudio } from './thought-tree-studio';
 import { TraceInspector } from './trace-inspector';
 
 export function ResearchShell() {
@@ -50,7 +51,7 @@ export function ResearchShell() {
           <p className="text-body text-fg-secondary">{t('subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
-          {(view === 'list' || view === 'dialectic') && (
+          {(view === 'list' || view === 'dialectic' || view === 'thoughtTree') && (
             <div className="flex rounded-md border border-border-default p-0.5">
               <Button
                 variant={view === 'list' ? 'secondary' : 'ghost'}
@@ -67,6 +68,14 @@ export function ResearchShell() {
               >
                 <BrainCircuit className="mr-1 h-4 w-4" />
                 Dialectic Studio
+              </Button>
+              <Button
+                variant={view === 'thoughtTree' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setView('thoughtTree')}
+              >
+                <Brain className="mr-1 h-4 w-4" />
+                Tree of Thoughts
               </Button>
             </div>
           )}
@@ -92,6 +101,7 @@ export function ResearchShell() {
           {view === 'trace' && <LiveTrace />}
           {view === 'report' && <ReportViewer />}
           {view === 'dialectic' && <DialecticStudio />}
+          {view === 'thoughtTree' && <ThoughtTreeStudio />}
         </main>
 
         {traceInspectorOpen && view === 'trace' && (

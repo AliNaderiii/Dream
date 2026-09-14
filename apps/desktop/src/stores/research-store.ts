@@ -40,7 +40,7 @@ interface ResearchState {
   /** Per-session streaming state, keyed by session_id. */
   streams: Record<string, SessionStreamState>;
   /** UI view mode for the active session. */
-  view: 'list' | 'composer' | 'plan' | 'trace' | 'report' | 'dialectic';
+  view: 'list' | 'composer' | 'plan' | 'trace' | 'report' | 'dialectic' | 'thoughtTree';
   /** Whether the trace inspector panel is open. */
   traceInspectorOpen: boolean;
   /** Filter for the trace inspector. */
