@@ -13,9 +13,9 @@
 | **M02** | `v3.1.0` | صوت دوطرفه بلادرنگ (S2S)، بینایی ماشین، استریم تعاملی و استودیو بصری بینایی | **تکمیل شده** | `6d7d3bb` (۱۰۰٪ سبز) |
 | **M03** | `v3.2.0` | حافظه اپیزودیک سلسله‌مراتبی (L0..L3)، گراف دانش زمانی و استودیوی تقویم جلالی/میلادی | **تکمیل شده** | `635b5bd` (۱۰۰٪ سبز) |
 | **M04** | `v3.3.0` | موتور استدلال پیشرفته Tree-of-Thought و MCTS به همراه استودیوی بصری درخت افکار | **تکمیل شده** | `3015c47` (۱۰۰٪ سبز) |
-| **M05** | `v3.4.0` | سنتز پویای ابزارها، مفسر کد پایتون و استودیوی سندباکس ایزوله چندزبانه | **تکمیل شده** | v3.4.0 (۱۰۰٪ سبز) |
-| **M06** | `v3.5.0` | استودیوی بصری شبکه عصبی چندعاملی (Swarm Neural Mesh) و مناظره زنده شورا | **گام بعدی** ⏳ | — |
-| **M07** | `v3.6.0` | استودیوی وب‌گردی تعاملی با Playwright، بازرسی محتوا و کاوش عمیق وب | در صف انتظار | — |
+| **M05** | `v3.4.0` | سنتز پویای ابزارها، مفسر کد پایتون و استودیوی سندباکس ایزوله چندزبانه | **تکمیل شده** | `78831d8` (۱۰۰٪ سبز) |
+| **M06** | `v3.5.0` | استودیوی بصری شبکه عصبی چندعاملی (Swarm Neural Mesh) و مناظره زنده شورا | **تکمیل شده** | v3.5.0 (۱۰۰٪ سبز) |
+| **M07** | `v3.6.0` | استودیوی وب‌گردی تعاملی با Playwright، بازرسی محتوا و کاوش عمیق وب | **گام بعدی** ⏳ | — |
 | **M08** | `v3.7.0` | استودیوی خود‌تکاملی، تقطیر ترجیحات DPO و بنچمارک مقایسه‌ای اثبات برتری بر هرمس | در صف انتظار | — |
 | **M09** | `v4.0.0` | انتشار طلایی نسخه ۴، بهینه‌سازی تاخیر صفر (Zero-Latency) و پکیج نصاب چندسکویی | در صف انتشار | — |
 
@@ -86,23 +86,24 @@
 | **Vision & Audio Studio** | `components/live/`, `components/browse/` | متصل (`6d7d3bb`) | ۱۰۰٪ پاس (۸ زبان) |
 | **Temporal Memory Studio** | `components/memory/`, `routes/memory.tsx` | متصل (`635b5bd`) | ۱۰۰٪ پاس (۸ زبان) |
 | **Thought Tree & MCTS Studio** | `components/research/thought-tree-studio.tsx` | متصل (`3015c47`) | ۱۰۰٪ پاس (۸ زبان) |
-| **Sandbox & Terminal Studio** | `components/sandbox/`, `routes/data.tsx` | **در حال اتصال (M05)** | در دست اقدام |
-| **Swarm & Council Studio** | `components/subagents/`, `routes/subagents.tsx` | برنامه فاز M06 | برنامه‌ریزی‌شده |
+| **Sandbox & Terminal Studio** | `components/sandbox/`, `routes/data.tsx` | متصل (`78831d8`) | ۱۰۰٪ پاس (۸ زبان) |
+| **Swarm & Council Studio** | `components/subagents/`, `routes/subagents.tsx` | **متصل (M06)** | ۱۰۰٪ پاس (۸ زبان) |
 | **Deep Web & Browser Studio** | `components/browser/`, `routes/browse.tsx` | برنامه فاز M07 | برنامه‌ریزی‌شده |
 | **Evals & Benchmark Studio** | `components/provenance/`, `routes/dashboard.tsx`| برنامه فاز M08 | برنامه‌ریزی‌شده |
 
 ---
 
-## 🚀 ۳. برنامه اجرایی مرحله جاری: فاز M05 (v3.4.0)
+## 🚀 ۳. دستاوردهای پیاده‌سازی‌شده در فاز M06 (v3.5.0)
 
-**عنوان:** سنتز پویای ابزارها، مفسر کد و استودیوی سندباکس ایزوله دسکتاپ (Polyglot Sandbox Studio)
-- [ ] پیاده‌سازی هندلرهای بریج `sandbox.*` و `terminal.*` در `dream/bridge/methods_sandbox.py`
-- [ ] ساخت کلاینت تایپ‌شده `apps/desktop/src/lib/bridge/sandbox.ts` و نسخه آفلاین `echo-sandbox.ts`
-- [ ] طراحی کامپوننت تعاملی `apps/desktop/src/components/sandbox/polyglot-sandbox-studio.tsx`
-- [ ] ادغام در مسیر داده و دسکتاپ `apps/desktop/src/routes/data.tsx`
-- [ ] به‌روزرسانی کلیدهای ترجمه در ۸ زبان (en, fa, de, es, fr, ja, ko, zh-CN)
-- [ ] نگارش تست‌های همگام جامع پایتون و تست‌های Vitest فرانت‌اند
-- [ ] اعتبارسنجی ۱۰۰٪ پاس تست‌ها و ۰ خطای لینت و ساخت بسته پچ همگام‌ساز `sync_green_v34.py`
+**عنوان:** استودیوی بصری شبکه عصبی چندعاملی (Swarm Neural Mesh) و شورای داوری (Council Studio)
+- [x] پیاده‌سازی متدهای ۹ گانه `swarm.*` در `dream/bridge/methods_swarm.py` (شامل مدیریت توپولوژی، اجرای DAG ورک‌فلوها، اجماع شورا و لاگ رویدادها)
+- [x] اتصال و ثبت کامل در دیسپچر اصلی بریج `dream/bridge/methods.py`
+- [x] ساخت کلاینت تایپ‌شده فرانت‌اند در `apps/desktop/src/lib/bridge/swarm.ts` و شبیه‌ساز آفلاین `echo-swarm.ts`
+- [x] طراحی و پیاده‌سازی استودیوی بصری ۴ پنله `SwarmMeshStudio` در `apps/desktop/src/components/subagents/swarm-mesh-studio.tsx`
+- [x] ارتقای صفحه عامل‌ها `apps/desktop/src/routes/subagents.tsx` با سوییچر زنده بین ناظر وظایف موازی و مش عصبی سوارم
+- [x] توسعه و یکپارچه‌سازی کلیدهای i18n در ۸ زبان دنیا (fa, en, de, es, fr, ja, ko, zh-CN) و تایید یکپارچگی ترجمه‌ها
+- [x] نگارش تست‌های پایتون `tests/test_desktop_swarm_bridge.py` و تست‌های Vitest فرانت‌اند `apps/desktop/src/lib/bridge/swarm.test.ts`
+- [x] اعتبارسنجی کامل Prettier, TypeScript, ESLint, Pytest و ساخت اسکریپت همگام‌ساز خودکار `sync_green_v35.py`
 
 ---
-*آخرین به‌روزرسانی: نسخه Dream v3.3.0 تثبیت‌شده (کامیت `3015c47`)*
+*آخرین به‌روزرسانی: نسخه Dream v3.5.0 تثبیت‌شده*

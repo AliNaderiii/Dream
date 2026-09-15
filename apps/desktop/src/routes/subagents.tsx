@@ -7,13 +7,14 @@
  * stream, which the sidecar replays from the beginning on subscribe.
  */
 
-import { Bot, ChevronDown, ChevronRight, Plus, RefreshCw, Scale } from 'lucide-react';
+import { Bot, ChevronDown, ChevronRight, Network, Plus, RefreshCw, Scale } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CouncilDialog } from '@/components/subagents/council-dialog';
 import { CouncilWidget } from '@/components/subagents/council-widget';
 import { SpawnDialog } from '@/components/subagents/spawn-dialog';
 import { SubagentDetail } from '@/components/subagents/subagent-detail';
+import { SwarmMeshStudio } from '@/components/subagents/swarm-mesh-studio';
 import { ProgressBar, SubagentStatusBadge } from '@/components/subagents/status-badge';
 import { BridgeOfflineBanner } from '@/components/shared/bridge-offline-banner';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -105,6 +106,7 @@ export function SubagentsRoute() {
   const { t } = useTranslation('subagents');
   const { call, stream } = useBridge();
 
+  const [view, setView] = useState<'monitor' | 'swarm'>('monitor');
   const [agents, setAgents] = useState<BridgeSubagent[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [followed, setFollowed] = useState<FollowedSubagent | null>(null);
@@ -331,11 +333,43 @@ export function SubagentsRoute() {
     [agents],
   );
 
+  if (view === 'swarm') {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="flex items-center justify-between border-b border-border-default bg-surface px-4 py-2">
+          <div className="flex rounded-md border border-border-default p-0.5">
+            <Button variant="ghost" size="sm" onClick={() => setView('monitor')}>
+              <Bot className="mr-1.5 size-4" />
+              Subagents Monitor
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setView('swarm')}>
+              <Network className="mr-1.5 size-4" />
+              Swarm Mesh Studio
+            </Button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          <SwarmMeshStudio />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3">
         <div className="flex items-center gap-2">
           <h2 className="text-h2 font-semibold">{t('title')}</h2>
+          <div className="flex rounded-md border border-border-default p-0.5">
+            <Button variant="secondary" size="sm" onClick={() => setView('monitor')}>
+              <Bot className="mr-1.5 size-4" />
+              Monitor
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setView('swarm')}>
+              <Network className="mr-1.5 size-4" />
+              Swarm Studio
+            </Button>
+          </div>
           {activeCount > 0 && (
             <Badge variant="info">{t('runningCount', { count: activeCount })}</Badge>
           )}
