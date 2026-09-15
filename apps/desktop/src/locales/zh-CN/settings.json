@@ -4,7 +4,8 @@
   "tabs": {
     "general": "常规",
     "mcp": "MCP 服务器",
-    "acp": "ACP 互操作"
+    "acp": "ACP 互操作",
+    "system": "系统与硬件"
   },
   "appearance": "外观",
   "theme": "主题",

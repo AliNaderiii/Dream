@@ -4,7 +4,8 @@
   "tabs": {
     "general": "General",
     "mcp": "Servidores MCP",
-    "acp": "Interoperabilidad ACP"
+    "acp": "Interoperabilidad ACP",
+    "system": "Sistema y Hardware"
   },
   "appearance": "Apariencia",
   "theme": "Tema",

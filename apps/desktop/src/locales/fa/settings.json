@@ -4,7 +4,8 @@
   "tabs": {
     "general": "عمومی",
     "mcp": "سرورهای MCP",
-    "acp": "همکاری ACP"
+    "acp": "همکاری ACP",
+    "system": "سیستم و سخت‌افزار"
   },
   "appearance": "ظاهر",
   "theme": "پوسته",

@@ -4,7 +4,8 @@
   "tabs": {
     "general": "一般",
     "mcp": "MCP サーバー",
-    "acp": "ACP 相互運用"
+    "acp": "ACP 相互運用",
+    "system": "システム＆ハードウェア"
   },
   "appearance": "外観",
   "theme": "テーマ",

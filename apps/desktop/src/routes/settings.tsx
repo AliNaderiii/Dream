@@ -1,4 +1,4 @@
-import { Bot, Server, Settings as SettingsIcon } from 'lucide-react';
+import { Activity, Bot, Server, Settings as SettingsIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { ACPConfigSection } from '@/components/acp/acp-config-section';
@@ -7,6 +7,7 @@ import { BrowserSettings } from '@/components/browser/browser-settings';
 import { GatewaySettings } from '@/components/gateway/gateway-settings';
 import { MCPServersList } from '@/components/mcp/mcp-servers-list';
 import { SandboxSettings } from '@/components/sandbox/sandbox-settings';
+import { SystemHealthStudio } from '@/components/settings/system-health-studio';
 import { Button } from '@/components/ui/button';
 import { LANGUAGES, useTranslation } from '@/lib/i18n';
 import { getBridgeClient } from '@/lib/bridge/client';
@@ -56,7 +57,7 @@ const NUMERAL_STYLES: NumeralStyle[] = ['latin', 'persian'];
 export function SettingsRoute() {
   const { t } = useTranslation('settings');
   const { t: tc } = useTranslation('common');
-  const [activeTab, setActiveTab] = useState<'general' | 'mcp' | 'acp'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'system' | 'mcp' | 'acp'>('general');
 
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
@@ -75,10 +76,6 @@ export function SettingsRoute() {
   const workspaceRoot = useAppStore((s) => s.workspaceRoot);
   const setWorkspaceRoot = useAppStore((s) => s.setWorkspaceRoot);
 
-  // Defaults mirror the Rust-side defaults exactly (state.rs): close quits the
-  // process for real (tray icon destroyed, sidecar killed). The mount effect
-  // below pushes these values to Rust, so a wrong default here would silently
-  // flip quit-on-close to hide-to-tray for every fresh install.
   const [minimizeToTray, setMinimizeToTray] = useState(false);
   const [closeToTray, setCloseToTray] = useState(false);
 
@@ -210,7 +207,7 @@ export function SettingsRoute() {
           <p className="text-caption text-fg-secondary">{t('subtitle')}</p>
         </div>
 
-        <div className="flex rounded-lg border border-border-default bg-surface p-1">
+        <div className="flex flex-wrap rounded-lg border border-border-default bg-surface p-1">
           <button
             type="button"
             onClick={() => setActiveTab('general')}
@@ -222,6 +219,18 @@ export function SettingsRoute() {
           >
             <SettingsIcon className="size-4" />
             {t('tabs.general')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('system')}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-caption font-medium transition-all ${
+              activeTab === 'system'
+                ? 'bg-accent text-fg-inverse shadow-xs'
+                : 'text-fg-secondary hover:text-fg-primary'
+            }`}
+          >
+            <Activity className="size-4" />
+            {t('tabs.system')}
           </button>
           <button
             type="button"
@@ -416,6 +425,12 @@ export function SettingsRoute() {
 
             {/* P-08: Web gateway */}
             <GatewaySettings />
+          </div>
+        )}
+
+        {activeTab === 'system' && (
+          <div className="mx-auto max-w-4xl">
+            <SystemHealthStudio />
           </div>
         )}
 

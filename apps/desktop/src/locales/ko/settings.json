@@ -4,7 +4,8 @@
   "tabs": {
     "general": "일반",
     "mcp": "MCP 서버",
-    "acp": "ACP 상호운용"
+    "acp": "ACP 상호운용",
+    "system": "시스템 및 하드웨어"
   },
   "appearance": "모양",
   "theme": "테마",
