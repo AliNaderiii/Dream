@@ -1,9 +1,11 @@
-/** Dashboard — the launch screen. */
+/** Dashboard — the launch screen & Evolution Benchmark Studio. */
 
-import { Database, MessageSquarePlus, Sparkles, Wrench } from 'lucide-react';
+import { Database, MessageSquarePlus, Sparkles, Trophy, Wrench } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { FirstRunCard } from '@/components/billing/first-run-card';
+import { EvolutionBenchmarkStudio } from '@/components/evals/evolution-benchmark-studio';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/lib/i18n';
 import { useSessionStore } from '@/stores/use-session-store';
@@ -36,27 +38,40 @@ export function DashboardRoute() {
   const { t } = useTranslation('common');
   const navigate = useNavigate();
   const createSession = useSessionStore((s) => s.createSession);
+  const [showBenchmarkStudio, setShowBenchmarkStudio] = useState(true);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-8 p-8">
-      <header className="flex flex-col gap-2">
-        <h2 className="text-display font-bold">{t('dashboard.greeting')}</h2>
-        <p className="text-body-lg text-fg-secondary">{t('dashboard.subtitle')}</p>
-      </header>
+    <div className="mx-auto flex max-w-5xl flex-col gap-8 p-6 lg:p-8">
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-display font-bold">{t('dashboard.greeting')}</h2>
+          <p className="text-body-lg text-fg-secondary">{t('dashboard.subtitle')}</p>
+        </div>
 
-      <Button
-        variant="primary"
-        size="lg"
-        className="self-start"
-        onClick={() => {
-          const session = createSession(t('sessions.untitled'));
-          void navigate(`/chat/${session.id}`);
-        }}
-      >
-        <MessageSquarePlus aria-hidden />
-        {t('dashboard.startSession')}
-        <span className="ltr-island ms-1 opacity-70">{formatShortcut(['mod', 'n'])}</span>
-      </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            variant={showBenchmarkStudio ? 'primary' : 'secondary'}
+            size="sm"
+            onClick={() => setShowBenchmarkStudio((prev) => !prev)}
+            className="flex items-center gap-1.5"
+          >
+            <Trophy className="size-4" />
+            <span>Hermes Superiority Arena</span>
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              const session = createSession(t('sessions.untitled'));
+              void navigate(`/chat/${session.id}`);
+            }}
+          >
+            <MessageSquarePlus aria-hidden className="mr-1 size-4" />
+            {t('dashboard.startSession')}
+            <span className="ltr-island ms-1 opacity-70">{formatShortcut(['mod', 'n'])}</span>
+          </Button>
+        </div>
+      </header>
 
       {/* S05: offline-first onboarding — echo works, Ollama offered, BYOK optional */}
       <FirstRunCard />
@@ -75,6 +90,13 @@ export function DashboardRoute() {
           </button>
         ))}
       </div>
+
+      {/* Integrated Self-Evolution & Hermes Benchmark Studio */}
+      {showBenchmarkStudio && (
+        <div className="mt-4 border-t border-border-default pt-6">
+          <EvolutionBenchmarkStudio />
+        </div>
+      )}
     </div>
   );
 }
