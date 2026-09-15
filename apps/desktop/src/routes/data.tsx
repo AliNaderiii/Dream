@@ -1,13 +1,14 @@
 /**
- * Data workbench landing (P-09): the dataset registry. Lists every ingested
- * dataset with shape and status, links into the per-dataset workbench, and
- * offers ingestion by file path.
+ * Data workbench landing (P-09): the dataset registry and Polyglot Sandbox Studio.
+ * Lists every ingested dataset with shape and status, links into the per-dataset workbench,
+ * and provides interactive multi-language code interpretation and execution sandbox.
  */
 
-import { BarChart3, Database, Plus, Trash2 } from 'lucide-react';
+import { BarChart3, Database, Plus, Terminal, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+import { PolyglotSandboxStudio } from '@/components/sandbox/polyglot-sandbox-studio';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -52,6 +53,7 @@ export function DataRoute() {
   const { t } = useTranslation('data');
   const { client } = useBridge();
   const navigate = useNavigate();
+  const [view, setView] = useState<'datasets' | 'sandbox'>('datasets');
   const [datasets, setDatasets] = useState<DatasetSummaryDto[] | null>(null);
   const [filePath, setFilePath] = useState('');
   const [busy, setBusy] = useState(false);
@@ -94,6 +96,28 @@ export function DataRoute() {
     await refresh();
   };
 
+  if (view === 'sandbox') {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="flex items-center justify-between border-b border-border-default bg-surface px-4 py-2">
+          <div className="flex rounded-md border border-border-default p-0.5">
+            <Button variant="ghost" size="sm" onClick={() => setView('datasets')}>
+              <Database className="mr-1.5 size-4" />
+              Datasets Registry
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setView('sandbox')}>
+              <Terminal className="mr-1.5 size-4" />
+              Sandbox Studio
+            </Button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          <PolyglotSandboxStudio />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4 p-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -101,26 +125,38 @@ export function DataRoute() {
           <h2 className="text-h1 font-bold">{t('title')}</h2>
           <p className="text-body text-fg-secondary">{t('subtitle')}</p>
         </div>
-        <form
-          className="flex items-center gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void ingest();
-          }}
-        >
-          <input
-            type="text"
-            aria-label={t('load')}
-            placeholder={t('ingestPlaceholder')}
-            value={filePath}
-            onChange={(event) => setFilePath(event.target.value)}
-            className="h-8 w-72 rounded-md border border-border-default bg-surface px-2.5 text-body outline-none focus:border-accent ltr-island"
-          />
-          <Button type="submit" variant="primary" size="md" disabled={busy || !filePath.trim()}>
-            <Plus aria-hidden />
-            {t('load')}
-          </Button>
-        </form>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-md border border-border-default p-0.5">
+            <Button variant="secondary" size="sm" onClick={() => setView('datasets')}>
+              <Database className="mr-1.5 size-4" />
+              Datasets
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setView('sandbox')}>
+              <Terminal className="mr-1.5 size-4" />
+              Sandbox Studio
+            </Button>
+          </div>
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void ingest();
+            }}
+          >
+            <input
+              type="text"
+              aria-label={t('load')}
+              placeholder={t('ingestPlaceholder')}
+              value={filePath}
+              onChange={(event) => setFilePath(event.target.value)}
+              className="h-8 w-60 rounded-md border border-border-default bg-surface px-2.5 text-body outline-none focus:border-accent ltr-island"
+            />
+            <Button type="submit" variant="primary" size="sm" disabled={busy || !filePath.trim()}>
+              <Plus aria-hidden className="mr-1 size-4" />
+              {t('load')}
+            </Button>
+          </form>
+        </div>
       </header>
 
       {error && (
