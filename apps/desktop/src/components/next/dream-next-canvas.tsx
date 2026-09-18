@@ -27,13 +27,23 @@ import {
   CalendarDays,
   FolderOpen,
   Cpu,
+  Database,
   Terminal,
+  TrendingUp,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useBridge } from '@/lib/bridge/hooks';
+import { askDataQa, createDataQaSession } from '@/lib/bridge/dataqa';
 import { duplexPushMicChunk, duplexStart, duplexStop } from '@/lib/bridge/duplex';
+import { systemGetHardwareStatus } from '@/lib/bridge/system';
+import type { BusinessInsight } from '@/lib/business/business-data';
+import {
+  BUSINESS_SUGGESTED_QUESTIONS,
+  businessAsk,
+  businessKpis,
+} from '@/lib/business/business-data';
 
 /**
  * Event-time id minting. Defined at module scope — outside the component — so
@@ -67,7 +77,8 @@ export interface Artifact {
     | 'ghost'
     | 'voice'
     | 'security'
-    | 'omnibar';
+    | 'omnibar'
+    | 'business';
   language: string;
   code: string;
   description: string;
@@ -120,6 +131,67 @@ interface Message {
     result: string;
     latencyMs: number;
   };
+}
+
+/** Cached DataQA session id for the business studio (runtime cache at module
+ * scope — deliberately not a React ref, so render-time command registries stay
+ * free of ref reads under the react-hooks/refs compiler rule). */
+let cachedDataqaSessionId: string | null = null;
+
+/** Bar chart for business insights — pure render, no effects. */
+function BusinessChart({ chart }: { chart: NonNullable<BusinessInsight['chart']> }) {
+  const max = Math.max(...chart.values, 1);
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-[#050507] p-4">
+      <div className="flex h-36 items-end gap-2" role="img" aria-label={chart.unit} dir="rtl">
+        {chart.labels.map((label, idx) => {
+          const pct = Math.max(4, Math.round((chart.values[idx] / max) * 100));
+          return (
+            <div key={label} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+              <div
+                className="w-full rounded-t-md bg-gradient-to-t from-cyan-600 to-cyan-300 transition-all"
+                style={{ height: `${pct}%` }}
+                title={`${label}: ${chart.values[idx].toLocaleString('fa-IR')}`}
+              />
+              <span className="w-full truncate text-center text-[8px] text-zinc-500">{label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Evidence table — the drill-down rows behind every grounded answer. */
+function BusinessEvidenceTable({ insight }: { insight: BusinessInsight }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-white/[0.06]">
+      <table className="w-full text-right text-[11px]" dir="rtl">
+        <thead className="bg-zinc-900/80 text-zinc-400">
+          <tr>
+            {insight.columns.map((column) => (
+              <th key={column} className="px-3 py-2 font-mono font-medium">
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/[0.04]">
+          {insight.rows.slice(0, 8).map((row, idx) => (
+            <tr key={idx} className="text-zinc-300">
+              {insight.columns.map((column) => (
+                <td key={column} className="px-3 py-1.5">
+                  {typeof row[column] === 'number'
+                    ? row[column].toLocaleString('fa-IR')
+                    : String(row[column] ?? '—')}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export function DreamNextCanvas() {
@@ -187,6 +259,22 @@ export function DreamNextCanvas() {
 
   // Omnibar & OS Integration State (Phase 7 Final)
   const [omnibarOpen, setOmnibarOpen] = useState(false);
+
+  // P8 — Business Data Studio: real DataQA session + local pilot engine.
+  const [businessQuestion, setBusinessQuestion] = useState('');
+  const [businessStreamText, setBusinessStreamText] = useState('');
+  const [businessStreaming, setBusinessStreaming] = useState(false);
+  const [businessInsight, setBusinessInsight] = useState<BusinessInsight | null>(null);
+
+  // Real hardware vitals from the Python core (echo fallback in browser preview).
+  const [hardwareInfo, setHardwareInfo] = useState<{
+    deviceType: string;
+    deviceName: string;
+    totalMb: number;
+    freeMb: number;
+    backend: string;
+    live: boolean;
+  } | null>(null);
   const [omnibarQuery, setOmnibarQuery] = useState('');
   const [selectedCommandIdx, setSelectedCommandIdx] = useState(0);
   const [clipQuery, setClipQuery] = useState('');
@@ -320,6 +408,32 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  // Real hardware vitals from the Python core; the echo transport serves
+  // conservative defaults in the browser preview. Async → no sync setState.
+  useEffect(() => {
+    let cancelled = false;
+    void systemGetHardwareStatus(client)
+      .then((res) => {
+        if (cancelled) return;
+        const device = res.profile.devices.find((d) => d.is_available) ?? res.profile.devices[0];
+        if (!device) return;
+        setHardwareInfo({
+          deviceType: device.device_type,
+          deviceName: device.device_name,
+          totalMb: device.total_memory_mb,
+          freeMb: device.free_memory_mb,
+          backend: res.profile.active_backend,
+          live: client.transportKind === 'tauri',
+        });
+      })
+      .catch(() => {
+        /* vitals keep their conservative defaults when the core is offline */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
 
   // Real-time Audio processing loop
   useEffect(() => {
@@ -721,10 +835,104 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
     setArtifactViewTab('preview');
   };
 
+  // P8 — Business Data Studio: route the question to the real DataQA core
+  // (Tauri transport) or the deterministic local pilot engine (browser),
+  // then stream the answer token-by-token like every other Dream pillar.
+  const handleBusinessAsk = (question: string) => {
+    const trimmed = question.trim();
+    if (!trimmed || businessStreaming) return;
+    setBusinessQuestion(trimmed);
+    setBusinessStreamText('');
+    setBusinessStreaming(true);
+    setBusinessInsight(null);
+
+    const presentLocal = (insight: BusinessInsight, note?: string) => {
+      const words = (note ? `${insight.answer} ${note}` : insight.answer).split(' ');
+      let cursor = 0;
+      const timer = setInterval(() => {
+        cursor += 2;
+        setBusinessStreamText(words.slice(0, cursor).join(' '));
+        if (cursor >= words.length) {
+          clearInterval(timer);
+          setBusinessInsight(insight);
+          setBusinessStreaming(false);
+        }
+      }, 35);
+    };
+
+    const run = async () => {
+      if (client.transportKind !== 'tauri') {
+        presentLocal(businessAsk(trimmed));
+        return;
+      }
+      try {
+        if (!cachedDataqaSessionId) {
+          const session = await createDataQaSession();
+          cachedDataqaSessionId = session.session_id;
+        }
+        const sessionId = cachedDataqaSessionId;
+        if (!sessionId) throw new Error('dataqa session unavailable');
+        const result = await askDataQa(sessionId, trimmed, (chunk) => {
+          if (chunk.token) setBusinessStreamText((prev) => prev + chunk.token);
+        });
+        const final = result.final_answer;
+        const rows = (final.evidence?.rows ?? []) as Array<Record<string, string | number>>;
+        const columns = final.evidence?.columns ?? (rows[0] ? Object.keys(rows[0]) : []);
+        setBusinessInsight({
+          id: 'live',
+          question: trimmed,
+          answer: final.answer,
+          summary: final.summary,
+          grounded: final.grounded,
+          columns,
+          rows,
+          chart: null,
+        });
+        setBusinessStreaming(false);
+      } catch {
+        presentLocal(
+          businessAsk(trimmed),
+          'هسته تحلیل در دسترس نبود؛ پاسخ از موتور محلی پایلوت ساخته شد.',
+        );
+      }
+    };
+
+    void run();
+  };
+
+  const handleOpenBusinessStudio = () => {
+    setActiveArtifact({
+      id: 'art-business-core',
+      title: 'استودیو داده‌های کسب‌وکار (Business Data Studio)',
+      type: 'business',
+      language: 'tsx',
+      version: 'v8.0 Pilot',
+      description:
+        'اتصال به داده‌های سازمانی (انبار، نیروی انسانی، فروش) و پرسش زبان طبیعی از داده با هسته تحلیل واقعی.',
+      code: `// Dream Business Data Studio — P8 Pilot
+const session = await bridge.call('dataqa.sessions.create');
+const answer = await bridge.stream('dataqa.ask', {
+  session_id: session.id,
+  question: 'موجودی انبار به تفکیک کالا؟',
+});`,
+    });
+  };
+
   const handleSendMessage = (customText?: string) => {
     const textToSend = customText || inputText;
     if (!textToSend.trim()) return;
 
+    if (
+      textToSend.includes('داده') ||
+      textToSend.includes('انبار') ||
+      textToSend.includes('فروش') ||
+      textToSend.includes('داشبورد مدیریتی')
+    ) {
+      if (!customText) setInputText('');
+      handleOpenBusinessStudio();
+      handleBusinessAsk('موجودی فعلی انبار به تفکیک کالا چقدر است؟');
+      return;
+    }
     if (
       textToSend.includes('پالت') ||
       textToSend.includes('دستور سراسری') ||
@@ -923,7 +1131,25 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       icon: Search,
       execute: () => handleSendMessage('جستجوی وب درباره آخرین اخبار هوش مصنوعی'),
     },
+    {
+      id: 'c12',
+      title: 'داشبورد داده‌های کسب‌وکار (انبار، فروش، نیروی انسانی)',
+      desc: 'Business DataQA · natural language over org data',
+      category: 'DATA',
+      shortcut: '⌘⇧D',
+      icon: Database,
+      execute: handleOpenBusinessStudio,
+    },
   ];
+
+  // P8 KPIs — pure deterministic pilot metrics for the executive glance.
+  const businessKpisData = businessKpis();
+  const hardwareUsedGb = hardwareInfo ? (hardwareInfo.totalMb - hardwareInfo.freeMb) / 1024 : null;
+  const hardwareTotalGb = hardwareInfo ? hardwareInfo.totalMb / 1024 : null;
+  const hardwareRamPct =
+    hardwareUsedGb !== null && hardwareTotalGb
+      ? Math.min(100, Math.round((hardwareUsedGb / hardwareTotalGb) * 100))
+      : 0;
 
   const filteredCommands =
     omnibarQuery.trim() === ''
@@ -994,6 +1220,18 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
           >
             <ShieldCheck className="size-3 text-emerald-400" />
             <span>VAULT</span>
+          </button>
+
+          <div className="h-3 w-px bg-white/10" />
+
+          {/* Business Data Studio (P8) */}
+          <button
+            onClick={handleOpenBusinessStudio}
+            className="flex items-center gap-1 font-mono text-[10px] text-cyan-300 hover:text-white transition-colors"
+            title="استودیو داده‌های کسب‌وکار"
+          >
+            <Database className="size-3 text-cyan-400" />
+            <span>DATA</span>
           </button>
 
           <div className="h-3 w-px bg-white/10" />
@@ -1385,15 +1623,19 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                 <div className="flex items-center gap-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 px-2 py-0.5 text-indigo-300 font-mono text-[10px]">
                   {activeArtifact.type === 'omnibar' ? (
                     <Command className="size-3 text-indigo-400" />
+                  ) : activeArtifact.type === 'business' ? (
+                    <Database className="size-3 text-cyan-400" />
                   ) : (
                     <Sparkles className="size-3" />
                   )}
                   <span>
                     {activeArtifact.type === 'omnibar'
                       ? 'OS COMMAND CENTER'
-                      : activeArtifact.type === 'security'
-                        ? 'SECURITY VAULT'
-                        : 'ARTIFACT'}
+                      : activeArtifact.type === 'business'
+                        ? 'BUSINESS DATA STUDIO'
+                        : activeArtifact.type === 'security'
+                          ? 'SECURITY VAULT'
+                          : 'ARTIFACT'}
                   </span>
                 </div>
                 <span className="text-xs font-semibold text-zinc-200 truncate max-w-xs">
@@ -1414,7 +1656,11 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                   >
                     <Eye className="size-3" />
                     <span>
-                      {activeArtifact.type === 'omnibar' ? 'مرکز فرماندهی' : 'خزانه محلی'}
+                      {activeArtifact.type === 'omnibar'
+                        ? 'مرکز فرماندهی'
+                        : activeArtifact.type === 'business'
+                          ? 'استودیو داده'
+                          : 'خزانه محلی'}
                     </span>
                   </button>
                   <button
@@ -1427,7 +1673,11 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                   >
                     <CodeXml className="size-3" />
                     <span>
-                      {activeArtifact.type === 'omnibar' ? 'موتور پالت' : 'پیکربندی امنیت'}
+                      {activeArtifact.type === 'omnibar'
+                        ? 'موتور پالت'
+                        : activeArtifact.type === 'business'
+                          ? 'موتور تحلیل'
+                          : 'پیکربندی امنیت'}
                     </span>
                   </button>
                 </div>
@@ -1478,7 +1728,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                           </div>
                         </div>
                         <span className="px-2.5 py-1 text-[10px] font-mono rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                          ● 11 COMMANDS · 52 MODULES INDEXED
+                          ● 12 COMMANDS · 52 MODULES INDEXED
                         </span>
                       </div>
 
@@ -1495,21 +1745,37 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
 
                         <div className="rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5 space-y-1.5">
                           <span className="font-mono text-[10px] text-zinc-400 flex items-center gap-1">
-                            <Cpu className="size-3 text-cyan-400" /> CPU // پردازنده
+                            <Cpu className="size-3 text-cyan-400" />{' '}
+                            {hardwareInfo ? hardwareInfo.deviceType.toUpperCase() : 'CORE'} // هسته
                           </span>
-                          <p className="text-lg font-bold font-mono text-cyan-300">23%</p>
-                          <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                            <div className="h-full w-[23%] rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400" />
-                          </div>
+                          <p
+                            className="text-lg font-bold font-mono text-cyan-300"
+                            title={hardwareInfo?.deviceName}
+                          >
+                            {hardwareInfo ? hardwareInfo.backend : '…'}
+                          </p>
+                          <span className="font-mono text-[9px] text-zinc-500">
+                            {hardwareInfo
+                              ? hardwareInfo.live
+                                ? 'LIVE · PYTHON CORE'
+                                : 'ECHO PREVIEW'
+                              : 'VITALS PENDING'}
+                          </span>
                         </div>
 
                         <div className="rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5 space-y-1.5">
                           <span className="font-mono text-[10px] text-zinc-400">RAM // حافظه</span>
                           <p className="text-lg font-bold font-mono text-indigo-300">
-                            8.4<span className="text-[10px] text-zinc-500">/32 GB</span>
+                            {hardwareUsedGb !== null ? hardwareUsedGb.toFixed(1) : '—'}
+                            <span className="text-[10px] text-zinc-500">
+                              /{hardwareTotalGb ? hardwareTotalGb.toFixed(0) : '—'} GB
+                            </span>
                           </p>
                           <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                            <div className="h-full w-[26%] rounded-full bg-gradient-to-r from-indigo-500 to-purple-400" />
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-400"
+                              style={{ width: `${hardwareRamPct}%` }}
+                            />
                           </div>
                         </div>
                       </div>
@@ -1615,6 +1881,156 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                     <div className="flex items-center justify-between text-xs text-zinc-500 font-mono border-t border-white/[0.06] pt-4">
                       <span>SEMAPHORE: OS-LEVEL GLOBAL HOOK ACTIVE</span>
                       <span>RANKING: BM25 + EMBEDDING COSINE</span>
+                    </div>
+                  </div>
+                ) : activeArtifact.type === 'business' ? (
+                  /* ═══════════ BUSINESS DATA STUDIO (P8 Pilot) ═══════════ */
+                  <div className="space-y-6">
+                    <div className="rounded-2xl border border-cyan-500/30 bg-zinc-900/60 p-6 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-4 mb-5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex size-8 items-center justify-center rounded-xl border border-cyan-500/40 bg-cyan-500/20 text-cyan-300">
+                            <Database className="size-4" />
+                          </div>
+                          <div>
+                            <span className="block font-mono text-[10px] uppercase tracking-widest text-cyan-400">
+                              P8 · BUSINESS DATA
+                            </span>
+                            <span className="text-sm font-bold text-zinc-100">
+                              داده‌های کسب‌وکار سازمان (انبار · فروش · نیروی انسانی)
+                            </span>
+                          </div>
+                        </div>
+                        <span
+                          className={`rounded-full border px-2.5 py-1 font-mono text-[10px] ${
+                            client.transportKind === 'tauri'
+                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                              : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                          }`}
+                        >
+                          {client.transportKind === 'tauri'
+                            ? '● LIVE CORE · PYTHON DATAQA'
+                            : '● DEMO ENGINE · BROWSER PILOT'}
+                        </span>
+                      </div>
+
+                      {/* Executive KPI glance */}
+                      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                        <div className="space-y-1.5 rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5">
+                          <span className="font-mono text-[10px] text-zinc-400">
+                            اقلام فعال انبار
+                          </span>
+                          <p className="text-lg font-bold font-mono text-cyan-300">
+                            {businessKpisData.activeItems.toLocaleString('fa-IR')}
+                          </p>
+                        </div>
+                        <div className="space-y-1.5 rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5">
+                          <span className="font-mono text-[10px] text-zinc-400">
+                            ارزش موجودی (میلیون تومان)
+                          </span>
+                          <p className="text-lg font-bold font-mono text-indigo-300">
+                            {Math.round(
+                              businessKpisData.totalStockValueToman / 1_000_000,
+                            ).toLocaleString('fa-IR')}
+                          </p>
+                        </div>
+                        <div className="space-y-1.5 rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5">
+                          <span className="font-mono text-[10px] text-zinc-400">
+                            حواله‌های شهریور
+                          </span>
+                          <p className="text-lg font-bold font-mono text-amber-300">
+                            {businessKpisData.monthOutMovements.toLocaleString('fa-IR')}
+                          </p>
+                        </div>
+                        <div className="space-y-1.5 rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5">
+                          <span className="font-mono text-[10px] text-zinc-400">
+                            نرخ حضور نیروها
+                          </span>
+                          <p className="text-lg font-bold font-mono text-emerald-300">
+                            {businessKpisData.attendanceRatePct.toLocaleString('fa-IR')}٪
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Suggested questions */}
+                      <div className="mt-5 flex flex-wrap gap-2" dir="rtl">
+                        {BUSINESS_SUGGESTED_QUESTIONS.slice(0, 4).map((question) => (
+                          <button
+                            key={question}
+                            onClick={() => handleBusinessAsk(question)}
+                            disabled={businessStreaming}
+                            className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-3 py-1 text-[11px] text-cyan-200 transition-all hover:bg-cyan-500/20 disabled:opacity-40"
+                          >
+                            {question}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Natural-language ask box */}
+                    <div className="rounded-2xl border border-white/[0.08] bg-zinc-950/50 p-4">
+                      <div className="flex items-center gap-2" dir="rtl">
+                        <Search className="size-4 shrink-0 text-cyan-400" />
+                        <input
+                          value={businessQuestion}
+                          onChange={(e) => setBusinessQuestion(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleBusinessAsk(businessQuestion);
+                          }}
+                          placeholder="از داده‌های سازمانی به زبان طبیعی بپرسید…"
+                          className="flex-1 bg-transparent text-sm text-white placeholder-zinc-500 focus:outline-none"
+                          dir="rtl"
+                        />
+                        <button
+                          onClick={() => handleBusinessAsk(businessQuestion)}
+                          disabled={businessStreaming || !businessQuestion.trim()}
+                          className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-cyan-600 to-indigo-500 text-white shadow-lg transition-all hover:opacity-90 disabled:opacity-40"
+                          title="پرسش از داده"
+                        >
+                          <ArrowUp className="size-4 stroke-[2.5]" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Answer · chart · evidence drill-down */}
+                    {(businessStreaming || businessInsight) && (
+                      <div className="space-y-4 rounded-2xl border border-white/[0.08] bg-zinc-950/40 p-5">
+                        {businessInsight ? (
+                          <>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span
+                                className="flex items-center gap-1.5 text-xs font-bold text-cyan-300"
+                                dir="rtl"
+                              >
+                                <TrendingUp className="size-3.5" />
+                                {businessInsight.summary}
+                              </span>
+                              <span className="font-mono text-[9px] text-zinc-500">
+                                {businessInsight.grounded
+                                  ? 'GROUNDED · EVIDENCE ATTACHED'
+                                  : 'UN-GROUNDED'}
+                              </span>
+                            </div>
+                            <p className="text-sm leading-relaxed text-zinc-200" dir="rtl">
+                              {businessStreamText || businessInsight.answer}
+                            </p>
+                            {businessInsight.chart ? (
+                              <BusinessChart chart={businessInsight.chart} />
+                            ) : null}
+                            <BusinessEvidenceTable insight={businessInsight} />
+                          </>
+                        ) : (
+                          <p className="text-sm leading-relaxed text-zinc-300" dir="rtl">
+                            {businessStreamText}
+                            <span className="animate-pulse text-cyan-400">▍</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between border-t border-white/[0.06] pt-4 font-mono text-xs text-zinc-500">
+                      <span>DATAQA BRIDGE · dataqa.sessions / dataqa.ask</span>
+                      <span>EVIDENCE-BOUND ANSWERS · JALALI CALENDAR</span>
                     </div>
                   </div>
                 ) : (
@@ -1766,7 +2182,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                     <span className="text-indigo-400">
                       {activeArtifact.type === 'omnibar'
                         ? 'GLOBAL_OMNIBAR_ENGINE.TSX'
-                        : 'CRYPTOGRAPHIC_VAULT_ENGINE.TSX'}
+                        : activeArtifact.type === 'business'
+                          ? 'BUSINESS_DATA_ENGINE.TSX'
+                          : 'CRYPTOGRAPHIC_VAULT_ENGINE.TSX'}
                     </span>
                     <span>2.6 KB · UTF-8</span>
                   </div>
