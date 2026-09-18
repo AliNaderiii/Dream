@@ -38,6 +38,8 @@ import { useBridge } from '@/lib/bridge/hooks';
 import { askDataQa, createDataQaSession } from '@/lib/bridge/dataqa';
 import { duplexPushMicChunk, duplexStart, duplexStop } from '@/lib/bridge/duplex';
 import { loadDataset } from '@/lib/bridge/data-science';
+import { ocrExtract } from '@/lib/bridge/ocr';
+import type { OcrExtractResult } from '@/lib/bridge/ocr';
 import { systemGetGoldenReleaseInfo, systemGetHardwareStatus } from '@/lib/bridge/system';
 import type { BusinessDataset, BusinessInsight } from '@/lib/business/business-data';
 import {
@@ -274,6 +276,11 @@ export function DreamNextCanvas() {
   const [businessLoadError, setBusinessLoadError] = useState<string | null>(null);
   const [coreFilePath, setCoreFilePath] = useState('');
   const [coreDatasetId, setCoreDatasetId] = useState<string | null>(null);
+  // v4.3 — real document OCR: file path + doc type + live engine result.
+  const [visionFilePath, setVisionFilePath] = useState('');
+  const [visionDocType, setVisionDocType] = useState<'general' | 'invoice'>('general');
+  const [visionOcr, setVisionOcr] = useState<OcrExtractResult | null>(null);
+  const [visionOcrRunning, setVisionOcrRunning] = useState(false);
 
   // Real hardware vitals from the Python core (echo fallback in browser preview).
   const [hardwareInfo, setHardwareInfo] = useState<{
@@ -665,7 +672,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
         id: eventId('drm'),
         sender: 'dream',
         indexRef: `00${msgCount + 1} / VISION_ANALYSIS`,
-        lead: 'ادراک بینایی محیطی صفحه نمایش (Screen Vision OCR)',
+        lead: 'اسکن پنجره فعال — شبیه‌سازی پیش‌نمایش (Simulated Active-Window Scan) · برای OCR واقعی، استودیو بینایی را باز کنید',
         text: `پنجره فعال «${visionData.activeApp}» اسکن شد. پچ اصلاحی مقاوم تولید و در بوم تعاملی سمت راست آماده اعمال است.`,
         timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
         artifact: visionArtifact,
@@ -870,6 +877,36 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       code: `// Dream Global Omnibar — Semantic OS Command Palette`,
     });
     setArtifactViewTab('preview');
+  };
+
+  // v4.3 — اجرای OCR واقعی روی فایل (اسکرین‌شات/سند/تصویر) از پل هسته
+  const handleRunRealOcr = () => {
+    const path = visionFilePath.trim();
+    if (!path || visionOcrRunning) return;
+    setVisionOcrRunning(true);
+    setVisionOcr(null);
+    void ocrExtract(client, path, visionDocType)
+      .then((res) => setVisionOcr(res))
+      .catch(() =>
+        setVisionOcr({
+          success: false,
+          error: 'اجرای موتور OCR ناموفق بود؛ مسیر فایل و دسترسی آن را بررسی کنید.',
+        }),
+      )
+      .finally(() => setVisionOcrRunning(false));
+  };
+
+  const handleOpenVisionStudio = () => {
+    setActiveArtifact({
+      id: 'art-vision-studio',
+      title: 'استودیو بینایی و OCR اسناد (Vision & Document OCR)',
+      type: 'vision',
+      language: 'tsx',
+      version: 'v4.3 Real OCR',
+      description:
+        'استخراج واقعی متن، بلوک‌ها و فیلدهای کلیدی از فایل‌ها با موتور OCR فارسی هسته دریم.',
+      code: `// Dream Document OCR — v4.3\nconst res = await bridge.call('ocr.extract', {\n  file_path: 'C:\\\\screens\\\\error.png',\n  document_type: 'general', // یا 'invoice'\n});\n// res.cleaned_text · res.extracted_fields · res.confidence`,
+    });
   };
 
   // P8 — Business Data Studio: route the question to the real DataQA core
@@ -1214,6 +1251,14 @@ const answer = await bridge.stream('dataqa.ask', {
       shortcut: '⌘⇧D',
       icon: Database,
       execute: handleOpenBusinessStudio,
+    },
+    {
+      id: 'c13',
+      title: 'استودیو بینایی و OCR اسناد (فایل واقعی)',
+      desc: 'Real document OCR · Persian engine',
+      category: 'VISION',
+      icon: Camera,
+      execute: handleOpenVisionStudio,
     },
   ];
 
@@ -1706,6 +1751,8 @@ const answer = await bridge.stream('dataqa.ask', {
                     <Command className="size-3 text-indigo-400" />
                   ) : activeArtifact.type === 'business' ? (
                     <Database className="size-3 text-cyan-400" />
+                  ) : activeArtifact.type === 'vision' ? (
+                    <Camera className="size-3 text-fuchsia-400" />
                   ) : (
                     <Sparkles className="size-3" />
                   )}
@@ -1714,9 +1761,11 @@ const answer = await bridge.stream('dataqa.ask', {
                       ? 'OS COMMAND CENTER'
                       : activeArtifact.type === 'business'
                         ? 'BUSINESS DATA STUDIO'
-                        : activeArtifact.type === 'security'
-                          ? 'SECURITY VAULT'
-                          : 'ARTIFACT'}
+                        : activeArtifact.type === 'vision'
+                          ? 'VISION & OCR STUDIO'
+                          : activeArtifact.type === 'security'
+                            ? 'SECURITY VAULT'
+                            : 'ARTIFACT'}
                   </span>
                 </div>
                 <span className="text-xs font-semibold text-zinc-200 truncate max-w-xs">
@@ -1741,7 +1790,9 @@ const answer = await bridge.stream('dataqa.ask', {
                         ? 'مرکز فرماندهی'
                         : activeArtifact.type === 'business'
                           ? 'استودیو داده'
-                          : 'خزانه محلی'}
+                          : activeArtifact.type === 'vision'
+                            ? 'استودیو بینایی'
+                            : 'خزانه محلی'}
                     </span>
                   </button>
                   <button
@@ -1758,7 +1809,9 @@ const answer = await bridge.stream('dataqa.ask', {
                         ? 'موتور پالت'
                         : activeArtifact.type === 'business'
                           ? 'موتور تحلیل'
-                          : 'پیکربندی امنیت'}
+                          : activeArtifact.type === 'vision'
+                            ? 'موتور OCR'
+                            : 'پیکربندی امنیت'}
                     </span>
                   </button>
                 </div>
@@ -1809,7 +1862,7 @@ const answer = await bridge.stream('dataqa.ask', {
                           </div>
                         </div>
                         <span className="px-2.5 py-1 text-[10px] font-mono rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                          ● 12 COMMANDS · 52 MODULES INDEXED
+                          ● 13 COMMANDS · 52 MODULES INDEXED
                         </span>
                       </div>
 
@@ -2229,6 +2282,152 @@ const answer = await bridge.stream('dataqa.ask', {
                       <span>EVIDENCE-BOUND ANSWERS · JALALI CALENDAR</span>
                     </div>
                   </div>
+                ) : activeArtifact.type === 'vision' ? (
+                  /* ═══════════ VISION & OCR STUDIO (v4.3) ═══════════ */
+                  <div className="space-y-6">
+                    <div className="rounded-2xl border border-fuchsia-500/30 bg-zinc-900/60 p-6 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-4 mb-5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex size-8 items-center justify-center rounded-xl border border-fuchsia-500/40 bg-fuchsia-500/20 text-fuchsia-300">
+                            <Camera className="size-4" />
+                          </div>
+                          <div>
+                            <span className="block font-mono text-[10px] uppercase tracking-widest text-fuchsia-400">
+                              v4.3 · DOCUMENT OCR
+                            </span>
+                            <span className="text-sm font-bold text-zinc-100">
+                              استخراج واقعی متن و فیلدها از فایل (موتور OCR فارسی هسته)
+                            </span>
+                          </div>
+                        </div>
+                        <span
+                          className={`rounded-full border px-2.5 py-1 font-mono text-[10px] ${
+                            client.transportKind === 'tauri'
+                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                              : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                          }`}
+                        >
+                          {client.transportKind === 'tauri'
+                            ? '● LIVE OCR · PYTHON CORE'
+                            : '● DEMO ENGINE · BROWSER PREVIEW'}
+                        </span>
+                      </div>
+
+                      {/* File path + document type + run */}
+                      <div className="space-y-3" dir="rtl">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            value={visionFilePath}
+                            onChange={(e) => setVisionFilePath(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleRunRealOcr();
+                            }}
+                            placeholder="C:\screens\error.png — مسیر تصویر/سند/اسکرین‌شات"
+                            className="min-w-56 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none"
+                            dir="ltr"
+                          />
+                          <div className="flex items-center rounded-lg border border-white/10 bg-zinc-900/60 p-0.5">
+                            {(['general', 'invoice'] as const).map((docType) => (
+                              <button
+                                key={docType}
+                                onClick={() => setVisionDocType(docType)}
+                                className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-all ${
+                                  visionDocType === docType
+                                    ? 'bg-white/10 text-white shadow-sm'
+                                    : 'text-zinc-400 hover:text-white'
+                                }`}
+                              >
+                                {docType === 'general' ? 'سند عمومی' : 'فاکتور'}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            onClick={handleRunRealOcr}
+                            disabled={!visionFilePath.trim() || visionOcrRunning}
+                            className="rounded-lg border border-fuchsia-500/40 bg-gradient-to-r from-fuchsia-600 to-purple-600 px-3.5 py-2 text-[11px] font-bold text-white shadow-lg transition-all hover:opacity-90 disabled:opacity-40"
+                          >
+                            {visionOcrRunning ? 'در حال استخراج…' : 'استخراج واقعی (ocr.extract)'}
+                          </button>
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-zinc-500">
+                          موتور OCR هسته، متن، بلوک‌ها، جداول و فیلدهای کلیدی (مبلغ، تاریخ، مالیات،
+                          شبا) را استخراج می‌کند. «اسکن پنجره فعال» در چت، شبیه‌سازی پیش‌نمایش است؛
+                          OCR واقعی از همین‌جا با فایل اجرا می‌شود.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* OCR result */}
+                    {visionOcr && (
+                      <div className="space-y-4 rounded-2xl border border-white/[0.08] bg-zinc-950/40 p-5">
+                        {visionOcr.success ? (
+                          <>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span
+                                className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-300"
+                                dir="rtl"
+                              >
+                                <Eye className="size-3.5" />
+                                استخراج موفق — {visionOcr.file_path}
+                              </span>
+                              <span className="font-mono text-[9px] text-zinc-500">
+                                {visionOcr.demo
+                                  ? 'DEMO RESULT · ECHO'
+                                  : `LIVE · CONF ${Math.round(
+                                      (visionOcr.confidence ?? 0) * 100,
+                                    )}% · ${visionOcr.blocks_count ?? 0} BLOCKS · ${visionOcr.language?.toUpperCase()}`}
+                              </span>
+                            </div>
+                            <pre
+                              className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-xl border border-white/[0.06] bg-[#050507] p-4 font-mono text-xs leading-relaxed text-zinc-200 scrollbar-thin"
+                              dir="rtl"
+                            >
+                              {visionOcr.cleaned_text}
+                            </pre>
+                            {visionOcr.extracted_fields &&
+                              Object.keys(visionOcr.extracted_fields).length > 0 && (
+                                <div
+                                  className="overflow-x-auto rounded-xl border border-white/[0.06]"
+                                  dir="rtl"
+                                >
+                                  <table className="w-full text-right text-[11px]">
+                                    <thead className="bg-zinc-900/80 text-zinc-400">
+                                      <tr>
+                                        <th className="px-3 py-2 font-mono font-medium">فیلد</th>
+                                        <th className="px-3 py-2 font-mono font-medium">
+                                          مقدار استخراج‌شده
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/[0.04]">
+                                      {Object.entries(visionOcr.extracted_fields)
+                                        .slice(0, 10)
+                                        .map(([field, value]) => (
+                                          <tr key={field} className="text-zinc-300">
+                                            <td className="px-3 py-1.5 font-mono text-fuchsia-300">
+                                              {field}
+                                            </td>
+                                            <td className="px-3 py-1.5">{String(value)}</td>
+                                          </tr>
+                                        ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                          </>
+                        ) : (
+                          <p className="text-sm leading-relaxed text-rose-300" dir="rtl">
+                            ⚠ {visionOcr.error ?? 'استخراج ناموفق بود.'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between border-t border-white/[0.06] pt-4 font-mono text-xs text-zinc-500">
+                      <span>OCR BRIDGE · ocr.extract / ocr.extract_invoice</span>
+                      <span>PERSIAN &amp; MULTILINGUAL · INVOICE PARSER</span>
+                    </div>
+                  </div>
                 ) : (
                   /* ═══════════ SECURITY VAULT STUDIO (Phase 6) ═══════════ */
                   <div className="space-y-6">
@@ -2380,7 +2579,9 @@ const answer = await bridge.stream('dataqa.ask', {
                         ? 'GLOBAL_OMNIBAR_ENGINE.TSX'
                         : activeArtifact.type === 'business'
                           ? 'BUSINESS_DATA_ENGINE.TSX'
-                          : 'CRYPTOGRAPHIC_VAULT_ENGINE.TSX'}
+                          : activeArtifact.type === 'vision'
+                            ? 'DOCUMENT_OCR_ENGINE.TSX'
+                            : 'CRYPTOGRAPHIC_VAULT_ENGINE.TSX'}
                     </span>
                     <span>2.6 KB · UTF-8</span>
                   </div>
