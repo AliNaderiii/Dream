@@ -57,7 +57,17 @@ const SSRF_SHIELD_MODES: ReadonlyArray<{
 export interface Artifact {
   id: string;
   title: string;
-  type: 'react' | 'chart' | 'html' | 'diagram' | 'vision' | 'speculative' | 'ghost' | 'voice' | 'security' | 'omnibar';
+  type:
+    | 'react'
+    | 'chart'
+    | 'html'
+    | 'diagram'
+    | 'vision'
+    | 'speculative'
+    | 'ghost'
+    | 'voice'
+    | 'security'
+    | 'omnibar';
   language: string;
   code: string;
   description: string;
@@ -143,14 +153,36 @@ export function DreamNextCanvas() {
 
   // Security & Local Vault State
   const [vaultLocked, setVaultLocked] = useState<boolean>(false);
-  const [ssrfShieldMode, setSsrfShieldMode] = useState<'strict' | 'airgap' | 'permissive'>('strict');
+  const [ssrfShieldMode, setSsrfShieldMode] = useState<'strict' | 'airgap' | 'permissive'>(
+    'strict',
+  );
   const [piiRedactionActive, setPiiRedactionActive] = useState<boolean>(true);
   const [auditLogs, setAuditLogs] = useState<
-    Array<{ id: string; time: string; event: string; status: 'blocked' | 'encrypted' | 'sanitized' }>
+    Array<{
+      id: string;
+      time: string;
+      event: string;
+      status: 'blocked' | 'encrypted' | 'sanitized';
+    }>
   >([
-    { id: 'log-1', time: '۱۰:۴۲:۰۱', event: 'رمزنگاری پایگاه داده محلی (AES-256-GCM)', status: 'encrypted' },
-    { id: 'log-2', time: '۱۰:۴۲:۱۵', event: 'مسدودسازی درخواست مشکوک SSRF به 169.254.169.254', status: 'blocked' },
-    { id: 'log-3', time: '۱۰:۴۳:۰۰', event: 'حذف خودکار کلیدهای API و رمزهای عبور از پرامپت', status: 'sanitized' },
+    {
+      id: 'log-1',
+      time: '۱۰:۴۲:۰۱',
+      event: 'رمزنگاری پایگاه داده محلی (AES-256-GCM)',
+      status: 'encrypted',
+    },
+    {
+      id: 'log-2',
+      time: '۱۰:۴۲:۱۵',
+      event: 'مسدودسازی درخواست مشکوک SSRF به 169.254.169.254',
+      status: 'blocked',
+    },
+    {
+      id: 'log-3',
+      time: '۱۰:۴۳:۰۰',
+      event: 'حذف خودکار کلیدهای API و رمزهای عبور از پرامپت',
+      status: 'sanitized',
+    },
   ]);
 
   // Omnibar & OS Integration State (Phase 7 Final)
@@ -204,7 +236,8 @@ export function DreamNextCanvas() {
     type: 'omnibar',
     language: 'tsx',
     version: 'v7.0 Final',
-    description: 'دسترسی آنی به ۵۲ ماژول، فایل‌ها، کلیپ‌بورد و دستورات سیستمی با جستجوی معنایی و میانبر سراسری Ctrl+K.',
+    description:
+      'دسترسی آنی به ۵۲ ماژول، فایل‌ها، کلیپ‌بورد و دستورات سیستمی با جستجوی معنایی و میانبر سراسری Ctrl+K.',
     code: `// Dream Global Omnibar — Semantic OS Command Palette (P7 Final)
 import { SemanticIndex, ClipboardVault, JalaliCalendar } from '@/dream/os/omnibar';
 
@@ -242,7 +275,8 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
         type: 'omnibar',
         language: 'tsx',
         version: 'v7.0 Final',
-        description: 'دسترسی آنی به ۵۲ ماژول، فایل‌ها، کلیپ‌بورد و دستورات سیستمی با جستجوی معنایی و میانبر سراسری Ctrl+K.',
+        description:
+          'دسترسی آنی به ۵۲ ماژول، فایل‌ها، کلیپ‌بورد و دستورات سیستمی با جستجوی معنایی و میانبر سراسری Ctrl+K.',
         code: `// Dream Global Omnibar — Semantic OS Command Palette (P7 Final)`,
       },
     },
@@ -251,7 +285,8 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
   // Inspector drawer for technical deep-dives or Swiss Index
   const [inspector, setInspector] = useState<{
     open: boolean;
-    type: 'tot' | 'browser' | 'code' | 'model' | 'index' | 'speculative' | 'voice' | 'security' | null;
+    type:
+      'tot' | 'browser' | 'code' | 'model' | 'index' | 'speculative' | 'voice' | 'security' | null;
     title: string;
     sectionNo?: string;
     content?: string;
@@ -348,7 +383,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
               const peaks: number[] = [];
               const step = Math.max(1, Math.floor(timeData.length / 24));
               for (let i = 0; i < 24; i++) {
-                peaks.push(Math.abs((timeData[Math.min(i * step, timeData.length - 1)] - 128) / 128));
+                peaks.push(
+                  Math.abs((timeData[Math.min(i * step, timeData.length - 1)] - 128) / 128),
+                );
               }
               setWaveformPeaks(peaks);
 
@@ -435,7 +472,8 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       type: 'security',
       language: 'markdown',
       version: 'v6.0 Enterprise',
-      description: 'تایید کامل عدم ارسال تلمتری، سلامت رمزنگاری AES-256 و مسدودسازی دسترسی‌های غیرمجاز شبکه.',
+      description:
+        'تایید کامل عدم ارسال تلمتری، سلامت رمزنگاری AES-256 و مسدودسازی دسترسی‌های غیرمجاز شبکه.',
       code: `### Zero-Telemetry Audit Report\n- Cipher: AES-256-GCM\n- Outbound Telemetry: 0 Bytes (100% BLOCKED)\n- PII Masking: Active (14 tokens redacted)\n- Status: 100% COMPLIANT`,
     };
     setActiveArtifact(secArt);
@@ -485,7 +523,8 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
         type: 'vision',
         language: 'typescript',
         version: 'v2.1',
-        description: 'اسکن مستقیم پنجره VS Code، تشخیص خطای اجرای توکن‌ها و تولید پچ اصلاحی در کسری از ثانیه.',
+        description:
+          'اسکن مستقیم پنجره VS Code، تشخیص خطای اجرای توکن‌ها و تولید پچ اصلاحی در کسری از ثانیه.',
         code: visionData.fixSuggestion,
       };
       setActiveArtifact(visionArtifact);
@@ -544,7 +583,8 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       type: 'speculative',
       language: 'tsx',
       version: 'v3.0 Ultra',
-      description: 'استریم موازی کلمات با مدل محلی سبک و اعتبارسنجی شاخه‌های درخت تفکر با DeepSeek-R1.',
+      description:
+        'استریم موازی کلمات با مدل محلی سبک و اعتبارسنجی شاخه‌های درخت تفکر با DeepSeek-R1.',
       code: `// Dream Speculative Streaming Matrix\nconst TTFT = 12.8; // ms\nconst throughput = 128.4; // tokens/sec`,
     };
     setActiveArtifact(specArtifact);
@@ -594,7 +634,8 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       type: 'ghost',
       language: 'markdown',
       version: 'v4.0 Autonomous',
-      description: 'اسکن کامل برنچ‌های گیت، اعتبارسنجی پکیج‌ها و تایید سلامت تست‌های امنیتی در سندباکس ایزوله.',
+      description:
+        'اسکن کامل برنچ‌های گیت، اعتبارسنجی پکیج‌ها و تایید سلامت تست‌های امنیتی در سندباکس ایزوله.',
       code: `### Sentinel Execution Audit Report\n- Repository: AliNaderiii/Dream\n- Branch Checked: main\n- Vulnerabilities: 0 Detected\n- Status: 100% HEALTHY`,
     };
     setActiveArtifact(ghostArt);
@@ -620,8 +661,16 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
         workerName: 'دیده‌بان مخزن کد (Git Sentinel)',
         badge: 'MANUAL TRIGGER EXECUTED',
         items: [
-          { title: 'تحلیل وابستگی‌های Python و Rust', desc: 'تمامی تایپ‌ها بدون هشدار کامپایل شدند.', severity: 'success' },
-          { title: 'بررسی سلامت تست‌های Vite و Vitest', desc: '۲۲۲ تست در کمتر از ۷ ثانیه پاس شدند.', severity: 'success' },
+          {
+            title: 'تحلیل وابستگی‌های Python و Rust',
+            desc: 'تمامی تایپ‌ها بدون هشدار کامپایل شدند.',
+            severity: 'success',
+          },
+          {
+            title: 'بررسی سلامت تست‌های Vite و Vitest',
+            desc: '۲۲۲ تست در کمتر از ۷ ثانیه پاس شدند.',
+            severity: 'success',
+          },
         ],
       },
     };
@@ -676,13 +725,22 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
     const textToSend = customText || inputText;
     if (!textToSend.trim()) return;
 
-    if (textToSend.includes('پالت') || textToSend.includes('دستور سراسری') || textToSend.includes('کنترل سیستم')) {
+    if (
+      textToSend.includes('پالت') ||
+      textToSend.includes('دستور سراسری') ||
+      textToSend.includes('کنترل سیستم')
+    ) {
       setOmnibarOpen(true);
       if (!customText) setInputText('');
       return;
     }
 
-    if (textToSend.includes('امنیت') || textToSend.includes('رمز') || textToSend.includes('حریم') || textToSend.includes('قفل')) {
+    if (
+      textToSend.includes('امنیت') ||
+      textToSend.includes('رمز') ||
+      textToSend.includes('حریم') ||
+      textToSend.includes('قفل')
+    ) {
       handleTriggerSecurityAudit();
       if (!customText) setInputText('');
       return;
@@ -695,19 +753,31 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       return;
     }
 
-    if (textToSend.includes('روح') || textToSend.includes('عامل') || textToSend.includes('نگهبان')) {
+    if (
+      textToSend.includes('روح') ||
+      textToSend.includes('عامل') ||
+      textToSend.includes('نگهبان')
+    ) {
       handleTriggerGhostWorker();
       if (!customText) setInputText('');
       return;
     }
 
-    if (textToSend.includes('صفحه') || textToSend.includes('اسکرین') || textToSend.includes('اسکن')) {
+    if (
+      textToSend.includes('صفحه') ||
+      textToSend.includes('اسکرین') ||
+      textToSend.includes('اسکن')
+    ) {
       handleTriggerScreenVision();
       if (!customText) setInputText('');
       return;
     }
 
-    if (textToSend.includes('استریم') || textToSend.includes('تاخیر') || textToSend.includes('سرعت')) {
+    if (
+      textToSend.includes('استریم') ||
+      textToSend.includes('تاخیر') ||
+      textToSend.includes('سرعت')
+    ) {
       handleTriggerSpeculativeStream(textToSend);
       return;
     }
@@ -807,7 +877,11 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       category: 'SYSTEM',
       icon: FolderOpen,
       execute: () =>
-        handleExecuteOSCommand('مرتب‌سازی پوشه Downloads', 'SYSTEM', '۴۲ فایل به ۶ پوشه معنایی دسته‌بندی شد'),
+        handleExecuteOSCommand(
+          'مرتب‌سازی پوشه Downloads',
+          'SYSTEM',
+          '۴۲ فایل به ۶ پوشه معنایی دسته‌بندی شد',
+        ),
     },
     {
       id: 'c7',
@@ -865,7 +939,8 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
     clipQuery.trim() === ''
       ? clipboardHistory
       : clipboardHistory.filter(
-          (c) => c.content.includes(clipQuery) || c.tag.toLowerCase().includes(clipQuery.toLowerCase()),
+          (c) =>
+            c.content.includes(clipQuery) || c.tag.toLowerCase().includes(clipQuery.toLowerCase()),
         );
 
   return (
@@ -1093,8 +1168,12 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                         <span className="font-mono text-[9px] text-indigo-300 flex items-center gap-1">
                           <Command className="size-3" /> 01 // OMNIBAR (Ctrl+K)
                         </span>
-                        <span className="text-xs font-semibold text-zinc-100 mt-1">پالت دستورات سراسری</span>
-                        <span className="text-[10px] text-zinc-400">جستجوی معنایی ماژول‌ها، فایل‌ها و سیستم</span>
+                        <span className="text-xs font-semibold text-zinc-100 mt-1">
+                          پالت دستورات سراسری
+                        </span>
+                        <span className="text-[10px] text-zinc-400">
+                          جستجوی معنایی ماژول‌ها، فایل‌ها و سیستم
+                        </span>
                       </button>
 
                       <button
@@ -1104,8 +1183,12 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                         <span className="font-mono text-[9px] text-emerald-400 flex items-center gap-1">
                           <Terminal className="size-3" /> 02 // OS COMMAND CENTER
                         </span>
-                        <span className="text-xs font-semibold text-zinc-100 mt-1">مرکز کنترل سیستم‌عامل</span>
-                        <span className="text-[10px] text-zinc-400">کلیپ‌بورد معنایی، تقویم جلالی، دستورات</span>
+                        <span className="text-xs font-semibold text-zinc-100 mt-1">
+                          مرکز کنترل سیستم‌عامل
+                        </span>
+                        <span className="text-[10px] text-zinc-400">
+                          کلیپ‌بورد معنایی، تقویم جلالی، دستورات
+                        </span>
                       </button>
                     </div>
                   </div>
@@ -1163,7 +1246,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                               <ShieldCheck className="size-3.5 text-emerald-400" />
                               {msg.securityAudit.encryption}
                             </span>
-                            <span className="text-cyan-300 text-[10px]">ZERO-TELEMETRY CERTIFIED</span>
+                            <span className="text-cyan-300 text-[10px]">
+                              ZERO-TELEMETRY CERTIFIED
+                            </span>
                           </div>
                           <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
                             <div className="bg-zinc-950/60 p-2 rounded border border-white/5">
@@ -1328,7 +1413,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                     }`}
                   >
                     <Eye className="size-3" />
-                    <span>{activeArtifact.type === 'omnibar' ? 'مرکز فرماندهی' : 'خزانه محلی'}</span>
+                    <span>
+                      {activeArtifact.type === 'omnibar' ? 'مرکز فرماندهی' : 'خزانه محلی'}
+                    </span>
                   </button>
                   <button
                     onClick={() => setArtifactViewTab('code')}
@@ -1339,7 +1426,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                     }`}
                   >
                     <CodeXml className="size-3" />
-                    <span>{activeArtifact.type === 'omnibar' ? 'موتور پالت' : 'پیکربندی امنیت'}</span>
+                    <span>
+                      {activeArtifact.type === 'omnibar' ? 'موتور پالت' : 'پیکربندی امنیت'}
+                    </span>
                   </button>
                 </div>
 
@@ -1350,7 +1439,11 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                   className="flex size-7 items-center justify-center rounded-lg border border-white/[0.08] bg-zinc-900 text-zinc-300 hover:text-white transition-all"
                   title="کپی کد"
                 >
-                  {hasCopiedCode ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
+                  {hasCopiedCode ? (
+                    <Check className="size-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="size-3.5" />
+                  )}
                 </button>
 
                 <button
@@ -1395,7 +1488,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                           <span className="font-mono text-[10px] text-zinc-400 flex items-center gap-1">
                             <CalendarDays className="size-3 text-amber-400" /> TODAY // تقویم جلالی
                           </span>
-                          <p className="text-xs font-bold text-amber-200 leading-relaxed">{jalaliToday}</p>
+                          <p className="text-xs font-bold text-amber-200 leading-relaxed">
+                            {jalaliToday}
+                          </p>
                         </div>
 
                         <div className="rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5 space-y-1.5">
@@ -1426,7 +1521,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                             <ClipboardList className="size-3.5 text-cyan-400" />
                             جستجوی معنایی کلیپ‌بورد (Semantic Clipboard)
                           </span>
-                          <span className="font-mono text-[9px] text-zinc-500">AES-256 ENCRYPTED · LOCAL ONLY</span>
+                          <span className="font-mono text-[9px] text-zinc-500">
+                            AES-256 ENCRYPTED · LOCAL ONLY
+                          </span>
                         </div>
                         <input
                           value={clipQuery}
@@ -1441,7 +1538,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                               className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-zinc-950/60 p-2.5"
                             >
                               <div className="min-w-0">
-                                <p className="text-[11px] text-zinc-200 truncate font-mono">{clip.content}</p>
+                                <p className="text-[11px] text-zinc-200 truncate font-mono">
+                                  {clip.content}
+                                </p>
                                 <p className="text-[9px] text-zinc-500 mt-0.5 font-mono">
                                   {clip.source} · {clip.time}
                                 </p>
@@ -1485,8 +1584,12 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                                   <Icon className="size-3.5" />
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="text-xs font-semibold text-zinc-100 truncate">{cmd.title}</p>
-                                  <p className="font-mono text-[9px] text-zinc-500 truncate">{cmd.desc}</p>
+                                  <p className="text-xs font-semibold text-zinc-100 truncate">
+                                    {cmd.title}
+                                  </p>
+                                  <p className="font-mono text-[9px] text-zinc-500 truncate">
+                                    {cmd.desc}
+                                  </p>
                                 </div>
                               </div>
                               <span className="shrink-0 font-mono text-[9px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded">
@@ -1541,7 +1644,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                       <div className="grid grid-cols-2 gap-3 mb-6">
                         <div className="rounded-xl border border-white/[0.06] bg-zinc-950/60 p-4 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-zinc-200">وضعیت قفل خزانه:</span>
+                            <span className="text-xs font-bold text-zinc-200">
+                              وضعیت قفل خزانه:
+                            </span>
                             <span
                               className={`px-2 py-0.5 rounded text-[9px] font-mono ${vaultLocked ? 'bg-rose-500/20 text-rose-300' : 'bg-emerald-500/20 text-emerald-300'}`}
                             >
@@ -1553,13 +1658,17 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                             className="w-full py-2 rounded-lg bg-zinc-900 border border-white/10 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 transition-all flex items-center justify-center gap-1.5"
                           >
                             <Lock className="size-3.5" />
-                            <span>{vaultLocked ? 'بازگشایی با بیومتریک' : 'قفل فوری خزانه (Lock Now)'}</span>
+                            <span>
+                              {vaultLocked ? 'بازگشایی با بیومتریک' : 'قفل فوری خزانه (Lock Now)'}
+                            </span>
                           </button>
                         </div>
 
                         <div className="rounded-xl border border-white/[0.06] bg-zinc-950/60 p-4 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-zinc-200">پالایش کلمات حساس (PII):</span>
+                            <span className="text-xs font-bold text-zinc-200">
+                              پالایش کلمات حساس (PII):
+                            </span>
                             <span
                               className={`px-2 py-0.5 rounded text-[9px] font-mono ${piiRedactionActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-800 text-zinc-500'}`}
                             >
@@ -1637,7 +1746,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                           className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg hover:opacity-90 transition-all"
                         >
                           <ShieldCheck className="size-3.5 fill-white" />
-                          <span>اجرای ممیزی کامل و چرخش کلیدهای رمزنگاری (Audit & Rotate Keys)</span>
+                          <span>
+                            اجرای ممیزی کامل و چرخش کلیدهای رمزنگاری (Audit & Rotate Keys)
+                          </span>
                         </button>
                       </div>
                     </div>
@@ -1743,7 +1854,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                       {cmd.category}
                     </span>
                     {cmd.shortcut && (
-                      <span className="shrink-0 font-mono text-[9px] text-zinc-500">{cmd.shortcut}</span>
+                      <span className="shrink-0 font-mono text-[9px] text-zinc-500">
+                        {cmd.shortcut}
+                      </span>
                     )}
                   </button>
                 );
@@ -1762,7 +1875,8 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                     <Search className="size-3.5" />
                   </div>
                   <p className="text-xs text-zinc-200">
-                    پرسیدن از دریم: «<span className="text-cyan-300 font-semibold">{omnibarQuery}</span>»
+                    پرسیدن از دریم: «
+                    <span className="text-cyan-300 font-semibold">{omnibarQuery}</span>»
                   </p>
                 </button>
               )}
@@ -1786,7 +1900,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                 <span className="font-mono text-[10px] text-indigo-400 tracking-widest uppercase block">
                   {inspector.sectionNo || 'DRAWER // 01'}
                 </span>
-                <span className="text-xs font-bold text-zinc-100 mt-0.5 block">{inspector.title}</span>
+                <span className="text-xs font-bold text-zinc-100 mt-0.5 block">
+                  {inspector.title}
+                </span>
               </div>
               <button
                 onClick={() => setInspector({ open: false, type: null, title: '' })}
@@ -1809,7 +1925,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                     >
                       <div>
                         <p className="font-semibold text-zinc-200">حافظه اپیزودیک و تقویم جلالی</p>
-                        <p className="font-mono text-[10px] text-zinc-500 mt-0.5">Episodic Knowledge Graph</p>
+                        <p className="font-mono text-[10px] text-zinc-500 mt-0.5">
+                          Episodic Knowledge Graph
+                        </p>
                       </div>
                       <ChevronRight className="size-3.5 text-zinc-500 rtl:rotate-180" />
                     </button>
@@ -1818,8 +1936,12 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                       className="w-full flex items-center justify-between rounded-xl border border-white/[0.05] bg-zinc-900/40 p-3 text-right hover:bg-white/[0.08] transition-all"
                     >
                       <div>
-                        <p className="font-semibold text-zinc-200">شبکه عاملی و شورای نورا (Swarm)</p>
-                        <p className="font-mono text-[10px] text-zinc-500 mt-0.5">Multi-Agent Council Mesh</p>
+                        <p className="font-semibold text-zinc-200">
+                          شبکه عاملی و شورای نورا (Swarm)
+                        </p>
+                        <p className="font-mono text-[10px] text-zinc-500 mt-0.5">
+                          Multi-Agent Council Mesh
+                        </p>
                       </div>
                       <ChevronRight className="size-3.5 text-zinc-500 rtl:rotate-180" />
                     </button>
@@ -1837,7 +1959,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                     >
                       <div>
                         <p className="font-semibold text-zinc-200">مرورگر عمیق Playwright</p>
-                        <p className="font-mono text-[10px] text-zinc-500 mt-0.5">Autonomous Deep Browser</p>
+                        <p className="font-mono text-[10px] text-zinc-500 mt-0.5">
+                          Autonomous Deep Browser
+                        </p>
                       </div>
                       <ChevronRight className="size-3.5 text-zinc-500 rtl:rotate-180" />
                     </button>
@@ -1847,7 +1971,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                     >
                       <div>
                         <p className="font-semibold text-zinc-200">سندباکس کد و پردازش داده</p>
-                        <p className="font-mono text-[10px] text-zinc-500 mt-0.5">Polyglot Execution Core</p>
+                        <p className="font-mono text-[10px] text-zinc-500 mt-0.5">
+                          Polyglot Execution Core
+                        </p>
                       </div>
                       <ChevronRight className="size-3.5 text-zinc-500 rtl:rotate-180" />
                     </button>
@@ -1865,7 +1991,9 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                     >
                       <div>
                         <p className="font-semibold text-zinc-200">شتاب‌دهنده سخت‌افزاری و سلامت</p>
-                        <p className="font-mono text-[10px] text-zinc-500 mt-0.5">Hardware Telemetry & MPS</p>
+                        <p className="font-mono text-[10px] text-zinc-500 mt-0.5">
+                          Hardware Telemetry & MPS
+                        </p>
                       </div>
                       <ChevronRight className="size-3.5 text-zinc-500 rtl:rotate-180" />
                     </button>
