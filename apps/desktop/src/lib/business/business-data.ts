@@ -59,6 +59,22 @@ export interface BusinessSale {
   buyer: string;
 }
 
+/** A connected organizational dataset — the bundled pilot or a real CSV. */
+export interface BusinessDataset {
+  name: string;
+  movements: readonly BusinessMovement[];
+}
+
+/** Ledger-only summary for real uploaded CSVs (no reference prices needed). */
+export interface BusinessLedgerSummary {
+  items: number;
+  totalInQty: number;
+  totalOutQty: number;
+  movements: number;
+  topItem: string;
+  topItemQty: number;
+}
+
 export interface BusinessKpis {
   activeItems: number;
   totalStockValueToman: number;
@@ -410,56 +426,70 @@ export const BUSINESS_SALES: readonly BusinessSale[] = buildSales();
 
 const faNum = (n: number): string => n.toLocaleString('fa-IR');
 
-/** موجودی فعلی هر کالا = مجموع ورود − مجموع خروج. */
-export function businessStockBalance(): Map<
-  string,
-  { qty: number; unit: string; valueToman: number }
-> {
-  const balances = new Map<
-    string,
-    { inQty: number; outQty: number; unit: string; refPriceToman: number }
-  >();
-  for (const item of BUSINESS_CATALOG) {
-    balances.set(item.name, {
-      inQty: 0,
-      outQty: 0,
-      unit: item.unit,
-      refPriceToman: item.refPriceToman,
-    });
-  }
-  for (const m of BUSINESS_MOVEMENTS) {
-    const entry = balances.get(m.item);
-    if (!entry) continue;
-    if (m.flow === 'ورود') entry.inQty += m.qty;
-    else entry.outQty += m.qty;
+/** موجودی فعلی هر کالا = مجموع ورود − مجموع خروج (پایلوت یا داده واقعی CSV). */
+export function businessStockBalance(
+  dataset?: BusinessDataset,
+): Map<string, { qty: number; unit: string; valueToman: number }> {
+  const movements = dataset?.movements ?? BUSINESS_MOVEMENTS;
+  const priceByName = new Map(BUSINESS_CATALOG.map((c) => [c.name, c.refPriceToman]));
+  const agg = new Map<string, { qty: number; unit: string }>();
+  for (const m of movements) {
+    const entry = agg.get(m.item) ?? { qty: 0, unit: m.unit };
+    entry.qty += m.flow === 'ورود' ? m.qty : -m.qty;
+    agg.set(m.item, entry);
   }
   const out = new Map<string, { qty: number; unit: string; valueToman: number }>();
-  for (const [name, e] of balances) {
+  for (const [name, e] of agg) {
     out.set(name, {
-      qty: e.inQty - e.outQty,
+      qty: e.qty,
       unit: e.unit,
-      valueToman: Math.max(0, e.inQty - e.outQty) * e.refPriceToman,
+      valueToman: Math.max(0, e.qty) * (priceByName.get(name) ?? 0),
     });
   }
   return out;
 }
 
+/** خلاصه دفتر حرکات برای داده واقعی — بدون نیاز به قیمت مرجع. */
+export function businessLedgerSummary(dataset: BusinessDataset): BusinessLedgerSummary {
+  let totalInQty = 0;
+  let totalOutQty = 0;
+  const outByItem = new Map<string, number>();
+  const items = new Set<string>();
+  for (const m of dataset.movements) {
+    items.add(m.item);
+    if (m.flow === 'ورود') totalInQty += m.qty;
+    else {
+      totalOutQty += m.qty;
+      outByItem.set(m.item, (outByItem.get(m.item) ?? 0) + m.qty);
+    }
+  }
+  const top = [...outByItem.entries()].sort((a, b) => b[1] - a[1])[0];
+  return {
+    items: items.size,
+    totalInQty,
+    totalOutQty,
+    movements: dataset.movements.length,
+    topItem: top?.[0] ?? '—',
+    topItemQty: top?.[1] ?? 0,
+  };
+}
+
 /** شاخص‌های کلیدی مدیریتی — همان چیزی که مدیر ارشد در «یک نگاه» می‌خواهد. */
-export function businessKpis(today = '1405/06/26'): BusinessKpis {
-  const balances = businessStockBalance();
+export function businessKpis(today = '1405/06/26', dataset?: BusinessDataset): BusinessKpis {
+  const movements = dataset?.movements ?? BUSINESS_MOVEMENTS;
+  const balances = businessStockBalance(dataset);
   const activeItems = [...balances.values()].filter((b) => b.qty > 0).length;
   const totalStockValueToman = [...balances.values()].reduce((sum, b) => sum + b.valueToman, 0);
 
   const month = today.slice(0, 7); // '1405/06'
-  const monthOut = BUSINESS_MOVEMENTS.filter((m) => m.flow === 'خروج' && m.date.startsWith(month));
+  const monthOut = movements.filter((m) => m.flow === 'خروج' && m.date.startsWith(month));
   const outByItem = new Map<string, number>();
   for (const m of monthOut) outByItem.set(m.item, (outByItem.get(m.item) ?? 0) + m.qty);
   const monthOutTopItem = [...outByItem.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
 
   const deadStockItems = [...balances.entries()]
     .filter(
-      ([name, b]) =>
-        b.qty > 0 && !BUSINESS_MOVEMENTS.some((m) => m.item === name && m.flow === 'خروج'),
+      ([name, b]) => b.qty > 0 && !movements.some((m) => m.item === name && m.flow === 'خروج'),
     )
     .map(([name]) => name);
 
@@ -504,9 +534,10 @@ export const BUSINESS_SUGGESTED_QUESTIONS: readonly string[] = [
  * تشخیص می‌دهد و از روی همین مجموعه‌داده پاسخ می‌سازد. در حالت دسکتاپ همین
  * پرسش‌ها از مسیر واقعی `dataqa.ask` به هسته پایتون می‌روند.
  */
-export function businessAsk(question: string): BusinessInsight {
+export function businessAsk(question: string, dataset?: BusinessDataset): BusinessInsight {
   const q = question.trim();
-  const balances = businessStockBalance();
+  const balances = businessStockBalance(dataset);
+  const movements = dataset?.movements ?? BUSINESS_MOVEMENTS;
 
   if (/موجودی|انبار|اشتاک|stock/i.test(q) && !/ارزش|ریال|تومان/.test(q)) {
     const rows = [...balances.entries()]
@@ -540,6 +571,28 @@ export function businessAsk(question: string): BusinessInsight {
         'ارزش (میلیون تومان)': Math.round(b.valueToman / 1_000_000),
       }));
     const total = rows.reduce((s, r) => s + Number(r['ارزش (میلیون تومان)']), 0);
+    if (dataset && total === 0) {
+      const qtyRows = [...balances.entries()]
+        .sort((a, b) => b[1].qty - a[1].qty)
+        .slice(0, 10)
+        .map(([name, b]) => ({ کالا: name, موجودی: b.qty, واحد: b.unit }));
+      return {
+        id: 'value',
+        question: q,
+        answer:
+          'قیمت مرجع کالاهای این فایل در کاتالوگ پایلوت موجود نیست، بنابراین ارزش ریالی قابل محاسبه نیست. موجودی عددی هر کالا در جدول ضمیمه است؛ با افزودن ستون قیمت به داده سازمانی، این تحلیل فعال می‌شود.',
+        summary: 'موجودی عددی (بدون قیمت مرجع)',
+        grounded: true,
+        columns: ['کالا', 'موجودی', 'واحد'],
+        rows: qtyRows,
+        chart: {
+          type: 'bar',
+          labels: qtyRows.slice(0, 6).map((r) => String(r.کالا)),
+          values: qtyRows.slice(0, 6).map((r) => Number(r.موجودی)),
+          unit: 'مقدار',
+        },
+      };
+    }
     return {
       id: 'value',
       question: q,
@@ -558,6 +611,19 @@ export function businessAsk(question: string): BusinessInsight {
   }
 
   if (/حضور|غیاب|غایب|نیرو|کارکنان|پرسنل/.test(q)) {
+    if (dataset) {
+      return {
+        id: 'attendance',
+        question: q,
+        answer:
+          'داده حضور و غیاب در فایل حرکات انبارِ بارگذاری‌شده موجود نیست. برای این تحلیل، فایل حضور و غیاب (تاریخ، نام، وضعیت) را جداگانه بارگذاری کنید.',
+        summary: 'داده موجود نیست',
+        grounded: false,
+        columns: [],
+        rows: [],
+        chart: null,
+      };
+    }
     const kpis = businessKpis();
     const rows = BUSINESS_ATTENDANCE.filter((a) => a.date === '1405/06/26').map((a) => ({
       نام: a.name,
@@ -577,7 +643,7 @@ export function businessAsk(question: string): BusinessInsight {
   }
 
   if (/راکد|بی‌حرکت|dead/.test(q)) {
-    const kpis = businessKpis();
+    const kpis = businessKpis('1405/06/26', dataset);
     const rows = kpis.deadStockItems.map((name) => ({
       کالا: name,
       'موجودی (واحد)': balances.get(name)?.qty ?? 0,
@@ -598,6 +664,19 @@ export function businessAsk(question: string): BusinessInsight {
   }
 
   if (/فروش|مشتری|خریدار|فاکتور/.test(q)) {
+    if (dataset) {
+      return {
+        id: 'sales',
+        question: q,
+        answer:
+          'داده فروش در فایل حرکات انبارِ بارگذاری‌شده موجود نیست. برای این تحلیل، فایل فاکتورها (تاریخ، کالا، تعداد، مبلغ، مشتری) را جداگانه بارگذاری کنید.',
+        summary: 'داده موجود نیست',
+        grounded: false,
+        columns: [],
+        rows: [],
+        chart: null,
+      };
+    }
     const byBuyer = new Map<string, number>();
     for (const s of BUSINESS_SALES)
       byBuyer.set(s.buyer, (byBuyer.get(s.buyer) ?? 0) + s.qty * s.unitPriceToman);
@@ -628,8 +707,9 @@ export function businessAsk(question: string): BusinessInsight {
   // پیش‌فرض و «پرمصرف/خروج/مصرف»: مصرف دوره به تفکیک کالا.
   const month = '1405/06';
   const outByItem = new Map<string, number>();
-  for (const m of BUSINESS_MOVEMENTS) {
-    if (m.flow === 'خروج' && m.date.startsWith(month)) {
+  for (const m of movements) {
+    const inScope = dataset ? true : m.date.startsWith(month);
+    if (m.flow === 'خروج' && inScope) {
       outByItem.set(m.item, (outByItem.get(m.item) ?? 0) + m.qty);
     }
   }

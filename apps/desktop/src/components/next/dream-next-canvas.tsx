@@ -37,13 +37,17 @@ import { useNavigate } from 'react-router-dom';
 import { useBridge } from '@/lib/bridge/hooks';
 import { askDataQa, createDataQaSession } from '@/lib/bridge/dataqa';
 import { duplexPushMicChunk, duplexStart, duplexStop } from '@/lib/bridge/duplex';
-import { systemGetHardwareStatus } from '@/lib/bridge/system';
-import type { BusinessInsight } from '@/lib/business/business-data';
+import { loadDataset } from '@/lib/bridge/data-science';
+import { systemGetGoldenReleaseInfo, systemGetHardwareStatus } from '@/lib/bridge/system';
+import type { BusinessDataset, BusinessInsight } from '@/lib/business/business-data';
 import {
+  BUSINESS_MOVEMENTS,
   BUSINESS_SUGGESTED_QUESTIONS,
   businessAsk,
   businessKpis,
+  businessLedgerSummary,
 } from '@/lib/business/business-data';
+import { downloadBusinessCsvSample, parseBusinessCsv } from '@/lib/business/business-csv';
 
 /**
  * Event-time id minting. Defined at module scope — outside the component — so
@@ -265,6 +269,11 @@ export function DreamNextCanvas() {
   const [businessStreamText, setBusinessStreamText] = useState('');
   const [businessStreaming, setBusinessStreaming] = useState(false);
   const [businessInsight, setBusinessInsight] = useState<BusinessInsight | null>(null);
+  // v4.2 — real data sources: uploaded CSV (browser) or core dataset (Tauri).
+  const [businessDataset, setBusinessDataset] = useState<BusinessDataset | null>(null);
+  const [businessLoadError, setBusinessLoadError] = useState<string | null>(null);
+  const [coreFilePath, setCoreFilePath] = useState('');
+  const [coreDatasetId, setCoreDatasetId] = useState<string | null>(null);
 
   // Real hardware vitals from the Python core (echo fallback in browser preview).
   const [hardwareInfo, setHardwareInfo] = useState<{
@@ -741,16 +750,30 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
   };
 
   // Trigger Proactive Ghost Worker Execution
-  const handleTriggerGhostWorker = () => {
+  // v4.2 — Ghost Worker با تلمتری واقعی هسته (system.get_hardware_status +
+  // system.get_golden_release_info) به‌جای متن از پیش‌نوشته.
+  const handleTriggerGhostWorker = async () => {
+    const [hwRes, golden] = await Promise.all([
+      systemGetHardwareStatus(client).catch(() => null),
+      systemGetGoldenReleaseInfo(client).catch(() => null),
+    ]);
+    const live = client.transportKind === 'tauri';
+    const fa = (n: number) => n.toLocaleString('fa-IR');
+    const backend = hwRes?.profile.active_backend ?? 'نامشخص';
+    const device = hwRes?.profile.devices.find((d) => d.is_available);
+    const readiness = golden?.readiness_score ?? 0;
+    const verifiedCount = golden?.verified_subsystems.length ?? 0;
+    const totalSubs = golden?.total_subsystems_count ?? 0;
+
     const ghostArt: Artifact = {
       id: eventId('art-ghost'),
-      title: 'گزارش اجرای خودکار عامل روح: نگهبان مخزن کد (Git Sentinel)',
+      title: 'گزارش دیده‌بان سلامت هسته (Core Health Sentinel)',
       type: 'ghost',
       language: 'markdown',
-      version: 'v4.0 Autonomous',
+      version: 'v4.2 Real Telemetry',
       description:
-        'اسکن کامل برنچ‌های گیت، اعتبارسنجی پکیج‌ها و تایید سلامت تست‌های امنیتی در سندباکس ایزوله.',
-      code: `### Sentinel Execution Audit Report\n- Repository: AliNaderiii/Dream\n- Branch Checked: main\n- Vulnerabilities: 0 Detected\n- Status: 100% HEALTHY`,
+        'ممیزی زنده زیرسیستم‌های هسته دریم با داده واقعی از پل Tauri؛ بدون هیچ مقدار شبیه‌سازی‌شده.',
+      code: `### Core Health Sentinel — Real Telemetry\n- Acceleration backend: ${backend}\n- Readiness: ${readiness}% (${verifiedCount}/${totalSubs} subsystems)\n- Platform: ${golden?.platform_system ?? '—'} · Python ${golden?.python_version ?? '—'}\n- Telemetry source: ${live ? 'LIVE (Tauri bridge)' : 'ECHO (browser preview)'}`,
     };
     setActiveArtifact(ghostArt);
 
@@ -759,7 +782,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       id: eventId('usr'),
       sender: 'user',
       indexRef: `00${msgCount} / GHOST_DISPATCH`,
-      text: '🤖 اجرای دستی دیده‌بان مخزن کد (Trigger Git Sentinel)',
+      text: '🤖 اجرای دیده‌بان سلامت هسته (Core Health Sentinel)',
       timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
     };
 
@@ -767,23 +790,37 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       id: eventId('drm'),
       sender: 'dream',
       indexRef: `00${msgCount + 1} / GHOST_AUDIT`,
-      lead: 'گزارش اجرای دیده‌بان خودکار پس‌زمینه (Git Sentinel Daemon)',
-      text: 'دیده‌بان مخزن کد اجرا شد. تمامی ۵۲ ماژول هسته بررسی شدند؛ هیچ باگ امنیتی یافت نشد و تلمتری به حافظه اپیزودیک دریم ضمیمه گردید.',
+      lead: 'گزارش دیده‌بان پس‌زمینه با تلمتری واقعی (Real Core Telemetry)',
+      text: `دیده‌بان سلامت هسته اجرا شد: بک‌اند شتاب «${backend}»، آمادگی ${fa(readiness)}٪ با ${fa(verifiedCount)} زیرسیستم تاییدشده از ${fa(totalSubs)}. ${device ? `دستگاه فعال: ${device.device_name} (${fa(device.free_memory_mb)} MB آزاد). ` : ''}منبع تلمتری: ${live ? 'پل زنده هسته' : 'پیش‌نمایش مرورگر'}.`,
       timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
       artifact: ghostArt,
       ghostWorkerReport: {
-        workerName: 'دیده‌بان مخزن کد (Git Sentinel)',
-        badge: 'MANUAL TRIGGER EXECUTED',
+        workerName: 'دیده‌بان سلامت هسته (Core Health Sentinel)',
+        badge: live ? 'LIVE CORE TELEMETRY' : 'ECHO TELEMETRY',
         items: [
           {
-            title: 'تحلیل وابستگی‌های Python و Rust',
-            desc: 'تمامی تایپ‌ها بدون هشدار کامپایل شدند.',
+            title: `بک‌اند شتاب‌دهنده: ${backend}`,
+            desc: device
+              ? `${device.device_name} · ${fa(device.free_memory_mb)} MB حافظه آزاد`
+              : 'دستگاه شتاب‌دهنده‌ای گزارش نشد.',
             severity: 'success',
           },
           {
-            title: 'بررسی سلامت تست‌های Vite و Vitest',
-            desc: '۲۲۲ تست در کمتر از ۷ ثانیه پاس شدند.',
+            title: `آمادگی هسته: ${fa(readiness)}٪`,
+            desc: `${fa(verifiedCount)} از ${fa(totalSubs)} زیرسیستم تایید شده‌اند.`,
+            severity: readiness >= 90 ? 'success' : 'warning',
+          },
+          {
+            title: `پلتفرم: ${golden?.platform_system ?? '—'} · Python ${golden?.python_version ?? '—'}`,
+            desc: golden?.release_tag ?? 'اطلاعات نسخه در دسترس نیست.',
             severity: 'success',
+          },
+          {
+            title: 'منبع تلمتری',
+            desc: live
+              ? 'پل زنده Tauri → هسته Python (داده واقعی)'
+              : 'پیش‌نمایش مرورگر (echo telemetry — با اجرای دسکتاپ، زنده می‌شود)',
+            severity: live ? 'success' : 'warning',
           },
         ],
       },
@@ -838,13 +875,15 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
   // P8 — Business Data Studio: route the question to the real DataQA core
   // (Tauri transport) or the deterministic local pilot engine (browser),
   // then stream the answer token-by-token like every other Dream pillar.
-  const handleBusinessAsk = (question: string) => {
+  const handleBusinessAsk = (question: string, override?: BusinessDataset) => {
     const trimmed = question.trim();
     if (!trimmed || businessStreaming) return;
     setBusinessQuestion(trimmed);
     setBusinessStreamText('');
     setBusinessStreaming(true);
     setBusinessInsight(null);
+
+    const dataset = override ?? businessDataset;
 
     const presentLocal = (insight: BusinessInsight, note?: string) => {
       const words = (note ? `${insight.answer} ${note}` : insight.answer).split(' ');
@@ -862,7 +901,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
 
     const run = async () => {
       if (client.transportKind !== 'tauri') {
-        presentLocal(businessAsk(trimmed));
+        presentLocal(businessAsk(trimmed, dataset ?? undefined));
         return;
       }
       try {
@@ -891,13 +930,49 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
         setBusinessStreaming(false);
       } catch {
         presentLocal(
-          businessAsk(trimmed),
+          businessAsk(trimmed, dataset ?? undefined),
           'هسته تحلیل در دسترس نبود؛ پاسخ از موتور محلی پایلوت ساخته شد.',
         );
       }
     };
 
     void run();
+  };
+
+  // v4.2 — بارگذاری CSV واقعی سازمان (پارس محلی، قطعی و آفلاین)
+  const handleBusinessCsvFile = (file: File) => {
+    void file.text().then((text) => {
+      const parsed = parseBusinessCsv(text, file.name);
+      if (!parsed.ok) {
+        setBusinessLoadError(parsed.error);
+        return;
+      }
+      setBusinessLoadError(null);
+      setBusinessDataset(parsed.dataset);
+      setCoreDatasetId(null);
+      handleBusinessAsk('موجودی فعلی انبار به تفکیک کالا چقدر است؟', parsed.dataset);
+    });
+  };
+
+  // v4.2 — اتصال فایل از هسته: data.load_data واقعی + جلسه DataQA روی دیتاست
+  const handleConnectCoreFile = () => {
+    const path = coreFilePath.trim();
+    if (!path) return;
+    void (async () => {
+      try {
+        const dto = await loadDataset(client, path);
+        setCoreDatasetId(dto.dataset_id);
+        const session = await createDataQaSession(undefined, '', dto.dataset_id);
+        cachedDataqaSessionId = session.session_id;
+        setBusinessDataset(null);
+        setBusinessLoadError(null);
+        handleBusinessAsk('خلاصه و ساختار این دیتاست چیست؟');
+      } catch {
+        setBusinessLoadError(
+          'بارگذاری فایل در هسته ناموفق بود؛ مسیر و فرمت فایل (CSV/JSON/SQLite) را بررسی کنید.',
+        );
+      }
+    })();
   };
 
   const handleOpenBusinessStudio = () => {
@@ -966,7 +1041,7 @@ const answer = await bridge.stream('dataqa.ask', {
       textToSend.includes('عامل') ||
       textToSend.includes('نگهبان')
     ) {
-      handleTriggerGhostWorker();
+      void handleTriggerGhostWorker();
       if (!customText) setInputText('');
       return;
     }
@@ -1067,7 +1142,7 @@ const answer = await bridge.stream('dataqa.ask', {
       category: 'AGENTS',
       shortcut: '⌘⇧G',
       icon: Bot,
-      execute: () => handleTriggerGhostWorker(),
+      execute: () => void handleTriggerGhostWorker(),
     },
     {
       id: 'c5',
@@ -1144,6 +1219,12 @@ const answer = await bridge.stream('dataqa.ask', {
 
   // P8 KPIs — pure deterministic pilot metrics for the executive glance.
   const businessKpisData = businessKpis();
+  const businessLedger = businessDataset ? businessLedgerSummary(businessDataset) : null;
+  const businessSourceLabel = businessDataset
+    ? `REAL CSV · ${businessDataset.name} · ${businessDataset.movements.length.toLocaleString('fa-IR')} ردیف`
+    : coreDatasetId
+      ? `CORE DATASET · ${coreDatasetId.slice(0, 10)}`
+      : 'PILOT DATASET';
   const hardwareUsedGb = hardwareInfo ? (hardwareInfo.totalMb - hardwareInfo.freeMb) / 1024 : null;
   const hardwareTotalGb = hardwareInfo ? hardwareInfo.totalMb / 1024 : null;
   const hardwareRamPct =
@@ -1571,7 +1652,7 @@ const answer = await bridge.stream('dataqa.ask', {
                       </button>
 
                       <button
-                        onClick={() => handleTriggerGhostWorker()}
+                        onClick={() => void handleTriggerGhostWorker()}
                         className="flex items-center gap-1 rounded-lg px-2 py-0.5 font-mono text-[10px] text-purple-300 bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 transition-all"
                       >
                         <Bot className="size-3" />
@@ -1914,42 +1995,85 @@ const answer = await bridge.stream('dataqa.ask', {
                         </span>
                       </div>
 
-                      {/* Executive KPI glance */}
+                      {/* Executive KPI glance — pilot KPIs or real-ledger KPIs */}
                       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                        <div className="space-y-1.5 rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5">
-                          <span className="font-mono text-[10px] text-zinc-400">
-                            اقلام فعال انبار
-                          </span>
-                          <p className="text-lg font-bold font-mono text-cyan-300">
-                            {businessKpisData.activeItems.toLocaleString('fa-IR')}
-                          </p>
-                        </div>
-                        <div className="space-y-1.5 rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5">
-                          <span className="font-mono text-[10px] text-zinc-400">
-                            ارزش موجودی (میلیون تومان)
-                          </span>
-                          <p className="text-lg font-bold font-mono text-indigo-300">
-                            {Math.round(
-                              businessKpisData.totalStockValueToman / 1_000_000,
-                            ).toLocaleString('fa-IR')}
-                          </p>
-                        </div>
-                        <div className="space-y-1.5 rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5">
-                          <span className="font-mono text-[10px] text-zinc-400">
-                            حواله‌های شهریور
-                          </span>
-                          <p className="text-lg font-bold font-mono text-amber-300">
-                            {businessKpisData.monthOutMovements.toLocaleString('fa-IR')}
-                          </p>
-                        </div>
-                        <div className="space-y-1.5 rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5">
-                          <span className="font-mono text-[10px] text-zinc-400">
-                            نرخ حضور نیروها
-                          </span>
-                          <p className="text-lg font-bold font-mono text-emerald-300">
-                            {businessKpisData.attendanceRatePct.toLocaleString('fa-IR')}٪
-                          </p>
-                        </div>
+                        {businessLedger ? (
+                          <>
+                            <div className="space-y-1.5 rounded-xl border border-cyan-500/25 bg-cyan-950/20 p-3.5">
+                              <span className="font-mono text-[10px] text-zinc-400">
+                                اقلام فایل واقعی
+                              </span>
+                              <p className="text-lg font-bold font-mono text-cyan-300">
+                                {businessLedger.items.toLocaleString('fa-IR')}
+                              </p>
+                            </div>
+                            <div className="space-y-1.5 rounded-xl border border-cyan-500/25 bg-cyan-950/20 p-3.5">
+                              <span className="font-mono text-[10px] text-zinc-400">
+                                مجموع ورود دوره
+                              </span>
+                              <p className="text-lg font-bold font-mono text-emerald-300">
+                                {businessLedger.totalInQty.toLocaleString('fa-IR')}
+                              </p>
+                            </div>
+                            <div className="space-y-1.5 rounded-xl border border-cyan-500/25 bg-cyan-950/20 p-3.5">
+                              <span className="font-mono text-[10px] text-zinc-400">
+                                مجموع خروج دوره
+                              </span>
+                              <p className="text-lg font-bold font-mono text-amber-300">
+                                {businessLedger.totalOutQty.toLocaleString('fa-IR')}
+                              </p>
+                            </div>
+                            <div className="space-y-1.5 rounded-xl border border-cyan-500/25 bg-cyan-950/20 p-3.5">
+                              <span className="font-mono text-[10px] text-zinc-400">
+                                پرگردش‌ترین کالا
+                              </span>
+                              <p
+                                className="truncate text-sm font-bold font-mono text-indigo-300"
+                                title={businessLedger.topItem}
+                              >
+                                {businessLedger.topItem} ·{' '}
+                                {businessLedger.topItemQty.toLocaleString('fa-IR')}
+                              </p>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="space-y-1.5 rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5">
+                              <span className="font-mono text-[10px] text-zinc-400">
+                                اقلام فعال انبار
+                              </span>
+                              <p className="text-lg font-bold font-mono text-cyan-300">
+                                {businessKpisData.activeItems.toLocaleString('fa-IR')}
+                              </p>
+                            </div>
+                            <div className="space-y-1.5 rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5">
+                              <span className="font-mono text-[10px] text-zinc-400">
+                                ارزش موجودی (میلیون تومان)
+                              </span>
+                              <p className="text-lg font-bold font-mono text-indigo-300">
+                                {Math.round(
+                                  businessKpisData.totalStockValueToman / 1_000_000,
+                                ).toLocaleString('fa-IR')}
+                              </p>
+                            </div>
+                            <div className="space-y-1.5 rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5">
+                              <span className="font-mono text-[10px] text-zinc-400">
+                                حواله‌های شهریور
+                              </span>
+                              <p className="text-lg font-bold font-mono text-amber-300">
+                                {businessKpisData.monthOutMovements.toLocaleString('fa-IR')}
+                              </p>
+                            </div>
+                            <div className="space-y-1.5 rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3.5">
+                              <span className="font-mono text-[10px] text-zinc-400">
+                                نرخ حضور نیروها
+                              </span>
+                              <p className="text-lg font-bold font-mono text-emerald-300">
+                                {businessKpisData.attendanceRatePct.toLocaleString('fa-IR')}٪
+                              </p>
+                            </div>
+                          </>
+                        )}
                       </div>
 
                       {/* Suggested questions */}
@@ -1964,6 +2088,78 @@ const answer = await bridge.stream('dataqa.ask', {
                             {question}
                           </button>
                         ))}
+                      </div>
+
+                      {/* v4.2 — real data source bar */}
+                      <div
+                        className="mt-4 space-y-2.5 rounded-xl border border-white/[0.06] bg-zinc-950/40 p-3"
+                        dir="rtl"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-300">
+                            <FolderOpen className="size-3.5 text-cyan-400" />
+                            منبع داده (Data Source)
+                          </span>
+                          <span className="font-mono text-[9px] text-cyan-300/80">
+                            {businessSourceLabel}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="cursor-pointer rounded-full border border-cyan-500/25 bg-cyan-500/10 px-3 py-1 text-[11px] text-cyan-200 transition-all hover:bg-cyan-500/20">
+                            ⬆ بارگذاری CSV حرکات انبار
+                            <input
+                              type="file"
+                              accept=".csv,text/csv"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleBusinessCsvFile(file);
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+                          <button
+                            onClick={() => downloadBusinessCsvSample(BUSINESS_MOVEMENTS)}
+                            className="rounded-full border border-white/10 bg-zinc-900 px-3 py-1 text-[11px] text-zinc-300 transition-all hover:text-white"
+                          >
+                            ⬇ دانلود نمونه CSV
+                          </button>
+                          {businessDataset && (
+                            <button
+                              onClick={() => {
+                                setBusinessDataset(null);
+                                setBusinessInsight(null);
+                                setBusinessStreamText('');
+                              }}
+                              className="rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1 text-[11px] text-amber-200 transition-all hover:bg-amber-500/20"
+                            >
+                              ↺ بازنشانی به داده پایلوت
+                            </button>
+                          )}
+                        </div>
+                        {client.transportKind === 'tauri' && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input
+                              value={coreFilePath}
+                              onChange={(e) => setCoreFilePath(e.target.value)}
+                              placeholder="D:\data\warehouse.csv — مسیر فایل در سیستم"
+                              className="min-w-56 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-3 py-1.5 text-[11px] text-zinc-200 placeholder-zinc-600 focus:outline-none"
+                              dir="ltr"
+                            />
+                            <button
+                              onClick={handleConnectCoreFile}
+                              disabled={!coreFilePath.trim()}
+                              className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[11px] text-emerald-200 transition-all hover:bg-emerald-500/20 disabled:opacity-40"
+                            >
+                              اتصال از هسته (data.load_data)
+                            </button>
+                          </div>
+                        )}
+                        {businessLoadError && (
+                          <p className="text-[11px] leading-relaxed text-rose-300">
+                            ⚠ {businessLoadError}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -2029,7 +2225,7 @@ const answer = await bridge.stream('dataqa.ask', {
                     )}
 
                     <div className="flex items-center justify-between border-t border-white/[0.06] pt-4 font-mono text-xs text-zinc-500">
-                      <span>DATAQA BRIDGE · dataqa.sessions / dataqa.ask</span>
+                      <span>DATAQA BRIDGE · dataqa.ask · data.load_data</span>
                       <span>EVIDENCE-BOUND ANSWERS · JALALI CALENDAR</span>
                     </div>
                   </div>
