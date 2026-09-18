@@ -29,10 +29,29 @@ import {
   Cpu,
   Terminal,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useBridge } from '@/lib/bridge/hooks';
 import { duplexPushMicChunk, duplexStart, duplexStop } from '@/lib/bridge/duplex';
+
+/**
+ * Event-time id minting. Defined at module scope — outside the component — so
+ * the component's render path stays pure (react-hooks/purity): ids are only
+ * generated when a user action fires, never during render.
+ */
+const eventId = (prefix: string) => `${prefix}-${Date.now()}`;
+
+/** SSRF shield policy modes for the local vault studio. */
+const SSRF_SHIELD_MODES: ReadonlyArray<{
+  id: 'strict' | 'airgap' | 'permissive';
+  label: string;
+  desc: string;
+}> = [
+  { id: 'strict', label: 'سخت‌گیرانه (Strict)', desc: 'مسدودسازی Localhost و متادیتا' },
+  { id: 'airgap', label: 'ایزوله مطلق (Airgap)', desc: 'قطع ۱۰۰٪ ترافیک شبکه' },
+  { id: 'permissive', label: 'آزاد (Permissive)', desc: 'دسترسی عمومی استاندارد' },
+];
 
 /** Model for Interactive Living Artifact */
 export interface Artifact {
@@ -235,7 +254,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
     type: 'tot' | 'browser' | 'code' | 'model' | 'index' | 'speculative' | 'voice' | 'security' | null;
     title: string;
     sectionNo?: string;
-    content?: any;
+    content?: string;
   }>({ open: false, type: null, title: '' });
 
   // Audio Context Refs
@@ -275,9 +294,6 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
         void audioCtxRef.current.close().catch(() => {});
       }
-      setVoiceRMS(0);
-      setWaveformPeaks(new Array(24).fill(0.08));
-      setIsSpeaking(false);
       return;
     }
 
@@ -369,23 +385,30 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       if (stream) stream.getTracks().forEach((t) => t.stop());
       if (ctx && ctx.state !== 'closed') void ctx.close().catch(() => {});
     };
-  }, [client, isVoiceActive, isMicMuted, isAiSpeaking]);
+  }, [client, isVoiceActive, isMicMuted, isAiSpeaking, bargeInEnabled]);
 
   const toggleVoiceSession = async () => {
     if (!isVoiceActive) {
       try {
         await duplexStart(client, 'desktop-live-voice', 16000, 0.5);
-      } catch {}
+      } catch {
+        /* duplex bridge may be offline; continue with the local voice UX. */
+      }
       setIsVoiceActive(true);
       setIsAiSpeaking(true);
       setTimeout(() => setIsAiSpeaking(false), 3000);
     } else {
       try {
         await duplexStop(client);
-      } catch {}
+      } catch {
+        /* duplex bridge may be offline; continue with the local voice UX. */
+      }
       setIsVoiceActive(false);
       setVoiceZenMode(false);
       setIsAiSpeaking(false);
+      setVoiceRMS(0);
+      setWaveformPeaks(new Array(24).fill(0.08));
+      setIsSpeaking(false);
     }
   };
 
@@ -399,7 +422,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
   // Trigger Security Audit & Key Rotation Action
   const handleTriggerSecurityAudit = () => {
     const newLog = {
-      id: `log-${Date.now()}`,
+      id: eventId('log'),
       time: new Date().toLocaleTimeString('fa-IR'),
       event: 'چرخش کلیدهای رمزنگاری محلی و پاک‌سازی بافر موقت حافظه',
       status: 'encrypted' as const,
@@ -407,7 +430,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
     setAuditLogs((prev) => [newLog, ...prev]);
 
     const secArt: Artifact = {
-      id: `art-sec-${Date.now()}`,
+      id: eventId('art-sec'),
       title: 'گزارش ممیزی امنیتی و سپر حریم خصوصی (Security & Vault Audit)',
       type: 'security',
       language: 'markdown',
@@ -419,7 +442,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
 
     const msgCount = messages.length + 1;
     const userMsg: Message = {
-      id: `usr-${Date.now()}`,
+      id: eventId('usr'),
       sender: 'user',
       indexRef: `00${msgCount} / VAULT_AUDIT`,
       text: '🛡️ ممیزی امنیتی و قفل خزانه محلی (Audit Local Vault)',
@@ -427,7 +450,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
     };
 
     const dreamReply: Message = {
-      id: `drm-${Date.now()}`,
+      id: eventId('drm'),
       sender: 'dream',
       indexRef: `00${msgCount + 1} / SECURITY_REPORT`,
       lead: 'گزارش ممیزی حریم خصوصی و امنیت داده‌ها (Zero-Telemetry Audit)',
@@ -457,7 +480,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       };
 
       const visionArtifact: Artifact = {
-        id: `art-vision-${Date.now()}`,
+        id: eventId('art-vision'),
         title: 'تحلیل بینایی کانتکست صفحه و پچ اصلاحی VS Code',
         type: 'vision',
         language: 'typescript',
@@ -469,7 +492,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
 
       const msgCount = messages.length + 1;
       const userMsg: Message = {
-        id: `usr-${Date.now()}`,
+        id: eventId('usr'),
         sender: 'user',
         indexRef: `00${msgCount} / VISION_CAPTURE`,
         text: '📷 اسکن کانتکست صفحه نمایش (Alt+Space)',
@@ -477,7 +500,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       };
 
       const dreamReply: Message = {
-        id: `drm-${Date.now()}`,
+        id: eventId('drm'),
         sender: 'dream',
         indexRef: `00${msgCount + 1} / VISION_ANALYSIS`,
         lead: 'ادراک بینایی محیطی صفحه نمایش (Screen Vision OCR)',
@@ -503,7 +526,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
   ) => {
     const msgCount = messages.length + 1;
     const userMsg: Message = {
-      id: `usr-${Date.now()}`,
+      id: eventId('usr'),
       sender: 'user',
       indexRef: `00${msgCount} / SPEC_INFER`,
       text: query,
@@ -516,7 +539,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
     setStreamedTokensCount(0);
 
     const specArtifact: Artifact = {
-      id: `art-spec-${Date.now()}`,
+      id: eventId('art-spec'),
       title: 'موتور استریم گمانه‌زنی دوهسته‌ای (Speculative Dual-Core)',
       type: 'speculative',
       language: 'tsx',
@@ -535,7 +558,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
         setIsLiveStreaming(false);
 
         const dreamReply: Message = {
-          id: `drm-${Date.now()}`,
+          id: eventId('drm'),
           sender: 'dream',
           indexRef: `00${msgCount + 1} / SPEC_COMPLETION`,
           lead: 'پردازش فوق‌سریع با موتور استریم دوهسته‌ای (Speculative Dual-Core)',
@@ -566,7 +589,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
   // Trigger Proactive Ghost Worker Execution
   const handleTriggerGhostWorker = () => {
     const ghostArt: Artifact = {
-      id: `art-ghost-${Date.now()}`,
+      id: eventId('art-ghost'),
       title: 'گزارش اجرای خودکار عامل روح: نگهبان مخزن کد (Git Sentinel)',
       type: 'ghost',
       language: 'markdown',
@@ -578,7 +601,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
 
     const msgCount = messages.length + 1;
     const userMsg: Message = {
-      id: `usr-${Date.now()}`,
+      id: eventId('usr'),
       sender: 'user',
       indexRef: `00${msgCount} / GHOST_DISPATCH`,
       text: '🤖 اجرای دستی دیده‌بان مخزن کد (Trigger Git Sentinel)',
@@ -586,7 +609,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
     };
 
     const dreamReply: Message = {
-      id: `drm-${Date.now()}`,
+      id: eventId('drm'),
       sender: 'dream',
       indexRef: `00${msgCount + 1} / GHOST_AUDIT`,
       lead: 'گزارش اجرای دیده‌بان خودکار پس‌زمینه (Git Sentinel Daemon)',
@@ -610,7 +633,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
   const handleExecuteOSCommand = (command: string, category: string, result: string) => {
     const msgCount = messages.length + 1;
     const userMsg: Message = {
-      id: `usr-${Date.now()}`,
+      id: eventId('usr'),
       sender: 'user',
       indexRef: `00${msgCount} / OS_COMMAND`,
       text: `⌨️ اجرای دستور سیستمی از پالت سراسری: ${command}`,
@@ -618,7 +641,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
     };
 
     const dreamReply: Message = {
-      id: `drm-${Date.now()}`,
+      id: eventId('drm'),
       sender: 'dream',
       indexRef: `00${msgCount + 1} / OS_EXECUTION`,
       lead: 'اجرای دستور سیستمی در سندباکس ایزوله (OS Command Dispatch)',
@@ -691,7 +714,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
 
     const msgCount = messages.length + 1;
     const userMsg: Message = {
-      id: `usr-${Date.now()}`,
+      id: eventId('usr'),
       sender: 'user',
       indexRef: `00${msgCount} / QUERY`,
       text: textToSend,
@@ -707,7 +730,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       const respIndex = `00${msgCount + 1} / SYNTHESIS`;
 
       const reply: Message = {
-        id: `drm-${Date.now()}`,
+        id: eventId('drm'),
         sender: 'dream',
         indexRef: respIndex,
         lead: 'پاسخ هوشمند سایدکار',
@@ -726,7 +749,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
     desc: string;
     category: string;
     shortcut?: string;
-    icon: any;
+    icon: LucideIcon;
     execute: () => void;
   }> = [
     {
@@ -1559,14 +1582,10 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
                           سیاست دیوار آتشین وب (SSRF Shield Policy):
                         </span>
                         <div className="grid grid-cols-3 gap-2">
-                          {[
-                            { id: 'strict', label: 'سخت‌گیرانه (Strict)', desc: 'مسدودسازی Localhost و متادیتا' },
-                            { id: 'airgap', label: 'ایزوله مطلق (Airgap)', desc: 'قطع ۱۰۰٪ ترافیک شبکه' },
-                            { id: 'permissive', label: 'آزاد (Permissive)', desc: 'دسترسی عمومی استاندارد' },
-                          ].map((m) => (
+                          {SSRF_SHIELD_MODES.map((m) => (
                             <button
                               key={m.id}
-                              onClick={() => setSsrfShieldMode(m.id as any)}
+                              onClick={() => setSsrfShieldMode(m.id)}
                               className={`rounded-xl p-3 text-right border transition-all ${
                                 ssrfShieldMode === m.id
                                   ? 'border-emerald-500/50 bg-emerald-950/30 text-white shadow-lg'
