@@ -29,7 +29,7 @@ describe('app shell', () => {
 
   it('renders the shell chrome and cold dashboard route within the startup budget', async () => {
     const started = performance.now();
-    renderApp('/');
+    renderApp('/classic');
 
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Sessions' })).toBeInTheDocument();
@@ -63,9 +63,9 @@ describe('app shell', () => {
     expect(await screen.findByRole('region', { name: label })).toBeInTheDocument();
   });
 
-  it('redirects an unknown route to the dashboard', async () => {
+  it('redirects an unknown route to the Dream Next home', async () => {
     renderApp('/does-not-exist');
-    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(await screen.findByText('DREAM // 4.0')).toBeInTheDocument();
   });
 
   it('renders a conversation for a known session id', async () => {
@@ -79,7 +79,7 @@ describe('app shell', () => {
 
   it('toggles the sidebar closed and open again', async () => {
     const user = userEvent.setup();
-    renderApp('/');
+    renderApp('/classic');
 
     await user.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
     expect(screen.queryByRole('complementary', { name: 'Sessions' })).not.toBeInTheDocument();
@@ -90,7 +90,7 @@ describe('app shell', () => {
 
   it('applies the dark theme to the document when toggled', async () => {
     const user = userEvent.setup();
-    renderApp('/');
+    renderApp('/classic');
 
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
     await user.click(screen.getByRole('button', { name: 'Switch to dark theme' }));
@@ -99,7 +99,7 @@ describe('app shell', () => {
 
   it('switches the document to RTL for Persian', async () => {
     const user = userEvent.setup();
-    renderApp('/');
+    renderApp('/classic');
 
     const sidebar = screen.getByRole('complementary', { name: 'Sessions' });
     expect(sidebar.className).toContain('border-e');
@@ -117,7 +117,7 @@ describe('app shell', () => {
 
   it('creates a session from the sidebar and navigates to it', async () => {
     const user = userEvent.setup();
-    renderApp('/');
+    renderApp('/classic');
 
     const sidebar = screen.getByRole('complementary', { name: 'Sessions' });
     await user.click(within(sidebar).getByRole('button', { name: 'New session' }));
@@ -127,7 +127,7 @@ describe('app shell', () => {
   });
 
   it('changes a warm route within the route-interaction budget', async () => {
-    renderApp('/');
+    renderApp('/classic');
     await screen.findByRole('heading', { name: 'Dashboard' });
 
     // The budget describes the cost of a warm route change, so measure it three
@@ -154,7 +154,7 @@ describe('app shell', () => {
   });
 
   it('opens the local command palette within the perceived-interaction budget', () => {
-    renderApp('/');
+    renderApp('/classic');
     const samples: number[] = [];
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const started = performance.now();
@@ -171,7 +171,7 @@ describe('app shell', () => {
 
   it('opens the command palette with the keyboard and runs a command', async () => {
     const user = userEvent.setup();
-    renderApp('/');
+    renderApp('/classic');
 
     await user.keyboard('{Control>}k{/Control}');
     const dialog = await screen.findByRole('dialog', { name: 'Command palette' });
@@ -191,5 +191,30 @@ describe('app shell', () => {
     expect(await screen.findByRole('dialog', { name: 'Conversation search' })).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toBeInTheDocument();
     expect(useAppStore.getState().sessionSearchOpen).toBe(true);
+  });
+
+  it.each([['/'], ['/next']])(
+    'renders the Dream Next zen experience at %s without the legacy chrome',
+    async (route) => {
+      renderApp(route);
+
+      expect(await screen.findByText('DREAM // 4.0')).toBeInTheDocument();
+      expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('complementary', { name: 'Sessions' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
+    },
+  );
+
+  it('opens the Dream omnibar with ctrl+k on the zen home', async () => {
+    renderApp('/');
+    await screen.findByText('DREAM // 4.0');
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    expect(screen.getByRole('dialog', { name: 'Dream omnibar' })).toBeInTheDocument();
+    // The classic palette must not open on top of the Dream omnibar.
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Dream omnibar' })).not.toBeInTheDocument();
   });
 });

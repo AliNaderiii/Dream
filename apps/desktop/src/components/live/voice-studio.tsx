@@ -48,6 +48,7 @@ export function VoiceStudio() {
     isMutedRef.current = isMuted;
   }, [isMuted]);
 
+  // Polling loop for visualizer frames and state from server (fallback / sync)
   useEffect(() => {
     if (!isActive) {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
@@ -137,6 +138,7 @@ export function VoiceStudio() {
           return;
         }
 
+        // Calculate Root-Mean-Square (RMS)
         let sumSq = 0;
         for (let i = 0; i < timeData.length; i++) {
           const val = (timeData[i] - 128) / 128;
@@ -144,6 +146,7 @@ export function VoiceStudio() {
         }
         const rms = Math.sqrt(sumSq / timeData.length);
 
+        // Calculate 16 peaks
         const peaks: number[] = [];
         const peakStep = Math.max(1, Math.floor(timeData.length / 16));
         for (let i = 0; i < 16; i++) {
@@ -151,6 +154,7 @@ export function VoiceStudio() {
           peaks.push((timeData[idx] - 128) / 128);
         }
 
+        // Calculate 8 frequency bins
         const bins: number[] = [];
         const binStep = Math.max(1, Math.floor(dataArray.length / 8));
         for (let i = 0; i < 8; i++) {
@@ -176,6 +180,7 @@ export function VoiceStudio() {
 
       animFrameRef.current = requestAnimationFrame(renderLoop);
 
+      // Setup 4096-sample buffer audio processor for real PCM streaming to backend
       if (ctx.createScriptProcessor) {
         const processor = ctx.createScriptProcessor(4096, 1, 1);
         processorRef.current = processor;
@@ -186,12 +191,14 @@ export function VoiceStudio() {
           if (isMutedRef.current) return;
           const inputData = e.inputBuffer.getChannelData(0);
 
+          // Convert Float32 (-1.0..1.0) to 16-bit PCM (<h)
           const pcm16 = new Int16Array(inputData.length);
           for (let i = 0; i < inputData.length; i++) {
             const s = Math.max(-1, Math.min(1, inputData[i]));
             pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
           }
 
+          // Base64 encode
           const binary = String.fromCharCode(...new Uint8Array(pcm16.buffer));
           const base64Chunk = btoa(binary);
 
@@ -210,8 +217,10 @@ export function VoiceStudio() {
       setIsActive(true);
       setDuplexState('listening');
 
+      // Start actual hardware microphone streaming
       await startAudioCapture();
 
+      // Seed initial connection chunk
       await duplexPushMicChunk(client, 'U2FtcGxlUEMxNkF1ZGlvQ2h1bms=');
       const metrics = await duplexGetMetrics(client, 'desktop-live-voice');
       if (metrics?.stats?.estimated_latency_ms) {
@@ -297,7 +306,9 @@ export function VoiceStudio() {
           </div>
         )}
 
+        {/* 3D/2D Dynamic Audio Waveform & Pulse Visualizer */}
         <div className="relative flex min-h-[220px] flex-col items-center justify-center overflow-hidden rounded-2xl border border-zinc-800/70 bg-zinc-900/60 p-8">
+          {/* Glowing background pulse aura */}
           <div
             className="pointer-events-none absolute rounded-full opacity-40 blur-2xl transition-all duration-150"
             style={{
@@ -312,6 +323,7 @@ export function VoiceStudio() {
             }}
           />
 
+          {/* Central Animated Equalizer Waveform */}
           <div className="z-10 flex h-28 w-full max-w-md items-center justify-center gap-1.5">
             {visualizer.waveform_peaks.map((peak, idx) => {
               const heightPct = Math.max(
@@ -337,6 +349,7 @@ export function VoiceStudio() {
             })}
           </div>
 
+          {/* 8-Band Frequency Spectrum Bar */}
           <div className="z-10 mt-4 flex w-full max-w-xs items-center justify-center gap-3">
             {visualizer.frequency_bins.map((bin, idx) => (
               <div key={idx} className="flex flex-1 flex-col items-center gap-1">
@@ -350,6 +363,7 @@ export function VoiceStudio() {
           </div>
         </div>
 
+        {/* Studio Controls Panel */}
         <div className="grid grid-cols-1 gap-3 pt-2 md:grid-cols-4">
           {!isActive ? (
             <Button
@@ -401,6 +415,7 @@ export function VoiceStudio() {
           </Button>
         </div>
 
+        {/* Transcript Area */}
         {transcript && (
           <div className="whitespace-pre-wrap rounded-xl border border-zinc-800 bg-zinc-900/80 p-4 font-sans text-sm leading-relaxed text-zinc-300">
             {transcript}

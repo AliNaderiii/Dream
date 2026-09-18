@@ -56,7 +56,7 @@ interface RouteCommand {
 }
 
 const ROUTES: readonly RouteCommand[] = [
-  { id: 'dashboard', path: '/', key: 'nav.dashboard', keys: ['mod', '1'] },
+  { id: 'dashboard', path: '/classic', key: 'nav.dashboard', keys: ['mod', '1'] },
   { id: 'chat', path: '/chat', key: 'nav.chat' },
   { id: 'projects', path: '/projects', key: 'nav.projects', keys: ['mod', '2'] },
   { id: 'memory', path: '/memory', key: 'nav.memory', keys: ['mod', '3'] },

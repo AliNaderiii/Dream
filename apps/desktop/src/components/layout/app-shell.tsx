@@ -36,6 +36,7 @@ const SecurityOffBanner = lazy(() =>
 /** Pathname → common.nav key for the top-bar title. */
 const NAV_SLUG: Record<string, string> = {
   '/': 'dashboard',
+  '/classic': 'dashboard',
   '/projects': 'projects',
   '/scheduler': 'scheduler',
   '/memory': 'memory',
@@ -67,17 +68,19 @@ export function AppShell() {
       ? t(extensionLabel)
       : t(`nav.${NAV_SLUG[location.pathname] ?? 'dashboard'}`);
 
+  const isZenMode = location.pathname === '/' || location.pathname === '/next';
+
   return (
     <TooltipProvider>
       <div className="surface-gradient flex h-screen flex-col overflow-hidden text-fg-primary">
         <TitleBar />
 
         <div className="flex min-h-0 flex-1">
-          <ActivityRail />
-          <Sidebar />
+          {!isZenMode && <ActivityRail />}
+          {!isZenMode && <Sidebar />}
 
           <main className="relative flex min-w-0 flex-1 flex-col">
-            <TopBar title={title} />
+            {!isZenMode && <TopBar title={title} />}
             <BridgeDisconnectedBanner />
             <Suspense fallback={null}>
               <SecurityOffBanner />
@@ -97,11 +100,16 @@ export function AppShell() {
           </main>
         </div>
 
-        <StatusBar />
-        <CommandPalette
-          commands={shortcuts}
-          onOpenSession={(sessionId) => void navigate(`/chat/${sessionId}`)}
-        />
+        {!isZenMode && <StatusBar />}
+        {/* The classic palette is replaced by the Dream omnibar (Ctrl+K) on the
+            zen routes ('/' and '/next'), so it stays unmounted there to avoid a
+            double-overlay conflict on the same global hotkey. */}
+        {!isZenMode && (
+          <CommandPalette
+            commands={shortcuts}
+            onOpenSession={(sessionId) => void navigate(`/chat/${sessionId}`)}
+          />
+        )}
         <SessionSearch onOpenSession={(sessionId) => void navigate(`/chat/${sessionId}`)} />
       </div>
     </TooltipProvider>

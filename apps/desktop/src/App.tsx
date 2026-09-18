@@ -39,6 +39,9 @@ const SchedulerRoute = lazy(() =>
 const SubagentsRoute = lazy(() =>
   import('@/routes/subagents').then((m) => ({ default: m.SubagentsRoute })),
 );
+const NextRoute = lazy(() =>
+  import('@/routes/next').then((m) => ({ default: m.NextRoute })),
+);
 
 // P0 SEAM: feature route components remain lazy while their metadata is discovered.
 const ExtensionRoutes = registeredRoutes.map((route) => ({
@@ -67,6 +70,14 @@ export default function App() {
       <Route element={<AppShell />}>
         <Route
           index
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <NextRoute />
+            </Suspense>
+          }
+        />
+        <Route
+          path="classic"
           element={
             <Suspense fallback={<RouteFallback />}>
               <DashboardRoute />
@@ -174,6 +185,14 @@ export default function App() {
           element={
             <Suspense fallback={<RouteFallback />}>
               <SettingsRoute />
+            </Suspense>
+          }
+        />
+        <Route
+          path="next"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <NextRoute />
             </Suspense>
           }
         />

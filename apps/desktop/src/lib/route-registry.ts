@@ -30,6 +30,7 @@ const DENYLIST = new Set([
   'data',
   'data.dataset',
   'memory',
+  'next',
   'projects',
   'provenance',
   'providers',
@@ -40,6 +41,8 @@ const DENYLIST = new Set([
 ]);
 const RESERVED_PATHS = new Set([
   '/',
+  '/classic',
+  '/next',
   '/chat',
   '/chat/:sessionId',
   '/memory',

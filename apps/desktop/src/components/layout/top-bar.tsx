@@ -77,6 +77,15 @@ export function TopBar({ title }: TopBarProps) {
 
       <h1 className="flex-1 truncate text-h3 font-semibold">{title}</h1>
 
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => void navigate('/next')}
+        className="gap-1.5 border-indigo-500/50 bg-indigo-950/40 text-indigo-200 hover:bg-indigo-900/60"
+      >
+        <span className="text-xs font-bold">✨ Dream Next (محیط مینیمال)</span>
+      </Button>
+
       {!isPaneWorkspace && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -53,7 +53,7 @@ interface RailItem {
 }
 
 const PRIMARY_ITEMS: RailItem[] = [
-  { to: '/', labelKey: 'nav.dashboard', icon: Sparkles, shortcut: ['mod', '1'], end: true },
+  { to: '/classic', labelKey: 'nav.dashboard', icon: Sparkles, shortcut: ['mod', '1'], end: true },
   { to: '/chat', labelKey: 'nav.chat', icon: MessageSquare },
   { to: '/projects', labelKey: 'nav.projects', icon: FolderKanban, shortcut: ['mod', '2'] },
   { to: '/scheduler', labelKey: 'nav.scheduler', icon: AlarmClock },
@@ -186,17 +186,17 @@ export function ActivityRail() {
       onPointerEnter={() => setHovering(true)}
       onPointerLeave={() => setHovering(false)}
       className={cn(
-        'flex shrink-0 flex-col items-stretch justify-between border-e border-border-default bg-surface py-2',
+        'flex shrink-0 flex-col items-stretch justify-between border-e border-border-default bg-surface py-2 min-h-0 h-full overflow-hidden',
         'transition-[width] duration-fast ease-standard',
         expanded ? 'w-44' : 'w-12',
       )}
     >
-      <div className="flex flex-col items-center gap-1 px-1.5">
+      <div className="flex flex-1 flex-col items-center gap-1 px-1.5 overflow-y-auto min-h-0 scrollbar-thin">
         {[...PRIMARY_ITEMS, ...P0_EXTENSION_ITEMS].map((item) => (
           <RailLink key={item.to} item={item} expanded={expanded} />
         ))}
       </div>
-      <div className="flex flex-col items-center gap-1 px-1.5">
+      <div className="flex shrink-0 flex-col items-center gap-1 px-1.5 pt-2 border-t border-border-default">
         {FOOTER_ITEMS.map((item) => (
           <RailLink key={item.to} item={item} expanded={expanded} />
         ))}
