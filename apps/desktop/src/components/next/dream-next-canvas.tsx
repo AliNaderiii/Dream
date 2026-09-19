@@ -42,6 +42,8 @@ import { loadDataset } from '@/lib/bridge/data-science';
 import { ocrExtract } from '@/lib/bridge/ocr';
 import { visionCaptureScreen } from '@/lib/bridge/vision';
 import type { VisionCaptureResult } from '@/lib/bridge/vision';
+import { PdfExportRow } from '@/components/next/pdf-export-row';
+import type { ReportSection } from '@/lib/reporting/print';
 import { systemGetGoldenReleaseInfo, systemGetHardwareStatus } from '@/lib/bridge/system';
 import type { BusinessDataset, BusinessInsight } from '@/lib/business/business-data';
 import {
@@ -2382,6 +2384,58 @@ const answer = await bridge.stream('dataqa.ask', {
                       </div>
                     )}
 
+                    {/* PDF export (v4.6) — print-safe dialog or core PDF engine */}
+                    <PdfExportRow
+                      client={client}
+                      defaultFileName="dream-business-report"
+                      buildReport={() => {
+                        const sections: ReportSection[] = [
+                          {
+                            heading: 'شاخص‌های کلیدی',
+                            kpis: [
+                              {
+                                label: 'اقلام فعال',
+                                value: businessKpisData.activeItems.toLocaleString('fa-IR'),
+                              },
+                              {
+                                label: 'ارزش موجودی (میلیون تومان)',
+                                value: Math.round(
+                                  businessKpisData.totalStockValueToman / 1_000_000,
+                                ).toLocaleString('fa-IR'),
+                              },
+                              {
+                                label: 'خروجی این ماه',
+                                value: businessKpisData.monthOutMovements.toLocaleString('fa-IR'),
+                              },
+                            ],
+                          },
+                        ];
+                        if (businessInsight) {
+                          const analysis: ReportSection = {
+                            heading: 'پرسش و تحلیل',
+                            paragraphs: [businessInsight.question, businessInsight.answer],
+                          };
+                          if (
+                            businessInsight.columns.length > 0 &&
+                            businessInsight.rows.length > 0
+                          ) {
+                            analysis.table = {
+                              columns: businessInsight.columns,
+                              rows: businessInsight.rows.map((row) =>
+                                businessInsight.columns.map((column) => String(row[column] ?? '')),
+                              ),
+                            };
+                          }
+                          sections.push(analysis);
+                        }
+                        return {
+                          title: 'گزارش داده کسب‌وکار — دریم',
+                          subtitle: businessSourceLabel,
+                          sections,
+                        };
+                      }}
+                    />
+
                     <div className="flex items-center justify-between border-t border-white/[0.06] pt-4 font-mono text-xs text-zinc-500">
                       <span>DATAQA BRIDGE · dataqa.ask · data.load_data</span>
                       <span>EVIDENCE-BOUND ANSWERS · JALALI CALENDAR</span>
@@ -2535,6 +2589,38 @@ const answer = await bridge.stream('dataqa.ask', {
                                 DELETED
                               </p>
                             )}
+
+                            {/* PDF export (v4.6) */}
+                            <PdfExportRow
+                              client={client}
+                              defaultFileName="dream-ocr-report"
+                              buildReport={() => {
+                                const sections: ReportSection[] = [
+                                  {
+                                    heading: 'متن استخراج‌شده',
+                                    paragraphs: [visionOcr?.cleaned_text ?? '—'],
+                                  },
+                                ];
+                                const fields = visionOcr?.extracted_fields ?? {};
+                                if (Object.keys(fields).length > 0) {
+                                  sections.push({
+                                    heading: 'فیلدهای استخراج‌شده',
+                                    table: {
+                                      columns: ['فیلد', 'مقدار'],
+                                      rows: Object.entries(fields).map(([key, value]) => [
+                                        key,
+                                        String(value),
+                                      ]),
+                                    },
+                                  });
+                                }
+                                return {
+                                  title: 'گزارش استخراج سند — دریم',
+                                  subtitle: visionOcr?.file_path,
+                                  sections,
+                                };
+                              }}
+                            />
                           </>
                         ) : (
                           <p className="text-sm leading-relaxed text-rose-300" dir="rtl">
