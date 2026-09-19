@@ -35,6 +35,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useBridge } from '@/lib/bridge/hooks';
+import { VisionFileBrowser } from '@/components/next/vision-file-browser';
 import { askDataQa, createDataQaSession } from '@/lib/bridge/dataqa';
 import { duplexPushMicChunk, duplexStart, duplexStop } from '@/lib/bridge/duplex';
 import { loadDataset } from '@/lib/bridge/data-science';
@@ -1254,8 +1255,8 @@ const answer = await bridge.stream('dataqa.ask', {
     },
     {
       id: 'c13',
-      title: 'استودیو بینایی و OCR اسناد (فایل واقعی)',
-      desc: 'Real document OCR · Persian engine',
+      title: 'استودیو بینایی و OCR اسناد (مرور فایل واقعی)',
+      desc: 'Real file browser · Persian OCR engine',
       category: 'VISION',
       icon: Camera,
       execute: handleOpenVisionStudio,
@@ -2283,7 +2284,7 @@ const answer = await bridge.stream('dataqa.ask', {
                     </div>
                   </div>
                 ) : activeArtifact.type === 'vision' ? (
-                  /* ═══════════ VISION & OCR STUDIO (v4.3) ═══════════ */
+                  /* ═══════════ VISION & OCR STUDIO (v4.3 + v4.4) ═══════════ */
                   <div className="space-y-6">
                     <div className="rounded-2xl border border-fuchsia-500/30 bg-zinc-900/60 p-6 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-4 mb-5">
@@ -2293,10 +2294,10 @@ const answer = await bridge.stream('dataqa.ask', {
                           </div>
                           <div>
                             <span className="block font-mono text-[10px] uppercase tracking-widest text-fuchsia-400">
-                              v4.3 · DOCUMENT OCR
+                              v4.4 · FILE BROWSER + OCR
                             </span>
                             <span className="text-sm font-bold text-zinc-100">
-                              استخراج واقعی متن و فیلدها از فایل (موتور OCR فارسی هسته)
+                              مرور فایل واقعی + استخراج متن و فیلدها (موتور OCR فارسی هسته)
                             </span>
                           </div>
                         </div>
@@ -2313,19 +2314,14 @@ const answer = await bridge.stream('dataqa.ask', {
                         </span>
                       </div>
 
-                      {/* File path + document type + run */}
+                      {/* Real file browser (v4.4) + document type + run */}
                       <div className="space-y-3" dir="rtl">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <input
-                            value={visionFilePath}
-                            onChange={(e) => setVisionFilePath(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleRunRealOcr();
-                            }}
-                            placeholder="C:\screens\error.png — مسیر تصویر/سند/اسکرین‌شات"
-                            className="min-w-56 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none"
-                            dir="ltr"
-                          />
+                        <VisionFileBrowser
+                          client={client}
+                          selectedPath={visionFilePath}
+                          onSelect={setVisionFilePath}
+                        />
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center rounded-lg border border-white/10 bg-zinc-900/60 p-0.5">
                             {(['general', 'invoice'] as const).map((docType) => (
                               <button
@@ -2350,9 +2346,10 @@ const answer = await bridge.stream('dataqa.ask', {
                           </button>
                         </div>
                         <p className="text-[11px] leading-relaxed text-zinc-500">
-                          موتور OCR هسته، متن، بلوک‌ها، جداول و فیلدهای کلیدی (مبلغ، تاریخ، مالیات،
-                          شبا) را استخراج می‌کند. «اسکن پنجره فعال» در چت، شبیه‌سازی پیش‌نمایش است؛
-                          OCR واقعی از همین‌جا با فایل اجرا می‌شود.
+                          فایل را از ریشه‌های ثبت‌شده مرور و انتخاب کنید (یا مسیر دستی). موتور OCR
+                          هسته، متن، بلوک‌ها، جداول و فیلدهای کلیدی (مبلغ، تاریخ، مالیات، شبا) را
+                          استخراج می‌کند. «اسکن پنجره فعال» در چت، شبیه‌سازی پیش‌نمایش است؛ OCR
+                          واقعی از همین‌جا با فایل اجرا می‌شود.
                         </p>
                       </div>
                     </div>
