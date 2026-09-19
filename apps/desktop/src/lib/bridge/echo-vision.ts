@@ -1,5 +1,7 @@
 /** Fallback offline mock implementations for vision.* methods. */
 
+import { echoOcrExtract } from './echo-ocr';
+
 import type {
   BoundingBox,
   UIElementGrounding,
@@ -142,4 +144,21 @@ export function echoVisionGetMetrics(): VisionMetricsResult {
 export function echoVisionReset() {
   resetEchoVision();
   return { status: 'reset', spatial_entities_in_memory: 0 };
+}
+
+/** Deterministic demo of `vision.capture_screen` for the browser preview. */
+export function echoVisionCaptureScreen(documentType = 'general') {
+  const base = echoOcrExtract('screen://live-capture', documentType);
+  return {
+    ...base,
+    demo: true as const,
+    file_path: '<screen-capture>',
+    screen: {
+      backend: 'echo-demo',
+      width: 1920,
+      height: 1080,
+      size_bytes: 0,
+      temp_deleted: true,
+    },
+  };
 }

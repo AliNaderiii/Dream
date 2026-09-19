@@ -4,6 +4,7 @@ import { getBridgeClient, resetBridgeClient, type BridgeClient } from './client'
 import { resetEchoVision } from './echo-vision';
 import {
   visionAnalyzeImage,
+  visionCaptureScreen,
   visionDecomposeVideo,
   visionDiffVisualStates,
   visionGetMetrics,
@@ -67,5 +68,23 @@ describe('Vision Bridge Client', () => {
 
     const metrics = await visionGetMetrics(client);
     expect(metrics.status).toBe('healthy');
+  });
+
+  it('captures the screen for OCR and flags the echo demo honestly', async () => {
+    const res = await visionCaptureScreen(client, 'invoice');
+    expect(res.demo).toBe(true);
+    expect(res.success).toBe(true);
+    expect(res.file_path).toBe('<screen-capture>');
+    expect(res.screen?.backend).toBe('echo-demo');
+    expect(res.screen?.temp_deleted).toBe(true);
+    expect(res.cleaned_text).toBeTruthy();
+  });
+
+  it('returns general screen-capture blocks with the demo screen metadata', async () => {
+    const res = await visionCaptureScreen(client);
+    expect(res.demo).toBe(true);
+    expect((res.blocks ?? []).length).toBeGreaterThan(0);
+    expect(res.screen?.width).toBe(1920);
+    expect(res.screen?.height).toBe(1080);
   });
 });

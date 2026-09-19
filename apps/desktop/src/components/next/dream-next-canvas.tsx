@@ -40,7 +40,8 @@ import { askDataQa, createDataQaSession } from '@/lib/bridge/dataqa';
 import { duplexPushMicChunk, duplexStart, duplexStop } from '@/lib/bridge/duplex';
 import { loadDataset } from '@/lib/bridge/data-science';
 import { ocrExtract } from '@/lib/bridge/ocr';
-import type { OcrExtractResult } from '@/lib/bridge/ocr';
+import { visionCaptureScreen } from '@/lib/bridge/vision';
+import type { VisionCaptureResult } from '@/lib/bridge/vision';
 import { systemGetGoldenReleaseInfo, systemGetHardwareStatus } from '@/lib/bridge/system';
 import type { BusinessDataset, BusinessInsight } from '@/lib/business/business-data';
 import {
@@ -280,8 +281,9 @@ export function DreamNextCanvas() {
   // v4.3 — real document OCR: file path + doc type + live engine result.
   const [visionFilePath, setVisionFilePath] = useState('');
   const [visionDocType, setVisionDocType] = useState<'general' | 'invoice'>('general');
-  const [visionOcr, setVisionOcr] = useState<OcrExtractResult | null>(null);
+  const [visionOcr, setVisionOcr] = useState<VisionCaptureResult | null>(null);
   const [visionOcrRunning, setVisionOcrRunning] = useState(false);
+  const [visionScreenScanning, setVisionScreenScanning] = useState(false);
 
   // Real hardware vitals from the Python core (echo fallback in browser preview).
   const [hardwareInfo, setHardwareInfo] = useState<{
@@ -637,8 +639,93 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
     setMessages((prev) => [...prev, userMsg, dreamReply]);
   };
 
-  // Trigger Ambient Screen Vision
+  // Trigger Ambient Screen Vision — REAL capture in the desktop app (v4.5),
+  // honest simulation in the browser preview.
   const handleTriggerScreenVision = () => {
+    if (client.transportKind === 'tauri') {
+      if (isVisionScanning) return;
+      setIsVisionScanning(true);
+      void visionCaptureScreen(client, 'general')
+        .then((res) => {
+          const msgCount = messages.length + 1;
+          const userMsg: Message = {
+            id: eventId('usr'),
+            sender: 'user',
+            indexRef: `00${msgCount} / VISION_CAPTURE`,
+            text: '📷 اسکن واقعی صفحه نمایش (LIVE SCREEN CAPTURE)',
+            timestamp: new Date().toLocaleTimeString('fa-IR', {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          };
+          const dreamReply: Message = res.success
+            ? {
+                id: eventId('drm'),
+                sender: 'dream',
+                indexRef: `00${msgCount + 1} / VISION_ANALYSIS`,
+                lead: `اسکن واقعی صفحه — اسکرین‌شات گرفته شد (${res.screen?.backend ?? 'core'})، OCR هسته اجرا شد و فایل بلافاصله حذف شد (TEMP FILE DELETED)`,
+                text:
+                  res.cleaned_text?.slice(0, 600) ??
+                  'متنی از صفحه استخراج نشد؛ صفحه محتوای متنی ندارد.',
+                timestamp: new Date().toLocaleTimeString('fa-IR', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+                artifact: {
+                  id: eventId('art-vision-studio'),
+                  title: 'استودیو بینایی — نتیجه اسکن واقعی صفحه',
+                  type: 'vision',
+                  language: 'text',
+                  version: 'v4.5 Screen OCR',
+                  description:
+                    'نتیجه OCR واقعی اسکرین‌شات صفحه در استودیوی بینایی؛ فایل موقت پس از استخراج حذف شد.',
+                  code: res.cleaned_text ?? '',
+                },
+              }
+            : {
+                id: eventId('drm'),
+                sender: 'dream',
+                indexRef: `00${msgCount + 1} / VISION_ANALYSIS`,
+                lead: 'اسکن واقعی صفحه ناموفق بود (Screen Capture Failed)',
+                text: `⚠ ${res.error ?? 'اسکرین‌شات گرفته نشد.'}`,
+                timestamp: new Date().toLocaleTimeString('fa-IR', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              };
+          setMessages((prev) => [...prev, userMsg, dreamReply]);
+          if (res.success) setVisionOcr(res);
+        })
+        .catch(() => {
+          const msgCount = messages.length + 1;
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: eventId('usr'),
+              sender: 'user',
+              indexRef: `00${msgCount} / VISION_CAPTURE`,
+              text: '📷 اسکن واقعی صفحه نمایش (LIVE SCREEN CAPTURE)',
+              timestamp: new Date().toLocaleTimeString('fa-IR', {
+                hour: '2-digit',
+                minute: '2-digit',
+              }),
+            },
+            {
+              id: eventId('drm'),
+              sender: 'dream',
+              indexRef: `00${msgCount + 1} / VISION_ANALYSIS`,
+              lead: 'اسکن واقعی صفحه ناموفق بود (Screen Capture Failed)',
+              text: '⚠ پل بینایی پاسخ نداد؛ اتصال هسته پایتون را بررسی کنید.',
+              timestamp: new Date().toLocaleTimeString('fa-IR', {
+                hour: '2-digit',
+                minute: '2-digit',
+              }),
+            },
+          ]);
+        })
+        .finally(() => setIsVisionScanning(false));
+      return;
+    }
     setIsVisionScanning(true);
     setTimeout(() => {
       setIsVisionScanning(false);
@@ -673,7 +760,7 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
         id: eventId('drm'),
         sender: 'dream',
         indexRef: `00${msgCount + 1} / VISION_ANALYSIS`,
-        lead: 'اسکن پنجره فعال — شبیه‌سازی پیش‌نمایش (Simulated Active-Window Scan) · برای OCR واقعی، استودیو بینایی را باز کنید',
+        lead: 'اسکن پنجره فعال — شبیه‌سازی پیش‌نمایش (در نسخه دسکتاپ همین دکمه اسکرین‌شات واقعی می‌گیرد) · برای OCR در پیش‌نمایش، استودیو بینایی را باز کنید',
         text: `پنجره فعال «${visionData.activeApp}» اسکن شد. پچ اصلاحی مقاوم تولید و در بوم تعاملی سمت راست آماده اعمال است.`,
         timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
         artifact: visionArtifact,
@@ -897,15 +984,32 @@ omnibar.onExecute((cmd) => DreamCore.dispatch(cmd, { audit: true }));`,
       .finally(() => setVisionOcrRunning(false));
   };
 
+  // v4.5 — Real screen scan: capture the actual screen (desktop) or run the
+  // honest echo demo (browser). The screenshot is deleted right after OCR.
+  const handleScreenScan = () => {
+    if (visionOcrRunning || visionScreenScanning) return;
+    setVisionScreenScanning(true);
+    setVisionOcr(null);
+    void visionCaptureScreen(client, visionDocType)
+      .then((res) => setVisionOcr(res))
+      .catch(() =>
+        setVisionOcr({
+          success: false,
+          error: 'اسکن صفحه ناموفق بود؛ در پیش‌نمایش مرورگر نتیجه دمو نمایش داده می‌شود.',
+        }),
+      )
+      .finally(() => setVisionScreenScanning(false));
+  };
+
   const handleOpenVisionStudio = () => {
     setActiveArtifact({
       id: 'art-vision-studio',
       title: 'استودیو بینایی و OCR اسناد (Vision & Document OCR)',
       type: 'vision',
       language: 'tsx',
-      version: 'v4.3 Real OCR',
+      version: 'v4.5 Screen OCR',
       description:
-        'استخراج واقعی متن، بلوک‌ها و فیلدهای کلیدی از فایل‌ها با موتور OCR فارسی هسته دریم.',
+        'استخراج واقعی متن، بلوک‌ها و فیلدهای کلیدی از فایل‌ها و اسکرین‌شات زنده صفحه با موتور OCR فارسی هسته دریم.',
       code: `// Dream Document OCR — v4.3\nconst res = await bridge.call('ocr.extract', {\n  file_path: 'C:\\\\screens\\\\error.png',\n  document_type: 'general', // یا 'invoice'\n});\n// res.cleaned_text · res.extracted_fields · res.confidence`,
     });
   };
@@ -1255,8 +1359,8 @@ const answer = await bridge.stream('dataqa.ask', {
     },
     {
       id: 'c13',
-      title: 'استودیو بینایی و OCR اسناد (مرور فایل واقعی)',
-      desc: 'Real file browser · Persian OCR engine',
+      title: 'استودیو بینایی و OCR اسناد (اسکن صفحه + مرور فایل)',
+      desc: 'Real screen & file OCR · Persian engine',
       category: 'VISION',
       icon: Camera,
       execute: handleOpenVisionStudio,
@@ -2284,7 +2388,7 @@ const answer = await bridge.stream('dataqa.ask', {
                     </div>
                   </div>
                 ) : activeArtifact.type === 'vision' ? (
-                  /* ═══════════ VISION & OCR STUDIO (v4.3 + v4.4) ═══════════ */
+                  /* ═══════════ VISION & OCR STUDIO (v4.3 + v4.4 + v4.5) ═══════════ */
                   <div className="space-y-6">
                     <div className="rounded-2xl border border-fuchsia-500/30 bg-zinc-900/60 p-6 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-4 mb-5">
@@ -2294,10 +2398,10 @@ const answer = await bridge.stream('dataqa.ask', {
                           </div>
                           <div>
                             <span className="block font-mono text-[10px] uppercase tracking-widest text-fuchsia-400">
-                              v4.4 · FILE BROWSER + OCR
+                              v4.5 · SCREEN OCR + FILE BROWSER
                             </span>
                             <span className="text-sm font-bold text-zinc-100">
-                              مرور فایل واقعی + استخراج متن و فیلدها (موتور OCR فارسی هسته)
+                              اسکن واقعی صفحه + مرور فایل + استخراج متن (موتور OCR فارسی هسته)
                             </span>
                           </div>
                         </div>
@@ -2337,19 +2441,32 @@ const answer = await bridge.stream('dataqa.ask', {
                               </button>
                             ))}
                           </div>
-                          <button
-                            onClick={handleRunRealOcr}
-                            disabled={!visionFilePath.trim() || visionOcrRunning}
-                            className="rounded-lg border border-fuchsia-500/40 bg-gradient-to-r from-fuchsia-600 to-purple-600 px-3.5 py-2 text-[11px] font-bold text-white shadow-lg transition-all hover:opacity-90 disabled:opacity-40"
-                          >
-                            {visionOcrRunning ? 'در حال استخراج…' : 'استخراج واقعی (ocr.extract)'}
-                          </button>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              onClick={handleScreenScan}
+                              disabled={visionScreenScanning || visionOcrRunning}
+                              className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-[11px] font-bold text-sky-200 shadow-lg transition-all hover:bg-sky-500/20 disabled:opacity-40"
+                            >
+                              {visionScreenScanning
+                                ? 'در حال اسکن صفحه…'
+                                : 'اسکن از صفحه (vision.capture_screen)'}
+                            </button>
+                            <button
+                              onClick={handleRunRealOcr}
+                              disabled={
+                                !visionFilePath.trim() || visionOcrRunning || visionScreenScanning
+                              }
+                              className="rounded-lg border border-fuchsia-500/40 bg-gradient-to-r from-fuchsia-600 to-purple-600 px-3.5 py-2 text-[11px] font-bold text-white shadow-lg transition-all hover:opacity-90 disabled:opacity-40"
+                            >
+                              {visionOcrRunning ? 'در حال استخراج…' : 'استخراج واقعی (ocr.extract)'}
+                            </button>
+                          </div>
                         </div>
                         <p className="text-[11px] leading-relaxed text-zinc-500">
-                          فایل را از ریشه‌های ثبت‌شده مرور و انتخاب کنید (یا مسیر دستی). موتور OCR
-                          هسته، متن، بلوک‌ها، جداول و فیلدهای کلیدی (مبلغ، تاریخ، مالیات، شبا) را
-                          استخراج می‌کند. «اسکن پنجره فعال» در چت، شبیه‌سازی پیش‌نمایش است؛ OCR
-                          واقعی از همین‌جا با فایل اجرا می‌شود.
+                          فایل را از ریشه‌های ثبت‌شده مرور و انتخاب کنید (یا مسیر دستی)، یا با «اسکن
+                          از صفحه» اسکرین‌شات زنده بگیرید. موتور OCR هسته، متن، بلوک‌ها، جداول و
+                          فیلدهای کلیدی (مبلغ، تاریخ، مالیات، شبا) را استخراج می‌کند. اسکرین‌شات
+                          بلافاصله پس از استخراج حذف می‌شود؛ در پیش‌نمایش مرورگر نتیجه دمو است.
                         </p>
                       </div>
                     </div>
@@ -2411,6 +2528,13 @@ const answer = await bridge.stream('dataqa.ask', {
                                   </table>
                                 </div>
                               )}
+                            {visionOcr.screen && (
+                              <p className="font-mono text-[10px] text-zinc-500" dir="ltr">
+                                SCREEN CAPTURE · {(visionOcr.screen.backend ?? '').toUpperCase()} ·{' '}
+                                {visionOcr.screen.width}×{visionOcr.screen.height} · TEMP FILE
+                                DELETED
+                              </p>
+                            )}
                           </>
                         ) : (
                           <p className="text-sm leading-relaxed text-rose-300" dir="rtl">
@@ -2421,7 +2545,7 @@ const answer = await bridge.stream('dataqa.ask', {
                     )}
 
                     <div className="flex items-center justify-between border-t border-white/[0.06] pt-4 font-mono text-xs text-zinc-500">
-                      <span>OCR BRIDGE · ocr.extract / ocr.extract_invoice</span>
+                      <span>OCR BRIDGE · ocr.extract · vision.capture_screen</span>
                       <span>PERSIAN &amp; MULTILINGUAL · INVOICE PARSER</span>
                     </div>
                   </div>

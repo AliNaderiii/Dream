@@ -2,6 +2,7 @@
 
 import type { BridgeClient } from './client';
 import * as echo from './echo-vision';
+import type { OcrExtractResult } from './ocr';
 
 export interface BoundingBox {
   ymin: number;
@@ -172,4 +173,30 @@ export function visionReset(
   client: BridgeClient,
 ): Promise<{ status: string; spatial_entities_in_memory: number }> {
   return echoOr(client, () => echo.echoVisionReset(), 'vision.reset', {});
+}
+
+/** Metadata about a real screen capture (v4.5) — the temp file is always deleted. */
+export interface ScreenCaptureInfo {
+  backend: string;
+  width: number;
+  height: number;
+  size_bytes: number;
+  temp_deleted: boolean;
+}
+
+/** Result of `vision.capture_screen`: OCR of a real, immediately-deleted screenshot. */
+export type VisionCaptureResult = OcrExtractResult & { screen?: ScreenCaptureInfo | null };
+
+/**
+ * Capture the real screen and OCR it (desktop: GDI/screencapture → core OCR,
+ * temp file deleted immediately). Under the echo transport the result is a
+ * clearly-flagged deterministic demo.
+ */
+export function visionCaptureScreen(
+  client: BridgeClient,
+  documentType = 'general',
+): Promise<VisionCaptureResult> {
+  return echoOr(client, () => echo.echoVisionCaptureScreen(documentType), 'vision.capture_screen', {
+    document_type: documentType,
+  });
 }

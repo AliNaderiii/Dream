@@ -9,6 +9,7 @@ Exposes the Multi-Modal Vision & Video Stream Reasoning Subsystem:
 ``vision.ground_ui_elements``     Ground interactive GUI elements and click targets
 ``vision.inspect_diagram``        Inspect architectural diagrams and SVG trees
 ``vision.diff_visual_states``     Compute visual differences between screen states
+``vision.capture_screen``         Capture the real screen and OCR it (v4.5)
 ``vision.get_metrics``            Retrieve operational telemetry for vision subsystem
 ``vision.reset``                  Clear spatial memory and caches
 ================================  ================================================
@@ -18,9 +19,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from dream.bridge.errors import invalid_params
+from dream.ocr.tools import ocr_extract_document
+from dream.vision.capture import (
+    ScreenCaptureError,
+    capture_extension,
+    capture_screen_to_file,
+)
 from dream.vision.engine import get_vision_engine
 
 logger = logging.getLogger("dream.bridge.vision")
@@ -170,6 +180,48 @@ async def vision_diff_visual_states(params: Any = None, **kwargs: Any) -> dict[s
     return diff.to_dict()
 
 
+async def vision_capture_screen(params: Any = None, **kwargs: Any) -> dict[str, Any]:
+    """Capture the real screen and OCR it. Params: optional ``document_type``.
+
+    Privacy (P-14): the screenshot is written to a temp file, fed to the core
+    OCR engine, and deleted immediately — screen pixels never persist on disk
+    and the temp path is never returned or logged.
+    """
+    data = _params(params, kwargs)
+    document_type = data.get("document_type", "general")
+    if not isinstance(document_type, str) or not document_type.strip():
+        raise invalid_params("document_type must be a non-empty string")
+    if len(document_type) > 64:
+        raise invalid_params("document_type must be at most 64 characters")
+
+    def _capture_and_extract() -> dict[str, Any]:
+        fd, name = tempfile.mkstemp(prefix="dream-scan-", suffix=capture_extension())
+        os.close(fd)
+        path = Path(name)
+        try:
+            info = capture_screen_to_file(path)
+        except BaseException:
+            path.unlink(missing_ok=True)
+            raise
+        try:
+            result = ocr_extract_document(str(path), document_type.strip())
+        finally:
+            path.unlink(missing_ok=True)
+        if isinstance(result, dict):
+            # The temp path must never leak to the client (privacy).
+            result["file_path"] = "<screen-capture>"
+            return {**result, "screen": {**info, "temp_deleted": True}}
+        return result
+
+    try:
+        return await asyncio.to_thread(_capture_and_extract)
+    except ScreenCaptureError as exc:
+        return {"success": False, "error": str(exc)}
+    except Exception as exc:  # defensive: capture failures must not crash the bridge
+        logger.warning("vision.capture_screen failed: %s", exc)
+        return {"success": False, "error": f"screen capture failed: {exc}"}
+
+
 async def vision_get_metrics(params: Any = None, **kwargs: Any) -> dict[str, Any]:
     """Retrieve vision telemetry metrics."""
     engine = get_vision_engine()
@@ -190,6 +242,7 @@ HANDLERS = {
     "vision.ground_ui_elements": vision_ground_ui_elements,
     "vision.inspect_diagram": vision_inspect_diagram,
     "vision.diff_visual_states": vision_diff_visual_states,
+    "vision.capture_screen": vision_capture_screen,
     "vision.get_metrics": vision_get_metrics,
     "vision.reset": vision_reset,
 }
