@@ -43,6 +43,7 @@ import { ocrExtract } from '@/lib/bridge/ocr';
 import { visionCaptureScreen } from '@/lib/bridge/vision';
 import type { VisionCaptureResult } from '@/lib/bridge/vision';
 import { PdfExportRow } from '@/components/next/pdf-export-row';
+import { TelegramBotStudio } from '@/components/next/telegram-bot-studio';
 import type { ReportSection } from '@/lib/reporting/print';
 import { systemGetGoldenReleaseInfo, systemGetHardwareStatus } from '@/lib/bridge/system';
 import type { BusinessDataset, BusinessInsight } from '@/lib/business/business-data';
@@ -88,7 +89,8 @@ export interface Artifact {
     | 'voice'
     | 'security'
     | 'omnibar'
-    | 'business';
+    | 'business'
+    | 'telegram';
   language: string;
   code: string;
   description: string;
@@ -1137,9 +1139,40 @@ const answer = await bridge.stream('dataqa.ask', {
     });
   };
 
+  // v4.7 — استودیو بات تلگرام: عکس/صوت/متن → OCR/رونویسی → PDF خودکار
+  const handleOpenTelegramStudio = () => {
+    setActiveArtifact({
+      id: 'art-telegram-report',
+      title: 'استودیو بات تلگرام (Telegram Report Bot)',
+      type: 'telegram',
+      language: 'tsx',
+      version: 'v4.7',
+      description:
+        'بات تلگرام متصل به زنجیره دریم: عکس → OCR فارسی، صوت → رونویسی، متن → گزارش ساخت‌یافته؛ خروجی PDF فارسی همان‌جا در چت.',
+      code: `// Dream Telegram Report Bot — v4.7
+const status = await bridge.call('reportbot.start', {
+  token: '123456789:AA…', // BotFather
+  api_base_url: 'https://relay.example', // اختیاری
+});
+// عکس → OCR → PDF · صوت → رونویسی → PDF · متن → PDF
+const events = await bridge.call('reportbot.status');
+// events: [{kind: 'photo_report', detail: {ocr_chars, pdf_pages}}…]`,
+    });
+  };
+
   const handleSendMessage = (customText?: string) => {
     const textToSend = customText || inputText;
     if (!textToSend.trim()) return;
+
+    if (
+      textToSend.includes('تلگرام') ||
+      textToSend.includes('بات') ||
+      textToSend.includes('گزارش خودکار')
+    ) {
+      if (!customText) setInputText('');
+      handleOpenTelegramStudio();
+      return;
+    }
 
     if (
       textToSend.includes('داده') ||
@@ -1367,6 +1400,14 @@ const answer = await bridge.stream('dataqa.ask', {
       icon: Camera,
       execute: handleOpenVisionStudio,
     },
+    {
+      id: 'c14',
+      title: 'استودیو بات تلگرام — گزارش خودکار (عکس/صوت/متن → PDF)',
+      desc: 'Telegram bot · photo → OCR, voice → transcript, text → PDF',
+      category: 'TELEGRAM',
+      icon: Bot,
+      execute: handleOpenTelegramStudio,
+    },
   ];
 
   // P8 KPIs — pure deterministic pilot metrics for the executive glance.
@@ -1465,6 +1506,18 @@ const answer = await bridge.stream('dataqa.ask', {
           >
             <Database className="size-3 text-cyan-400" />
             <span>DATA</span>
+          </button>
+
+          <div className="h-3 w-px bg-white/10" />
+
+          {/* Telegram Report Bot (v4.7) */}
+          <button
+            onClick={handleOpenTelegramStudio}
+            className="flex items-center gap-1 font-mono text-[10px] text-sky-300 hover:text-white transition-colors"
+            title="استودیو بات تلگرام"
+          >
+            <Bot className="size-3 text-sky-400" />
+            <span>TG</span>
           </button>
 
           <div className="h-3 w-px bg-white/10" />
@@ -1860,6 +1913,8 @@ const answer = await bridge.stream('dataqa.ask', {
                     <Database className="size-3 text-cyan-400" />
                   ) : activeArtifact.type === 'vision' ? (
                     <Camera className="size-3 text-fuchsia-400" />
+                  ) : activeArtifact.type === 'telegram' ? (
+                    <Bot className="size-3 text-sky-400" />
                   ) : (
                     <Sparkles className="size-3" />
                   )}
@@ -1870,9 +1925,11 @@ const answer = await bridge.stream('dataqa.ask', {
                         ? 'BUSINESS DATA STUDIO'
                         : activeArtifact.type === 'vision'
                           ? 'VISION & OCR STUDIO'
-                          : activeArtifact.type === 'security'
-                            ? 'SECURITY VAULT'
-                            : 'ARTIFACT'}
+                          : activeArtifact.type === 'telegram'
+                            ? 'TELEGRAM REPORT BOT'
+                            : activeArtifact.type === 'security'
+                              ? 'SECURITY VAULT'
+                              : 'ARTIFACT'}
                   </span>
                 </div>
                 <span className="text-xs font-semibold text-zinc-200 truncate max-w-xs">
@@ -1899,7 +1956,9 @@ const answer = await bridge.stream('dataqa.ask', {
                           ? 'استودیو داده'
                           : activeArtifact.type === 'vision'
                             ? 'استودیو بینایی'
-                            : 'خزانه محلی'}
+                            : activeArtifact.type === 'telegram'
+                              ? 'بات تلگرام'
+                              : 'خزانه محلی'}
                     </span>
                   </button>
                   <button
@@ -1918,7 +1977,9 @@ const answer = await bridge.stream('dataqa.ask', {
                           ? 'موتور تحلیل'
                           : activeArtifact.type === 'vision'
                             ? 'موتور OCR'
-                            : 'پیکربندی امنیت'}
+                            : activeArtifact.type === 'telegram'
+                              ? 'موتور بات'
+                              : 'پیکربندی امنیت'}
                     </span>
                   </button>
                 </div>
@@ -2124,6 +2185,9 @@ const answer = await bridge.stream('dataqa.ask', {
                       <span>RANKING: BM25 + EMBEDDING COSINE</span>
                     </div>
                   </div>
+                ) : activeArtifact.type === 'telegram' ? (
+                  /* ═══════════ TELEGRAM REPORT BOT STUDIO (v4.7) ═══════════ */
+                  <TelegramBotStudio client={client} />
                 ) : activeArtifact.type === 'business' ? (
                   /* ═══════════ BUSINESS DATA STUDIO (P8 Pilot) ═══════════ */
                   <div className="space-y-6">
