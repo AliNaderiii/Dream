@@ -3,6 +3,12 @@
  * resize, row hover, per-cell copy. Purely presentational — the rows come
  * from `data.get_dataset` / `data.clean_data` previews.
  */
+/* eslint-disable react-hooks/incompatible-library --
+   TanStack Table's useReactTable() intentionally returns a mutable instance
+   API, so React Compiler (not enabled in this project) skips memoizing this
+   component — the documented safe behaviour for this library. The runtime
+   contract is unchanged: the hook is called unconditionally with a stable
+   options object shape. */
 
 import {
   flexRender,

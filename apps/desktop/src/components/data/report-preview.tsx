@@ -26,7 +26,7 @@ interface Block {
 }
 
 /** Parse the markdown subset the report generator emits. */
-export function parseReportMarkdown(markdown: string): Block[] {
+function parseReportMarkdown(markdown: string): Block[] {
   const blocks: Block[] = [];
   let paragraph: string[] = [];
   const flush = () => {

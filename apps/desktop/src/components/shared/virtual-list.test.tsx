@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { VirtualList, virtualRange } from '@/components/shared/virtual-list';
+import { VirtualList } from '@/components/shared/virtual-list';
+import { virtualRange } from '@/components/shared/virtual-range';
 
 describe('VirtualList', () => {
   it('calculates an overscanned range', () => {

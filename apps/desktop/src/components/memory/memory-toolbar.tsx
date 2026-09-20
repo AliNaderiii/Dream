@@ -8,7 +8,8 @@
 import { List, Plus, Rows3, Search } from 'lucide-react';
 
 import { ImportanceSlider } from '@/components/memory/importance-stars';
-import { KIND_COLOR } from '@/components/memory/kind-badge';
+import { KIND_COLOR } from '@/components/memory/kind-colors';
+import type { MemoryFilters } from '@/components/memory/memory-filters';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -18,30 +19,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { MEMORY_KINDS, MEMORY_SORTS } from '@/lib/bridge/types';
-import type { MemoryKind, MemorySort } from '@/lib/bridge/types';
+import type { MemoryKind } from '@/lib/bridge/types';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/utils/cn';
-
-/** Everything the explorer filters on. Shared by both views. */
-export interface MemoryFilters {
-  search: string;
-  kind: MemoryKind | 'all';
-  dateFrom: string;
-  dateTo: string;
-  /** Minimum importance in stars, 0–10. */
-  minStars: number;
-  sort: MemorySort;
-}
-
-/** Filters with nothing applied. */
-export const DEFAULT_FILTERS: MemoryFilters = {
-  search: '',
-  kind: 'all',
-  dateFrom: '',
-  dateTo: '',
-  minStars: 0,
-  sort: 'date_newest',
-};
 
 interface MemoryToolbarProps {
   filters: MemoryFilters;

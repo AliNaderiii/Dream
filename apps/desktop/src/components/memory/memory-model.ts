@@ -2,7 +2,7 @@ import { toImportance } from '@/lib/bridge/memory';
 import type { MemoryListParams } from '@/lib/bridge/types';
 import { dateInputToSeconds } from '@/utils/time';
 
-import type { MemoryFilters } from './memory-toolbar';
+import type { MemoryFilters } from './memory-filters';
 
 const PAGE_SIZE = 25;
 type MemoryQueryFilters = Pick<MemoryFilters, 'kind' | 'dateFrom' | 'dateTo' | 'sort'>;

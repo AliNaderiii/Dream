@@ -280,7 +280,11 @@ export function LiveTrace() {
   useEffect(() => {
     if (!sessionId || !isRunning) return;
     initStream(sessionId);
-    const cursor = stream?.cursor ?? 0;
+    // Snapshot the cursor from the store (not from render scope) so streamed
+    // events never re-trigger this effect; the poll interval likewise reads
+    // the freshest cursor instead of a stale closure.
+    const latestCursor = () => useResearchStore.getState().activeStream()?.cursor ?? 0;
+    const cursor = latestCursor();
     const controller = new AbortController();
 
     researchStream(
@@ -296,7 +300,7 @@ export function LiveTrace() {
 
     // Also poll status periodically as a fallback
     pollTimer.current = setInterval(() => {
-      researchStatus(client, { session_id: sessionId, cursor: stream?.cursor ?? 0 })
+      researchStatus(client, { session_id: sessionId, cursor: latestCursor() })
         .then((result) => {
           setActiveSummary(result);
           for (const evt of result.new_events) {
@@ -321,7 +325,18 @@ export function LiveTrace() {
       controller.abort();
       if (pollTimer.current) clearInterval(pollTimer.current);
     };
-  }, [sessionId, isRunning]);
+    // All deps are stable (zustand actions + the memoized bridge client), so
+    // the effect still only re-runs when the session or run state changes.
+  }, [
+    sessionId,
+    isRunning,
+    client,
+    initStream,
+    markStale,
+    pushEvent,
+    setActiveRecord,
+    setActiveSummary,
+  ]);
 
   // Heartbeat stale detection
   useEffect(() => {

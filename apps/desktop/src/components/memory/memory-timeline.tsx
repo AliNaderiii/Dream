@@ -8,7 +8,8 @@
 
 import { useMemo, useRef } from 'react';
 
-import { KindBadge, KIND_COLOR } from '@/components/memory/kind-badge';
+import { KindBadge } from '@/components/memory/kind-badge';
+import { KIND_COLOR } from '@/components/memory/kind-colors';
 import { ImportanceStars } from '@/components/memory/importance-stars';
 import { Button } from '@/components/ui/button';
 import { sanitizeMemoryText, toStars } from '@/lib/bridge/memory';

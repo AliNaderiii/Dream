@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_FILTERS } from './memory-toolbar';
+import { DEFAULT_FILTERS } from './memory-filters';
 import { buildMemoryQuery } from './memory-model';
 
 describe('memory model', () => {

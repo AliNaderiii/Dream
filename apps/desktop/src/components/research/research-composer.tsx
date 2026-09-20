@@ -7,7 +7,7 @@
  */
 
 import { AlertTriangle, FolderOpen, Globe, Lock, Sparkles } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/lib/i18n';
@@ -55,11 +55,18 @@ export function ResearchComposer() {
   const selectedRoute = MODEL_ROUTES.find((r) => r.id === modelRoute) ?? MODEL_ROUTES[0];
   const config = DEPTH_PRESETS[depth];
 
-  const params: ResearchCreateParams = {
-    topic,
-    workspace,
-    config: { ...config, allow_network: selectedRoute.leavesMachine },
-  };
+  // Memoized so the handleStart useCallback below keeps a stable identity —
+  // a fresh object literal every render would defeat that memoization.
+  // `config` (module-const lookup) and `selectedRoute` (find on a module
+  // const) are stable per selection, so the deps below change only on input.
+  const params = useMemo<ResearchCreateParams>(
+    () => ({
+      topic,
+      workspace,
+      config: { ...config, allow_network: selectedRoute.leavesMachine },
+    }),
+    [topic, workspace, config, selectedRoute],
+  );
 
   const validationError = validateResearchCreate(params);
 

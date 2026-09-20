@@ -3,22 +3,17 @@
  *
  * The three kinds use the Okabe–Ito categorical ramp from `theme.css`
  * (semantic = chart-1 blue, episodic = chart-3 green, procedural = p-500
- * purple). Colour is never the only signal: the kind name is always spelled
- * out (design-system §2.3).
+ * purple); the mapping lives in `kind-colors.ts`. Colour is never the only
+ * signal: the kind name is always spelled out (design-system §2.3).
  */
 
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/utils/cn';
 
-/** Per-kind swatch, keyed by the backend's kind string. */
-export const KIND_COLOR: Record<string, string> = {
-  semantic: 'var(--color-chart-1)',
-  episodic: 'var(--color-chart-3)',
-  procedural: 'var(--color-p-500)',
-};
+import { KIND_COLOR } from '@/components/memory/kind-colors';
 
 /** Title-cased label for a kind. */
-export function kindLabel(kind: string): string {
+function kindLabel(kind: string): string {
   return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 

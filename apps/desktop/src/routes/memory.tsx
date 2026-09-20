@@ -17,11 +17,8 @@ import { MemoryCard } from '@/components/memory/memory-card';
 import { MemoryDrawer, type MemoryDraft } from '@/components/memory/memory-drawer';
 import { buildMemoryQuery } from '@/components/memory/memory-model';
 import { MemoryTimeline } from '@/components/memory/memory-timeline';
-import {
-  DEFAULT_FILTERS,
-  MemoryToolbar,
-  type MemoryFilters,
-} from '@/components/memory/memory-toolbar';
+import { DEFAULT_FILTERS, type MemoryFilters } from '@/components/memory/memory-filters';
+import { MemoryToolbar } from '@/components/memory/memory-toolbar';
 import { BridgeOfflineBanner } from '@/components/shared/bridge-offline-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { VirtualList } from '@/components/shared/virtual-list';

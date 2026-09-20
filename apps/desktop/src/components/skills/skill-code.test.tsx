@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { SkillCode, tokenizeSkillLine } from '@/components/skills/skill-code';
+import { SkillCode } from '@/components/skills/skill-code';
+import { tokenizeSkillLine } from '@/components/skills/skill-tokens';
 
 describe('tokenizeSkillLine', () => {
   it('marks the section keys', () => {
