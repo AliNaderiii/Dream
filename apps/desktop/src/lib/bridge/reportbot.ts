@@ -26,6 +26,8 @@ export interface ReportBotStatus {
   updates_processed: number;
   last_error: string | null;
   token_fingerprint: string | null;
+  /** Voice-path engine: "faster-whisper" or an honest simulated label. */
+  stt_engine?: string;
   events: ReportBotEvent[];
   /** Present only on echo-transport demo results. */
   demo?: boolean;

@@ -8,11 +8,13 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Bot, Radio, Send } from 'lucide-react';
+import { AudioLines, Bot, Radio, Send } from 'lucide-react';
 
 import type { BridgeClient } from '@/lib/bridge/client';
 import type { ReportBotStatus } from '@/lib/bridge/reportbot';
 import { reportbotStart, reportbotStatus, reportbotStop } from '@/lib/bridge/reportbot';
+import type { SttTranscribeResult } from '@/lib/bridge/stt';
+import { sttTranscribe } from '@/lib/bridge/stt';
 
 const KIND_LABELS: Record<string, string> = {
   started: 'بات روشن شد',
@@ -49,6 +51,9 @@ export function TelegramBotStudio({ client }: { client: BridgeClient }) {
   const [status, setStatus] = useState<ReportBotStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sttPath, setSttPath] = useState('');
+  const [sttBusy, setSttBusy] = useState(false);
+  const [sttResult, setSttResult] = useState<SttTranscribeResult | null>(null);
 
   // Initial state read — setState only ever lands in the async callback.
   useEffect(() => {
@@ -179,6 +184,21 @@ export function TelegramBotStudio({ client }: { client: BridgeClient }) {
             TOKEN {status.token_fingerprint}
           </span>
         )}
+        <span
+          className={`rounded-md border px-2 py-1 ${
+            status?.stt_engine?.startsWith('faster-whisper')
+              ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+              : 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+          }`}
+          dir="ltr"
+          title={
+            status?.stt_engine?.startsWith('faster-whisper')
+              ? 'مسیر صوتی: رونویسی واقعی faster-whisper'
+              : 'مسیر صوتی: شبیه‌سازی داخلی — برای رونویسی واقعی در دسکتاپ: pip install ".[stt]"'
+          }
+        >
+          STT {status?.stt_engine?.startsWith('faster-whisper') ? 'faster-whisper' : 'SIMULATED'}
+        </span>
         <span className="rounded-md border border-white/10 bg-zinc-900 px-2 py-1 text-zinc-400">
           UPDATES {status?.updates_processed ?? 0}
         </span>
@@ -196,6 +216,64 @@ export function TelegramBotStudio({ client }: { client: BridgeClient }) {
         >
           ⚠ {error}
         </p>
+      )}
+
+      {/* Direct STT probe — transcribe a local audio file (desktop core) */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.08] bg-zinc-950/40 p-3.5">
+        <input
+          value={sttPath}
+          onChange={(e) => setSttPath(e.target.value)}
+          type="text"
+          placeholder="C:\Users\alina\voice.oga — مسیر فایل صوتی (oga/mp3/wav) برای رونویسی مستقیم"
+          className="min-w-44 flex-1 rounded-lg border border-white/10 bg-zinc-900 px-2.5 py-1.5 font-mono text-[11px] text-zinc-300 placeholder-zinc-600 focus:outline-none"
+          dir="ltr"
+          aria-label="Audio file path for direct transcription"
+        />
+        <button
+          onClick={() => {
+            const path = sttPath.trim();
+            if (!path || sttBusy) return;
+            setSttBusy(true);
+            setSttResult(null);
+            void sttTranscribe(client, path, 'fa')
+              .then((next) => setSttResult(next))
+              .catch((reason) =>
+                setSttResult({
+                  success: false,
+                  error: reason instanceof Error ? reason.message : String(reason),
+                }),
+              )
+              .finally(() => setSttBusy(false));
+          }}
+          disabled={!sttPath.trim() || sttBusy}
+          className="flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-bold text-emerald-200 transition-all hover:bg-emerald-500/20 disabled:opacity-40"
+        >
+          <AudioLines className="size-3.5" aria-hidden="true" />
+          {sttBusy ? 'در حال رونویسی…' : 'رونویسی فایل صوتی'}
+        </button>
+      </div>
+      {sttResult && (
+        <div
+          className={`rounded-lg border p-2.5 text-[11px] leading-relaxed ${
+            sttResult.demo || sttResult.success === false || sttResult.available === false
+              ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+              : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+          }`}
+        >
+          {sttResult.demo
+            ? '● DEMO · رونویسی واقعی (faster-whisper) در هسته پایتون اپ دسکتاپ اجرا می‌شود.'
+            : sttResult.success === false
+              ? `⚠ ${sttResult.error ?? 'رونویسی ناموفق بود.'}`
+              : sttResult.available === false
+                ? `⚠ ${sttResult.error ?? 'موتور نصب نیست.'}`
+                : `${sttResult.text || '—'}`}
+          {sttResult.success && sttResult.available && sttResult.engine && (
+            <p className="mt-1.5 font-mono text-[9px] text-emerald-400/70" dir="ltr">
+              {sttResult.engine}
+              {sttResult.duration ? ` · ${sttResult.duration}s` : ''}
+            </p>
+          )}
+        </div>
       )}
 
       {/* Event log */}

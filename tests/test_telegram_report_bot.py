@@ -13,11 +13,13 @@ import time
 import pytest
 
 from dream.reporting.telegram_bot import (
+    SIMULATED_STT_ENGINE,
     ReportBotError,
     ReportBotService,
     ReportBotTransport,
     TelegramReportBot,
 )
+from dream.speech.whisper_stt import WhisperSTTError
 
 VALID_TOKEN = "123456789:AAFakeDreamBotTokenForTests_-abc123XYZ"
 OTHER_TOKEN = "987654321:AAAnotherDreamBotTokenForTests_-xyz789UVW"
@@ -69,8 +71,49 @@ class FakeTransport:
         self.sent_documents.append((chat_id, filename, data, caption))
 
 
-def make_bot(transport: FakeTransport) -> TelegramReportBot:
-    return TelegramReportBot(VALID_TOKEN, transport=transport, poll_interval=0.01)
+class UnavailableTranscriber:
+    """Deterministic 'faster-whisper not installed' stub for every default test."""
+
+    def is_available(self) -> bool:
+        return False
+
+    def transcribe_file(self, path: str, language: str = "fa") -> dict:
+        raise AssertionError("transcribe_file must not be called when unavailable")
+
+
+class RealFakeTranscriber:
+    """Deterministic 'real engine' stub: exercises the faster-whisper path."""
+
+    def __init__(self, fail: bool = False) -> None:
+        self.fail = fail
+        self.calls: list[str] = []
+
+    def is_available(self) -> bool:
+        return True
+
+    def transcribe_file(self, path: str, language: str = "fa") -> dict:
+        self.calls.append(path)
+        if self.fail:
+            raise WhisperSTTError("whisper model 'base' failed to load: boom")
+        return {
+            "text": "گزارش صوتی واقعی: فروش این هفته رشد داشت",
+            "duration": 6.5,
+            "language": "fa",
+            "engine": "faster-whisper (base)",
+            "simulated": False,
+        }
+
+
+def make_bot(
+    transport: FakeTransport,
+    transcriber: object | None = None,
+) -> TelegramReportBot:
+    return TelegramReportBot(
+        VALID_TOKEN,
+        transport=transport,
+        transcriber=transcriber if transcriber is not None else UnavailableTranscriber(),
+        poll_interval=0.01,
+    )
 
 
 def photo_update(caption: str | None = None) -> dict:
@@ -234,3 +277,36 @@ class TestService:
         assert status["running"] is False
         assert status["events"] == []
         assert status["token_fingerprint"] is None
+
+
+class TestRealSTT:
+    def test_voice_uses_real_transcriber_when_available(self) -> None:
+        transport = FakeTransport([voice_update()])
+        transcriber = RealFakeTranscriber()
+        bot = make_bot(transport, transcriber=transcriber)
+        bot.handle_update(transport.pending.pop(0))
+        assert transcriber.calls, "the real transcriber must be invoked"
+        _, _, data, _ = transport.sent_documents[0]
+        assert data[:5] == b"%PDF-"
+        events = bot.snapshot()["events"]
+        assert events[-1]["kind"] == "voice_report"
+        assert events[-1]["detail"]["stt_engine"] == "faster-whisper (base)"
+        assert events[-1]["detail"]["transcript_chars"] > 10
+        assert bot.snapshot()["stt_engine"] == "faster-whisper"
+
+    def test_voice_falls_back_to_simulated_on_engine_failure(self) -> None:
+        transport = FakeTransport([voice_update()])
+        transcriber = RealFakeTranscriber(fail=True)
+        bot = make_bot(transport, transcriber=transcriber)
+        bot.handle_update(transport.pending.pop(0))
+        # The pipeline still delivers a PDF — with the honest simulated label.
+        assert len(transport.sent_documents) == 1
+        events = bot.snapshot()["events"]
+        kinds = [e["kind"] for e in events]
+        assert "stt_fallback" in kinds
+        assert events[-1]["kind"] == "voice_report"
+        assert events[-1]["detail"]["stt_engine"] == SIMULATED_STT_ENGINE
+
+    def test_snapshot_reports_simulated_engine_when_unavailable(self) -> None:
+        bot = make_bot(FakeTransport())
+        assert bot.snapshot()["stt_engine"].startswith(SIMULATED_STT_ENGINE)

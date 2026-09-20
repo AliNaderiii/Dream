@@ -45,6 +45,7 @@ export function echoReportBotStart(token: string): ReportBotStatus {
     updates_processed: 3,
     last_error: null,
     token_fingerprint: fingerprint,
+    stt_engine: 'simulated (demo)',
     events: DEMO_EVENTS,
     demo: true,
   };
@@ -59,6 +60,7 @@ export function echoReportBotStop(): ReportBotStatus {
     updates_processed: 3,
     last_error: null,
     token_fingerprint: null,
+    stt_engine: 'simulated (demo)',
     events: [...DEMO_EVENTS, { ts: now(), kind: 'stopped', chat_id: null, detail: {} }],
     demo: true,
   };
@@ -73,6 +75,7 @@ export function echoReportBotStatus(): ReportBotStatus {
     updates_processed: 0,
     last_error: null,
     token_fingerprint: null,
+    stt_engine: 'simulated (demo)',
     events: [],
     demo: true,
   };

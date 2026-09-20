@@ -30,6 +30,7 @@ from dream.ocr.types import DocumentType
 from dream.reporting.pdf import ReportError, build_report_pdf
 from dream.speech.engine import SpeechEngine
 from dream.speech.types import STTRequest
+from dream.speech.whisper_stt import Transcriber, WhisperSTTError, get_whisper_transcriber
 from dream.telegram import (
     _TOKEN_FULL_RE,
     _resolve_api_base_url,
@@ -43,6 +44,7 @@ __all__ = [
     "ReportBotError",
     "ReportBotTransport",
     "TelegramReportBot",
+    "SIMULATED_STT_ENGINE",
     "ReportBotService",
     "get_report_bot_service",
     "reset_report_bot_service",
@@ -58,6 +60,8 @@ MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 MAX_PARAGRAPH_CHARS = 4_000
 MAX_CELL_CHARS = 500
 PDF_FILENAME = "dream-report.pdf"
+#: Honest label for the built-in simulated transcript engine.
+SIMULATED_STT_ENGINE = "simulated (built-in)"
 
 HELP_TEXT = (
     "سلام! من بات گزارش‌ساز دریم هستم 🌙\n\n"
@@ -202,11 +206,13 @@ class TelegramReportBot:
         token: str,
         api_base_url: str | None = None,
         transport: ReportBotTransport | None = None,
+        transcriber: Transcriber | None = None,
         poll_interval: float = 0.2,
     ) -> None:
         self._transport = (
             transport if transport is not None else ReportBotTransport(token, api_base_url)
         )
+        self._transcriber = transcriber if transcriber is not None else get_whisper_transcriber()
         self._ocr = OCREngine()
         self._speech = SpeechEngine()
         self._poll_interval = poll_interval
@@ -240,6 +246,11 @@ class TelegramReportBot:
             "updates_processed": updates,
             "last_error": last_error,
             "events": events,
+            "stt_engine": (
+                "faster-whisper"
+                if self._transcriber.is_available()
+                else f"{SIMULATED_STT_ENGINE} — faster-whisper not installed"
+            ),
         }
 
     # ------------------------------------------------------------------- loop
@@ -340,15 +351,27 @@ class TelegramReportBot:
         with tempfile.TemporaryDirectory(prefix="dream-reportbot-") as tmp:
             audio_path = Path(tmp) / "voice.oga"
             audio_path.write_bytes(data)
-            stt = self._speech.transcribe(STTRequest(audio_path=str(audio_path), language="fa"))
-        report = self._build_voice_report(stt.text, stt.duration)
+            transcript, duration, engine = self._transcribe_voice(str(audio_path))
+        report = self._build_voice_report(transcript, duration, engine)
         self._send_report(
             chat_id,
             report,
             "voice_report",
-            transcript_chars=len(stt.text),
-            duration_s=round(stt.duration, 2),
+            transcript_chars=len(transcript),
+            duration_s=round(duration, 2),
+            stt_engine=engine,
         )
+
+    def _transcribe_voice(self, audio_path: str) -> tuple[str, float, str]:
+        """Real faster-whisper when installed; honest simulated fallback otherwise."""
+        if self._transcriber.is_available():
+            try:
+                result = self._transcriber.transcribe_file(audio_path, language="fa")
+                return str(result["text"]), float(result["duration"]), str(result["engine"])
+            except WhisperSTTError as exc:
+                self._event("stt_fallback", message=str(exc))
+        stt = self._speech.transcribe(STTRequest(audio_path=audio_path, language="fa"))
+        return stt.text, stt.duration, SIMULATED_STT_ENGINE
 
     def _handle_text(self, chat_id: int, text: str) -> None:
         stripped = text.strip()
@@ -390,16 +413,19 @@ class TelegramReportBot:
             "sections": [section],
         }
 
-    def _build_voice_report(self, transcript: str, duration: float) -> dict[str, Any]:
+    def _build_voice_report(
+        self, transcript: str, duration: float, engine: str
+    ) -> dict[str, Any]:
         return {
             "title": "گزارش صوتی — دریم",
-            "subtitle": "رونویسی خودکار پیام صوتی",
+            "subtitle": f"رونویسی خودکار پیام صوتی · موتور: {engine}",
             "sections": [
                 {
                     "heading": "رونویسی صوتی",
                     "paragraphs": [(transcript.strip() or "…")[:MAX_PARAGRAPH_CHARS]],
                     "kpis": [
                         {"label": "مدت پیام", "value": f"{duration:.0f} ثانیه"},
+                        {"label": "موتور رونویسی", "value": engine},
                     ],
                 }
             ],
