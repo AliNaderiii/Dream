@@ -64,7 +64,7 @@ def test_system_benchmark_hardware():
 
 def test_system_golden_release_info():
     rel_info = _run(system_get_golden_release_info())
-    assert rel_info["release_version"] == "4.0.0"
+    assert rel_info["release_version"] == "4.1.0"
     assert rel_info["total_subsystems_count"] == 52
     assert rel_info["readiness_score"] == 100.0
     assert rel_info["is_golden_release"] is True

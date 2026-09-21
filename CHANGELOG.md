@@ -4,8 +4,62 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
+
+## [4.1.0] - 2026-09-21
+
+The "real pipeline" release: every studio in the desktop app now talks to the
+Python core, and the whole chain — screen, document, voice, Telegram — ends in
+a properly shaped Persian PDF.
+
+### Added
+
+- **Business Data Studio.** Natural-language Q&A over organisational data
+  with grounded evidence tables and KPI cards (`dataqa.ask` over
+  `data.load_data` datasets; CSV/JSON/SQLite), plus real CSV ingestion in the
+  UI.
+- **Document OCR.** `ocr.extract` bridge with Persian text cleaning,
+  block/table detection, and invoice key-value fields; a real workspace file
+  browser for the vision studio; and real screen-capture OCR via
+  `vision.capture_screen` (Windows GDI, screenshot deleted immediately).
+- **Persian PDF report engine.** `pdf.export_report` renders A4 Persian
+  reports with real HarfBuzz shaping and the embedded Vazirmatn font (OFL) —
+  joined letterforms, RTL tables, KPI blocks, and per-page footers. New
+  runtime dependencies `fpdf2` and `uharfbuzz`, bundled in the Windows
+  installer. Print-safe export (print dialog → Save as PDF) from the studios.
+- **Telegram report bot.** Long-polling bot where photo → Persian OCR and
+  text → structured report both return a Persian PDF in the same chat;
+  `reportbot.start` / `reportbot.stop` / `reportbot.status` bridge methods
+  with token redaction, a bounded event log, and an optional relay API base
+  URL for filtered networks. Voice messages use real transcription when the
+  optional `stt` extra is installed, otherwise the clearly-labelled built-in
+  engine.
+- **Real speech-to-text (optional).** `pip install ".[stt]"` adds
+  faster-whisper (CPU, int8) behind the `stt.transcribe` bridge; the report
+  bot prefers it when present.
+
+### Fixed
+
+- **Frontend lint.** All 13 remaining ESLint warnings resolved — the project
+  now lints at zero warnings.
+
+### Known notes
+
+- The Windows installer bundles base dependencies only, so voice
+  transcription in installed builds uses the built-in engine; install
+  `pip install ".[stt]"` next to the installer for real faster-whisper
+  transcription.
+- The Windows installer is unsigned — SmartScreen may warn (unchanged).
+- Test suites: 4,204 Python tests and 882 frontend tests, green across nine
+  consecutive deployments.
+
+## [4.0.0] - 2026-09-15
+
+Golden master: 52 verified subsystems and the desktop shell with the embedded
+CPython sidecar. Details in the
+[v4.0.0 release](https://github.com/AliNaderiii/Dream/releases/tag/v4.0.0).
 
 ## [0.4.6] - 2026-08-27
 

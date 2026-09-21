@@ -124,6 +124,50 @@ jobs:
             echo "No draft release for $tag (or no release yet) — nothing to publish"
           fi
 
+      - name: Verify tag matches app version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          app_version=$(python -c "import json; print(json.load(open('apps/desktop/src-tauri/tauri.conf.json'))['version'])")
+          if [ "$tag_version" != "$app_version" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match tauri.conf.json version ${app_version}"
+            exit 1
+          fi
+          echo "Tag ${GITHUB_REF_NAME} matches app version ${app_version}"
+
+      - name: Extract release notes from CHANGELOG.md
+        id: notes
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          body=$(awk -v ver="$version" '
+            BEGIN { state = "search" }
+            state == "search" && index($0, "## [" ver "]") == 1 { state = "copy"; next }
+            state == "copy" && /^## \[/ { state = "done" }
+            state == "copy" { print }
+          ' CHANGELOG.md)
+          if [ -z "$body" ]; then
+            echo "No CHANGELOG.md section for ${GITHUB_REF_NAME} - falling back to the one-liner body."
+            body="Dream desktop ${GITHUB_REF_NAME}, built from main."
+          fi
+          {
+            echo "body<<NOTES_EOF"
+            echo "$body"
+            echo ""
+            echo "---"
+            echo ""
+            echo "**Installer notes**"
+            echo ""
+            echo '- **Windows (`-setup.exe`)** embeds a CPython 3.12 runtime plus the Dream kernel — no separate `pip install` and no local Python are required on Windows. Linux installers are the UI shell and still need system Python 3.10+ with Dream installed (`pip install -e .` from the repository).'
+            echo '- The Windows installer is **unsigned** — SmartScreen may warn. Choose More info → Run anyway. That is expected.'
+            echo '- WebView2 may be downloaded during installation if it is missing.'
+            echo '- Ollama is optional for a real local model; without it the router may fall through to echo.'
+            echo '- Optional extras such as `pip install ".[stt]"` (faster-whisper speech-to-text) are not bundled; installed builds use the built-in, clearly-labelled engine.'
+            echo 'NOTES_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and publish release
         if: startsWith(github.ref, 'refs/tags/')
         uses: tauri-apps/tauri-action@v0
@@ -137,21 +181,7 @@ jobs:
           projectPath: apps/desktop
           tagName: ${{ github.ref_name }}
           releaseName: 'Dream ${{ github.ref_name }}'
-          releaseBody: |
-            Dream desktop ${{ github.ref_name }}, built from main.
-
-            **Windows (`-setup.exe`)** embeds a CPython 3.12 runtime plus the
-            Dream kernel — no separate `pip install` and no local Python are
-            required on Windows. Linux installers are the UI shell and still
-            need system Python 3.10+ with Dream installed.
-
-            - The Windows installer is **unsigned** — SmartScreen may warn.
-              Choose More info → Run anyway. That is expected.
-            - WebView2 may be downloaded during installation if it is missing.
-            - Ollama is optional for a real local model; without it the router
-              may fall through to echo.
-            - First-run path without an installer: clone the repository, install
-              Ollama, double-click `run.bat` (see `docs/user/quick-start.md`).
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: ${{ steps.signing.outputs.updater == 'true' }}

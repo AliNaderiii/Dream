@@ -874,7 +874,7 @@ dependencies = [
 
 [[package]]
 name = "dream-desktop"
-version = "3.0.0"
+version = "4.1.0"
 dependencies = [
  "libc",
  "log",
