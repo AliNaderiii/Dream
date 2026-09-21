@@ -8,6 +8,34 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [4.2.0] - 2026-09-21
+
+The offline release: a second Windows installer that carries real
+speech-to-text — faster-whisper and the `base` model — with no `pip install`
+and no internet required.
+
+### Added
+
+- **Full Windows installer (`*_full_x64-setup.exe`).** Same app as the
+  standard `-setup.exe`, plus the `stt` extra (faster-whisper, CPU/int8) and
+  the pinned `base` Whisper model (~148 MB) bundled next to the embedded
+  CPython sidecar. Voice notes in the Telegram bot and the `stt.transcribe`
+  bridge run fully offline out of the box.
+- **Bundled-model resolution.** `WhisperTranscriber` now prefers a local model
+  directory (`DREAM_WHISPER_MODELS_DIR`, or `<python>/models/` in the sidecar)
+  before falling back to a Hugging Face download; other sizes (tiny/small/…)
+  still download on first use when online.
+- The release workflow builds and attaches both installers with per-file
+  SHA-256 checksums, and `workflow_dispatch` accepts a `build_full` input to
+  exercise the full build without cutting a release.
+
+### Known notes
+
+- The full installer is roughly 200 MB (the standard one is ~22 MB); both are
+  attached to the same release — pick whichever fits.
+- Linux installers are unchanged (UI shell; install Dream from the repository
+  with `pip install -e ".[stt]"` for real STT).
+
 ## [4.1.0] - 2026-09-21
 
 The "real pipeline" release: every studio in the desktop app now talks to the

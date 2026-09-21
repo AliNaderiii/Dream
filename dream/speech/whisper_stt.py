@@ -8,12 +8,20 @@ rule of this codebase: never present a simulated transcript as a real one.
 
 Telegram voice notes are OGG/Opus; faster-whisper decodes them through PyAV,
 so no transcoding step is needed on this path.
+
+Offline models: before touching the network, ``_bundled_model_path`` looks for
+a pre-downloaded model directory — ``DREAM_WHISPER_MODELS_DIR`` first, then
+``<sys.prefix>/models/`` (exactly where the Windows *full* installer drops the
+pinned ``base`` model next to the embedded interpreter). A directory only
+counts when it holds ``model.bin``, so a partial download never shadows the
+Hugging Face fallback.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
 from pathlib import Path
 from typing import Any, Protocol
@@ -22,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "DEFAULT_WHISPER_MODEL",
+    "MODELS_DIR_ENV",
     "WHISPER_MODEL_ENV",
     "WhisperSTTError",
     "WhisperTranscriber",
@@ -32,6 +41,9 @@ __all__ = [
 #: Model id used unless the environment overrides it (tiny/base/small/…).
 DEFAULT_WHISPER_MODEL = "base"
 WHISPER_MODEL_ENV = "DREAM_WHISPER_MODEL"
+#: Optional override pointing at a directory of pre-downloaded models
+#: (``<root>/faster-whisper-<id>``). The Windows full installer ships one.
+MODELS_DIR_ENV = "DREAM_WHISPER_MODELS_DIR"
 ALLOWED_MODELS = {"tiny", "base", "small", "medium", "large-v3", "distil-small.en"}
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
@@ -50,6 +62,26 @@ def _resolve_model_id(raw: str | None = None) -> str:
             + ")"
         )
     return model
+
+
+def _bundled_model_path(model_id: str) -> Path | None:
+    """Return a locally bundled model directory for *model_id*, if present.
+
+    Lookup order: ``DREAM_WHISPER_MODELS_DIR`` (explicit override), then
+    ``<sys.prefix>/models`` — the layout the Windows full installer bakes in
+    next to the embedded CPython. Returns ``None`` when nothing complete is
+    found, leaving the normal Hugging Face download path in charge.
+    """
+    candidate_roots: list[Path] = []
+    override = os.environ.get(MODELS_DIR_ENV, "").strip()
+    if override:
+        candidate_roots.append(Path(override))
+    candidate_roots.append(Path(sys.prefix) / "models")
+    for root in candidate_roots:
+        candidate = root / f"faster-whisper-{model_id}"
+        if (candidate / "model.bin").is_file():
+            return candidate
+    return None
 
 
 class Transcriber(Protocol):
@@ -99,8 +131,13 @@ class WhisperTranscriber:
                     "faster-whisper is not installed — install with: pip install \".[stt]\""
                 ) from None
             try:
-                logger.info("loading whisper model '%s' (first use)", self._model_id)
-                self._model = WhisperModel(self._model_id, device="cpu", compute_type="int8")
+                bundled = _bundled_model_path(self._model_id)
+                if bundled is not None:
+                    logger.info("using bundled whisper model at %s", bundled)
+                    self._model = WhisperModel(str(bundled), device="cpu", compute_type="int8")
+                else:
+                    logger.info("loading whisper model '%s' (first use)", self._model_id)
+                    self._model = WhisperModel(self._model_id, device="cpu", compute_type="int8")
             except Exception as exc:
                 self._load_failed = f"whisper model '{self._model_id}' failed to load: {exc}"
                 raise WhisperSTTError(self._load_failed) from None

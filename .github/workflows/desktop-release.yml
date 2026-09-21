@@ -12,6 +12,12 @@ name: Desktop Release
 # - Windows NSIS runs `scripts/bundle-sidecar.mjs` at `tauri build` time and
 #   embeds CPython 3.12.10 plus a non-editable Dream install, so a Release
 #   download can start the sidecar with no local Python.
+# - Tag builds ALSO produce a *full* Windows installer
+#   (`Dream_<version>_full_x64-setup.exe`): the same app plus the `stt` extra
+#   (faster-whisper) and the pinned Whisper `base` model next to the sidecar,
+#   for fully-offline real speech-to-text. The full artifact is built BEFORE
+#   the release is created, so a failed full build never publishes a partial
+#   release. `workflow_dispatch` can opt in with the `build_full` input.
 # - Linux artefacts are the UI shell only; the sidecar uses system Python
 #   3.10+ with Dream installed (`pip install -e .` from the repository).
 #
@@ -28,6 +34,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      build_full:
+        description: 'Also build the full Windows installer (offline STT + Whisper model)'
+        type: boolean
+        default: false
 
 concurrency:
   group: desktop-release-${{ github.ref }}
@@ -164,9 +175,46 @@ jobs:
             echo '- The Windows installer is **unsigned** — SmartScreen may warn. Choose More info → Run anyway. That is expected.'
             echo '- WebView2 may be downloaded during installation if it is missing.'
             echo '- Ollama is optional for a real local model; without it the router may fall through to echo.'
-            echo '- Optional extras such as `pip install ".[stt]"` (faster-whisper speech-to-text) are not bundled; installed builds use the built-in, clearly-labelled engine.'
+            echo '- **Two Windows installers:** the standard `-setup.exe` stays lean (voice notes use the built-in, clearly-labelled engine); `*_full_x64-setup.exe` additionally bundles faster-whisper and the `base` Whisper model for fully-offline real speech-to-text. Other model sizes (`DREAM_WHISPER_MODEL`) download on first use when online.'
             echo 'NOTES_EOF'
           } >> "$GITHUB_OUTPUT"
+
+      - name: Bundle full sidecar (STT extra + Whisper model)
+        if: startsWith(matrix.os, 'windows') && (startsWith(github.ref, 'refs/tags/') || inputs.build_full == true)
+        working-directory: apps/desktop
+        run: node ./scripts/bundle-sidecar.mjs --full
+
+      - name: Build full NSIS installer
+        if: startsWith(matrix.os, 'windows') && (startsWith(github.ref, 'refs/tags/') || inputs.build_full == true)
+        working-directory: apps/desktop
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: npm run tauri build -- --bundles nsis
+
+      - name: Stage full installer
+        if: startsWith(matrix.os, 'windows') && (startsWith(github.ref, 'refs/tags/') || inputs.build_full == true)
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem -Path "apps/desktop/src-tauri/target/release/bundle/nsis" -Filter "*-setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $setup) {
+            throw "Full build produced no NSIS installer under target/release/bundle/nsis"
+          }
+          Copy-Item $setup.FullName "${env:RUNNER_TEMP}/dream-full-setup.exe" -Force
+          $mb = [math]::Round((Get-Item "${env:RUNNER_TEMP}/dream-full-setup.exe").Length / 1MB, 1)
+          Write-Host "Staged full installer: $($setup.FullName) ($mb MB)"
+
+      - name: Reset sidecar to the lean bundle
+        if: startsWith(matrix.os, 'windows') && (startsWith(github.ref, 'refs/tags/') || inputs.build_full == true)
+        shell: pwsh
+        run: |
+          if (Test-Path "apps/desktop/src-tauri/resources/python") {
+            Remove-Item -Recurse -Force "apps/desktop/src-tauri/resources/python"
+            Write-Host "Removed full sidecar — the release build re-bundles the lean one"
+          }
 
       - name: Build and publish release
         if: startsWith(github.ref, 'refs/tags/')
@@ -215,6 +263,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
           path: |
+            ${{ runner.temp }}/dream-full-setup.exe
             apps/desktop/src-tauri/target/**/release/bundle/**/*.dmg
             apps/desktop/src-tauri/target/**/release/bundle/**/*.app.tar.gz
             apps/desktop/src-tauri/target/**/release/bundle/**/*.deb
@@ -268,6 +317,29 @@ jobs:
             gh release upload "$tag" "$dest" --clobber
           fi
 
+      - name: Attach full installer and checksums
+        if: startsWith(github.ref, 'refs/tags/') && startsWith(matrix.os, 'windows')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          full="${RUNNER_TEMP}/dream-full-setup.exe"
+          if [ ! -f "$full" ]; then
+            echo "::error::Full installer missing at $full — the full build steps failed or were skipped on a tag run"
+            exit 1
+          fi
+          version="${GITHUB_REF_NAME#v}"
+          dest="Dream_${version}_full_x64-setup.exe"
+          cp "$full" "$dest"
+          sums="SHA256SUMS-${{ matrix.target }}.txt"
+          {
+            (cd apps/desktop/src-tauri/target/release/bundle/nsis && sha256sum *-setup.exe)
+            sha256sum "$dest"
+          } > "$sums"
+          gh release upload "$tag" "$dest" "$sums" --clobber
+          echo "Attached $dest and refreshed $sums"
+
       - name: Verify release assets
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
@@ -281,6 +353,10 @@ jobs:
             *windows*)
               if ! echo "$assets" | grep -q -- '-setup.exe'; then
                 echo "::error::Release $tag has no Windows NSIS installer attached"
+                exit 1
+              fi
+              if ! echo "$assets" | grep -q -- '_full_x64-setup.exe'; then
+                echo "::error::Release $tag has no full (offline-STT) Windows installer attached"
                 exit 1
               fi
               ;;

@@ -13,6 +13,12 @@
  *   `src-tauri/resources/python/`, enable `site` in `python312._pth`, bootstrap
  *   pip, and `pip install` the Dream package (non-editable) from the repo root.
  * - Idempotent: if `python/python.exe` can already `import dream.bridge`, skip.
+ * - `--full` (or `DREAM_SIDECAR_STT=1`): additionally install the `stt` extra
+ *   (faster-whisper) and download the pinned Whisper `base` model into
+ *   `<python>/models/faster-whisper-base/`, so the *full* Windows installer
+ *   transcribes voice notes fully offline. In full mode the idempotency check
+ *   also requires `import faster_whisper` and the model file — a slim bundle
+ *   never masquerades as a full one.
  *
  * Run from `apps/desktop` (the Tauri `beforeBuildCommand` cwd); paths are
  * resolved from this file's location, not the process cwd, so it is safe to
@@ -25,6 +31,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  statSync,
   writeFileSync,
   rmSync,
 } from 'node:fs';
@@ -45,6 +52,15 @@ const EMBED_ZIP_URL = `https://www.python.org/ftp/python/${PYTHON_VERSION}/pytho
 // published by python.org): fe8ef205f2e9c3ba44d0cf9954e1abd3.
 const EMBED_ZIP_SHA256 = '4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3';
 const GET_PIP_URL = 'https://bootstrap.pypa.io/get-pip.py';
+
+// Full-installer additions: the `stt` extra plus a pinned Whisper model
+// downloaded next to the embedded interpreter. The revision is pinned to the
+// Systran/faster-whisper-base HEAD at pin time (2023-11-23) so release builds
+// stay reproducible; the model is ~148 MB (model.bin ~145 MB).
+const STT_MODEL_ID = 'base';
+const STT_MODEL_REPO = 'Systran/faster-whisper-base';
+const STT_MODEL_REVISION = 'ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66';
+const STT_MODEL_MIN_BYTES = 100_000_000; // sanity floor for model.bin (~145 MB)
 
 // ---------------------------------------------------------------------------
 // Resolved paths (relative to this file, never the process cwd)
@@ -188,6 +204,40 @@ export function findPthName(names) {
 }
 
 /**
+ * Whether this invocation should build the FULL sidecar (stt extra + bundled
+ * Whisper model). Pure so a unit test can drive it without Windows.
+ */
+export function wantsFullStt(argv = process.argv, env = process.env) {
+  return argv.includes('--full') || env.DREAM_SIDECAR_STT === '1';
+}
+
+/** The pip requirement that adds the `stt` extra to a local repo install. */
+export function sttPipSpec(repoRoot = REPO_ROOT) {
+  return `${repoRoot}[stt]`;
+}
+
+/** Where the pinned Whisper model lives inside the bundled interpreter. */
+export function sttModelDir(pythonDir = PYTHON_DIR) {
+  return join(pythonDir, 'models', `faster-whisper-${STT_MODEL_ID}`);
+}
+
+/**
+ * The Python snippet (run with the bundled interpreter) that downloads the
+ * pinned model into `modelDir`. `JSON.stringify` produces a valid Python
+ * string literal for any path, backslashes included.
+ */
+export function sttModelDownloadPython(modelDir) {
+  return [
+    'from huggingface_hub import snapshot_download',
+    'snapshot_download(',
+    `    repo_id=${JSON.stringify(STT_MODEL_REPO)},`,
+    `    revision=${JSON.stringify(STT_MODEL_REVISION)},`,
+    `    local_dir=${JSON.stringify(String(modelDir))},`,
+    ')',
+  ].join('\n');
+}
+
+/**
  * Enable `site` in the embeddable distribution's `._pth` file and make the
  * `Lib/site-packages` directory (where pip installs land) importable.
  */
@@ -221,6 +271,20 @@ function patchPth() {
   console.log(`[bundle-sidecar] patched ${pth} to enable site + Lib/site-packages`);
 }
 
+/** Is the bundled interpreter usable — and, in full mode, complete? */
+function sidecarReady(fullStt) {
+  const kernelOk =
+    runStatus(PYTHON_EXE, [
+      '-c',
+      "import dream.bridge; from zoneinfo import ZoneInfo; ZoneInfo('Asia/Tehran')",
+    ]) === 0;
+  if (!kernelOk) return false;
+  if (!fullStt) return true;
+  const sttOk = runStatus(PYTHON_EXE, ['-c', 'import faster_whisper']) === 0;
+  const modelOk = existsSync(join(sttModelDir(), 'model.bin'));
+  return sttOk && modelOk;
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -236,15 +300,16 @@ async function main() {
     return;
   }
 
-  // Idempotency: a working interpreter + kernel means there is nothing to do.
-  if (
-    existsSync(PYTHON_EXE) &&
-    runStatus(PYTHON_EXE, [
-      '-c',
-      "import dream.bridge; from zoneinfo import ZoneInfo; ZoneInfo('Asia/Tehran')",
-    ]) === 0
-  ) {
-    console.log('[bundle-sidecar] bundled interpreter + Dream kernel already present — skipping');
+  // Idempotency: a working interpreter + kernel means there is nothing to
+  // do. In full mode the check additionally requires faster-whisper and the
+  // bundled model file, so a slim bundle is upgraded rather than reused.
+  const fullStt = wantsFullStt();
+  if (existsSync(PYTHON_EXE) && sidecarReady(fullStt)) {
+    console.log(
+      fullStt
+        ? '[bundle-sidecar] full bundle (kernel + faster-whisper + model) already present — skipping'
+        : '[bundle-sidecar] bundled interpreter + Dream kernel already present — skipping',
+    );
     return;
   }
 
@@ -305,7 +370,43 @@ async function main() {
     fail('smoke test failed: `import dream.bridge` did not exit 0');
   }
 
-  console.log('[bundle-sidecar] bundled CPython + Dream kernel ready');
+  if (fullStt) {
+    console.log('[bundle-sidecar] full mode: installing the stt extra (faster-whisper)');
+    runOrThrow(PYTHON_EXE, [
+      '-m',
+      'pip',
+      'install',
+      '--no-warn-script-location',
+      '--no-build-isolation',
+      sttPipSpec(),
+    ]);
+
+    console.log('[bundle-sidecar] full mode: smoke test: import dream.bridge + faster_whisper');
+    if (runStatus(PYTHON_EXE, ['-c', 'import dream.bridge, faster_whisper']) !== 0) {
+      fail('smoke test failed: `import dream.bridge, faster_whisper` did not exit 0');
+    }
+
+    const modelDir = sttModelDir();
+    console.log(
+      `[bundle-sidecar] full mode: downloading Whisper model '${STT_MODEL_ID}' ` +
+        `(~148 MB, pinned revision ${STT_MODEL_REVISION.slice(0, 8)}…)`,
+    );
+    runOrThrow(PYTHON_EXE, ['-c', sttModelDownloadPython(modelDir)]);
+
+    const modelBin = join(modelDir, 'model.bin');
+    if (!existsSync(modelBin) || statSync(modelBin).size < STT_MODEL_MIN_BYTES) {
+      fail(`bundled model incomplete: ${modelBin} is missing or under ${STT_MODEL_MIN_BYTES} bytes`);
+    }
+    console.log(
+      `[bundle-sidecar] full mode: model ready (${(statSync(modelBin).size / 1e6).toFixed(1)} MB)`,
+    );
+  }
+
+  console.log(
+    fullStt
+      ? '[bundle-sidecar] full bundle ready: CPython + Dream kernel + faster-whisper + model'
+      : '[bundle-sidecar] bundled CPython + Dream kernel ready',
+  );
 }
 
 // Run only when executed directly (`node ./scripts/bundle-sidecar.mjs`), not
