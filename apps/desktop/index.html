@@ -1,12 +1,23 @@
 <!doctype html>
-<html lang="en" dir="ltr" data-theme="light">
+<html lang="fa" dir="rtl" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dream</title>
+    <meta name="color-scheme" content="dark light" />
+    <title>Dream — میزکار ایجنت</title>
+    <link rel="preload" href="/fonts/Vazirmatn-Regular.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="preload" href="/fonts/Vazirmatn-Bold.ttf" as="font" type="font/ttf" crossorigin />
+    <script>
+      // Apply the persisted theme before first paint to avoid a flash.
+      try {
+        var s = JSON.parse(localStorage.getItem('dream5:settings') || '{}');
+        var theme = s && s.theme === 'light' ? 'light' : 'dark';
+        document.documentElement.dataset.theme = theme;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="/src/v5/main.js"></script>
   </body>
 </html>

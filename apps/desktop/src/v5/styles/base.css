@@ -1,0 +1,325 @@
+/* ---------------------------------------------------------------------------
+ * Dream v5 — base layer: reset, fonts, primitives (buttons, fields, chips)
+ * ------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/fonts/Vazirmatn-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/fonts/Vazirmatn-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  color-scheme: dark;
+}
+[data-theme='light'] {
+  color-scheme: light;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-13);
+  line-height: 1.65;
+  color: var(--tx-0);
+  background: var(--bg-0);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+::selection {
+  background: var(--accent-dim);
+  color: var(--tx-0);
+}
+
+/* thin, unobtrusive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line-2);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--tx-2);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-1);
+}
+
+/* ---- primitives -------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: var(--fs-13);
+  font-weight: 500;
+  color: var(--tx-0);
+  background: var(--bg-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-2);
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    border-color var(--t-fast),
+    color var(--t-fast);
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) {
+  background: var(--bg-3);
+  border-color: var(--line-2);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn .ic {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--tx-1);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--bg-2);
+  color: var(--tx-0);
+}
+
+.btn-danger {
+  color: var(--err);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--err-dim);
+  border-color: var(--err);
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: var(--fs-12);
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  padding: 8px 11px;
+  font: inherit;
+  font-size: var(--fs-13);
+  color: var(--tx-0);
+  background: var(--bg-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-2);
+  transition:
+    border-color var(--t-fast),
+    background var(--t-fast);
+}
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--tx-2);
+}
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent-line);
+  background: var(--bg-1);
+}
+.textarea {
+  resize: none;
+  line-height: 1.7;
+}
+.select {
+  appearance: none;
+  cursor: pointer;
+}
+
+/* micro section label — bilingual engineering marker */
+.micro {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--tx-2);
+  direction: ltr;
+  text-align: right;
+}
+
+/* status chip */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  font-size: var(--fs-12);
+  font-weight: 500;
+  color: var(--tx-1);
+  background: var(--bg-2);
+  border: 1px solid var(--line-1);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.chip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tx-2);
+  flex: none;
+}
+.chip.ok {
+  color: var(--ok);
+  border-color: var(--accent-line);
+  background: var(--ok-dim);
+}
+.chip.ok .dot {
+  background: var(--ok);
+}
+.chip.warn {
+  color: var(--warn);
+  background: var(--warn-dim);
+  border-color: rgba(224, 178, 92, 0.35);
+}
+.chip.warn .dot {
+  background: var(--warn);
+}
+.chip.err {
+  color: var(--err);
+  background: var(--err-dim);
+  border-color: rgba(229, 105, 90, 0.35);
+}
+.chip.err .dot {
+  background: var(--err);
+}
+
+/* hairline card */
+.card {
+  background: var(--bg-1);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-3);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+.muted {
+  color: var(--tx-1);
+}
+.faint {
+  color: var(--tx-2);
+}
+
+/* empty state — one icon, one line, one action. no illustrations. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--tx-1);
+}
+.empty .ic {
+  width: 28px;
+  height: 28px;
+  color: var(--tx-2);
+}
+.empty .empty-title {
+  font-size: var(--fs-14);
+  font-weight: 700;
+  color: var(--tx-0);
+}
+.empty .empty-note {
+  font-size: var(--fs-12);
+  color: var(--tx-2);
+  max-width: 380px;
+}
+
+/* inline notice — honest system messages */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: var(--fs-12);
+  border-radius: var(--r-2);
+  border: 1px solid var(--line-1);
+  background: var(--bg-2);
+  color: var(--tx-1);
+}
+.notice .ic {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin-top: 2px;
+}
+.notice.err {
+  border-color: rgba(229, 105, 90, 0.35);
+  background: var(--err-dim);
+  color: var(--err);
+}
+.notice.ok {
+  border-color: var(--accent-line);
+  background: var(--ok-dim);
+  color: var(--tx-0);
+}
+.notice.warn {
+  border-color: rgba(224, 178, 92, 0.35);
+  background: var(--warn-dim);
+  color: var(--warn);
+}

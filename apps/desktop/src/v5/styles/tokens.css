@@ -1,0 +1,93 @@
+/* ---------------------------------------------------------------------------
+ * Dream v5 — design tokens
+ * One dark engineering palette, one accent, hairlines over shadows.
+ * ------------------------------------------------------------------------- */
+
+:root {
+  /* surfaces */
+  --bg-0: #0b0d11; /* app background            */
+  --bg-1: #10131a; /* panels                    */
+  --bg-2: #161a23; /* raised / inputs           */
+  --bg-3: #1d232e; /* hover / active wells      */
+  --line-1: #222935; /* hairline                  */
+  --line-2: #2d3644; /* strong hairline           */
+
+  /* text */
+  --tx-0: #e8edf4; /* primary                   */
+  --tx-1: #97a3b4; /* secondary                 */
+  --tx-2: #5b6779; /* faint / placeholders      */
+
+  /* accent — used sparingly: nav marker, primary actions, links, live dot */
+  --accent: #35d6a4;
+  --accent-strong: #5ce3b8;
+  --accent-ink: #04241a; /* text on accent            */
+  --accent-dim: rgba(53, 214, 164, 0.12);
+  --accent-line: rgba(53, 214, 164, 0.35);
+
+  /* status */
+  --ok: #3dd68c;
+  --ok-dim: rgba(61, 214, 140, 0.12);
+  --warn: #e0b25c;
+  --warn-dim: rgba(224, 178, 92, 0.12);
+  --err: #e5695a;
+  --err-dim: rgba(229, 105, 90, 0.12);
+  --info: #6fa8ff;
+
+  /* typography */
+  --font-sans:
+    'Vazirmatn', 'Segoe UI', Tahoma, ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+
+  /* scale (dense, workbench-grade) */
+  --fs-11: 0.6875rem; /* micro labels  */
+  --fs-12: 0.75rem; /* captions      */
+  --fs-13: 0.8125rem; /* body          */
+  --fs-14: 0.875rem; /* body+ / chat  */
+  --fs-16: 1rem; /* section head  */
+  --fs-20: 1.25rem; /* view title    */
+  --fs-28: 1.75rem; /* wizard head   */
+
+  /* geometry */
+  --r-1: 4px;
+  --r-2: 6px;
+  --r-3: 10px;
+  --sidebar-w: 216px;
+  --topbar-h: 52px;
+
+  /* motion */
+  --t-fast: 110ms cubic-bezier(0.3, 0, 0.5, 1);
+
+  /* elevation — hairline-first; shadows only for floating layers */
+  --shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme='light'] {
+  --bg-0: #f4f6f9;
+  --bg-1: #ffffff;
+  --bg-2: #f0f2f6;
+  --bg-3: #e7eaf0;
+  --line-1: #e1e5ec;
+  --line-2: #ccd3de;
+
+  --tx-0: #17202e;
+  --tx-1: #51607a;
+  --tx-2: #8b98ac;
+
+  --accent: #0c9d73;
+  --accent-strong: #087a5a;
+  --accent-ink: #ffffff;
+  --accent-dim: rgba(12, 157, 115, 0.1);
+  --accent-line: rgba(12, 157, 115, 0.35);
+
+  --ok: #0c9d5f;
+  --ok-dim: rgba(12, 157, 95, 0.1);
+  --warn: #a97a1c;
+  --warn-dim: rgba(169, 122, 28, 0.1);
+  --err: #c2483a;
+  --err-dim: rgba(194, 72, 58, 0.1);
+  --info: #2d6fd4;
+
+  --shadow-pop: 0 8px 28px rgba(23, 32, 46, 0.14);
+}
