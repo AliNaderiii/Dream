@@ -859,3 +859,126 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- phase 2: real tool results ------------------------------------------ */
+
+.result-panel {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.result-text {
+  font-size: var(--fs-14);
+  line-height: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.evidence-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-12);
+}
+.evidence-table th,
+.evidence-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line-1);
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.evidence-table thead th {
+  color: var(--tx-2);
+  font-weight: 500;
+  font-size: var(--fs-11);
+}
+.evidence-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.doc-type-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.doc-type.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.data-session {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+.data-session-ic {
+  color: var(--accent);
+  display: inline-flex;
+}
+.data-session-ic .ic {
+  width: 20px;
+  height: 20px;
+}
+.data-session-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.data-session-name {
+  font-weight: 700;
+  font-size: var(--fs-13);
+}
+.data-session-meta {
+  font-size: var(--fs-11);
+  color: var(--tx-2);
+}
+
+.telegram-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.log-row {
+  display: grid;
+  grid-template-columns: 44px 110px 1fr;
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line-1);
+  font-size: var(--fs-12);
+}
+.log-row:last-child {
+  border-bottom: none;
+}
+.log-time {
+  color: var(--tx-2);
+  font-size: 10px;
+}
+.log-kind {
+  color: var(--accent);
+  font-weight: 500;
+}
+.log-detail {
+  color: var(--tx-1);
+  overflow-wrap: anywhere;
+}
+
+.memory-results {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 80px;
+}

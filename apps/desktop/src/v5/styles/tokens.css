@@ -1,37 +1,37 @@
 /* ---------------------------------------------------------------------------
- * Dream v5 — design tokens
- * One dark engineering palette, one accent, hairlines over shadows.
+ * Dream v5 — design tokens · "Atelier" luxury palette
+ * Warm near-black + champagne gold. One metal, warm neutrals, hairlines.
  * ------------------------------------------------------------------------- */
 
 :root {
-  /* surfaces */
-  --bg-0: #0b0d11; /* app background            */
-  --bg-1: #10131a; /* panels                    */
-  --bg-2: #161a23; /* raised / inputs           */
-  --bg-3: #1d232e; /* hover / active wells      */
-  --line-1: #222935; /* hairline                  */
-  --line-2: #2d3644; /* strong hairline           */
+  /* surfaces — warm charcoal, not blue-black */
+  --bg-0: #0e0c09; /* app background            */
+  --bg-1: #15120d; /* panels                    */
+  --bg-2: #1c1812; /* raised / inputs           */
+  --bg-3: #252017; /* hover / active wells      */
+  --line-1: #2b251b; /* hairline                  */
+  --line-2: #3b3323; /* strong hairline           */
 
-  /* text */
-  --tx-0: #e8edf4; /* primary                   */
-  --tx-1: #97a3b4; /* secondary                 */
-  --tx-2: #5b6779; /* faint / placeholders      */
+  /* text — warm ivory scale */
+  --tx-0: #ece5d8; /* primary                   */
+  --tx-1: #a79c88; /* secondary                 */
+  --tx-2: #6f6552; /* faint / placeholders      */
 
-  /* accent — used sparingly: nav marker, primary actions, links, live dot */
-  --accent: #35d6a4;
-  --accent-strong: #5ce3b8;
-  --accent-ink: #04241a; /* text on accent            */
-  --accent-dim: rgba(53, 214, 164, 0.12);
-  --accent-line: rgba(53, 214, 164, 0.35);
+  /* accent — champagne gold, used like a metal: sparingly */
+  --accent: #d3a95f;
+  --accent-strong: #e7c784;
+  --accent-ink: #221a0c; /* text on gold            */
+  --accent-dim: rgba(211, 169, 95, 0.13);
+  --accent-line: rgba(211, 169, 95, 0.42);
 
-  /* status */
-  --ok: #3dd68c;
-  --ok-dim: rgba(61, 214, 140, 0.12);
-  --warn: #e0b25c;
-  --warn-dim: rgba(224, 178, 92, 0.12);
-  --err: #e5695a;
-  --err-dim: rgba(229, 105, 90, 0.12);
-  --info: #6fa8ff;
+  /* status — warm-tuned, still functional */
+  --ok: #8fbe93;
+  --ok-dim: rgba(143, 190, 147, 0.12);
+  --warn: #d8b26a;
+  --warn-dim: rgba(216, 178, 106, 0.12);
+  --err: #d98a72;
+  --err-dim: rgba(217, 138, 114, 0.12);
+  --info: #9ab5d8;
 
   /* typography */
   --font-sans:
@@ -60,34 +60,35 @@
   --t-fast: 110ms cubic-bezier(0.3, 0, 0.5, 1);
 
   /* elevation — hairline-first; shadows only for floating layers */
-  --shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.5);
 }
 
 [data-theme='light'] {
-  --bg-0: #f4f6f9;
-  --bg-1: #ffffff;
-  --bg-2: #f0f2f6;
-  --bg-3: #e7eaf0;
-  --line-1: #e1e5ec;
-  --line-2: #ccd3de;
+  /* ivory day theme — cream paper with bronze */
+  --bg-0: #f6f2ea;
+  --bg-1: #fdfaf4;
+  --bg-2: #f0ebe0;
+  --bg-3: #e7e0d1;
+  --line-1: #e3dccd;
+  --line-2: #cfc4ac;
 
-  --tx-0: #17202e;
-  --tx-1: #51607a;
-  --tx-2: #8b98ac;
+  --tx-0: #2b2417;
+  --tx-1: #6d6250;
+  --tx-2: #a2947c;
 
-  --accent: #0c9d73;
-  --accent-strong: #087a5a;
-  --accent-ink: #ffffff;
-  --accent-dim: rgba(12, 157, 115, 0.1);
-  --accent-line: rgba(12, 157, 115, 0.35);
+  --accent: #a5793a;
+  --accent-strong: #8a6428;
+  --accent-ink: #fffdf8;
+  --accent-dim: rgba(165, 121, 58, 0.11);
+  --accent-line: rgba(165, 121, 58, 0.4);
 
-  --ok: #0c9d5f;
-  --ok-dim: rgba(12, 157, 95, 0.1);
-  --warn: #a97a1c;
-  --warn-dim: rgba(169, 122, 28, 0.1);
-  --err: #c2483a;
-  --err-dim: rgba(194, 72, 58, 0.1);
-  --info: #2d6fd4;
+  --ok: #4d7d55;
+  --ok-dim: rgba(77, 125, 85, 0.11);
+  --warn: #9a7328;
+  --warn-dim: rgba(154, 115, 40, 0.11);
+  --err: #a85440;
+  --err-dim: rgba(168, 84, 64, 0.11);
+  --info: #44618a;
 
-  --shadow-pop: 0 8px 28px rgba(23, 32, 46, 0.14);
+  --shadow-pop: 0 8px 28px rgba(43, 36, 23, 0.16);
 }

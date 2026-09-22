@@ -116,13 +116,15 @@ body {
 }
 
 .btn-primary {
-  background: var(--accent);
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
   border-color: var(--accent);
   color: var(--accent-ink);
   font-weight: 700;
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-strong);
+  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
+  background-position: 0 100%;
+  filter: brightness(1.06);
   border-color: var(--accent-strong);
 }
 

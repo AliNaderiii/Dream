@@ -61,30 +61,83 @@ export async function status() {
   if (!isTauri) return 'browser';
   try {
     const s = await invoke('bridge_status');
-    // ConnectionState fields vary by shell version; any truthy answer means
-    // the supervisor and the sidecar are alive.
     return s && (s.state === undefined || s.state !== 'error') ? 'ready' : 'down';
   } catch {
     return 'down';
   }
 }
 
-/** Namespace the typed helpers the views actually use (wired in phase 2). */
+/**
+ * Pick a file with the native dialog. Returns a FileEntry
+ * ({path, name, extension, size, is_dir}) or null when cancelled.
+ * Browser preview: honest error — no fake paths.
+ */
+export async function pickFile(title = 'انتخاب فایل') {
+  if (!isTauri) {
+    throw new BridgeUnavailableError(
+      'انتخاب فایل فقط داخل اپلیکیشن دسکتاپ ممکن است — در پیش‌نمایش مرورگر مسیر واقعی وجود ندارد',
+    );
+  }
+  const entries = await invoke('open_file_dialog', { multiple: false, title });
+  return entries?.[0] ?? null;
+}
+
+/** Default sibling output path for a generated PDF: <source>.report.pdf */
+export function pdfSiblingPath(sourcePath, suffix = 'report') {
+  const base = String(sourcePath).replace(/\.[^.\\/]*$/, '');
+  return `${base}.${suffix}.pdf`;
+}
+
+/** Namespace of the typed helpers the views use — all REAL core methods. */
 export const api = {
+  // ---- speech-to-text ----------------------------------------------------
   /** stt.transcribe — real faster-whisper in the core, or an honest error. */
   sttTranscribe: (filePath, language = 'fa') =>
-    call('stt.transcribe', { file_path: filePath, language }),
+    call('stt.transcribe', { file_path: filePath, language }, { timeoutMs: 300_000 }),
 
-  /** ocr.extract — Persian OCR over an image/PDF path. */
-  ocrExtract: (filePath) => call('ocr.extract', { file_path: filePath }),
+  // ---- OCR ---------------------------------------------------------------
+  /** ocr.extract — document_type: general | invoice | receipt | id_card. */
+  ocrExtract: (filePath, documentType = 'general') =>
+    call('ocr.extract', { file_path: filePath, document_type: documentType }, { timeoutMs: 180_000 }),
 
-  /** pdf.export_report — shaped Persian PDF from content blocks. */
-  pdfExport: (payload) => call('pdf.export_report', payload),
+  /** ocr.extract_invoice — invoice key-value fields. */
+  ocrInvoice: (filePath) =>
+    call('ocr.extract_invoice', { file_path: filePath }, { timeoutMs: 180_000 }),
 
-  /** dataqa.ask — grounded Q&A over a loaded dataset. */
-  dataAsk: (question, dataset) =>
-    call('dataqa.ask', { question, dataset: dataset || null }),
+  // ---- Persian PDF -------------------------------------------------------
+  /** pdf.export_report — report {title, subtitle?, sections[]}, output_path. */
+  pdfExport: (report, outputPath) =>
+    call('pdf.export_report', { report, output_path: outputPath }, { timeoutMs: 120_000 }),
 
-  /** data.load_data — list what the core can see. */
-  dataLoad: (path) => call('data.load_data', { path }),
+  // ---- data Q&A ----------------------------------------------------------
+  /** dataqa.sessions.create — {source} path to CSV/JSON/SQLite. */
+  dataSessionCreate: (source) =>
+    call('dataqa.sessions.create', { source }, { timeoutMs: 120_000 }),
+
+  /** dataqa.sessions.list — loaded sessions. */
+  dataSessionsList: () => call('dataqa.sessions.list', {}, { timeoutMs: 30_000 }),
+
+  /** dataqa.ask — {session_id, question}; final result carries evidence. */
+  dataAsk: (sessionId, question) =>
+    call('dataqa.ask', { session_id: sessionId, question, timeout: 20 }, { timeoutMs: 90_000 }),
+
+  // ---- Telegram report bot ----------------------------------------------
+  reportbotStart: (token) =>
+    call('reportbot.start', { token }, { timeoutMs: 30_000 }),
+
+  reportbotStop: () => call('reportbot.stop', {}, { timeoutMs: 30_000 }),
+
+  reportbotStatus: () => call('reportbot.status', {}, { timeoutMs: 15_000 }),
+
+  // ---- episodic memory ---------------------------------------------------
+  /** episodic.query_timeline — {query, limit}. */
+  episodicQuery: (query, limit = 50) =>
+    call('episodic.query_timeline', { query, limit }, { timeoutMs: 60_000 }),
+
+  /** episodic.get_hierarchy_stats — tier metrics. */
+  episodicStats: () => call('episodic.get_hierarchy_stats', {}, { timeoutMs: 30_000 }),
+
+  /** episodic.record_event — {session_id, speaker, text}. */
+  episodicRecord: (sessionId, speaker, text) =>
+    call('episodic.record_event', { session_id: sessionId, speaker, text }, { timeoutMs: 30_000 }),
 };
