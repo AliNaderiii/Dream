@@ -58,7 +58,7 @@ async function main() {
     {
       url: 'http://localhost/',
       pretendToBeVisual: true,
-    runScripts: 'outside-only',
+      runScripts: 'outside-only',
     },
   );
   const started = performance.now();
