@@ -88,6 +88,16 @@ export function pdfSiblingPath(sourcePath, suffix = 'report') {
   return `${base}.${suffix}.pdf`;
 }
 
+/** Pick a folder with the native dialog. Returns an absolute path or null. */
+export async function pickFolder(title = 'انتخاب پوشه') {
+  if (!isTauri) {
+    throw new BridgeUnavailableError(
+      'انتخاب پوشه فقط داخل اپلیکیشن دسکتاپ ممکن است',
+    );
+  }
+  return invoke('select_folder_dialog', { title });
+}
+
 /** Namespace of the typed helpers the views use — all REAL core methods. */
 export const api = {
   // ---- speech-to-text ----------------------------------------------------
@@ -140,4 +150,24 @@ export const api = {
   /** episodic.record_event — {session_id, speaker, text}. */
   episodicRecord: (sessionId, speaker, text) =>
     call('episodic.record_event', { session_id: sessionId, speaker, text }, { timeoutMs: 30_000 }),
+
+  // ---- research ----------------------------------------------------------
+  /** research.create — {topic, workspace} → session summary. */
+  researchCreate: (topic, workspace) =>
+    call('research.create', { topic, workspace }, { timeoutMs: 60_000 }),
+
+  /** research.plan — runs the planner; leaves the session APPROVAL_PENDING. */
+  researchPlan: (sessionId, force = false) =>
+    call('research.plan', { session_id: sessionId, force }, { timeoutMs: 120_000 }),
+
+  /** research.approve — the human-in-the-loop checkpoint. */
+  researchApprove: (sessionId) =>
+    call('research.approve', { session_id: sessionId }, { timeoutMs: 300_000 }),
+
+  /** research.get — full record: plan, sections, findings, report, events. */
+  researchGet: (sessionId) =>
+    call('research.get', { session_id: sessionId }, { timeoutMs: 60_000 }),
+
+  /** research.list — persisted session summaries, newest first. */
+  researchList: () => call('research.list', {}, { timeoutMs: 30_000 }),
 };
