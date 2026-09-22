@@ -46,21 +46,34 @@ function messageEl(msg, openEvidence) {
   const meta = h(
     'div',
     { class: 'msg-meta' },
-    h('span', { class: 'msg-author' }, h('span', { class: 'msg-author-ic', html: ic(isUser ? 'user' : 'bot') }), isUser ? 'شما' : 'Dream'),
+    h(
+      'span',
+      { class: 'msg-author' },
+      h('span', { class: 'msg-author-ic', html: ic(isUser ? 'user' : 'bot') }),
+      isUser ? 'شما' : 'Dream',
+    ),
     h('span', { class: 'msg-time mono', text: fmtTime(msg.ts) }),
     msg.evidence
-      ? h('button', {
-          class: 'btn btn-ghost btn-sm evidence-link',
-          onclick: () => openEvidence(msg.evidence),
-        }, h('span', { html: ic('evidence') }), `شواهد (${msg.evidence.steps.length})`)
+      ? h(
+          'button',
+          {
+            class: 'btn btn-ghost btn-sm evidence-link',
+            onclick: () => openEvidence(msg.evidence),
+          },
+          h('span', { html: ic('evidence') }),
+          `شواهد (${msg.evidence.steps.length})`,
+        )
       : null,
   );
   return h(
     'div',
     { class: `msg ${isUser ? 'from-user' : 'from-agent'} msg-in` },
     meta,
-    h('div', { class: `msg-bubble ${isUser ? 'user' : 'agent'}` },
-      h('div', { class: 'msg-text', text: msg.text })),
+    h(
+      'div',
+      { class: `msg-bubble ${isUser ? 'user' : 'agent'}` },
+      h('div', { class: 'msg-text', text: msg.text }),
+    ),
   );
 }
 
@@ -81,7 +94,12 @@ export function chatView(root, ctx) {
       e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
     },
   });
-  const sendBtn = h('button', { class: 'btn btn-primary composer-send', onclick: submit }, h('span', { html: ic('send') }), 'ارسال');
+  const sendBtn = h(
+    'button',
+    { class: 'btn btn-primary composer-send', onclick: submit },
+    h('span', { html: ic('send') }),
+    'ارسال',
+  );
   let busy = false;
 
   function push(msg) {
@@ -94,14 +112,33 @@ export function chatView(root, ctx) {
     list.replaceChildren();
     if (messages.length === 0) {
       list.append(
-        h('div', { class: 'chat-empty' },
+        h(
+          'div',
+          { class: 'chat-empty' },
           h('span', { class: 'chat-empty-mark', html: ic('logo') }),
           h('span', { class: 'chat-empty-title', text: 'ایجنت همه‌کاره شخصی شما' }),
-          h('span', { class: 'chat-empty-note' },
-            'حافظه پایدار، پژوهش عمیق، مرور وب، سندباکس کد و ابزارهای سند و داده و صدا — همه روی سیستم خودتان، با شواهد قابل بازبینی.'),
-          h('div', { class: 'chat-suggestions' },
+          h(
+            'span',
+            { class: 'chat-empty-note' },
+            'حافظه پایدار، پژوهش عمیق، مرور وب، سندباکس کد و ابزارهای سند و داده و صدا — همه روی سیستم خودتان، با شواهد قابل بازبینی.',
+          ),
+          h(
+            'div',
+            { class: 'chat-suggestions' },
             ...SUGGESTIONS.map((s) =>
-              h('button', { class: 'btn btn-sm', onclick: () => { composer.value = s; composer.focus(); } }, s))),
+              h(
+                'button',
+                {
+                  class: 'btn btn-sm',
+                  onclick: () => {
+                    composer.value = s;
+                    composer.focus();
+                  },
+                },
+                s,
+              ),
+            ),
+          ),
         ),
       );
     } else {
@@ -111,12 +148,28 @@ export function chatView(root, ctx) {
   }
 
   function typingBubble() {
-    return h('div', { class: 'msg from-agent msg-in' },
-      h('div', { class: 'msg-meta' },
-        h('span', { class: 'msg-author' }, h('span', { class: 'msg-author-ic', html: ic('bot') }), 'Dream'),
-        h('span', { class: 'msg-time mono', text: '…در حال نوشتن' })),
-      h('div', { class: 'msg-bubble agent typing' },
-        h('span', { class: 'typing-dot' }), h('span', { class: 'typing-dot' }), h('span', { class: 'typing-dot' })));
+    return h(
+      'div',
+      { class: 'msg from-agent msg-in' },
+      h(
+        'div',
+        { class: 'msg-meta' },
+        h(
+          'span',
+          { class: 'msg-author' },
+          h('span', { class: 'msg-author-ic', html: ic('bot') }),
+          'Dream',
+        ),
+        h('span', { class: 'msg-time mono', text: '…در حال نوشتن' }),
+      ),
+      h(
+        'div',
+        { class: 'msg-bubble agent typing' },
+        h('span', { class: 'typing-dot' }),
+        h('span', { class: 'typing-dot' }),
+        h('span', { class: 'typing-dot' }),
+      ),
+    );
   }
 
   /** Best-effort memory recording — the chat itself never depends on it. */
@@ -155,7 +208,11 @@ export function chatView(root, ctx) {
           title: 'پاسخ ایجنت',
           steps: [
             { name: 'مدل', detail: reply.engine, meta: 'اتصال مستقیم BYOK' },
-            { name: 'حافظه اپیزودیک', detail: isTauri ? 'turn در خط زمانی ثبت شد' : 'هسته در دسترس نیست — ثبت نشد', meta: 'episodic.record_event' },
+            {
+              name: 'حافظه اپیزودیک',
+              detail: isTauri ? 'turn در خط زمانی ثبت شد' : 'هسته در دسترس نیست — ثبت نشد',
+              meta: 'episodic.record_event',
+            },
             { name: 'پاسخ', detail: `${reply.text.length} نویسه`, meta: `${reply.latencyMs}ms` },
           ],
         },
@@ -163,7 +220,7 @@ export function chatView(root, ctx) {
       remember('agent', reply.text);
     } catch (e) {
       typing.remove();
-      const hint = e instanceof ModelError ? e.message : (e?.message || String(e));
+      const hint = e instanceof ModelError ? e.message : e?.message || String(e);
       push({ role: 'system', text: hint, ts: Date.now() });
     } finally {
       busy = false;
@@ -177,13 +234,19 @@ export function chatView(root, ctx) {
     { class: 'tools-menu card' },
     h('span', { class: 'micro', text: 'TOOLS' }),
     ...TOOLS.map((t) =>
-      h('button', {
-        class: 'tools-menu-item',
-        onclick: () => {
-          toolsMenu.classList.add('hidden');
-          location.hash = `#/${t.id}`;
+      h(
+        'button',
+        {
+          class: 'tools-menu-item',
+          onclick: () => {
+            toolsMenu.classList.add('hidden');
+            location.hash = `#/${t.id}`;
+          },
         },
-      }, h('span', { class: 'tools-menu-ic', html: ic(t.icon) }), h('span', { text: t.label }))),
+        h('span', { class: 'tools-menu-ic', html: ic(t.icon) }),
+        h('span', { text: t.label }),
+      ),
+    ),
   );
   const attachBtn = h('button', {
     class: 'btn btn-ghost composer-attach',
@@ -197,12 +260,21 @@ export function chatView(root, ctx) {
   document.addEventListener('click', () => toolsMenu.classList.add('hidden'));
 
   root.append(
-    h('div', { class: 'chat-view' },
+    h(
+      'div',
+      { class: 'chat-view' },
       list,
-      h('div', { class: 'composer card' },
+      h(
+        'div',
+        { class: 'composer card' },
         toolsMenu,
         h('div', { class: 'composer-row' }, attachBtn, composer, sendBtn),
-        h('div', { class: 'composer-hint faint', text: 'هیچ پاسخی شبیه‌سازی نمی‌شود — هر خروجی یا واقعی است یا خطایش صادقانه اعلام می‌شود.' }))),
+        h('div', {
+          class: 'composer-hint faint',
+          text: 'هیچ پاسخی شبیه‌سازی نمی‌شود — هر خروجی یا واقعی است یا خطایش صادقانه اعلام می‌شود.',
+        }),
+      ),
+    ),
   );
 
   renderAll();

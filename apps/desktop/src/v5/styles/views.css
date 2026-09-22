@@ -376,7 +376,9 @@
   min-height: 340px;
   display: flex;
   align-items: stretch;
-  transition: border-color var(--t-fast), background var(--t-fast);
+  transition:
+    border-color var(--t-fast),
+    background var(--t-fast);
 }
 .voice-dropzone.over {
   border-color: var(--accent);
@@ -479,7 +481,9 @@
   font: inherit;
   color: var(--tx-0);
   cursor: pointer;
-  transition: border-color var(--t-fast), background var(--t-fast);
+  transition:
+    border-color var(--t-fast),
+    background var(--t-fast);
 }
 .provider-card:hover {
   border-color: var(--line-2);
@@ -1021,7 +1025,9 @@
   animation-delay: 300ms;
 }
 @keyframes typing {
-  0%, 60%, 100% {
+  0%,
+  60%,
+  100% {
     transform: translateY(0);
     opacity: 0.4;
   }
@@ -1040,8 +1046,12 @@
 /* کمپوزر: هاله طلایی هنگام فوکوس */
 .composer:focus-within {
   border-color: var(--accent-line);
-  box-shadow: 0 0 0 1px var(--accent-dim), 0 6px 24px rgba(0, 0, 0, 0.25);
-  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  box-shadow:
+    0 0 0 1px var(--accent-dim),
+    0 6px 24px rgba(0, 0, 0, 0.25);
+  transition:
+    border-color var(--t-fast),
+    box-shadow var(--t-fast);
 }
 
 /* حلقه طلایی ظریف دور نشان برند */
@@ -1070,7 +1080,10 @@
 
 /* دکمه اصلی: اوج طلایی هنگام هاور */
 .btn-primary {
-  transition: filter var(--t-fast), transform var(--t-fast), background var(--t-fast);
+  transition:
+    filter var(--t-fast),
+    transform var(--t-fast),
+    background var(--t-fast);
 }
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);

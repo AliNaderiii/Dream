@@ -43,9 +43,7 @@ export async function call(method, params = {}, { timeoutMs = 60_000 } = {}) {
         timer = setTimeout(
           () =>
             reject(
-              new BridgeUnavailableError(
-                `پاسخی از هسته نیامد (${method} — ${timeoutMs / 1000}s)`,
-              ),
+              new BridgeUnavailableError(`پاسخی از هسته نیامد (${method} — ${timeoutMs / 1000}s)`),
             ),
           timeoutMs,
         );
@@ -91,9 +89,7 @@ export function pdfSiblingPath(sourcePath, suffix = 'report') {
 /** Pick a folder with the native dialog. Returns an absolute path or null. */
 export async function pickFolder(title = 'انتخاب پوشه') {
   if (!isTauri) {
-    throw new BridgeUnavailableError(
-      'انتخاب پوشه فقط داخل اپلیکیشن دسکتاپ ممکن است',
-    );
+    throw new BridgeUnavailableError('انتخاب پوشه فقط داخل اپلیکیشن دسکتاپ ممکن است');
   }
   return invoke('select_folder_dialog', { title });
 }
@@ -108,7 +104,11 @@ export const api = {
   // ---- OCR ---------------------------------------------------------------
   /** ocr.extract — document_type: general | invoice | receipt | id_card. */
   ocrExtract: (filePath, documentType = 'general') =>
-    call('ocr.extract', { file_path: filePath, document_type: documentType }, { timeoutMs: 180_000 }),
+    call(
+      'ocr.extract',
+      { file_path: filePath, document_type: documentType },
+      { timeoutMs: 180_000 },
+    ),
 
   /** ocr.extract_invoice — invoice key-value fields. */
   ocrInvoice: (filePath) =>
@@ -121,8 +121,7 @@ export const api = {
 
   // ---- data Q&A ----------------------------------------------------------
   /** dataqa.sessions.create — {source} path to CSV/JSON/SQLite. */
-  dataSessionCreate: (source) =>
-    call('dataqa.sessions.create', { source }, { timeoutMs: 120_000 }),
+  dataSessionCreate: (source) => call('dataqa.sessions.create', { source }, { timeoutMs: 120_000 }),
 
   /** dataqa.sessions.list — loaded sessions. */
   dataSessionsList: () => call('dataqa.sessions.list', {}, { timeoutMs: 30_000 }),
@@ -132,8 +131,7 @@ export const api = {
     call('dataqa.ask', { session_id: sessionId, question, timeout: 20 }, { timeoutMs: 90_000 }),
 
   // ---- Telegram report bot ----------------------------------------------
-  reportbotStart: (token) =>
-    call('reportbot.start', { token }, { timeoutMs: 30_000 }),
+  reportbotStart: (token) => call('reportbot.start', { token }, { timeoutMs: 30_000 }),
 
   reportbotStop: () => call('reportbot.stop', {}, { timeoutMs: 30_000 }),
 

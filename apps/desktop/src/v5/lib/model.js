@@ -51,7 +51,7 @@ export async function chatComplete(cfg, messages) {
         body: JSON.stringify({ model: cfg.model, messages }),
       });
     }
-  } catch (e) {
+  } catch {
     throw new ModelError(
       `اتصال به سرور مدل برقرار نشد (${base}) — Ollama را با «ollama serve» روشن کنید یا آدرس/کلید را بررسی کنید.`,
     );
@@ -62,9 +62,7 @@ export async function chatComplete(cfg, messages) {
   }
   const data = await res.json().catch(() => null);
   const text =
-    cfg.provider === 'ollama'
-      ? data?.message?.content
-      : data?.choices?.[0]?.message?.content;
+    cfg.provider === 'ollama' ? data?.message?.content : data?.choices?.[0]?.message?.content;
   if (!text) {
     throw new ModelError('پاسخ مدل خالی یا غیرمنتظره بود.');
   }

@@ -17,7 +17,7 @@ const TIERS = [
   { key: 'l3', name: 'L3', note: 'هویت — باورها و ترجیحات' },
 ];
 
-export function memoryView(root, ctx) {
+export function memoryView(root) {
   const stats = {};
   const tierHost = h('div', { class: 'memory-tiers' });
   const results = h('div', { class: 'memory-results' });
@@ -40,11 +40,21 @@ export function memoryView(root, ctx) {
   function renderTiers() {
     tierHost.replaceChildren(
       ...TIERS.map((t) =>
-        h('div', { class: 'memory-tier card' },
+        h(
+          'div',
+          { class: 'memory-tier card' },
           h('span', { class: 'memory-tier-name mono', text: t.name }),
-          h('div', { class: 'memory-tier-main' },
+          h(
+            'div',
+            { class: 'memory-tier-main' },
             h('span', { class: 'memory-tier-note', text: t.note }),
-            h('span', { class: 'memory-tier-count mono', text: tierCount(t.key) === null ? '—' : String(tierCount(t.key)) })))),
+            h('span', {
+              class: 'memory-tier-count mono',
+              text: tierCount(t.key) === null ? '—' : String(tierCount(t.key)),
+            }),
+          ),
+        ),
+      ),
     );
   }
 
@@ -60,27 +70,45 @@ export function memoryView(root, ctx) {
   async function search() {
     const q = queryInput.value.trim();
     if (!q) return;
-    results.replaceChildren(h('div', { class: 'notice', html: ic('refresh') }, 'در حال جست‌وجو در خط زمانی…'));
+    results.replaceChildren(
+      h('div', { class: 'notice', html: ic('refresh') }, 'در حال جست‌وجو در خط زمانی…'),
+    );
     try {
       const res = await api.episodicQuery(q);
       const events = Array.isArray(res?.events) ? res.events : Array.isArray(res) ? res : [];
       if (events.length === 0) {
         results.replaceChildren(
-          h('div', { class: 'empty empty-sm' },
+          h(
+            'div',
+            { class: 'empty empty-sm' },
             h('span', { html: ic('db') }),
             h('span', { class: 'empty-title', text: 'چیزی یافت نشد' }),
-            h('span', { class: 'empty-note', text: 'حافظه با استفاده از اپ خالی است — هر گفتگو و کار ایجنت اینجا جمع می‌شود.' })),
+            h('span', {
+              class: 'empty-note',
+              text: 'حافظه با استفاده از اپ خالی است — هر گفتگو و کار ایجنت اینجا جمع می‌شود.',
+            }),
+          ),
         );
         return;
       }
       results.replaceChildren(
-        h('div', { class: 'result-panel card' },
+        h(
+          'div',
+          { class: 'result-panel card' },
           h('span', { class: 'micro', text: 'TIMELINE' }),
           ...events.slice(0, 30).map((ev) =>
-            h('div', { class: 'log-row' },
-              h('span', { class: 'log-time mono', text: ev.ts ? fmtTime(ev.ts * 1000) : (ev.jalali ?? '—') }),
+            h(
+              'div',
+              { class: 'log-row' },
+              h('span', {
+                class: 'log-time mono',
+                text: ev.ts ? fmtTime(ev.ts * 1000) : (ev.jalali ?? '—'),
+              }),
               h('span', { class: 'log-kind', text: ev.speaker ?? ev.kind ?? 'رویداد' }),
-              h('span', { class: 'log-detail', text: ev.text ?? ev.summary ?? '—' })))),
+              h('span', { class: 'log-detail', text: ev.text ?? ev.summary ?? '—' }),
+            ),
+          ),
+        ),
       );
     } catch (e) {
       results.replaceChildren(h('div', { class: 'notice err', html: ic('alert') }, msg(e)));
@@ -88,16 +116,41 @@ export function memoryView(root, ctx) {
   }
 
   root.append(
-    h('div', { class: 'memory-view' },
-      h('div', { class: 'data-ask card' },
-        h('div', { class: 'data-ask-row' },
+    h(
+      'div',
+      { class: 'memory-view' },
+      h(
+        'div',
+        { class: 'data-ask card' },
+        h(
+          'div',
+          { class: 'data-ask-row' },
           queryInput,
-          h('button', { class: 'btn btn-primary', onclick: search }, h('span', { html: ic('search') }), 'یادآوری')),
-        h('div', { class: 'data-ask-meta' },
-          h('span', { class: 'chip' }, h('span', { class: 'dot' }), 'خط زمانی جلالی + سلسله‌مراتب L0..L3'),
-          h('span', { class: 'faint data-hint', text: 'هر چیزی که ایجنت یاد می‌گیرد روی سیستم خودتان می‌ماند و قابل بازبینی است.' }))),
+          h(
+            'button',
+            { class: 'btn btn-primary', onclick: search },
+            h('span', { html: ic('search') }),
+            'یادآوری',
+          ),
+        ),
+        h(
+          'div',
+          { class: 'data-ask-meta' },
+          h(
+            'span',
+            { class: 'chip' },
+            h('span', { class: 'dot' }),
+            'خط زمانی جلالی + سلسله‌مراتب L0..L3',
+          ),
+          h('span', {
+            class: 'faint data-hint',
+            text: 'هر چیزی که ایجنت یاد می‌گیرد روی سیستم خودتان می‌ماند و قابل بازبینی است.',
+          }),
+        ),
+      ),
       tierHost,
-      results),
+      results,
+    ),
   );
 
   renderTiers();

@@ -34,11 +34,8 @@
   --info: #9ab5d8;
 
   /* typography */
-  --font-sans:
-    'Vazirmatn', 'Segoe UI', Tahoma, ui-sans-serif, system-ui, sans-serif;
-  --font-mono:
-    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas,
-    monospace;
+  --font-sans: 'Vazirmatn', 'Segoe UI', Tahoma, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* scale (dense, workbench-grade) */
   --fs-11: 0.6875rem; /* micro labels  */

@@ -72,12 +72,12 @@ async def system_benchmark_hardware(params: dict[str, Any] | None = None) -> dic
 
 
 async def system_get_golden_release_info(params: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Return Golden Release v4.2.0 metadata and system verification checklist."""
+    """Return Golden Release v5.0.0 metadata and system verification checklist."""
     del params
     py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     return {
-        "release_version": "4.2.0",
-        "release_tag": "Golden Master Release v4.2.0",
+        "release_version": "5.0.0",
+        "release_tag": "Agent Workbench Release v5.0.0",
         "codename": "Zero-Latency Autonomous Sovereign Intelligence",
         "python_version": py_ver,
         "platform_system": platform.system(),

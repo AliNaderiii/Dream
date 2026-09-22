@@ -27,16 +27,27 @@ export function evidenceDrawer() {
           h('span', { class: 'micro', text: 'EVIDENCE CHAIN' }),
           h('span', { class: 'drawer-name', text: payload?.title ?? 'زنجیره شواهد' }),
         ),
-        h('button', { class: 'btn btn-ghost btn-sm', onclick: close, html: ic('x'), title: 'بستن' }),
+        h('button', {
+          class: 'btn btn-ghost btn-sm',
+          onclick: close,
+          html: ic('x'),
+          title: 'بستن',
+        }),
       ),
       h(
         'div',
         { class: 'drawer-body' },
         steps.length === 0
-          ? h('div', { class: 'empty' },
+          ? h(
+              'div',
+              { class: 'empty' },
               h('span', { html: ic('evidence') }),
               h('span', { class: 'empty-title', text: 'شواهدی ثبت نشده' }),
-              h('span', { class: 'empty-note', text: 'هر خروجی واقعی، مراحل تولیدش را اینجا نشان می‌دهد.' }))
+              h('span', {
+                class: 'empty-note',
+                text: 'هر خروجی واقعی، مراحل تولیدش را اینجا نشان می‌دهد.',
+              }),
+            )
           : h(
               'ol',
               { class: 'evidence-steps' },
@@ -49,13 +60,9 @@ export function evidenceDrawer() {
                     'div',
                     { class: 'evidence-main' },
                     h('span', { class: 'evidence-name', text: step.name ?? 'مرحله' }),
-                    step.detail
-                      ? h('span', { class: 'evidence-detail', text: step.detail })
-                      : null,
+                    step.detail ? h('span', { class: 'evidence-detail', text: step.detail }) : null,
                   ),
-                  step.meta
-                    ? h('span', { class: 'evidence-meta mono', text: step.meta })
-                    : null,
+                  step.meta ? h('span', { class: 'evidence-meta mono', text: step.meta }) : null,
                 ),
               ),
             ),

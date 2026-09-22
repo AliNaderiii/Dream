@@ -21,14 +21,54 @@ import { settingsView } from '../views/settings.js';
 import { evidenceDrawer } from './evidence.js';
 
 const VIEWS = {
-  chat: { title: 'گفتگو', subtitle: 'یک مکالمه با ایجنت — همه ابزارها در دسترس', icon: 'chat', render: chatView },
-  research: { title: 'پژوهش', subtitle: 'پرسش عمیق → برنامه → منابع → گزارش', icon: 'search', render: researchView },
-  memory: { title: 'حافظه', subtitle: 'رویدادها، دانسته‌ها و خط زمانی ایجنت', icon: 'db', render: memoryView },
-  doc: { title: 'سند', subtitle: 'عکس و PDF → متن فارسی → گزارش', icon: 'doc', render: documentView },
-  data: { title: 'داده', subtitle: 'مجموعه‌داده → پرسش → پاسخ با شواهد', icon: 'chart', render: dataView },
-  voice: { title: 'صدا', subtitle: 'فایل صوتی → رونویسی واقعی → گزارش', icon: 'wave', render: voiceView },
-  telegram: { title: 'تلگرام', subtitle: 'بات گزارش — عکس/ویس/متن → PDF فارسی', icon: 'send', render: telegramView },
-  settings: { title: 'تنظیمات', subtitle: 'مدل، ظاهر و وضعیت اجزا', icon: 'settings', render: settingsView },
+  chat: {
+    title: 'گفتگو',
+    subtitle: 'یک مکالمه با ایجنت — همه ابزارها در دسترس',
+    icon: 'chat',
+    render: chatView,
+  },
+  research: {
+    title: 'پژوهش',
+    subtitle: 'پرسش عمیق → برنامه → منابع → گزارش',
+    icon: 'search',
+    render: researchView,
+  },
+  memory: {
+    title: 'حافظه',
+    subtitle: 'رویدادها، دانسته‌ها و خط زمانی ایجنت',
+    icon: 'db',
+    render: memoryView,
+  },
+  doc: {
+    title: 'سند',
+    subtitle: 'عکس و PDF → متن فارسی → گزارش',
+    icon: 'doc',
+    render: documentView,
+  },
+  data: {
+    title: 'داده',
+    subtitle: 'مجموعه‌داده → پرسش → پاسخ با شواهد',
+    icon: 'chart',
+    render: dataView,
+  },
+  voice: {
+    title: 'صدا',
+    subtitle: 'فایل صوتی → رونویسی واقعی → گزارش',
+    icon: 'wave',
+    render: voiceView,
+  },
+  telegram: {
+    title: 'تلگرام',
+    subtitle: 'بات گزارش — عکس/ویس/متن → PDF فارسی',
+    icon: 'send',
+    render: telegramView,
+  },
+  settings: {
+    title: 'تنظیمات',
+    subtitle: 'مدل، ظاهر و وضعیت اجزا',
+    icon: 'settings',
+    render: settingsView,
+  },
 };
 
 const NAV_GROUPS = [
@@ -71,7 +111,12 @@ function chipBridge(state) {
     unknown: { cls: '', label: 'بررسی هسته…' },
   };
   const { cls, label } = map[state] ?? map.unknown;
-  return h('span', { class: `chip bridge-chip ${cls}`, dataset: { state } }, h('span', { class: 'dot' }), label);
+  return h(
+    'span',
+    { class: `chip bridge-chip ${cls}`, dataset: { state } },
+    h('span', { class: 'dot' }),
+    label,
+  );
 }
 
 function chipModel(model) {
@@ -99,18 +144,15 @@ export function mountApp(root) {
     ),
   );
 
-  const themeBtn = h(
-    'button',
-    {
-      class: 'btn btn-ghost theme-toggle',
-      title: 'تغییر تم',
-      onclick: () => {
-        const next = settings.get().theme === 'light' ? 'dark' : 'light';
-        settings.set({ theme: next });
-        applyTheme(next);
-      },
+  const themeBtn = h('button', {
+    class: 'btn btn-ghost theme-toggle',
+    title: 'تغییر تم',
+    onclick: () => {
+      const next = settings.get().theme === 'light' ? 'dark' : 'light';
+      settings.set({ theme: next });
+      applyTheme(next);
     },
-  );
+  });
   const renderThemeBtn = () => {
     themeBtn.innerHTML = ic(settings.get().theme === 'light' ? 'moon' : 'sun');
     themeBtn.append(settings.get().theme === 'light' ? ' تم تیره' : ' تم روشن');
@@ -138,7 +180,9 @@ export function mountApp(root) {
       ),
     ),
     nav,
-    h('div', { class: 'sidebar-foot' },
+    h(
+      'div',
+      { class: 'sidebar-foot' },
       themeBtn,
       navItem('settings', app.get().view),
       h('span', { class: 'micro version', text: 'v5.0.0-dev' }),

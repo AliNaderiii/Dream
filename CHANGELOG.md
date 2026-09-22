@@ -8,6 +8,53 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.0.0] - 2026-09-22
+
+The workbench release: the desktop UI is rebuilt from scratch as a
+framework-free ES-module app wired to the real Python core.
+
+### Added
+
+- **New agent workbench UI (HTML/CSS/JS, no framework).** Grouped navigation
+  (agent / memory / tools / channels), first-run wizard with an honest core
+  check, dark "Atelier" luxury theme (warm black + champagne gold) with an
+  ivory light theme, and an evidence drawer: every output can show the chain
+  that produced it.
+- **Real chat (BYOK).** The conversation talks directly to the user's model —
+  local Ollama or any OpenAI-compatible endpoint — with a typing indicator,
+  12-turn context, and per-reply evidence (model, latency, memory state).
+  Every turn is recorded into the agent's episodic memory when the core is
+  available. The Python core deliberately exposes no LLM-chat RPC (gateway
+  credentials never travel over the bridge).
+- **Wired tools.** Document (OCR: general/invoice/receipt/id_card, fields
+  table, Persian PDF report), Data (dataqa sessions, grounded answers with
+  evidence tables and the analysis code chain), Voice (real transcription
+  with an honest engine badge + PDF), Telegram (report bot start/stop with
+  live status, engine, and event log), Memory (L0..L3 tier stats and
+  timeline search), and Research (create → plan → explicit approval →
+  report, human-in-the-loop by design).
+- **New quality gates.** 49 frontend unit tests (DOM helpers, store, model
+  client, bridge guards) plus a CI-able accessibility gate: WCAG contrast
+  ratios computed from the real design tokens, RTL/fa document structure,
+  and aria-hidden icon checks. The performance gate now measures a real
+  JSDOM cold start of the built bundle (~54 KB of JS, cold start ~50 ms).
+
+### Removed
+
+- **The legacy React application** (routes, stores, echo/simulated bridge
+  layers, 130 test files, i18n, Tailwind, Radix, Ladle) — roughly 250 npm
+  packages and ~239 KB of React chunks replaced by ~54 KB of vanilla JS.
+  The simulated `echo-*` layers are gone by design: every value the UI
+  shows now comes from the real core or is labelled as unavailable.
+
+### Known notes
+
+- Browser previews show honest "unavailable" states — the Python core only
+  runs inside the installed desktop app.
+- The full Windows installer (~200 MB) bundles faster-whisper + the `base`
+  model for fully offline speech-to-text; the standard installer stays lean
+  (~22 MB).
+
 ## [4.2.0] - 2026-09-21
 
 The offline release: a second Windows installer that carries real

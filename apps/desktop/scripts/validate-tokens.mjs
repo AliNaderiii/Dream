@@ -40,7 +40,7 @@ if (!Array.isArray(document.$themes) || document.$themes.length !== 12) {
   errors.push('Expected exactly 12 theme/accent combinations.');
 }
 
-const setNames = (document.$metadata?.tokenSetOrder ?? []);
+const setNames = document.$metadata?.tokenSetOrder ?? [];
 const sets = new Map();
 for (const name of setNames) {
   if (!document[name]) errors.push(`Metadata references missing set: ${name}`);
@@ -54,7 +54,10 @@ for (const [name, tokens] of sets) {
       errors.push(`${name}:${path} uses unsupported Tokens Studio type ${token.$type}`);
     }
     if (token.$value === undefined) errors.push(`${name}:${path} is missing $value`);
-    if (token.$type === 'cubicBezier' && (!Array.isArray(token.$value) || token.$value.length !== 4)) {
+    if (
+      token.$type === 'cubicBezier' &&
+      (!Array.isArray(token.$value) || token.$value.length !== 4)
+    ) {
       errors.push(`${name}:${path} must contain four cubic-bezier coordinates`);
     }
     if (token.$type === 'fontFamily' && !Array.isArray(token.$value)) {
@@ -65,7 +68,8 @@ for (const [name, tokens] of sets) {
 
 const themeIds = new Set();
 for (const theme of document.$themes ?? []) {
-  if (!theme.id || !theme.name || !theme.group) errors.push('Every theme needs id, name, and group.');
+  if (!theme.id || !theme.name || !theme.group)
+    errors.push('Every theme needs id, name, and group.');
   if (themeIds.has(theme.id)) errors.push(`Duplicate theme id: ${theme.id}`);
   themeIds.add(theme.id);
   for (const [setName, status] of Object.entries(theme.selectedTokenSets ?? {})) {
@@ -145,7 +149,9 @@ for (const theme of document.$themes ?? []) {
       const ratio = contrast(fg, bg);
       rows.push({ theme: theme.name, pair: `${fgPath} / ${bgPath}`, ratio });
       if (ratio < minimum) {
-        errors.push(`${theme.name}: ${fgPath} on ${bgPath} is ${ratio.toFixed(2)}:1 (< ${minimum}:1)`);
+        errors.push(
+          `${theme.name}: ${fgPath} on ${bgPath} is ${ratio.toFixed(2)}:1 (< ${minimum}:1)`,
+        );
       }
     } catch (error) {
       errors.push(`${theme.name}: ${error instanceof Error ? error.message : String(error)}`);

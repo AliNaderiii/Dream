@@ -1,8 +1,4 @@
 /// <reference types="vitest/config" />
-import path from 'node:path';
-
-import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 // Tauri injects these when the CLI drives Vite; they are absent for plain `npm run dev`.
@@ -10,11 +6,7 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
-
-  resolve: {
-    alias: { '@': path.resolve(__dirname, './src') },
-  },
+  plugins: [],
 
   // Tauri expects a fixed port and fails if it is not available.
   clearScreen: false,
@@ -39,26 +31,12 @@ export default defineConfig({
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
     outDir: 'dist',
     emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (!id.includes('/node_modules/')) return undefined;
-          if (/\/(react|react-dom|react-router|scheduler|use-sync-external-store)\//.test(id)) {
-            return 'react-vendor';
-          }
-          if (/\/(?:@radix-ui|cmdk)\//.test(id)) return 'ui-vendor';
-          if (/\/(?:i18next|react-i18next)\//.test(id)) return 'i18n-vendor';
-          return undefined;
-        },
-      },
-    },
   },
 
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.{test,spec}.{ts,tsx}', 'scripts/**/*.test.mjs'],
+    include: ['src/v5/**/*.test.js', 'scripts/**/*.test.mjs'],
     css: false,
     testTimeout: 25000,
     hookTimeout: 25000,

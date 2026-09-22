@@ -296,7 +296,9 @@ async function main() {
     return;
   }
   if (process.platform !== 'win32') {
-    console.log(`[bundle-sidecar] skipping — Windows-only CPython bundle (platform ${process.platform})`);
+    console.log(
+      `[bundle-sidecar] skipping — Windows-only CPython bundle (platform ${process.platform})`,
+    );
     return;
   }
 
@@ -317,9 +319,7 @@ async function main() {
   const zipBuf = await download(EMBED_ZIP_URL);
   const actual = sha256(zipBuf);
   if (actual !== EMBED_ZIP_SHA256) {
-    fail(
-      `SHA-256 mismatch for ${EMBED_ZIP_URL} (expected ${EMBED_ZIP_SHA256}, got ${actual})`,
-    );
+    fail(`SHA-256 mismatch for ${EMBED_ZIP_URL} (expected ${EMBED_ZIP_SHA256}, got ${actual})`);
   }
   console.log(`[bundle-sidecar] SHA-256 verified (${actual.slice(0, 16)}…)`);
 
@@ -395,7 +395,9 @@ async function main() {
 
     const modelBin = join(modelDir, 'model.bin');
     if (!existsSync(modelBin) || statSync(modelBin).size < STT_MODEL_MIN_BYTES) {
-      fail(`bundled model incomplete: ${modelBin} is missing or under ${STT_MODEL_MIN_BYTES} bytes`);
+      fail(
+        `bundled model incomplete: ${modelBin} is missing or under ${STT_MODEL_MIN_BYTES} bytes`,
+      );
     }
     console.log(
       `[bundle-sidecar] full mode: model ready (${(statSync(modelBin).size / 1e6).toFixed(1)} MB)`,

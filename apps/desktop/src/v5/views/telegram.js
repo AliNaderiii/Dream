@@ -10,7 +10,7 @@ import { api, BridgeUnavailableError } from '../lib/bridge.js';
 
 const msg = (e) => (e instanceof BridgeUnavailableError ? e.message : e?.message || String(e));
 
-export function telegramView(root, ctx) {
+export function telegramView(root) {
   let pollTimer = null;
 
   const tokenInput = h('input', {
@@ -20,11 +20,21 @@ export function telegramView(root, ctx) {
     placeholder: 'توکن بات از @BotFather (مثلاً 123456:ABC-DEF…)',
   });
   const statusHost = h('div', { class: 'telegram-status' });
-  const startBtn = h('button', {
-    class: 'btn btn-primary',
-    onclick: start,
-  }, h('span', { html: ic('send') }), 'شروع بات');
-  const stopBtn = h('button', { class: 'btn', onclick: stop }, h('span', { html: ic('x') }), 'توقف');
+  const startBtn = h(
+    'button',
+    {
+      class: 'btn btn-primary',
+      onclick: start,
+    },
+    h('span', { html: ic('send') }),
+    'شروع بات',
+  );
+  const stopBtn = h(
+    'button',
+    { class: 'btn', onclick: stop },
+    h('span', { html: ic('x') }),
+    'توقف',
+  );
 
   function render(status, error = null) {
     const running = status?.running === true;
@@ -40,40 +50,83 @@ export function telegramView(root, ctx) {
       const engine = status.stt_engine || '—';
       const simulated = /simulat|built/i.test(engine);
       children.push(
-        h('div', { class: 'telegram-stats' },
-          h('span', { class: `chip ${running ? 'ok' : ''}` }, h('span', { class: 'dot' }), running ? 'در حال اجرا' : 'متوقف'),
-          h('span', { class: `chip ${simulated ? 'warn' : running ? 'ok' : ''}` }, h('span', { class: 'dot' }), `موتور صدا: ${engine}`),
-          h('span', { class: 'chip' }, h('span', { class: 'dot' }), `${status.updates_processed ?? 0} پیام پردازش‌شده`),
+        h(
+          'div',
+          { class: 'telegram-stats' },
+          h(
+            'span',
+            { class: `chip ${running ? 'ok' : ''}` },
+            h('span', { class: 'dot' }),
+            running ? 'در حال اجرا' : 'متوقف',
+          ),
+          h(
+            'span',
+            { class: `chip ${simulated ? 'warn' : running ? 'ok' : ''}` },
+            h('span', { class: 'dot' }),
+            `موتور صدا: ${engine}`,
+          ),
+          h(
+            'span',
+            { class: 'chip' },
+            h('span', { class: 'dot' }),
+            `${status.updates_processed ?? 0} پیام پردازش‌شده`,
+          ),
           status.token_fingerprint
-            ? h('span', { class: 'chip' }, h('span', { class: 'dot' }), `توکن: ${status.token_fingerprint}`)
-            : null),
+            ? h(
+                'span',
+                { class: 'chip' },
+                h('span', { class: 'dot' }),
+                `توکن: ${status.token_fingerprint}`,
+              )
+            : null,
+        ),
       );
       if (status.last_error) {
-        children.push(h('div', { class: 'notice warn', html: ic('alert') }, `آخرین خطای بات: ${status.last_error}`));
+        children.push(
+          h(
+            'div',
+            { class: 'notice warn', html: ic('alert') },
+            `آخرین خطای بات: ${status.last_error}`,
+          ),
+        );
       }
       const events = Array.isArray(status.events) ? status.events.slice(-8).reverse() : [];
       if (events.length) {
         children.push(
-          h('div', { class: 'result-panel card' },
+          h(
+            'div',
+            { class: 'result-panel card' },
             h('span', { class: 'micro', text: 'RECENT EVENTS' }),
             ...events.map((ev) =>
-              h('div', { class: 'log-row' },
+              h(
+                'div',
+                { class: 'log-row' },
                 h('span', { class: 'log-time mono', text: fmtTime(ev.ts * 1000) }),
                 h('span', { class: 'log-kind', text: ev.kind }),
-                h('span', { class: 'log-detail muted', text: ev.chat_id ? `چت ${ev.chat_id}` : '—' })))),
+                h('span', {
+                  class: 'log-detail muted',
+                  text: ev.chat_id ? `چت ${ev.chat_id}` : '—',
+                }),
+              ),
+            ),
+          ),
         );
       }
     } else if (!error) {
       children.push(
-        h('div', { class: 'notice', html: ic('alert') },
-          'بات متوقف است. توکن را وارد کنید و «شروع بات» را بزنید — پاسخ‌ها در همان چت تلگرام به‌صورت PDF فارسی ارسال می‌شود.'),
+        h(
+          'div',
+          { class: 'notice', html: ic('alert') },
+          'بات متوقف است. توکن را وارد کنید و «شروع بات» را بزنید — پاسخ‌ها در همان چت تلگرام به‌صورت PDF فارسی ارسال می‌شود.',
+        ),
       );
     }
     statusHost.replaceChildren(...children);
   }
 
   function poll() {
-    api.reportbotStatus()
+    api
+      .reportbotStatus()
       .then((s) => render(s))
       .catch(() => render(null));
   }
@@ -112,21 +165,33 @@ export function telegramView(root, ctx) {
   };
 
   root.append(
-    h('div', { class: 'telegram-view' },
-      h('div', { class: 'section-card card' },
+    h(
+      'div',
+      { class: 'telegram-view' },
+      h(
+        'div',
+        { class: 'section-card card' },
         h('span', { class: 'micro', text: 'BOT TOKEN' }),
         tokenInput,
         h('div', { class: 'telegram-actions' }, startBtn, stopBtn),
-        statusHost),
-      h('div', { class: 'telegram-flows' },
+        statusHost,
+      ),
+      h(
+        'div',
+        { class: 'telegram-flows' },
         ...[
           ['عکس', 'OCR فارسی → فیلدهای فاکتور → PDF'],
           ['ویس', 'رونویسی (faster-whisper در نصاب کامل) → PDF'],
           ['متن', 'گزارش ساختاریافته → PDF'],
         ].map(([t, note]) =>
-          h('div', { class: 'telegram-flow card' },
+          h(
+            'div',
+            { class: 'telegram-flow card' },
             h('span', { class: 'telegram-flow-title', text: t }),
-            h('span', { class: 'telegram-flow-note', text: note })))),
+            h('span', { class: 'telegram-flow-note', text: note }),
+          ),
+        ),
+      ),
     ),
   );
 

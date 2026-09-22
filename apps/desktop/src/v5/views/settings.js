@@ -16,9 +16,25 @@ export function settingsView(root, ctx) {
   const { settings } = ctx;
   const model = { ...settings.get().model };
 
-  const baseUrl = h('input', { class: 'input', dir: 'ltr', placeholder: 'http://localhost:11434', value: model.baseUrl || '' });
-  const apiKey = h('input', { class: 'input', dir: 'ltr', type: 'password', placeholder: 'کلید API (اختیاری برای Ollama)', value: model.apiKey || '' });
-  const modelName = h('input', { class: 'input', dir: 'ltr', placeholder: 'مثلاً qwen2.5:7b', value: model.model || '' });
+  const baseUrl = h('input', {
+    class: 'input',
+    dir: 'ltr',
+    placeholder: 'http://localhost:11434',
+    value: model.baseUrl || '',
+  });
+  const apiKey = h('input', {
+    class: 'input',
+    dir: 'ltr',
+    type: 'password',
+    placeholder: 'کلید API (اختیاری برای Ollama)',
+    value: model.apiKey || '',
+  });
+  const modelName = h('input', {
+    class: 'input',
+    dir: 'ltr',
+    placeholder: 'مثلاً qwen2.5:7b',
+    value: model.model || '',
+  });
 
   const providerCards = h(
     'div',
@@ -106,45 +122,101 @@ export function settingsView(root, ctx) {
 
   const bridge = ctx.app.get().bridge;
   const engines = [
-    { name: 'هسته پایتون (پل)', state: bridge === 'ready' ? 'ok' : bridge === 'browser' ? 'warn' : 'err', note: bridge === 'browser' ? 'پیش‌نمایش مرورگر — داخل اپ دسکتاپ' : bridge === 'ready' ? 'متصل' : 'در دسترس نیست' },
+    {
+      name: 'هسته پایتون (پل)',
+      state: bridge === 'ready' ? 'ok' : bridge === 'browser' ? 'warn' : 'err',
+      note:
+        bridge === 'browser'
+          ? 'پیش‌نمایش مرورگر — داخل اپ دسکتاپ'
+          : bridge === 'ready'
+            ? 'متصل'
+            : 'در دسترس نیست',
+    },
     { name: 'OCR فارسی', state: 'unknown', note: 'وضعیت در فاز ۲ به‌صورت زنده خوانده می‌شود' },
-    { name: 'PDF فارسی (HarfBuzz)', state: 'unknown', note: 'وضعیت در فاز ۲ به‌صورت زنده خوانده می‌شود' },
-    { name: 'رونویسی صدا (faster-whisper)', state: 'unknown', note: 'در نصاب کامل به‌صورت آفلاین فعال است' },
+    {
+      name: 'PDF فارسی (HarfBuzz)',
+      state: 'unknown',
+      note: 'وضعیت در فاز ۲ به‌صورت زنده خوانده می‌شود',
+    },
+    {
+      name: 'رونویسی صدا (faster-whisper)',
+      state: 'unknown',
+      note: 'در نصاب کامل به‌صورت آفلاین فعال است',
+    },
   ];
 
   root.append(
     h(
       'div',
       { class: 'settings-view' },
-      section('MODEL', 'مدل',
-        h('div', { class: 'section-card card' },
+      section(
+        'MODEL',
+        'مدل',
+        h(
+          'div',
+          { class: 'section-card card' },
           providerCards,
           fieldsHost,
-          h('div', { class: 'settings-actions' }, saveBtn, saveNote))),
+          h('div', { class: 'settings-actions' }, saveBtn, saveNote),
+        ),
+      ),
 
-      section('APPEARANCE', 'ظاهر',
-        h('div', { class: 'section-card card theme-card' }, themeRow)),
+      section('APPEARANCE', 'ظاهر', h('div', { class: 'section-card card theme-card' }, themeRow)),
 
-      section('ABOUT', 'درباره',
-        h('div', { class: 'section-card card about-card' },
-          h('div', { class: 'about-row' }, h('span', { class: 'muted', text: 'نسخه' }), h('span', { class: 'mono', text: '5.0.0-dev' })),
-          h('div', { class: 'about-row' }, h('span', { class: 'muted', text: 'پروتکل پل' }), h('span', { class: 'mono', text: 'bridge_send · JSON-RPC' })),
-          h('div', { class: 'about-engines' },
+      section(
+        'ABOUT',
+        'درباره',
+        h(
+          'div',
+          { class: 'section-card card about-card' },
+          h(
+            'div',
+            { class: 'about-row' },
+            h('span', { class: 'muted', text: 'نسخه' }),
+            h('span', { class: 'mono', text: '5.0.0-dev' }),
+          ),
+          h(
+            'div',
+            { class: 'about-row' },
+            h('span', { class: 'muted', text: 'پروتکل پل' }),
+            h('span', { class: 'mono', text: 'bridge_send · JSON-RPC' }),
+          ),
+          h(
+            'div',
+            { class: 'about-engines' },
             h('span', { class: 'micro', text: 'COMPONENT STATUS' }),
             ...engines.map((eng) =>
-              h('div', { class: 'about-engine' },
+              h(
+                'div',
+                { class: 'about-engine' },
                 h('span', { class: 'engine-name', text: eng.name }),
-                h('span', { class: `chip ${eng.state === 'ok' ? 'ok' : eng.state === 'err' ? 'err' : eng.state === 'warn' ? 'warn' : ''}` },
-                  h('span', { class: 'dot' }), eng.note)),
-            )))),
+                h(
+                  'span',
+                  {
+                    class: `chip ${eng.state === 'ok' ? 'ok' : eng.state === 'err' ? 'err' : eng.state === 'warn' ? 'warn' : ''}`,
+                  },
+                  h('span', { class: 'dot' }),
+                  eng.note,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     ),
   );
 }
 
 function section(micro, title, ...children) {
-  return h('section', { class: 'settings-section' },
-    h('div', { class: 'settings-section-head' },
+  return h(
+    'section',
+    { class: 'settings-section' },
+    h(
+      'div',
+      { class: 'settings-section-head' },
       h('span', { class: 'micro', text: micro }),
-      h('span', { class: 'settings-section-title', text: title })),
-    ...children);
+      h('span', { class: 'settings-section-title', text: title }),
+    ),
+    ...children,
+  );
 }
