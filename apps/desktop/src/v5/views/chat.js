@@ -274,7 +274,7 @@ export function chatView(root, ctx) {
 
   const toolsMenu = h(
     'div',
-    { class: 'tools-menu card' },
+    { class: 'tools-menu card hidden' },
     h('span', { class: 'micro', text: 'TOOLS' }),
     ...TOOLS.map((t) =>
       h(

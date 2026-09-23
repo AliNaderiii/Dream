@@ -120,6 +120,19 @@ export function researchView(root, ctx) {
           : null,
       ),
     ];
+    if (runEvidence && !busy) {
+      children.push(
+        h(
+          'button',
+          {
+            class: 'btn btn-sm evidence-link',
+            onclick: () => ctx.openEvidence(runEvidence),
+          },
+          h('span', { html: ic('evidence') }),
+          'شواهد اجرا',
+        ),
+      );
+    }
     if (busyLabel) children.push(h('div', { class: 'notice', html: ic('refresh') }, busyLabel));
     if (error) children.push(notice(error));
     const steps = planSteps();
@@ -230,6 +243,8 @@ export function researchView(root, ctx) {
     }
   }
 
+  let runEvidence = null; // shown on demand — the drawer never opens itself
+
   async function approve() {
     busy = true;
     renderStage({
@@ -238,7 +253,7 @@ export function researchView(root, ctx) {
     try {
       await api.researchApprove(session.session_id);
       await refresh();
-      ctx.openEvidence({
+      runEvidence = {
         title: 'اجرای پژوهش',
         steps: [
           { name: 'research.create', detail: session.topic },
@@ -246,7 +261,7 @@ export function researchView(root, ctx) {
           { name: 'research.approve', detail: 'تأیید شما', meta: 'human-in-the-loop' },
           { name: 'research.get', detail: 'گزارش و رویدادها', meta: 'هسته پایتون' },
         ],
-      });
+      };
     } catch (e) {
       renderStage({ error: msg(e) });
     } finally {

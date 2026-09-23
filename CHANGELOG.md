@@ -8,6 +8,25 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.1.1] - 2026-09-23
+
+### Fixed
+
+- **The ghost panel in the middle of every view.** The evidence drawer's
+  closed-state CSS transforms were swapped between LTR and RTL: in the
+  RTL app the "closed" drawer rested 400px INSIDE the viewport — an
+  empty dead panel floating over the middle of every section, blocking
+  clicks, impossible to dismiss, and reappearing parked mid-screen after
+  pressing its close button. The drawer now hides fully off-screen
+  (positive physical X in LTR, negative in RTL) and is additionally
+  `visibility: hidden` while closed. Regression-tested in
+  `shell/drawer.test.js`.
+- **The drawer never opens itself anymore.** Evidence is strictly
+  on-demand: document, voice, and research results now carry a
+  «شواهد» button instead of popping the drawer open after an operation.
+- **The chat tools menu started visible** on entering the chat view; it
+  now starts hidden like every other popover.
+
 ## [5.1.0] - 2026-09-23
 
 ### Added

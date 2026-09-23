@@ -21,6 +21,7 @@ export function documentView(root, ctx) {
   let docType = 'general';
   let extraction = null;
   let pdfResult = null;
+  let pdfEvidence = null; // shown on demand — the drawer never opens itself
 
   const list = h('div', { class: 'doc-list' });
   const stage = h('div', { class: 'doc-stage' });
@@ -152,6 +153,17 @@ export function documentView(root, ctx) {
           'div',
           { class: 'notice ok', html: ic('check') },
           `PDF ساخته شد: ${pdfResult.file_path} (${fmtBytes(pdfResult.bytes ?? 0)})`,
+          pdfEvidence
+            ? h(
+                'button',
+                {
+                  class: 'btn btn-sm evidence-link',
+                  onclick: () => ctx.openEvidence(pdfEvidence),
+                },
+                h('span', { html: ic('evidence') }),
+                'شواهد',
+              )
+            : null,
         ),
       );
     }
@@ -208,7 +220,7 @@ export function documentView(root, ctx) {
       };
       pdfResult = await api.pdfExport(report, pdfSiblingPath(file.path, 'report'));
       renderStage();
-      ctx.openEvidence({
+      pdfEvidence = {
         title: 'گزارش استخراج سند',
         steps: [
           { name: 'سند', detail: file.name, meta: fmtBytes(file.size) },
@@ -219,7 +231,7 @@ export function documentView(root, ctx) {
             meta: fmtBytes(pdfResult.bytes ?? 0),
           },
         ],
-      });
+      };
     } catch (e) {
       pdfResult = null;
       renderStage({ error: msg(e) });

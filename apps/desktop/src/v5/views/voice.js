@@ -24,6 +24,7 @@ export function voiceView(root, ctx) {
   let file = null; // FileEntry {path, name, size}
   let transcript = null; // stt result
   let pdfResult = null;
+  let pdfEvidence = null; // shown on demand — the drawer never opens itself
 
   const stage = h('div', { class: 'voice-stage' });
 
@@ -158,6 +159,17 @@ export function voiceView(root, ctx) {
             'div',
             { class: 'notice ok', html: ic('check') },
             `PDF ساخته شد: ${pdfResult.file_path} (${fmtBytes(pdfResult.bytes ?? 0)})`,
+            pdfEvidence
+              ? h(
+                  'button',
+                  {
+                    class: 'btn btn-sm evidence-link',
+                    onclick: () => ctx.openEvidence(pdfEvidence),
+                  },
+                  h('span', { html: ic('evidence') }),
+                  'شواهد',
+                )
+              : null,
           ),
         );
       }
@@ -203,7 +215,7 @@ export function voiceView(root, ctx) {
       };
       pdfResult = await api.pdfExport(report, pdfSiblingPath(file.path));
       renderStage();
-      ctx.openEvidence({
+      pdfEvidence = {
         title: 'گزارش رونویسی صوتی',
         steps: [
           { name: 'فایل صوتی', detail: file.name, meta: fmtBytes(file.size) },
@@ -218,7 +230,7 @@ export function voiceView(root, ctx) {
             meta: fmtBytes(pdfResult.bytes ?? 0),
           },
         ],
-      });
+      };
     } catch (e) {
       pdfResult = null;
       renderStage({ error: msg(e) });
@@ -245,6 +257,7 @@ export function voiceView(root, ctx) {
   let enginesLoaded = false;
   let enginesError = null;
   let ttsResult = null;
+  let ttsEvidence = null; // shown on demand — the drawer never opens itself
   let ttsBusy = false;
   let ttsError = null;
 
@@ -471,6 +484,17 @@ export function voiceView(root, ctx) {
                 )
               : null,
             h('span', { class: 'chip' }, h('span', { class: 'dot' }), fmtBytes(ttsResult.bytes)),
+            ttsEvidence
+              ? h(
+                  'button',
+                  {
+                    class: 'btn btn-sm evidence-link',
+                    onclick: () => ctx.openEvidence(ttsEvidence),
+                  },
+                  h('span', { html: ic('evidence') }),
+                  'شواهد',
+                )
+              : null,
           ),
         ),
       );
@@ -497,7 +521,7 @@ export function voiceView(root, ctx) {
         ttsError = res.error || 'ساخت صدا ناموفق بود';
       } else {
         ttsResult = res;
-        ctx.openEvidence({
+        ttsEvidence = {
           title: 'گفتار ساخته‌شده',
           steps: [
             {
@@ -512,7 +536,7 @@ export function voiceView(root, ctx) {
             },
             { name: 'فایل صوتی', detail: res.audio_path, meta: fmtBytes(res.bytes) },
           ],
-        });
+        };
       }
     } catch (e) {
       ttsError = msg(e);
