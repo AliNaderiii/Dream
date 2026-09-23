@@ -8,6 +8,32 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.2.0] - 2026-09-23
+
+### Added — wiring the core to the UI, batch 1
+
+- **فایل‌ها (Files).** A new tools view wired to the real `workspace.*`
+  bridge methods: register a folder through the native dialog
+  (`workspace.roots_register` — an explicit user action, nothing is ever
+  scanned silently), browse it with a breadcrumb (`workspace.files_list`,
+  bounded and symlink-safe), and preview file contents
+  (`workspace.files_preview`, with an honest truncated flag and a clear
+  "no text preview" state for binaries).
+- **بینایی (Vision).** The v4 screen-OCR studio, rebuilt on v5: one real
+  action captures the screen (Windows GDI via `vision.capture_screen`),
+  extracts Persian text with the core OCR engine, and deletes the
+  screenshot immediately — the privacy promise (P-14: screen pixels
+  never persist) is stated in the UI. Results export to a Persian PDF
+  via the existing report engine.
+- Navigation: TOOLS now lists سند، داده، صدا، بینایی، فایل‌ها.
+
+### Remaining core domains (next batches)
+
+- Browser automation (10 methods), multi-agent swarm (9), reasoning /
+  dialectic (17), sandboxed code execution (7), duplex live loop,
+  provider hubs, remote gateway, evals — all present in the core, not
+  yet wired to the UI.
+
 ## [5.1.1] - 2026-09-23
 
 ### Fixed

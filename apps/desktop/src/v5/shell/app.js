@@ -18,6 +18,8 @@ import { memoryView } from '../views/memory.js';
 import { documentView } from '../views/document.js';
 import { dataView } from '../views/data.js';
 import { voiceView } from '../views/voice.js';
+import { visionView } from '../views/vision.js';
+import { filesView } from '../views/files.js';
 import { telegramView } from '../views/telegram.js';
 import { settingsView } from '../views/settings.js';
 import { evidenceDrawer } from './evidence.js';
@@ -59,6 +61,18 @@ const VIEWS = {
     icon: 'wave',
     render: voiceView,
   },
+  vision: {
+    title: 'بینایی',
+    subtitle: 'عکس از صفحه → متن فارسی (اسکرین‌شات فوراً حذف می‌شود)',
+    icon: 'eye',
+    render: visionView,
+  },
+  files: {
+    title: 'فایل‌ها',
+    subtitle: 'پوشه‌های ثبت‌شده → مرور و پیش‌نمایش فایل‌ها',
+    icon: 'folder',
+    render: filesView,
+  },
   telegram: {
     title: 'تلگرام',
     subtitle: 'بات گزارش — عکس/ویس/متن → PDF فارسی',
@@ -76,7 +90,7 @@ const VIEWS = {
 const NAV_GROUPS = [
   { micro: 'AGENT', items: ['chat', 'research'] },
   { micro: 'MEMORY', items: ['memory'] },
-  { micro: 'TOOLS', items: ['doc', 'data', 'voice'] },
+  { micro: 'TOOLS', items: ['doc', 'data', 'voice', 'vision', 'files'] },
   { micro: 'CHANNELS', items: ['telegram'] },
 ];
 

@@ -16,6 +16,15 @@ describe('browser environment (no Tauri)', () => {
     await expect(status()).resolves.toBe('browser');
   });
 
+  it('workspace + vision helpers are wired to the real bridge — honest in the browser', async () => {
+    await expect(api.wsRootsList()).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.wsFilesList('wsr1', '')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.wsFilesPreview('wsr1', 'a.txt')).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+    await expect(api.visionCaptureScreen()).rejects.toBeInstanceOf(BridgeUnavailableError);
+  });
+
   it('tts helpers are wired to the real bridge — honest in the browser', async () => {
     await expect(api.ttsEngines()).rejects.toBeInstanceOf(BridgeUnavailableError);
     await expect(api.ttsVoices('piper')).rejects.toBeInstanceOf(BridgeUnavailableError);

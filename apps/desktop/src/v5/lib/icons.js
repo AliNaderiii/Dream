@@ -56,6 +56,12 @@ export const icons = {
   search: wrap('<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>'),
   minus: wrap('<path d="M5 12h14"/>'),
   square: wrap('<rect x="5" y="5" width="14" height="14" rx="1.5"/>'),
+  folder: wrap(
+    '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  ),
+  eye: wrap(
+    '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/>',
+  ),
   speaker: wrap(
     '<path d="M11 5L6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>',
   ),

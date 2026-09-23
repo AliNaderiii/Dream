@@ -1213,3 +1213,121 @@
 .tts-status {
   margin-top: 10px;
 }
+
+/* ---- files view ---------------------------------------------------------- */
+
+.files-roots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.files-root {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  min-width: 260px;
+  text-align: start;
+  cursor: pointer;
+  font: inherit;
+  color: var(--tx-0);
+  transition: border-color var(--t-fast);
+}
+.files-root:hover {
+  border-color: var(--accent-line);
+}
+.files-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.crumb {
+  background: none;
+  border: none;
+  color: var(--tx-1);
+  font: inherit;
+  font-size: var(--fs-13);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--r-1);
+}
+.crumb:hover {
+  color: var(--tx-0);
+  background: var(--bg-3);
+}
+.crumb-sep {
+  color: var(--tx-2);
+}
+.files-list {
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+}
+.files-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px;
+  background: none;
+  border: none;
+  border-radius: var(--r-1);
+  font: inherit;
+  color: var(--tx-0);
+  text-align: start;
+  cursor: pointer;
+}
+.files-row:hover {
+  background: var(--bg-3);
+}
+.files-row-ic {
+  color: var(--accent);
+  display: inline-flex;
+}
+.files-row-ic .ic {
+  width: 16px;
+  height: 16px;
+}
+.files-row-main {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.files-row-name {
+  font-size: var(--fs-13);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.files-row-meta {
+  font-size: var(--fs-11);
+  color: var(--tx-2);
+}
+.faint-chip {
+  color: var(--tx-2);
+}
+.files-preview-name {
+  display: block;
+  font-size: var(--fs-11);
+  color: var(--tx-2);
+  margin-bottom: 8px;
+}
+.files-preview-text {
+  margin: 0;
+  padding: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-1);
+  direction: ltr;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 340px;
+  overflow-y: auto;
+}

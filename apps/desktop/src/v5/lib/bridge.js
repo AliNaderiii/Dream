@@ -119,6 +119,31 @@ export const api = {
       { timeoutMs: 120_000 },
     ),
 
+  // ---- workspace files ---------------------------------------------------
+  /** workspace.roots_list — registered workspace roots. */
+  wsRootsList: () => call('workspace.roots_list', {}, { timeoutMs: 30_000 }),
+
+  /** workspace.roots_register — explicit user action via the native dialog. */
+  wsRootsRegister: (folder, name = '') =>
+    call('workspace.roots_register', { folder, name }, { timeoutMs: 60_000 }),
+
+  /** workspace.files_list — bounded, symlink-safe listing inside one root. */
+  wsFilesList: (rootId, path = '', cursor = 0) =>
+    call(
+      'workspace.files_list',
+      { root_id: rootId, path, cursor, limit: 200 },
+      { timeoutMs: 60_000 },
+    ),
+
+  /** workspace.files_preview — bounded text preview (truncated flag). */
+  wsFilesPreview: (rootId, path) =>
+    call('workspace.files_preview', { root_id: rootId, path }, { timeoutMs: 30_000 }),
+
+  // ---- screen vision ------------------------------------------------------
+  /** vision.capture_screen — real GDI capture + core OCR; temp file deleted. */
+  visionCaptureScreen: (documentType = 'general') =>
+    call('vision.capture_screen', { document_type: documentType }, { timeoutMs: 120_000 }),
+
   // ---- OCR ---------------------------------------------------------------
   /** ocr.extract — document_type: general | invoice | receipt | id_card. */
   ocrExtract: (filePath, documentType = 'general') =>
