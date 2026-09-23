@@ -1,8 +1,11 @@
 /**
- * Web — honest, human-in-the-loop web reading on the real browse.* bridge:
- * propose a URL, approve it yourself, and only then the core fetches it
- * (SSRF-guarded, prompt-injection-scanned). Extracted links can be followed
- * the same way. No YOLO, no auto-fetch, no fake pages.
+ * Web — two real, human-in-the-loop ways to reach the web:
+ *  - «خواندن» (reading): the browse.* flow — propose a URL, approve it, only
+ *    then the core fetches it (SSRF-guarded, prompt-injection-scanned).
+ *  - «مرورگر» (browser): the REAL Playwright/CDP controller (webbrowser.*)
+ *    — attach to your own Chrome or launch an isolated one; every navigation
+ *    needs your explicit single-use approval (SEC-03), quota and blocklist
+ *    enforced by the core. Nothing here is simulated.
  */
 
 import { h } from '../lib/dom.js';
@@ -19,6 +22,9 @@ const STATUS_FA = {
 };
 
 export function webView(root, ctx) {
+  let mode = 'read'; // 'read' | 'browser'
+
+  // ════════════════ pane 1: reading (browse.* — unchanged flow) ═══════════
   let drafts = [];
   let selected = null; // fetched draft shown in detail
   let busy = '';
@@ -125,7 +131,7 @@ export function webView(root, ctx) {
             { class: 'result-meta' },
             statusChip(selected.status),
             selected.truncated
-              ? h('span', { class: 'chip warn' }, h('span', { class: 'dot' }), 'گزینهٔ کوتاه‌شده')
+              ? h('span', { class: 'chip warn' }, h('span', { class: 'dot' }), 'گزیدهٔ کوتاه‌شده')
               : null,
             h(
               'button',
@@ -161,23 +167,21 @@ export function webView(root, ctx) {
             h(
               'div',
               { class: 'files-list' },
-              ...links.slice(0, 30).map((l) =>
-                h(
-                  'button',
-                  {
-                    class: 'files-row',
-                    disabled: !!busy,
-                    onclick: () => follow(l.url),
-                  },
-                  h('span', { class: 'files-row-ic', html: ic('arrow') }),
+              ...links
+                .slice(0, 30)
+                .map((l) =>
                   h(
-                    'div',
-                    { class: 'files-row-main' },
-                    h('span', { class: 'files-row-name', text: l.url }),
+                    'button',
+                    { class: 'files-row', disabled: !!busy, onclick: () => follow(l.url) },
+                    h('span', { class: 'files-row-ic', html: ic('arrow') }),
+                    h(
+                      'div',
+                      { class: 'files-row-main' },
+                      h('span', { class: 'files-row-name', text: l.url }),
+                    ),
+                    h('span', { class: 'chip' }, h('span', { class: 'dot' }), 'دنبال کردن'),
                   ),
-                  h('span', { class: 'chip' }, h('span', { class: 'dot' }), 'دنبال کردن'),
                 ),
-              ),
             ),
           ),
         );
@@ -264,31 +268,477 @@ export function webView(root, ctx) {
     }
   }
 
+  const readPane = h(
+    'div',
+    { class: 'web-pane' },
+    h(
+      'div',
+      { class: 'voice-toolbar' },
+      urlInput,
+      h(
+        'button',
+        { class: 'btn btn-primary', onclick: propose },
+        h('span', { html: ic('globe') }),
+        'پیشنهاد',
+      ),
+    ),
+    h(
+      'span',
+      { class: 'chip warn' },
+      h('span', { class: 'dot' }),
+      'هیچ صفحه‌ای بدون تأیید صریح شما بازخوانی نمی‌شود — بدون YOLO',
+    ),
+    stage,
+  );
+
+  // ════════════════ pane 2: real browser (webbrowser.*) ═══════════════════
+  let wbStatus = null; // webbrowser.status result
+  let wbError = null;
+  let wbBusy = '';
+  let pending = null; // approval_required session
+  let page = null; // last PageContent
+  let lastNav = { url: '', purpose: '' };
+
+  const portInput = h('input', {
+    class: 'input wb-port mono',
+    dir: 'ltr',
+    value: '9222',
+    title: 'پورت دیباگ کروم — کروم باید با --remote-debugging-port=9222 اجرا شده باشد',
+  });
+  const navUrl = h('input', {
+    class: 'input web-url',
+    dir: 'ltr',
+    placeholder: 'https://example.com',
+  });
+  const navPurpose = h('input', { class: 'input', placeholder: 'چرا این صفحه؟ (اختیاری)' });
+  const selInput = h('input', {
+    class: 'input mono',
+    dir: 'ltr',
+    placeholder: 'selector مثل button.submit',
+  });
+  const valInput = h('input', { class: 'input', placeholder: 'متنی که تایپ شود' });
+  const wbStage = h('div', { class: 'web-stage' });
+
+  function wbNotice(text, cls = 'err') {
+    return h('div', { class: `notice ${cls}`, html: ic(cls === 'ok' ? 'check' : 'alert') }, text);
+  }
+
+  function renderBrowser() {
+    const children = [];
+    if (wbError) children.push(wbNotice(wbError));
+    if (wbBusy) children.push(h('div', { class: 'notice', html: ic('refresh') }, wbBusy));
+
+    if (wbStatus && !wbStatus.available) {
+      children.push(
+        wbNotice(`${wbStatus.error || 'موتور مرورگر نصب نیست'} — نصاب full دریم آن را همراه دارد.`),
+      );
+    } else if (wbStatus?.available) {
+      const c = wbStatus.controller || {};
+      children.push(
+        h(
+          'div',
+          { class: 'result-meta' },
+          h(
+            'span',
+            { class: `chip ${c.attached ? 'ok' : ''}` },
+            h('span', { class: 'dot' }),
+            c.attached
+              ? c.attached_to_existing
+                ? 'متصل به کروم شما'
+                : 'مرورگر ایزوله فعال'
+              : 'مرورگر بسته است',
+          ),
+          h(
+            'span',
+            { class: 'chip' },
+            h('span', { class: 'dot' }),
+            `سهمیه ناوبری: ${c.session_fetch_count ?? 0}/${c.max_fetches ?? 20}`,
+          ),
+          c.blocklist_error
+            ? h(
+                'span',
+                { class: 'chip err' },
+                h('span', { class: 'dot' }),
+                'خطای بلاک‌لیست — همهٔ ناوبری‌ها رد می‌شوند',
+              )
+            : null,
+          h(
+            'button',
+            { class: 'btn btn-sm', onclick: refreshWbStatus },
+            h('span', { html: ic('refresh') }),
+            'به‌روزرسانی وضعیت',
+          ),
+        ),
+      );
+    }
+
+    // pending approval card — the SEC-03 human checkpoint
+    if (pending) {
+      children.push(
+        h(
+          'div',
+          { class: 'result-panel card wb-approval' },
+          h('span', { class: 'micro', text: 'APPROVAL REQUIRED' }),
+          h('span', {
+            class: 'empty-title',
+            text: `ناوبری به «${pending.domain || '—'}» نیازمند تأیید شماست`,
+          }),
+          h('span', {
+            class: 'empty-note',
+            text: `هدف: ${pending.url || '—'}${pending.purpose ? ` — ${pending.purpose}` : ''}`,
+          }),
+          h('span', {
+            class: 'empty-note',
+            text: 'تأیید تک‌مصرف است و پس از ۱۵ دقیقه منقضی می‌شود.',
+          }),
+          h(
+            'div',
+            { class: 'voice-actions' },
+            h(
+              'button',
+              {
+                class: 'btn btn-primary',
+                disabled: !!wbBusy,
+                onclick: async () => {
+                  await doApprove();
+                },
+              },
+              h('span', { html: ic('check') }),
+              'تأیید و رفتن',
+            ),
+            h(
+              'button',
+              {
+                class: 'btn',
+                disabled: !!wbBusy,
+                onclick: async () => {
+                  try {
+                    await api.wbDeny(pending.id);
+                  } catch {
+                    /* already denied */
+                  }
+                  pending = null;
+                  renderBrowser();
+                },
+              },
+              'رد',
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (page) {
+      children.push(
+        h(
+          'div',
+          { class: 'result-panel card' },
+          h('span', { class: 'micro', text: 'CURRENT PAGE' }),
+          h('span', { class: 'files-row-name', text: page.title || '—' }),
+          h('span', { class: 'files-preview-name mono', text: page.url }),
+          page.text ? h('pre', { class: 'files-preview-text' }, page.text.slice(0, 4000)) : null,
+          (page.links || []).length
+            ? h(
+                'div',
+                { class: 'result-meta' },
+                h(
+                  'span',
+                  { class: 'chip' },
+                  h('span', { class: 'dot' }),
+                  `${page.links.length} پیوند در صفحه`,
+                ),
+              )
+            : null,
+          h(
+            'div',
+            { class: 'voice-actions' },
+            h(
+              'button',
+              {
+                class: 'btn btn-sm',
+                onclick: async () => {
+                  navUrl.value = page.url || '';
+                  await doNavigate();
+                },
+              },
+              h('span', { html: ic('refresh') }),
+              'بازخوانی محتوا',
+            ),
+            h(
+              'button',
+              {
+                class: 'btn btn-sm',
+                onclick: async () => {
+                  wbBusy = 'در حال گرفتن اسکرین‌شات…';
+                  renderBrowser();
+                  try {
+                    const res = await api.wbScreenshot();
+                    if (res?.success === false) wbError = res.error;
+                    else
+                      ctx.openEvidence({
+                        title: 'اسکرین‌شات صفحه',
+                        steps: [
+                          {
+                            name: 'webbrowser.screenshot',
+                            detail: res.screenshot_path,
+                            meta: 'فایل محلی',
+                          },
+                          { name: 'صفحه', detail: page.url, meta: page.title || '—' },
+                        ],
+                      });
+                  } catch (e) {
+                    wbError = msg(e);
+                  } finally {
+                    wbBusy = '';
+                    renderBrowser();
+                  }
+                },
+              },
+              h('span', { html: ic('eye') }),
+              'اسکرین‌شات کامل',
+            ),
+          ),
+        ),
+      );
+    }
+
+    wbStage.replaceChildren(...children);
+  }
+
+  async function refreshWbStatus() {
+    try {
+      wbStatus = await api.wbStatus();
+      wbError = wbStatus?.available ? null : null;
+    } catch (e) {
+      wbStatus = null;
+      wbError = msg(e);
+    }
+    renderBrowser();
+  }
+
+  async function doAttach() {
+    wbBusy = 'در حال اتصال به کروم شما…';
+    wbError = null;
+    renderBrowser();
+    try {
+      const res = await api.wbAttach(Number(portInput.value) || 9222);
+      if (res?.success === false) wbError = res.error;
+    } catch (e) {
+      wbError = msg(e);
+    } finally {
+      wbBusy = '';
+      await refreshWbStatus();
+    }
+  }
+
+  async function doLaunch() {
+    wbBusy = 'در حال اجرای مرورگر ایزوله…';
+    wbError = null;
+    renderBrowser();
+    try {
+      const res = await api.wbLaunch();
+      if (res?.success === false) wbError = res.error;
+    } catch (e) {
+      wbError = msg(e);
+    } finally {
+      wbBusy = '';
+      await refreshWbStatus();
+    }
+  }
+
+  async function doClose() {
+    try {
+      await api.wbClose();
+      page = null;
+      pending = null;
+    } catch (e) {
+      wbError = msg(e);
+    }
+    await refreshWbStatus();
+  }
+
+  async function doNavigate() {
+    const url = navUrl.value.trim();
+    if (!url) return;
+    lastNav = { url, purpose: navPurpose.value.trim() };
+    wbBusy = `در حال رفتن به ${url}…`;
+    wbError = null;
+    pending = null;
+    renderBrowser();
+    try {
+      const res = await api.wbNavigate(url, lastNav.purpose);
+      if (res?.success) {
+        page = res.content;
+      } else if (res?.status === 'approval_required' || res?.status === 'approval_expired') {
+        pending = res.session || {};
+        pending.purpose = lastNav.purpose;
+      } else {
+        wbError = res?.error || 'ناوبری ناموفق بود';
+      }
+    } catch (e) {
+      wbError = msg(e);
+    } finally {
+      wbBusy = '';
+      renderBrowser();
+      refreshWbStatus();
+    }
+  }
+
+  async function doApprove() {
+    if (!pending) return;
+    wbBusy = 'در حال اعمال تأیید و رفتن…';
+    renderBrowser();
+    try {
+      const res = await api.wbApprove(pending.id);
+      pending = null;
+      if (res?.success === false) {
+        wbError = res.error;
+      } else {
+        const nav = await api.wbNavigate(lastNav.url, lastNav.purpose);
+        if (nav?.success) page = nav.content;
+        else if (nav?.status === 'approval_required' || nav?.status === 'approval_expired') {
+          pending = nav.session || {};
+        } else {
+          wbError = nav?.error || 'ناوبری ناموفق بود';
+        }
+      }
+    } catch (e) {
+      wbError = msg(e);
+    } finally {
+      wbBusy = '';
+      renderBrowser();
+      refreshWbStatus();
+    }
+  }
+
+  async function doClick() {
+    const selector = selInput.value.trim();
+    if (!selector) return;
+    wbBusy = `در حال کلیک روی ${selector}…`;
+    wbError = null;
+    renderBrowser();
+    try {
+      const res = await api.wbClick(selector);
+      if (res?.success === false) wbError = res.error;
+    } catch (e) {
+      wbError = msg(e);
+    } finally {
+      wbBusy = '';
+      renderBrowser();
+    }
+  }
+
+  async function doFill() {
+    const selector = selInput.value.trim();
+    if (!selector || !valInput.value) return;
+    wbBusy = `در حال تایپ در ${selector}…`;
+    wbError = null;
+    renderBrowser();
+    try {
+      const res = await api.wbFill(selector, valInput.value);
+      if (res?.success === false) wbError = res.error;
+    } catch (e) {
+      wbError = msg(e);
+    } finally {
+      wbBusy = '';
+      renderBrowser();
+    }
+  }
+
+  const browserPane = h(
+    'div',
+    { class: 'web-pane hidden' },
+    h(
+      'div',
+      { class: 'voice-toolbar' },
+      h(
+        'label',
+        { class: 'field wb-port-field' },
+        h('span', { class: 'field-label', text: 'پورت کروم' }),
+        portInput,
+      ),
+      h(
+        'button',
+        { class: 'btn btn-primary', onclick: doAttach },
+        h('span', { html: ic('globe') }),
+        'اتصال به کروم شما',
+      ),
+      h(
+        'button',
+        { class: 'btn', onclick: doLaunch },
+        h('span', { html: ic('plus') }),
+        'مرورگر ایزوله',
+      ),
+      h('button', { class: 'btn', onclick: doClose }, h('span', { html: ic('x') }), 'بستن'),
+    ),
+    h(
+      'span',
+      { class: 'empty-note' },
+      'اتصال به کروم شما: کروم را با پرچم --remote-debugging-port=9222 اجرا کنید تا نشست‌ها و ورودهای‌تان بمانند. مرورگر ایزوله: یک کروم تازه و بدون پروفایل باز می‌شود.',
+    ),
+    h(
+      'div',
+      { class: 'voice-toolbar' },
+      navUrl,
+      navPurpose,
+      h(
+        'button',
+        { class: 'btn btn-primary', onclick: doNavigate },
+        h('span', { html: ic('arrow') }),
+        'رفتن',
+      ),
+    ),
+    h(
+      'div',
+      { class: 'voice-toolbar' },
+      selInput,
+      valInput,
+      h('button', { class: 'btn', onclick: doClick }, h('span', { html: ic('check') }), 'کلیک'),
+      h('button', { class: 'btn', onclick: doFill }, h('span', { html: ic('send') }), 'تایپ'),
+    ),
+    h(
+      'span',
+      { class: 'chip warn' },
+      h('span', { class: 'dot' }),
+      'هر ناوبری تأیید تک‌مصرف شما را می‌خواهد (SEC-03) · سهمیهٔ ۲۰ ناوبری · بلاک‌لیست دامنه',
+    ),
+    wbStage,
+  );
+
+  // ════════════════ tabs ══════════════════════════════════════════════════
+  const readTab = h(
+    'button',
+    { class: 'voice-tab active', onclick: () => switchMode('read') },
+    h('span', { html: ic('search') }),
+    'خواندن',
+  );
+  const browserTab = h(
+    'button',
+    { class: 'voice-tab', onclick: () => switchMode('browser') },
+    h('span', { html: ic('globe') }),
+    'مرورگر',
+  );
+
+  function switchMode(next) {
+    mode = next;
+    readTab.classList.toggle('active', mode === 'read');
+    browserTab.classList.toggle('active', mode === 'browser');
+    readPane.classList.toggle('hidden', mode !== 'read');
+    browserPane.classList.toggle('hidden', mode !== 'browser');
+    if (mode === 'browser' && !wbStatus && !wbError) refreshWbStatus();
+  }
+
   root.append(
     h(
       'div',
       { class: 'web-view' },
-      h(
-        'div',
-        { class: 'voice-toolbar' },
-        urlInput,
-        h(
-          'button',
-          { class: 'btn btn-primary', onclick: propose },
-          h('span', { html: ic('globe') }),
-          'پیشنهاد',
-        ),
-      ),
-      h(
-        'span',
-        { class: 'chip warn' },
-        h('span', { class: 'dot' }),
-        'هیچ صفحه‌ای بدون تأیید صریح شما بازخوانی نمی‌شود — بدون YOLO',
-      ),
-      stage,
+      h('div', { class: 'voice-tabs' }, readTab, browserTab),
+      readPane,
+      browserPane,
     ),
   );
 
   renderStage();
   load();
+  renderBrowser();
 }

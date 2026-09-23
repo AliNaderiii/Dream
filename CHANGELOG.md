@@ -8,6 +8,27 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.4.0] - 2026-09-23
+
+### Added — the real browser, wired end to end
+
+- **مرورگر (Browser) tab in Web.** The real Playwright/CDP
+  `BrowserController` exposed through twelve new `webbrowser.*` bridge
+  methods — the legacy mock `browser.*` engine stays unwired by design.
+  Attach to your own Chrome (CDP, port 9222 — sessions and logins
+  preserved) or launch a fresh isolated Chrome; navigate, click, type,
+  re-extract content, and take full-page screenshots.
+- **SEC-03 in the UI.** Every navigation raises a single-use approval
+  card (15-minute TTL), the per-session quota (20 navigations) and the
+  fail-closed blocklist state are surfaced live, and approvals are
+  issued only by you — no bypass exists.
+- New optional extra for the sidecar: `pip install ".[browser]"`
+  (playwright). The full Windows installer bundles it; without it the
+  UI answers honestly with an install hint.
+- Tests: 18 new Python bridge tests (honest availability, validation,
+  approval-gated navigation mapping), browser-honest web-tab tests and
+  bridge guards; 82 frontend tests total (was 77).
+
 ## [5.3.0] - 2026-09-23
 
 ### Added — wiring the core to the UI, batch 2 (real engines only)

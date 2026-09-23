@@ -41,7 +41,7 @@ const VIEWS = {
   },
   web: {
     title: 'وب',
-    subtitle: 'بازخوانی صفحه — فقط با تأیید صریح شما',
+    subtitle: 'بازخوانی و مرور واقعی — فقط با تأیید صریح شما',
     icon: 'globe',
     render: webView,
   },

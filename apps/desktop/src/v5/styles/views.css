@@ -1365,3 +1365,17 @@
 .code-stderr {
   border-color: var(--err);
 }
+
+/* ---- web: real browser pane ------------------------------------------------ */
+
+.wb-port {
+  width: 90px;
+  text-align: center;
+}
+.wb-approval .empty-title,
+.wb-approval .empty-note {
+  display: block;
+}
+.wb-approval .voice-actions {
+  margin-top: 12px;
+}

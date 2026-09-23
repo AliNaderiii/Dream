@@ -296,7 +296,7 @@ export function settingsView(root, ctx) {
             'div',
             { class: 'about-row' },
             h('span', { class: 'muted', text: 'نسخه' }),
-            h('span', { class: 'mono', text: '5.3.0' }),
+            h('span', { class: 'mono', text: '5.4.0' }),
           ),
           h(
             'div',

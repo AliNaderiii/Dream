@@ -21,6 +21,33 @@ function mount() {
   return { root, opened };
 }
 
+describe('web view tabs', () => {
+  it('renders both the reading and the browser tab', () => {
+    const { root } = mount();
+    const tabs = [...root.querySelectorAll('.voice-tabs .voice-tab')].map((b) => b.textContent);
+    expect(tabs.some((t) => t.includes('خواندن'))).toBe(true);
+    expect(tabs.some((t) => t.includes('مرورگر'))).toBe(true);
+  });
+
+  it('browser pane is hidden until its tab is chosen', () => {
+    const { root } = mount();
+    const hiddenPane = root.querySelector('.web-pane.hidden');
+    expect(hiddenPane).not.toBeNull();
+    expect(hiddenPane.textContent).toContain('اتصال به کروم شما');
+  });
+
+  it('browser tab is honest in the preview — no fake pages, desktop-only', async () => {
+    const { root } = mount();
+    const tab = [...root.querySelectorAll('.voice-tabs .voice-tab')].find((b) =>
+      b.textContent.includes('مرورگر'),
+    );
+    tab.click();
+    await flush();
+    expect(root.textContent).toContain('دسکتاپ');
+    expect(root.querySelector('.files-preview-text')).toBeNull();
+  });
+});
+
 describe('web view', () => {
   it('offers proposing a URL and states the approval rule', async () => {
     const { root } = mount();

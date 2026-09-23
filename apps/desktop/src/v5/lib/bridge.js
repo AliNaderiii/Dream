@@ -137,6 +137,46 @@ export const api = {
   browseFollow: (draftId, url) =>
     call('browse.follow', { draft_id: draftId, url }, { timeoutMs: 30_000 }),
 
+  // ---- real browser (SEC-03: approval-gated, quota, blocklist) ------------
+  /** webbrowser.status — honest availability + controller state. */
+  wbStatus: () => call('webbrowser.status', {}, { timeoutMs: 30_000 }),
+
+  /** webbrowser.attach — CDP-attach to the user's Chrome (port 9222). */
+  wbAttach: (port = 9222) => call('webbrowser.attach', { port }, { timeoutMs: 60_000 }),
+
+  /** webbrowser.launch — fresh isolated visible Chrome (no user profile). */
+  wbLaunch: () => call('webbrowser.launch', {}, { timeoutMs: 120_000 }),
+
+  /** webbrowser.request — create a pending navigation approval. */
+  wbRequest: (url, purpose) => call('webbrowser.request', { url, purpose }, { timeoutMs: 30_000 }),
+
+  /** webbrowser.approve — single-use approval (expires per TTL). */
+  wbApprove: (sessionId) =>
+    call('webbrowser.approve', { session_id: sessionId }, { timeoutMs: 30_000 }),
+
+  /** webbrowser.deny — refuse a pending navigation. */
+  wbDeny: (sessionId) => call('webbrowser.deny', { session_id: sessionId }, { timeoutMs: 30_000 }),
+
+  /** webbrowser.navigate — real navigation; approval_required comes back
+   *  as a structured result with the pending session, never as a fake page. */
+  wbNavigate: (url, purpose, timeout = 45) =>
+    call('webbrowser.navigate', { url, purpose, timeout }, { timeoutMs: 180_000 }),
+
+  /** webbrowser.content — re-extract the current page. */
+  wbContent: () => call('webbrowser.content', {}, { timeoutMs: 60_000 }),
+
+  /** webbrowser.click — click an element by CSS selector. */
+  wbClick: (selector) => call('webbrowser.click', { selector }, { timeoutMs: 60_000 }),
+
+  /** webbrowser.fill — type text into an element. */
+  wbFill: (selector, value) => call('webbrowser.fill', { selector, value }, { timeoutMs: 60_000 }),
+
+  /** webbrowser.screenshot — full-page screenshot to the local dir. */
+  wbScreenshot: () => call('webbrowser.screenshot', {}, { timeoutMs: 60_000 }),
+
+  /** webbrowser.close — end the session. */
+  wbClose: () => call('webbrowser.close', {}, { timeoutMs: 30_000 }),
+
   // ---- code sandbox -------------------------------------------------------
   /** sandbox.run_code — real Python in the stateful core sandbox. */
   sandboxRun: (code, timeoutSeconds = 15) =>

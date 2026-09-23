@@ -228,7 +228,7 @@ export function wantsFullStt(argv = process.argv, env = process.env) {
 
 /** The pip requirement that adds the full-mode extras to a local repo install. */
 export function fullPipSpec(repoRoot = REPO_ROOT) {
-  return `${repoRoot}[stt,tts]`;
+  return `${repoRoot}[stt,tts,browser]`;
 }
 
 /** Backwards-compatible alias — full mode has always meant "the heavy extras". */
@@ -329,8 +329,9 @@ function sidecarReady(fullStt) {
   const sttOk = runStatus(PYTHON_EXE, ['-c', 'import faster_whisper']) === 0;
   const modelOk = existsSync(join(sttModelDir(), 'model.bin'));
   const ttsOk = runStatus(PYTHON_EXE, ['-c', 'import piper, edge_tts']) === 0;
+  const browserOk = runStatus(PYTHON_EXE, ['-c', 'import playwright']) === 0;
   const voiceOk = existsSync(join(ttsVoiceDir(), TTS_VOICE_REPO_PATH, `${TTS_VOICE_STEM}.onnx`));
-  return sttOk && modelOk && ttsOk && voiceOk;
+  return sttOk && modelOk && ttsOk && voiceOk && browserOk;
 }
 
 // ---------------------------------------------------------------------------
@@ -419,9 +420,7 @@ async function main() {
   }
 
   if (fullStt) {
-    console.log(
-      '[bundle-sidecar] full mode: installing the stt + tts extras (faster-whisper, piper, edge-tts)',
-    );
+    console.log('[bundle-sidecar] full mode: installing the stt + tts + browser extras');
     runOrThrow(PYTHON_EXE, [
       '-m',
       'pip',
@@ -435,7 +434,10 @@ async function main() {
       '[bundle-sidecar] full mode: smoke test: import dream.bridge + faster_whisper + piper + edge_tts',
     );
     if (
-      runStatus(PYTHON_EXE, ['-c', 'import dream.bridge, faster_whisper, piper, edge_tts']) !== 0
+      runStatus(PYTHON_EXE, [
+        '-c',
+        'import dream.bridge, faster_whisper, piper, edge_tts, playwright',
+      ]) !== 0
     ) {
       fail(
         'smoke test failed: `import dream.bridge, faster_whisper, piper, edge_tts` did not exit 0',

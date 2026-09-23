@@ -41,7 +41,7 @@ describe('wantsFullStt', () => {
 
 describe('sttPipSpec / fullPipSpec', () => {
   it('appends the stt + tts extras to the repository root path', () => {
-    expect(sttPipSpec('C:\\repo\\Dream')).toBe('C:\\repo\\Dream[stt,tts]');
+    expect(sttPipSpec('C:\\repo\\Dream')).toBe('C:\\repo\\Dream[stt,tts,browser]');
   });
 });
 
