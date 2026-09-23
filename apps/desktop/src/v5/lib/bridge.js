@@ -101,6 +101,24 @@ export const api = {
   sttTranscribe: (filePath, language = 'fa') =>
     call('stt.transcribe', { file_path: filePath, language }, { timeoutMs: 300_000 }),
 
+  // ---- text-to-speech ----------------------------------------------------
+  /** tts.engines — honest engine listing (edge online / piper offline). */
+  ttsEngines: () => call('tts.engines', {}, { timeoutMs: 30_000 }),
+
+  /** tts.voices — voice catalogue per engine (with on-disk flags). */
+  ttsVoices: (engine = '') => call('tts.voices', { engine }, { timeoutMs: 30_000 }),
+
+  /** tts.synthesize — text → real speech; result carries inline audio. */
+  ttsSynthesize: (
+    text,
+    { engine = 'auto', voice = '', speed = 1, outputPath = '', withAudio = true } = {},
+  ) =>
+    call(
+      'tts.synthesize',
+      { text, engine, voice, speed, output_path: outputPath, with_audio: withAudio },
+      { timeoutMs: 120_000 },
+    ),
+
   // ---- OCR ---------------------------------------------------------------
   /** ocr.extract — document_type: general | invoice | receipt | id_card. */
   ocrExtract: (filePath, documentType = 'general') =>

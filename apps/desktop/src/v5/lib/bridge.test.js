@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BridgeUnavailableError, call, isTauri, pdfSiblingPath, status } from './bridge.js';
+import { BridgeUnavailableError, api, call, isTauri, pdfSiblingPath, status } from './bridge.js';
 
 describe('browser environment (no Tauri)', () => {
   it('isTauri is false', () => {
@@ -14,6 +14,12 @@ describe('browser environment (no Tauri)', () => {
 
   it('status() reports browser honestly', async () => {
     await expect(status()).resolves.toBe('browser');
+  });
+
+  it('tts helpers are wired to the real bridge — honest in the browser', async () => {
+    await expect(api.ttsEngines()).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.ttsVoices('piper')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.ttsSynthesize('سلام')).rejects.toBeInstanceOf(BridgeUnavailableError);
   });
 
   it('pickFile-style guards: the error message names the browser preview', async () => {

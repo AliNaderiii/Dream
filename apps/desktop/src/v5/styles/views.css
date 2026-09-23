@@ -1106,3 +1106,110 @@
   flex-direction: column;
   gap: 14px;
 }
+
+/* ---- voice: direction tabs + text-to-speech ------------------------------ */
+
+.hidden {
+  display: none !important;
+}
+
+.voice-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.voice-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--bg-3);
+  border-radius: var(--r-1);
+  background: var(--bg-2);
+  color: var(--tx-1);
+  cursor: pointer;
+  font: inherit;
+  transition:
+    border-color var(--t-fast),
+    color var(--t-fast),
+    background var(--t-fast);
+}
+.voice-tab:hover:not(:disabled) {
+  border-color: var(--accent-line);
+  color: var(--tx-0);
+}
+.voice-tab.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--tx-0);
+}
+.voice-tab:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.voice-tab .ic {
+  width: 14px;
+  height: 14px;
+}
+
+.tts-engines,
+.tts-voices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.tts-engines .chip,
+.tts-voices .chip {
+  font-size: 11px;
+}
+.tts-voice-note {
+  display: block;
+  margin-bottom: 12px;
+}
+.tts-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin: 4px 0 10px;
+}
+.tts-speed-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.tts-speed {
+  width: 180px;
+  accent-color: var(--accent);
+}
+.tts-count {
+  font-size: 12px;
+  color: var(--tx-2);
+}
+.tts-text {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.9;
+}
+.tts-result audio {
+  width: 100%;
+  margin: 10px 0 4px;
+}
+.speak-link {
+  margin-inline-start: 2px;
+}
+.tts-voice-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tts-voice-row .input {
+  flex: 1;
+}
+.tts-status {
+  margin-top: 10px;
+}

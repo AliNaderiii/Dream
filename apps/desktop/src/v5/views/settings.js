@@ -5,6 +5,7 @@
 
 import { h } from '../lib/dom.js';
 import { ic } from '../lib/icons.js';
+import { api } from '../lib/bridge.js';
 
 const PROVIDERS = [
   { id: 'none', title: 'بدون مدل', note: 'اپ کار می‌کند؛ گفتگو غیرفعال می‌ماند.' },
@@ -143,7 +144,115 @@ export function settingsView(root, ctx) {
       state: 'unknown',
       note: 'در نصاب کامل به‌صورت آفلاین فعال است',
     },
+    {
+      name: 'صحبت (edge-tts نورال + Piper آفلاین)',
+      state: 'unknown',
+      note: 'استودیوی صدا → «متن به گفتار» و دکمه «گفتن» در گفتگو',
+    },
   ];
+
+  // ---- speech (TTS) --------------------------------------------------------
+  const tts = { engine: 'auto', voice: '', speed: 1, ...(settings.get().tts || {}) };
+  const ttsEngineSel = h(
+    'select',
+    { class: 'input' },
+    h('option', { value: 'auto', text: 'خودکار — بهترین موتور موجود' }),
+    h('option', { value: 'edge', text: 'نورال آنلاین (مایکروسافت edge-tts)' }),
+    h('option', { value: 'piper', text: 'آفلاین محلی (Piper)' }),
+  );
+  ttsEngineSel.value = tts.engine;
+  const ttsVoiceSel = h('select', { class: 'input' });
+  const ttsVoiceNote = h('span', { class: 'muted tts-voice-note', text: '' });
+  const ttsSpeed = h('input', {
+    class: 'tts-speed',
+    type: 'range',
+    min: '0.5',
+    max: '1.5',
+    step: '0.05',
+  });
+  ttsSpeed.value = String(tts.speed ?? 1);
+  const ttsSpeedVal = h('span', {
+    class: 'mono tts-speed-val',
+    text: `${Number(tts.speed ?? 1).toFixed(2)}×`,
+  });
+  const ttsStatus = h('div', { class: 'tts-status' });
+  const ttsSaveNote = h('span', { class: 'ok-note', text: '' });
+
+  async function refreshTtsVoices() {
+    ttsVoiceSel.replaceChildren();
+    if (ttsEngineSel.value === 'auto') {
+      ttsVoiceSel.append(h('option', { value: '', text: 'پیش‌فرض موتورِ انتخابی' }));
+      ttsVoiceSel.value = '';
+      return;
+    }
+    try {
+      const res = await api.ttsVoices(ttsEngineSel.value);
+      const list = (res?.voices || []).filter((v) => v.engine === ttsEngineSel.value);
+      ttsVoiceSel.append(h('option', { value: '', text: 'پیش‌فرض' }));
+      for (const v of list) ttsVoiceSel.append(h('option', { value: v.id, text: v.label }));
+      ttsVoiceSel.value = list.some((v) => v.id === tts.voice) ? tts.voice : '';
+    } catch (e) {
+      ttsVoiceNote.textContent = e?.message || '';
+    }
+  }
+
+  async function refreshTtsStatus() {
+    try {
+      const res = await api.ttsEngines();
+      const rows = res?.engines || [];
+      const edge = rows.find((r) => r.id === 'edge');
+      const piper = rows.find((r) => r.id === 'piper');
+      const any = edge?.available || piper?.available;
+      ttsStatus.replaceChildren(
+        h(
+          'div',
+          { class: 'about-engine' },
+          h('span', { class: 'engine-name', text: 'موتورهای صحبت' }),
+          h(
+            'span',
+            { class: `chip ${any ? 'ok' : 'warn'}` },
+            h('span', { class: 'dot' }),
+            `نورال آنلاین ${edge?.available ? '✓' : '✗'} · آفلاین Piper ${piper?.available ? '✓' : '✗'}`,
+          ),
+        ),
+      );
+    } catch {
+      ttsStatus.replaceChildren(
+        h('div', {
+          class: 'muted',
+          text: 'پیش‌نمایش مرورگر — موتورها داخل اپ دسکتاپ بررسی می‌شوند',
+        }),
+      );
+    }
+    refreshTtsVoices();
+  }
+
+  ttsEngineSel.addEventListener('change', refreshTtsVoices);
+  ttsSpeed.addEventListener('input', () => {
+    ttsSpeedVal.textContent = `${Number(ttsSpeed.value).toFixed(2)}×`;
+  });
+
+  const ttsSaveBtn = h(
+    'button',
+    {
+      class: 'btn btn-primary',
+      onclick: () => {
+        settings.set({
+          tts: {
+            engine: ttsEngineSel.value,
+            voice: ttsVoiceSel.value,
+            speed: Number(ttsSpeed.value),
+          },
+        });
+        ttsSaveNote.textContent = 'ذخیره شد ✓';
+        setTimeout(() => (ttsSaveNote.textContent = ''), 2000);
+      },
+    },
+    h('span', { html: ic('check') }),
+    'ذخیره',
+  );
+
+  refreshTtsStatus();
 
   root.append(
     h(
@@ -161,6 +270,20 @@ export function settingsView(root, ctx) {
         ),
       ),
 
+      section(
+        'SPEECH',
+        'صحبت (متن به گفتار)',
+        h(
+          'div',
+          { class: 'section-card card' },
+          field('موتور', ttsEngineSel),
+          field('صدا', h('div', { class: 'tts-voice-row' }, ttsVoiceSel, ttsVoiceNote)),
+          field('سرعت', h('div', { class: 'tts-speed-row' }, ttsSpeed, ttsSpeedVal)),
+          ttsStatus,
+          h('div', { class: 'settings-actions' }, ttsSaveBtn, ttsSaveNote),
+        ),
+      ),
+
       section('APPEARANCE', 'ظاهر', h('div', { class: 'section-card card theme-card' }, themeRow)),
 
       section(
@@ -173,7 +296,7 @@ export function settingsView(root, ctx) {
             'div',
             { class: 'about-row' },
             h('span', { class: 'muted', text: 'نسخه' }),
-            h('span', { class: 'mono', text: '5.0.0-dev' }),
+            h('span', { class: 'mono', text: '5.1.0-dev' }),
           ),
           h(
             'div',

@@ -11,6 +11,8 @@ import { ic } from '../lib/icons.js';
 import { chatComplete, ModelError } from '../lib/model.js';
 import { api, isTauri } from '../lib/bridge.js';
 
+const msg2 = (e) => e?.message || String(e);
+
 const SESSION_ID = `chat-${Date.now().toString(36)}`;
 const messages = []; // {role, text, ts, evidence?}
 
@@ -33,7 +35,7 @@ const SYSTEM_PROMPT =
   'تو «دریم» هستی، ایجنت شخصی کاربر که روی سیستم خودش اجرا می‌شود. ' +
   'فارسی روان و دقیق جواب بده و از اظهار نظر بی‌پشتوانه بپرهیز.';
 
-function messageEl(msg, openEvidence) {
+function messageEl(msg, openEvidence, speak) {
   if (msg.role === 'system') {
     return h(
       'div',
@@ -62,6 +64,18 @@ function messageEl(msg, openEvidence) {
           },
           h('span', { html: ic('evidence') }),
           `شواهد (${msg.evidence.steps.length})`,
+        )
+      : null,
+    !isUser && msg.text
+      ? h(
+          'button',
+          {
+            class: 'btn btn-ghost btn-sm speak-link',
+            title: 'خواندن این پاسخ با صدا',
+            onclick: () => speak(msg),
+          },
+          h('span', { html: ic('speaker') }),
+          'گفتن',
         )
       : null,
   );
@@ -104,7 +118,7 @@ export function chatView(root, ctx) {
 
   function push(msg) {
     messages.push(msg);
-    list.append(messageEl(msg, ctx.openEvidence));
+    list.append(messageEl(msg, ctx.openEvidence, speakMessage));
     list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' });
   }
 
@@ -142,7 +156,7 @@ export function chatView(root, ctx) {
         ),
       );
     } else {
-      for (const msg of messages) list.append(messageEl(msg, ctx.openEvidence));
+      for (const msg of messages) list.append(messageEl(msg, ctx.openEvidence, speakMessage));
       list.scrollTop = list.scrollHeight;
     }
   }
@@ -176,6 +190,35 @@ export function chatView(root, ctx) {
   function remember(role, text) {
     if (!isTauri) return;
     api.episodicRecord(SESSION_ID, role, text).catch(() => {});
+  }
+
+  let currentAudio = null; // one voice at a time — new speech stops the old
+
+  /** Read an agent reply aloud with the configured TTS engine (real audio). */
+  async function speakMessage(msg) {
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
+    const tts = ctx.settings.get().tts || { engine: 'auto', voice: '', speed: 1 };
+    try {
+      const res = await api.ttsSynthesize(msg.text, {
+        engine: tts.engine || 'auto',
+        voice: tts.voice || '',
+        speed: Number(tts.speed) || 1,
+      });
+      if (res?.success === false) {
+        push({ role: 'system', text: `گفتن پاسخ ممکن نشد: ${res.error || '—'}`, ts: Date.now() });
+        return;
+      }
+      const audio = new Audio(`data:${res.mime};base64,${res.audio_b64}`);
+      currentAudio = audio;
+      audio.play().catch(() => {
+        push({ role: 'system', text: 'پخش صدا ممکن نشد', ts: Date.now() });
+      });
+    } catch (e) {
+      push({ role: 'system', text: msg2(e), ts: Date.now() });
+    }
   }
 
   async function submit() {

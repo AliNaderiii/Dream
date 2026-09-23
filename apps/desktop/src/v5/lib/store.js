@@ -36,7 +36,8 @@ function load(key, fallback) {
  *   theme: 'dark' | 'light',
  *   onboarded: boolean,
  *   view: string,
- *   model: { provider: 'none'|'ollama'|'openai', baseUrl, apiKey, model }
+ *   model: { provider: 'none'|'ollama'|'openai', baseUrl, apiKey, model },
+ *   tts: { engine: 'auto'|'edge'|'piper', voice, speed }
  * }
  */
 export const settings = createStore(
@@ -45,6 +46,7 @@ export const settings = createStore(
     onboarded: false,
     view: 'chat',
     model: { provider: 'none', baseUrl: '', apiKey: '', model: '' },
+    tts: { engine: 'auto', voice: '', speed: 1 },
   }),
 );
 

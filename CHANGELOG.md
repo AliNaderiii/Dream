@@ -8,6 +8,51 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.1.0] - 2026-09-23
+
+### Added
+
+- **Real speech — Dream can talk now.** Text-to-speech with two honest
+  engines, wired end to end through the bridge (`tts.engines`,
+  `tts.voices`, `tts.synthesize`). The legacy sine-wave "synthesizer" in
+  `dream/speech/engine.py` stays unwired by design; nothing simulated
+  ships.
+- **Online neural engine (edge-tts).** Microsoft neural voices — Farid
+  (male) and Dilara (female), `fa-IR` — free, no API key, needs internet.
+  Verified end to end: a sentence of Persian becomes a real MP3 in ~2s.
+- **Offline engine (Piper).** Fully local VITS voices from the pinned
+  `rhasspy/piper-voices` revision — five Persian medium voices (Reza,
+  Amir, Ganji, Ganji-Adabi, Gyro). The bundled voice is pre-downloaded by
+  the full installer; other voices download on first use (pinned
+  revision, atomic download). Verified: ~10x realtime synthesis on CPU,
+  real WAV output.
+- **Voice studio, both directions.** The voice view now has two tabs:
+  «گفتار به متن» (unchanged faster-whisper flow) and «متن به گفتار» —
+  engine and voice pickers with honest availability badges, speed
+  control, an inline player, and per-synthesis evidence (engine, voice,
+  latency, bytes, file path).
+- **Chat read-aloud.** Every agent reply has a «گفتن» button that speaks
+  it with the configured engine; one voice at a time, honest errors in
+  the chat log.
+- **Speech settings.** A new settings section picks the default engine,
+  voice, and speed, with live availability read from the real core.
+- **Installer.** The full Windows installer additionally bundles the
+  `tts` extra and the pinned offline Persian Piper voice (~63 MB) next to
+  the Whisper model, so the full install speaks fully offline; its
+  completeness check now requires both. New optional dependency extra:
+  `pip install ".[tts]"`.
+- **CSP.** `media-src 'self' asset: http://asset.localhost data: blob:`
+  for in-app audio playback.
+
+### Tests
+
+- Python: 27 new bridge/engine tests (validation, honest unavailability,
+  routing with faked engines, WAV container, text normalisation,
+  data-URI helper) — engine backends faked so no test needs the network.
+- Frontend: voice-view tests (tabs, honest browser-preview notice, no
+  audio element without a real result), tts bridge-guard tests, and
+  installer pin tests (bundle-sidecar).
+
 ## [5.0.1] - 2026-09-23
 
 ### Fixed

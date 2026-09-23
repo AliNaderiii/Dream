@@ -13,7 +13,10 @@
  *   `src-tauri/resources/python/`, enable `site` in `python312._pth`, bootstrap
  *   pip, and `pip install` the Dream package (non-editable) from the repo root.
  * - Idempotent: if `python/python.exe` can already `import dream.bridge`, skip.
- * - `--full` (or `DREAM_SIDECAR_STT=1`): additionally install the `stt` extra
+ * - `--full` (or `DREAM_SIDECAR_STT=1`): additionally install the `stt` and
+ *   `tts` extras and download the pinned Whisper `base` model AND the pinned
+ *   offline Persian Piper voice into `<python>/models/`, so the *full* Windows
+ *   installer transcribes AND speaks fully offline.
  *   (faster-whisper) and download the pinned Whisper `base` model into
  *   `<python>/models/faster-whisper-base/`, so the *full* Windows installer
  *   transcribes voice notes fully offline. In full mode the idempotency check
@@ -61,6 +64,18 @@ const STT_MODEL_ID = 'base';
 const STT_MODEL_REPO = 'Systran/faster-whisper-base';
 const STT_MODEL_REVISION = 'ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66';
 const STT_MODEL_MIN_BYTES = 100_000_000; // sanity floor for model.bin (~145 MB)
+
+// Full-installer additions for SPEECH: the `tts` extra (edge-tts + piper-tts)
+// plus the pinned offline Persian Piper voice downloaded next to the embedded
+// interpreter. The revision is pinned to the rhasspy/piper-voices HEAD at pin
+// time (2026-09-23) so release builds stay reproducible; the voice is ~63 MB.
+const TTS_VOICE_REPO = 'rhasspy/piper-voices';
+const TTS_VOICE_REVISION = 'c10ece1aade47bb51c153c893d14e5bf8e5b7117';
+const TTS_VOICE_SPEAKER = 'reza_ibrahim';
+const TTS_VOICE_QUALITY = 'medium';
+const TTS_VOICE_STEM = 'fa_IR-reza_ibrahim-medium'; // <file>.onnx / <file>.onnx.json
+const TTS_VOICE_REPO_PATH = `fa/fa_IR/${TTS_VOICE_SPEAKER}/${TTS_VOICE_QUALITY}`;
+const TTS_VOICE_MIN_BYTES = 60_000_000; // sanity floor for the .onnx (~63 MB)
 
 // ---------------------------------------------------------------------------
 // Resolved paths (relative to this file, never the process cwd)
@@ -211,14 +226,22 @@ export function wantsFullStt(argv = process.argv, env = process.env) {
   return argv.includes('--full') || env.DREAM_SIDECAR_STT === '1';
 }
 
-/** The pip requirement that adds the `stt` extra to a local repo install. */
-export function sttPipSpec(repoRoot = REPO_ROOT) {
-  return `${repoRoot}[stt]`;
+/** The pip requirement that adds the full-mode extras to a local repo install. */
+export function fullPipSpec(repoRoot = REPO_ROOT) {
+  return `${repoRoot}[stt,tts]`;
 }
+
+/** Backwards-compatible alias — full mode has always meant "the heavy extras". */
+export const sttPipSpec = fullPipSpec;
 
 /** Where the pinned Whisper model lives inside the bundled interpreter. */
 export function sttModelDir(pythonDir = PYTHON_DIR) {
   return join(pythonDir, 'models', `faster-whisper-${STT_MODEL_ID}`);
+}
+
+/** Where the pinned offline Piper voices live inside the bundled interpreter. */
+export function ttsVoiceDir(pythonDir = PYTHON_DIR) {
+  return join(pythonDir, 'models', 'piper-voices');
 }
 
 /**
@@ -233,6 +256,29 @@ export function sttModelDownloadPython(modelDir) {
     `    repo_id=${JSON.stringify(STT_MODEL_REPO)},`,
     `    revision=${JSON.stringify(STT_MODEL_REVISION)},`,
     `    local_dir=${JSON.stringify(String(modelDir))},`,
+    ')',
+  ].join('\n');
+}
+
+/**
+ * The Python snippet (run with the bundled interpreter) that downloads the
+ * pinned offline Piper voice into `voiceDir`, mirroring the HF repo layout
+ * (`fa/fa_IR/<speaker>/<quality>/…`) that `dream/speech/tts.py` expects.
+ */
+export function ttsVoiceDownloadPython(voiceDir) {
+  return [
+    'from huggingface_hub import hf_hub_download',
+    `hf_hub_download(`,
+    `    repo_id=${JSON.stringify(TTS_VOICE_REPO)},`,
+    `    revision=${JSON.stringify(TTS_VOICE_REVISION)},`,
+    `    filename=${JSON.stringify(`${TTS_VOICE_REPO_PATH}/${TTS_VOICE_STEM}.onnx`)},`,
+    `    local_dir=${JSON.stringify(String(voiceDir))},`,
+    ')',
+    `hf_hub_download(`,
+    `    repo_id=${JSON.stringify(TTS_VOICE_REPO)},`,
+    `    revision=${JSON.stringify(TTS_VOICE_REVISION)},`,
+    `    filename=${JSON.stringify(`${TTS_VOICE_REPO_PATH}/${TTS_VOICE_STEM}.onnx.json`)},`,
+    `    local_dir=${JSON.stringify(String(voiceDir))},`,
     ')',
   ].join('\n');
 }
@@ -282,7 +328,9 @@ function sidecarReady(fullStt) {
   if (!fullStt) return true;
   const sttOk = runStatus(PYTHON_EXE, ['-c', 'import faster_whisper']) === 0;
   const modelOk = existsSync(join(sttModelDir(), 'model.bin'));
-  return sttOk && modelOk;
+  const ttsOk = runStatus(PYTHON_EXE, ['-c', 'import piper, edge_tts']) === 0;
+  const voiceOk = existsSync(join(ttsVoiceDir(), TTS_VOICE_REPO_PATH, `${TTS_VOICE_STEM}.onnx`));
+  return sttOk && modelOk && ttsOk && voiceOk;
 }
 
 // ---------------------------------------------------------------------------
@@ -371,19 +419,27 @@ async function main() {
   }
 
   if (fullStt) {
-    console.log('[bundle-sidecar] full mode: installing the stt extra (faster-whisper)');
+    console.log(
+      '[bundle-sidecar] full mode: installing the stt + tts extras (faster-whisper, piper, edge-tts)',
+    );
     runOrThrow(PYTHON_EXE, [
       '-m',
       'pip',
       'install',
       '--no-warn-script-location',
       '--no-build-isolation',
-      sttPipSpec(),
+      fullPipSpec(),
     ]);
 
-    console.log('[bundle-sidecar] full mode: smoke test: import dream.bridge + faster_whisper');
-    if (runStatus(PYTHON_EXE, ['-c', 'import dream.bridge, faster_whisper']) !== 0) {
-      fail('smoke test failed: `import dream.bridge, faster_whisper` did not exit 0');
+    console.log(
+      '[bundle-sidecar] full mode: smoke test: import dream.bridge + faster_whisper + piper + edge_tts',
+    );
+    if (
+      runStatus(PYTHON_EXE, ['-c', 'import dream.bridge, faster_whisper, piper, edge_tts']) !== 0
+    ) {
+      fail(
+        'smoke test failed: `import dream.bridge, faster_whisper, piper, edge_tts` did not exit 0',
+      );
     }
 
     const modelDir = sttModelDir();
@@ -402,11 +458,34 @@ async function main() {
     console.log(
       `[bundle-sidecar] full mode: model ready (${(statSync(modelBin).size / 1e6).toFixed(1)} MB)`,
     );
+
+    const voiceDir = ttsVoiceDir();
+    console.log(
+      `[bundle-sidecar] full mode: downloading offline Piper voice '${TTS_VOICE_STEM}' ` +
+        `(~63 MB, pinned revision ${TTS_VOICE_REVISION.slice(0, 8)}…)`,
+    );
+    runOrThrow(PYTHON_EXE, ['-c', ttsVoiceDownloadPython(voiceDir)]);
+
+    const voiceOnnx = join(voiceDir, TTS_VOICE_REPO_PATH, `${TTS_VOICE_STEM}.onnx`);
+    const voiceJson = join(voiceDir, TTS_VOICE_REPO_PATH, `${TTS_VOICE_STEM}.onnx.json`);
+    if (
+      !existsSync(voiceOnnx) ||
+      statSync(voiceOnnx).size < TTS_VOICE_MIN_BYTES ||
+      !existsSync(voiceJson)
+    ) {
+      fail(
+        `bundled voice incomplete: ${voiceOnnx} (or its .onnx.json) is missing or under ` +
+          `${TTS_VOICE_MIN_BYTES} bytes`,
+      );
+    }
+    console.log(
+      `[bundle-sidecar] full mode: offline voice ready (${(statSync(voiceOnnx).size / 1e6).toFixed(1)} MB)`,
+    );
   }
 
   console.log(
     fullStt
-      ? '[bundle-sidecar] full bundle ready: CPython + Dream kernel + faster-whisper + model'
+      ? '[bundle-sidecar] full bundle ready: CPython + kernel + faster-whisper + model + piper voice'
       : '[bundle-sidecar] bundled CPython + Dream kernel ready',
   );
 }

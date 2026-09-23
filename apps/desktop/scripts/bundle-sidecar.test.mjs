@@ -5,6 +5,8 @@ import {
   sttModelDir,
   sttModelDownloadPython,
   sttPipSpec,
+  ttsVoiceDir,
+  ttsVoiceDownloadPython,
   wantsFullStt,
 } from './bundle-sidecar.mjs';
 
@@ -37,9 +39,29 @@ describe('wantsFullStt', () => {
   });
 });
 
-describe('sttPipSpec', () => {
-  it('appends the stt extra to the repository root path', () => {
-    expect(sttPipSpec('C:\\repo\\Dream')).toBe('C:\\repo\\Dream[stt]');
+describe('sttPipSpec / fullPipSpec', () => {
+  it('appends the stt + tts extras to the repository root path', () => {
+    expect(sttPipSpec('C:\\repo\\Dream')).toBe('C:\\repo\\Dream[stt,tts]');
+  });
+});
+
+describe('ttsVoiceDir', () => {
+  it('nests the pinned piper voices under <python>/models', () => {
+    const pythonDir = join('C:', 'app', 'python');
+    expect(ttsVoiceDir(pythonDir)).toBe(join(pythonDir, 'models', 'piper-voices'));
+  });
+});
+
+describe('ttsVoiceDownloadPython', () => {
+  it('pins the repo, revision, and both voice files', () => {
+    const voiceDir = join('C:', 'app', 'python', 'models', 'piper-voices');
+    const code = ttsVoiceDownloadPython(voiceDir);
+    expect(code).toContain('from huggingface_hub import hf_hub_download');
+    expect(code).toContain('repo_id="rhasspy/piper-voices"');
+    expect(code).toContain('revision="c10ece1aade47bb51c153c893d14e5bf8e5b7117"');
+    expect(code).toContain('fa_IR-reza_ibrahim-medium.onnx');
+    expect(code).toContain('fa_IR-reza_ibrahim-medium.onnx.json');
+    expect(code).toContain(`local_dir=${JSON.stringify(voiceDir)}`);
   });
 });
 
