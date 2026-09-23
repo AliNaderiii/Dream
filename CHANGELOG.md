@@ -8,6 +8,30 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.3.0] - 2026-09-23
+
+### Added — wiring the core to the UI, batch 2 (real engines only)
+
+- **وب (Web).** Human-in-the-loop web reading on the real `browse.*`
+  bridge: propose a URL, approve it yourself, and only then does the
+  core fetch it — SSRF-guarded, prompt-injection-scanned, excerpts and
+  followable links, every step evidenced. No YOLO, no auto-fetch.
+  Note: the legacy `browser.*` extension methods drive a mock engine
+  (fake pages for every backend); per the zero-simulation rule they
+  stay unwired until the real Playwright/CDP `BrowserController` is
+  exposed through the bridge.
+- **کد (Code).** Real Python execution in the core sandbox
+  (`sandbox.run_code`): stateful namespace across runs, captured
+  stdout/stderr, generated artifacts, live status, and session reset —
+  with the executor's security blocklist stated in the UI.
+- Navigation: AGENT now lists گفتگو، پژوهش، وب; TOOLS adds کد.
+
+### Tests
+
+- Browser-honest view tests for web + code, bridge guard tests for all
+  nine new helpers; 76 frontend tests total (was 70); Python suite
+  unchanged (4236).
+
 ## [5.2.0] - 2026-09-23
 
 ### Added — wiring the core to the UI, batch 1

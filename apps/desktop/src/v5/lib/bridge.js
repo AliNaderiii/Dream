@@ -119,6 +119,35 @@ export const api = {
       { timeoutMs: 120_000 },
     ),
 
+  // ---- web reading (human-in-the-loop) ------------------------------------
+  /** browse.propose — queue a URL; nothing is fetched until you approve. */
+  browsePropose: (url) => call('browse.propose', { url }, { timeoutMs: 30_000 }),
+
+  /** browse.list — proposed/fetched/denied drafts. */
+  browseList: () => call('browse.list', {}, { timeoutMs: 30_000 }),
+
+  /** browse.approve — your explicit approval; the core then fetches. */
+  browseApprove: (draftId) =>
+    call('browse.approve', { draft_id: draftId, approved: true }, { timeoutMs: 120_000 }),
+
+  /** browse.deny — refuse a pending URL. */
+  browseDeny: (draftId) => call('browse.deny', { draft_id: draftId }, { timeoutMs: 30_000 }),
+
+  /** browse.follow — propose a link extracted from a fetched page. */
+  browseFollow: (draftId, url) =>
+    call('browse.follow', { draft_id: draftId, url }, { timeoutMs: 30_000 }),
+
+  // ---- code sandbox -------------------------------------------------------
+  /** sandbox.run_code — real Python in the stateful core sandbox. */
+  sandboxRun: (code, timeoutSeconds = 15) =>
+    call('sandbox.run_code', { code, timeout_seconds: timeoutSeconds }, { timeoutMs: 180_000 }),
+
+  /** sandbox.get_status — executions, variables, artifacts. */
+  sandboxStatus: () => call('sandbox.get_status', {}, { timeoutMs: 30_000 }),
+
+  /** sandbox.reset — clear the stateful namespace. */
+  sandboxReset: () => call('sandbox.reset', {}, { timeoutMs: 30_000 }),
+
   // ---- workspace files ---------------------------------------------------
   /** workspace.roots_list — registered workspace roots. */
   wsRootsList: () => call('workspace.roots_list', {}, { timeoutMs: 30_000 }),

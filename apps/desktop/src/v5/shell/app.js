@@ -20,6 +20,8 @@ import { dataView } from '../views/data.js';
 import { voiceView } from '../views/voice.js';
 import { visionView } from '../views/vision.js';
 import { filesView } from '../views/files.js';
+import { webView } from '../views/web.js';
+import { codeView } from '../views/code.js';
 import { telegramView } from '../views/telegram.js';
 import { settingsView } from '../views/settings.js';
 import { evidenceDrawer } from './evidence.js';
@@ -36,6 +38,12 @@ const VIEWS = {
     subtitle: 'پرسش عمیق → برنامه → منابع → گزارش',
     icon: 'search',
     render: researchView,
+  },
+  web: {
+    title: 'وب',
+    subtitle: 'بازخوانی صفحه — فقط با تأیید صریح شما',
+    icon: 'globe',
+    render: webView,
   },
   memory: {
     title: 'حافظه',
@@ -79,6 +87,12 @@ const VIEWS = {
     icon: 'send',
     render: telegramView,
   },
+  code: {
+    title: 'کد',
+    subtitle: 'اجرای واقعی پایتون در سندباکس هسته',
+    icon: 'terminal',
+    render: codeView,
+  },
   settings: {
     title: 'تنظیمات',
     subtitle: 'مدل، ظاهر و وضعیت اجزا',
@@ -88,9 +102,9 @@ const VIEWS = {
 };
 
 const NAV_GROUPS = [
-  { micro: 'AGENT', items: ['chat', 'research'] },
+  { micro: 'AGENT', items: ['chat', 'research', 'web'] },
   { micro: 'MEMORY', items: ['memory'] },
-  { micro: 'TOOLS', items: ['doc', 'data', 'voice', 'vision', 'files'] },
+  { micro: 'TOOLS', items: ['doc', 'data', 'voice', 'vision', 'files', 'code'] },
   { micro: 'CHANNELS', items: ['telegram'] },
 ];
 

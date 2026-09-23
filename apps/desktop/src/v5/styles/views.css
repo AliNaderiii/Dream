@@ -1331,3 +1331,37 @@
   max-height: 340px;
   overflow-y: auto;
 }
+
+/* ---- web + code views ---------------------------------------------------- */
+
+.web-draft {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--line-1);
+}
+.web-draft:last-child {
+  border-bottom: none;
+}
+.web-draft-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 10px 10px 42px;
+}
+.web-url {
+  flex: 1;
+  min-width: 220px;
+}
+.code-editor {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.8;
+  direction: ltr;
+  text-align: left;
+  min-height: 200px;
+  resize: vertical;
+  white-space: pre;
+}
+.code-stderr {
+  border-color: var(--err);
+}
