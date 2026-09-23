@@ -8,6 +8,18 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.0.1] - 2026-09-23
+
+### Fixed
+
+- **Window controls for the frameless window.** 5.0.0 shipped the custom
+  chrome without minimize / maximize / close buttons. The topbar is now the
+  titlebar: it is draggable (`data-tauri-drag-region`) and carries caption
+  buttons — mirrored to the left corner per RTL convention — that call the
+  same audited Rust window commands the shell has always exposed
+  (`minimize_window`, `toggle_maximize`, `close_window`). Buttons are hidden
+  in browser previews, where there is no window to control.
+
 ## [5.0.0] - 2026-09-22
 
 The workbench release: the desktop UI is rebuilt from scratch as a

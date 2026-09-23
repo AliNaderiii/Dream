@@ -54,6 +54,8 @@ export const icons = {
     '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
   ),
   search: wrap('<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>'),
+  minus: wrap('<path d="M5 12h14"/>'),
+  square: wrap('<rect x="5" y="5" width="14" height="14" rx="1.5"/>'),
 };
 
 /** Shorthand: icon by name as a safe HTML string. */

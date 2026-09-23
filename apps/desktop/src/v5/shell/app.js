@@ -8,6 +8,8 @@
 import { h } from '../lib/dom.js';
 import { ic } from '../lib/icons.js';
 import { app, settings } from '../lib/store.js';
+import { invoke } from '@tauri-apps/api/core';
+
 import { status as bridgeStatus, isTauri } from '../lib/bridge.js';
 
 import { chatView } from '../views/chat.js';
@@ -119,6 +121,31 @@ function chipBridge(state) {
   );
 }
 
+/**
+ * Native window controls for the frameless window (Windows caption buttons,
+ * mirrored to the left corner per RTL convention). The shell exposes the
+ * same audited Rust commands the legacy app used.
+ */
+function winControls() {
+  if (!isTauri) return h('span');
+  const btn = (title, icon, command, cls = '') =>
+    h('button', {
+      class: `win-btn ${cls}`,
+      title,
+      html: ic(icon),
+      onclick: () => {
+        invoke(command).catch(() => {});
+      },
+    });
+  return h(
+    'div',
+    { class: 'win-controls' },
+    btn('کوچک‌نمایی', 'minus', 'minimize_window'),
+    btn('بزرگ‌نمایی', 'square', 'toggle_maximize'),
+    btn('بستن', 'x', 'close_window', 'win-close'),
+  );
+}
+
 function chipModel(model) {
   if (!model || model.provider === 'none' || !model.model) {
     return h('span', { class: 'chip model-chip' }, h('span', { class: 'dot' }), 'بدون مدل');
@@ -189,11 +216,13 @@ export function mountApp(root) {
     ),
   );
 
+  // The topbar doubles as the titlebar: draggable via data-tauri-drag-region,
+  // with caption buttons at the (RTL-mirrored) left corner.
   const topbar = h(
     'header',
-    { class: 'topbar' },
-    h('div', { class: 'view-heading' }, viewTitle, viewSubtitle),
-    h('div', { class: 'topbar-chips' }, modelChipHost, bridgeChipHost),
+    { class: 'topbar', 'data-tauri-drag-region': true },
+    h('div', { class: 'view-heading', 'data-tauri-drag-region': true }, viewTitle, viewSubtitle),
+    h('div', { class: 'topbar-chips' }, modelChipHost, bridgeChipHost, winControls()),
   );
 
   const viewHost = h('main', { id: 'view', class: 'view' });
