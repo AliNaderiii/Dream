@@ -108,6 +108,14 @@ describe('browser environment (no Tauri)', () => {
     await expect(api.shExecute('sh_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
   });
 
+  it('data-studio helpers are wired to the real bridge — honest in the browser', async () => {
+    await expect(api.dataDiscover('فروش')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.dataSessionFromDataset('ds_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.dataSessionGet('s_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.dataSessionDelete('s_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.dataChart('s_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
+  });
+
   it('tts helpers are wired to the real bridge — honest in the browser', async () => {
     await expect(api.ttsEngines()).rejects.toBeInstanceOf(BridgeUnavailableError);
     await expect(api.ttsVoices('piper')).rejects.toBeInstanceOf(BridgeUnavailableError);

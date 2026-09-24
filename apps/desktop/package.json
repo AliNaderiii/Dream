@@ -1,7 +1,7 @@
 {
   "name": "@dream/desktop",
   "private": true,
-  "version": "5.8.0",
+  "version": "5.9.0",
   "type": "module",
   "description": "Dream desktop shell — Tauri 2 + vanilla ES modules (v5 agent workbench)",
   "license": "MIT",

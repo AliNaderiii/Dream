@@ -8,6 +8,42 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.9.0] - 2026-09-24
+
+### Added — the complete data studio, batch 8 (real engines only)
+
+- **استودیوی دادهٔ کامل.** The Data view grew three real capabilities —
+  five new bridge helpers:
+  - «کشف مجموعه‌داده»: Persian-aware dataset discovery over the Dream
+    workspace (`dataqa.discover`) — bounded schema profiling (500-row
+    samples, ≤2000 files, ≤500MB), Persian/English synonym families
+    (فروش/درآمد/مبلغ…), honest limitations per candidate, and one
+    click to start a session from a discovered dataset
+    (`sessions.create {dataset_id}`);
+  - «نشست‌های ذخیره‌شده»: persisted-session management — open a past
+    session with its last grounded answers (`sessions.get`), delete
+    with its chart assets (`sessions.delete`);
+  - «نمودار»: a REAL SVG chart, built by the core ONLY from executed
+    evidence (`dataqa.chart`) — quota-bounded (32/session, 4MB dir,
+    512KB SVG), honest refusal when the latest answer does not
+    support a consistent chart, with an evidence chain for the chart
+    itself.
+- **Zero-simulation verdict, recorded:** the `system.*` telemetry
+  domain stays unwired — its device numbers are invented constants
+  (hardcoded 16GB VRAM / 32GB RAM, per-backend tps/latency tables, a
+  fixed 450/200 GB/s bandwidth, and a decorative
+  `sha256_verified_golden_release_dream_v4` "signature"), and
+  `get_golden_release_info` is a static marketing checklist
+  (readiness 100.0, "verified" swarm) that contradicts the recorded
+  verdicts. Wiring it would surface fake numbers; it joins the
+  unwired-by-design list.
+
+### Tests
+
+- Browser-honest data-studio tests (new file) + bridge guards for the
+  five new helpers; 113 frontend tests total (was 106); Python suite
+  unchanged.
+
 ## [5.8.0] - 2026-09-24
 
 ### Added — agent mode, batch 7 (real engines only)

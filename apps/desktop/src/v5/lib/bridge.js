@@ -411,8 +411,27 @@ export const api = {
   /** dataqa.sessions.create — {source} path to CSV/JSON/SQLite. */
   dataSessionCreate: (source) => call('dataqa.sessions.create', { source }, { timeoutMs: 120_000 }),
 
+  /** dataqa.sessions.create — from a discovered dataset_id. */
+  dataSessionFromDataset: (datasetId) =>
+    call('dataqa.sessions.create', { dataset_id: datasetId }, { timeoutMs: 120_000 }),
+
   /** dataqa.sessions.list — loaded sessions. */
   dataSessionsList: () => call('dataqa.sessions.list', {}, { timeoutMs: 30_000 }),
+
+  /** dataqa.sessions.get — full record incl. the last turns. */
+  dataSessionGet: (sessionId) =>
+    call('dataqa.sessions.get', { session_id: sessionId }, { timeoutMs: 60_000 }),
+
+  /** dataqa.sessions.delete — remove a session and its chart assets. */
+  dataSessionDelete: (sessionId) =>
+    call('dataqa.sessions.delete', { session_id: sessionId }, { timeoutMs: 30_000 }),
+
+  /** dataqa.discover — Persian-aware dataset discovery + bounded profiles. */
+  dataDiscover: (query = '', limit = 20) =>
+    call('dataqa.discover', { query, limit }, { timeoutMs: 120_000 }),
+
+  /** dataqa.chart — the session's SVG, built only from executed evidence. */
+  dataChart: (sessionId) => call('dataqa.chart', { session_id: sessionId }, { timeoutMs: 60_000 }),
 
   /** dataqa.ask — {session_id, question}; final result carries evidence. */
   dataAsk: (sessionId, question) =>

@@ -1869,3 +1869,97 @@
 .shell-err {
   border-color: var(--err);
 }
+
+/* ---- data studio: discovery + saved sessions + chart ----------------------- */
+
+.data-status:empty {
+  display: none;
+}
+.data-view .rt-section {
+  margin-top: 18px;
+}
+.disc-candidate {
+  gap: 8px;
+  padding: 12px 14px;
+}
+.disc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.disc-name {
+  font-weight: 600;
+  color: var(--tx-1);
+}
+.disc-cols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.disc-reasons {
+  font-size: var(--fs-11);
+  line-height: 1.7;
+}
+.data-discover-results,
+.data-saved-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.saved-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line-1);
+  padding-top: 8px;
+  flex-wrap: wrap;
+}
+.saved-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.saved-row.active {
+  background: var(--accent-dim);
+  border-radius: var(--r-1);
+  padding: 8px 10px;
+  border-top-color: transparent;
+}
+.saved-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.saved-name {
+  font-weight: 600;
+  color: var(--tx-1);
+}
+.saved-meta {
+  font-size: var(--fs-11);
+}
+.saved-actions {
+  display: flex;
+  gap: 8px;
+}
+.chart-panel {
+  gap: 8px;
+}
+.chart-title {
+  font-weight: 600;
+  color: var(--tx-1);
+}
+.chart-svg {
+  background: var(--bg-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-2);
+  padding: 10px;
+  overflow: auto;
+}
+.chart-svg svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
