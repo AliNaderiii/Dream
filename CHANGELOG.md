@@ -8,6 +8,36 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.8.0] - 2026-09-24
+
+### Added — agent mode, batch 7 (real engines only)
+
+- **حالت ایجنت (Agent Mode).** A new AGENT view with three real
+  workbenches — six new bridge helpers:
+  - «هدف»: an objective plus YOUR acceptance criteria; the core verifies
+    each criterion with an honest RULE-BASED evaluator — real filenames
+    under registered workspace roots (bounded walk), listing-cap
+    compliance, impossible markers (network, live market,…) refused —
+    and reports "unable" out loud when a criterion is not locally
+    verifiable (`workspace.agentmode_goal/report/stop`).
+  - «پوسته»: guarded !shell with a real subprocess — propose, see the
+    risk tier (safe/guarded/dangerous), approve, execute: network off
+    (PATH=/usr/bin:/bin), guarded commands path-confined to a
+    registered workspace root, dangerous commands NEVER spawn even if
+    approved (`workspace.shell_propose/execute`).
+  - «وضعیت زنده»: the live registry of recent goals and subagent
+    bookkeeping, with a real stop that cancels through engine tokens
+    (`workspace.agentmode_status/stop`).
+- **Zero-simulation verdicts, recorded:** `agentmode_plan` /
+  `agentmode_continue` draft three FIXED template steps and mark them
+  done without doing any work (`executed: true` with nothing performed)
+  — simulated execution, unwired by design.
+
+### Tests
+
+- Browser-honest agent-view tests + bridge guards for the six new
+  helpers; 106 frontend tests total (was 99); Python suite unchanged.
+
 ## [5.7.0] - 2026-09-24
 
 ### Added — spaces, batch 6 (real engines only)

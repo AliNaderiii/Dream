@@ -259,6 +259,42 @@ export const api = {
   llArmDraft: (draftId) =>
     call('liveloop.arm_draft', { draft_id: draftId, approved: true }, { timeoutMs: 60_000 }),
 
+  // ---- agent mode (goal + guarded shell + live status) --------------------
+  /** workspace.agentmode_goal — objective + criteria; a rule-based evaluator
+   *  checks them against the REAL workspace and says "unable" honestly. */
+  amGoal: (objective, criteria) =>
+    call('workspace.agentmode_goal', { objective, criteria }, { timeoutMs: 120_000 }),
+
+  /** workspace.agentmode_report — re-evaluate a goal against the workspace. */
+  amReport: (goalId) =>
+    call('workspace.agentmode_report', { goal_id: goalId }, { timeoutMs: 120_000 }),
+
+  /** workspace.agentmode_stop — cancel goals/subagents through engine tokens. */
+  amStop: ({ goalId, planId, subagentId } = {}) => {
+    const params = {};
+    if (goalId) params.goal_id = goalId;
+    if (planId) params.plan_id = planId;
+    if (subagentId) params.subagent_id = subagentId;
+    return call('workspace.agentmode_stop', params, { timeoutMs: 30_000 });
+  },
+
+  /** workspace.agentmode_status — live goals + subagent registry. */
+  amStatus: () => call('workspace.agentmode_status', {}, { timeoutMs: 30_000 }),
+
+  /** workspace.shell_propose — classify a command's risk (no execution). */
+  shPropose: (command, cwd) =>
+    call('workspace.shell_propose', cwd ? { command, cwd } : { command }, { timeoutMs: 30_000 }),
+
+  /** workspace.shell_execute — run an approved command for real: network
+   *  off, guarded commands confined to a registered root, dangerous
+   *  commands never spawn even if approved. */
+  shExecute: (approvalId) =>
+    call(
+      'workspace.shell_execute',
+      { approval_id: approvalId, approved: true },
+      { timeoutMs: 60_000 },
+    ),
+
   // ---- web reading (human-in-the-loop) ------------------------------------
   /** browse.propose — queue a URL; nothing is fetched until you approve. */
   browsePropose: (url) => call('browse.propose', { url }, { timeoutMs: 30_000 }),

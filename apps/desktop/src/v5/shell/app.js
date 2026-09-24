@@ -27,6 +27,7 @@ import { codeView } from '../views/code.js';
 import { thinkingView } from '../views/thinking.js';
 import { runtimesView } from '../views/runtimes.js';
 import { spacesView } from '../views/spaces.js';
+import { agentView } from '../views/agent.js';
 import { telegramView } from '../views/telegram.js';
 import { settingsView } from '../views/settings.js';
 import { evidenceDrawer } from './evidence.js';
@@ -55,6 +56,12 @@ const VIEWS = {
     subtitle: 'درخت استدلال و مدل ذهنی — فکرها از شما، ساختار از دریم',
     icon: 'brain',
     render: thinkingView,
+  },
+  agent: {
+    title: 'حالت ایجنت',
+    subtitle: 'هدف با معیارهای پذیرش، پوستهٔ محافظ و وضعیت زنده — قاعده‌محور و صادق',
+    icon: 'target',
+    render: agentView,
   },
   runtimes: {
     title: 'موتورها',
@@ -125,7 +132,7 @@ const VIEWS = {
 };
 
 const NAV_GROUPS = [
-  { micro: 'AGENT', items: ['chat', 'research', 'web', 'thinking'] },
+  { micro: 'AGENT', items: ['chat', 'research', 'web', 'thinking', 'agent'] },
   { micro: 'MEMORY', items: ['memory'] },
   { micro: 'SPACES', items: ['spaces'] },
   { micro: 'TOOLS', items: ['doc', 'data', 'voice', 'vision', 'files', 'code'] },

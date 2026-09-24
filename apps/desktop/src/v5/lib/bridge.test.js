@@ -97,6 +97,17 @@ describe('browser environment (no Tauri)', () => {
     await expect(api.llArmDraft('dft_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
   });
 
+  it('agent-mode helpers are wired to the real bridge — honest in the browser', async () => {
+    await expect(api.amGoal('هدف', ['معیار'])).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.amReport('goal_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.amStop({ goalId: 'goal_x' })).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.amStop({})).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.amStatus()).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.shPropose('ls -la')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.shPropose('ls', 'C:/root')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.shExecute('sh_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
+  });
+
   it('tts helpers are wired to the real bridge — honest in the browser', async () => {
     await expect(api.ttsEngines()).rejects.toBeInstanceOf(BridgeUnavailableError);
     await expect(api.ttsVoices('piper')).rejects.toBeInstanceOf(BridgeUnavailableError);
