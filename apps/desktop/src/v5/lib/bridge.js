@@ -214,6 +214,51 @@ export const api = {
   /** providerhubs.gateway_update — toggles only; credentials are refused. */
   phGatewayUpdate: (params) => call('providerhubs.gateway_update', params, { timeoutMs: 30_000 }),
 
+  // ---- spaces (durable project work surfaces) ------------------------------
+  /** space.list — persisted space records, newest first. */
+  spaceList: () => call('space.list', {}, { timeoutMs: 30_000 }),
+
+  /** space.create — {name, language fa|en, ceiling safe|guarded}. */
+  spaceCreate: (name, language = 'fa', ceiling = 'guarded') =>
+    call('space.create', { name, language, ceiling }, { timeoutMs: 30_000 }),
+
+  /** space.get — record + drafts + roles with effective ceilings. */
+  spaceGet: (spaceId) => call('space.get', { space_id: spaceId }, { timeoutMs: 30_000 }),
+
+  /** space.archive — hide a space (archived spaces stay durable). */
+  spaceArchive: (spaceId) => call('space.archive', { space_id: spaceId }, { timeoutMs: 30_000 }),
+
+  /** space.attach_folder — import a folder IN PLACE via the workspace. */
+  spaceAttachFolder: (spaceId, folder) =>
+    call('space.attach_folder', { space_id: spaceId, folder }, { timeoutMs: 60_000 }),
+
+  /** space.set_instruction — pasted text or a picked file path; the
+   *  core scans it for prompt injection and quarantines suspicious docs. */
+  spaceSetInstruction: (spaceId, { path, text } = {}) => {
+    const params = { space_id: spaceId };
+    if (text != null) params.text = text;
+    if (path != null) params.path = path;
+    return call('space.set_instruction', params, { timeoutMs: 60_000 });
+  },
+
+  /** space.propose_draft — a natural-language rule; nl_to_cron parses it. */
+  spaceProposeDraft: (spaceId, rule) =>
+    call('space.propose_draft', { space_id: spaceId, rule }, { timeoutMs: 30_000 }),
+
+  /** space.approve_draft — your explicit approval of a pending rule. */
+  spaceApproveDraft: (draftId) =>
+    call('space.approve_draft', { draft_id: draftId }, { timeoutMs: 30_000 }),
+
+  /** space.deny_draft — refuse a pending rule. */
+  spaceDenyDraft: (draftId) =>
+    call('space.deny_draft', { draft_id: draftId }, { timeoutMs: 30_000 }),
+
+  // ---- live loop (arming approved drafts on the real scheduler) ------------
+  /** liveloop.arm_draft — arm an APPROVED draft; every fire still needs
+   *  approval (require_approval=true). Dangerous drafts never arm. */
+  llArmDraft: (draftId) =>
+    call('liveloop.arm_draft', { draft_id: draftId, approved: true }, { timeoutMs: 60_000 }),
+
   // ---- web reading (human-in-the-loop) ------------------------------------
   /** browse.propose — queue a URL; nothing is fetched until you approve. */
   browsePropose: (url) => call('browse.propose', { url }, { timeoutMs: 30_000 }),

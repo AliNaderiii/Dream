@@ -74,6 +74,29 @@ describe('browser environment (no Tauri)', () => {
     await expect(api.phCatalog('ollama')).rejects.toBeInstanceOf(BridgeUnavailableError);
   });
 
+  it('space + liveloop helpers are wired to the real bridge — honest in the browser', async () => {
+    await expect(api.spaceList()).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.spaceCreate('فروشگاه', 'fa', 'guarded')).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+    await expect(api.spaceGet('spc_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.spaceAttachFolder('spc_x', 'C:/x')).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+    await expect(api.spaceSetInstruction('spc_x', { text: 'قواعد' })).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+    await expect(api.spaceSetInstruction('spc_x', { path: 'C:/x.md' })).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+    await expect(api.spaceProposeDraft('spc_x', 'هر روز ساعت ۹')).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+    await expect(api.spaceApproveDraft('dft_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.spaceDenyDraft('dft_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.llArmDraft('dft_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
+  });
+
   it('tts helpers are wired to the real bridge — honest in the browser', async () => {
     await expect(api.ttsEngines()).rejects.toBeInstanceOf(BridgeUnavailableError);
     await expect(api.ttsVoices('piper')).rejects.toBeInstanceOf(BridgeUnavailableError);

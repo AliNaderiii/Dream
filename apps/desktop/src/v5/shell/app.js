@@ -1,8 +1,9 @@
 /**
- * App shell: grouped sidebar (agent / memory / tools / runtime / channels),
- * topbar, view container, evidence drawer. Dream is a general-purpose agent —
- * the nav says so: chat and research up top, memory its own section, the
- * three document tools are *tools*, the runtime matrix runs the models, and
+ * App shell: grouped sidebar (agent / memory / spaces / tools / runtime /
+ * channels), topbar, view container, evidence drawer. Dream is a
+ * general-purpose agent — the nav says so: chat and research up top, memory
+ * its own section, spaces are the durable project surfaces, the three
+ * document tools are *tools*, the runtime matrix runs the models, and
  * Telegram is one channel of many.
  */
 
@@ -25,6 +26,7 @@ import { webView } from '../views/web.js';
 import { codeView } from '../views/code.js';
 import { thinkingView } from '../views/thinking.js';
 import { runtimesView } from '../views/runtimes.js';
+import { spacesView } from '../views/spaces.js';
 import { telegramView } from '../views/telegram.js';
 import { settingsView } from '../views/settings.js';
 import { evidenceDrawer } from './evidence.js';
@@ -65,6 +67,12 @@ const VIEWS = {
     subtitle: 'رویدادها، دانسته‌ها و خط زمانی ایجنت',
     icon: 'db',
     render: memoryView,
+  },
+  spaces: {
+    title: 'فضاها',
+    subtitle: 'فضاهای پروژه — پوشه، سند دستوری و خودکارسازی زمان‌بندی‌شده',
+    icon: 'layers',
+    render: spacesView,
   },
   doc: {
     title: 'سند',
@@ -119,7 +127,9 @@ const VIEWS = {
 const NAV_GROUPS = [
   { micro: 'AGENT', items: ['chat', 'research', 'web', 'thinking'] },
   { micro: 'MEMORY', items: ['memory'] },
+  { micro: 'SPACES', items: ['spaces'] },
   { micro: 'TOOLS', items: ['doc', 'data', 'voice', 'vision', 'files', 'code'] },
+  { micro: 'RUNTIME', items: ['runtimes'] },
   { micro: 'CHANNELS', items: ['telegram'] },
 ];
 

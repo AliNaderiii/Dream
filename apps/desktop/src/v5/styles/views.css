@@ -1600,3 +1600,177 @@
   gap: 6px;
   flex-wrap: wrap;
 }
+
+/* ---- spaces view ----------------------------------------------------------- */
+
+.spaces-view {
+  max-width: 1080px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 22px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.sp-status:empty {
+  display: none;
+}
+.sp-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.sp-create {
+  gap: 10px;
+}
+.sp-create-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.sp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+.space-card {
+  gap: 10px;
+  padding: 14px;
+  text-align: start;
+  cursor: pointer;
+  color: var(--tx-1);
+  font: inherit;
+}
+.space-card:hover {
+  border-color: var(--accent-line);
+}
+.space-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.space-name {
+  font-weight: 600;
+  color: var(--tx-1);
+}
+.space-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.space-folder {
+  font-size: var(--fs-12);
+  color: var(--tx-2);
+  text-align: left;
+  direction: ltr;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.sp-back {
+  align-self: flex-start;
+}
+.sp-archive {
+  margin-inline-start: auto;
+}
+.sp-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.instr-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.role-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line-1);
+  padding-top: 8px;
+}
+.role-row:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+.role-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.role-name {
+  font-weight: 600;
+  color: var(--tx-1);
+}
+.role-job {
+  font-size: var(--fs-11);
+}
+.drafts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+.draft-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-2);
+  padding: 10px 12px;
+  background: var(--bg-2);
+}
+.draft-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.draft-rule {
+  line-height: 1.7;
+  color: var(--tx-1);
+}
+.draft-cron {
+  font-size: var(--fs-12);
+  color: var(--tx-2);
+  text-align: left;
+}
+.draft-when {
+  font-size: var(--fs-11);
+}
+.draft-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.shell-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.shell-cmd {
+  font-size: var(--fs-12);
+  color: var(--tx-1);
+  background: var(--bg-3);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-1);
+  padding: 2px 8px;
+}
+.schedule-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--accent-line);
+  padding-top: 8px;
+}
+.sp-note {
+  font-size: var(--fs-12);
+  line-height: 1.8;
+}

@@ -8,6 +8,43 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.7.0] - 2026-09-24
+
+### Added — spaces, batch 6 (real engines only)
+
+- **فضاها (Spaces).** A new SPACES view on the real space service — ten
+  new `space.*` / `liveloop.arm_draft` bridge helpers:
+  - durable project spaces (persisted in `data/spaces.json`) with
+    language and risk-ceiling choices, and folders attached IN PLACE
+    through the workspace import (nothing is copied);
+  - a per-space instruction doc — pasted text or a picked file —
+    scanned by the REAL prompt-injection detector; suspicious docs are
+    quarantined, never silently obeyed;
+  - the specialized-role catalog with effective risk ceilings per
+    space (a role can never widen grants above the space ceiling);
+  - automation rules: natural language parsed into a real cron
+    expression (`nl_to_cron`), `!shell` snippets risk-classified
+    (dangerous shell is never scheduled), and an approved draft can be
+    ARMED onto the real scheduler via `liveloop.arm_draft` — every
+    later fire still requires explicit approval
+    (`require_approval=true`), stated in the UI.
+- **Zero-simulation verdicts, recorded:** `space.ask` and
+  `liveloop.role_turn` return templated local briefings (the core says
+  `hosted: false`) and stay unwired; `space.run_draft` only records
+  and is superseded in the UI by the real scheduler arming.
+
+### Fixed
+
+- The v5.6.0 sidebar was missing the RUNTIME nav group (a lost edit),
+  so the runtimes view was reachable only via `#/runtimes`. The
+  «موتورها» sidebar entry is restored, and the nav now reads
+  agent / memory / spaces / tools / runtime / channels.
+
+### Tests
+
+- Browser-honest spaces-view tests + bridge guards for the ten new
+  helpers; 99 frontend tests total (was 93); Python suite unchanged.
+
 ## [5.6.0] - 2026-09-24
 
 ### Added — the runtimes matrix, batch 5 (real engines only)
