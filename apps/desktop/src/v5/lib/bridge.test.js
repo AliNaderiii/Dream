@@ -45,6 +45,19 @@ describe('browser environment (no Tauri)', () => {
     await expect(api.wbScreenshot()).rejects.toBeInstanceOf(BridgeUnavailableError);
   });
 
+  it('reasoning + dialectic helpers are wired to the real bridge — honest in the browser', async () => {
+    await expect(api.reasoningPlanTree('هدف')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.reasoningExpand('t', 'n', ['فکر'])).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+    await expect(api.reasoningMcts('t', ['فکر'])).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.dialecticAdd('general', 'باور')).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+    await expect(api.dialecticSnapshot()).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.dialecticTensions()).rejects.toBeInstanceOf(BridgeUnavailableError);
+  });
+
   it('tts helpers are wired to the real bridge — honest in the browser', async () => {
     await expect(api.ttsEngines()).rejects.toBeInstanceOf(BridgeUnavailableError);
     await expect(api.ttsVoices('piper')).rejects.toBeInstanceOf(BridgeUnavailableError);

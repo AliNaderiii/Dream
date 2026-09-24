@@ -8,6 +8,29 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.5.0] - 2026-09-23
+
+### Added — thinking workbenches, batch 4 (real engines only)
+
+- **تفکر (Thinking).** A new AGENT view with two real workbenches:
+  - «درخت استدلال»: a user-driven Tree-of-Thoughts — you write the
+    candidate thoughts, the core keeps the tree (plan/expand/critique/
+    MCTS-step/prune/synthesize) and scores nodes with an honestly
+    labelled RULE-BASED evaluator (length/coherence/depth — not an
+    LLM); the winning path is synthesized with a confidence score.
+  - «مدل ذهنی»: a real dialectic belief graph — register beliefs with
+    confidence, detect tensions with the rule-based opposite-pairs
+    matcher, and reconcile contradictions with YOUR nuanced statement;
+    keyword query and full snapshot included.
+- **Zero-simulation verdicts, recorded:** the swarm engine (task results
+  are string templates, consensus is `simulate_mock_deliberation`) and
+  the templated 3-agent `dialectic.debate_turn` stay unwired by design.
+
+### Tests
+
+- Browser-honest thinking-view tests + bridge guards for all twelve new
+  helpers; 87 frontend tests total (was 81); Python suite unchanged.
+
 ## [5.4.0] - 2026-09-23
 
 ### Added — the real browser, wired end to end

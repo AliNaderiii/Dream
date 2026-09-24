@@ -56,6 +56,9 @@ export const icons = {
   search: wrap('<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>'),
   minus: wrap('<path d="M5 12h14"/>'),
   square: wrap('<rect x="5" y="5" width="14" height="14" rx="1.5"/>'),
+  brain: wrap(
+    '<path d="M9.5 3a2.5 2.5 0 0 0-2.4 1.8A3 3 0 0 0 5 9.3 3 3 0 0 0 6 14a2.8 2.8 0 0 0 1.6 4.6A2.4 2.4 0 0 0 12 19V5a2.5 2.5 0 0 0-2.5-2z"/><path d="M14.5 3a2.5 2.5 0 0 1 2.4 1.8A3 3 0 0 1 19 9.3a3 3 0 0 1-1 4.7 2.8 2.8 0 0 1-1.6 4.6A2.4 2.4 0 0 1 12 19V5a2.5 2.5 0 0 1 2.5-2z"/>',
+  ),
   globe: wrap(
     '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/>',
   ),

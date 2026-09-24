@@ -119,6 +119,69 @@ export const api = {
       { timeoutMs: 120_000 },
     ),
 
+  // ---- reasoning tree (user-driven Tree-of-Thoughts) ----------------------
+  /** reasoning.plan_tree — create a ToT trajectory for a goal. */
+  reasoningPlanTree: (goal) => call('reasoning.plan_tree', { goal }, { timeoutMs: 60_000 }),
+
+  /** reasoning.expand_branch — add YOUR candidate thoughts under a node. */
+  reasoningExpand: (trajectoryId, parentNodeId, thoughts) =>
+    call(
+      'reasoning.expand_branch',
+      { trajectory_id: trajectoryId, parent_node_id: parentNodeId, thoughts },
+      { timeoutMs: 60_000 },
+    ),
+
+  /** reasoning.step_critique — rule-based critique (length/coherence/depth). */
+  reasoningCritique: (trajectoryId, nodeId) =>
+    call(
+      'reasoning.step_critique',
+      { trajectory_id: trajectoryId, node_id: nodeId },
+      { timeoutMs: 60_000 },
+    ),
+
+  /** reasoning.mcts_search — one MCTS iteration over YOUR candidate thoughts. */
+  reasoningMcts: (trajectoryId, candidateThoughts) =>
+    call(
+      'reasoning.mcts_search',
+      { trajectory_id: trajectoryId, candidate_thoughts: candidateThoughts },
+      { timeoutMs: 120_000 },
+    ),
+
+  /** reasoning.backtrack — prune weak branches, recompute the frontier. */
+  reasoningBacktrack: (trajectoryId) =>
+    call('reasoning.backtrack', { trajectory_id: trajectoryId }, { timeoutMs: 60_000 }),
+
+  /** reasoning.synthesize_solution — assemble the winning path. */
+  reasoningSynthesize: (trajectoryId) =>
+    call('reasoning.synthesize_solution', { trajectory_id: trajectoryId }, { timeoutMs: 60_000 }),
+
+  /** reasoning.get_tree_stats — live tree metrics + full node list. */
+  reasoningStats: (trajectoryId) =>
+    call('reasoning.get_tree_stats', { trajectory_id: trajectoryId }, { timeoutMs: 30_000 }),
+
+  // ---- mental model (dialectic belief graph) -------------------------------
+  /** dialectic.add_belief — register a belief with confidence. */
+  dialecticAdd: (domain, statement) =>
+    call('dialectic.add_belief', { domain, statement }, { timeoutMs: 30_000 }),
+
+  /** dialectic.detect_tensions — rule-based contradiction pairs. */
+  dialecticTensions: () => call('dialectic.detect_tensions', {}, { timeoutMs: 60_000 }),
+
+  /** dialectic.reconcile_tension — merge with YOUR nuanced statement. */
+  dialecticReconcile: (tensionId, nuancedStatement) =>
+    call(
+      'dialectic.reconcile_tension',
+      { tension_id: tensionId, nuanced_statement: nuancedStatement },
+      { timeoutMs: 30_000 },
+    ),
+
+  /** dialectic.query — keyword search over the belief graph. */
+  dialecticQuery: (query, limit = 8) =>
+    call('dialectic.query', { query, limit }, { timeoutMs: 30_000 }),
+
+  /** dialectic.snapshot — counts, top beliefs, synthesized summary. */
+  dialecticSnapshot: () => call('dialectic.snapshot', {}, { timeoutMs: 30_000 }),
+
   // ---- web reading (human-in-the-loop) ------------------------------------
   /** browse.propose — queue a URL; nothing is fetched until you approve. */
   browsePropose: (url) => call('browse.propose', { url }, { timeoutMs: 30_000 }),

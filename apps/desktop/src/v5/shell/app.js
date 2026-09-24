@@ -22,6 +22,7 @@ import { visionView } from '../views/vision.js';
 import { filesView } from '../views/files.js';
 import { webView } from '../views/web.js';
 import { codeView } from '../views/code.js';
+import { thinkingView } from '../views/thinking.js';
 import { telegramView } from '../views/telegram.js';
 import { settingsView } from '../views/settings.js';
 import { evidenceDrawer } from './evidence.js';
@@ -44,6 +45,12 @@ const VIEWS = {
     subtitle: 'بازخوانی و مرور واقعی — فقط با تأیید صریح شما',
     icon: 'globe',
     render: webView,
+  },
+  thinking: {
+    title: 'تفکر',
+    subtitle: 'درخت استدلال و مدل ذهنی — فکرها از شما، ساختار از دریم',
+    icon: 'brain',
+    render: thinkingView,
   },
   memory: {
     title: 'حافظه',
@@ -102,7 +109,7 @@ const VIEWS = {
 };
 
 const NAV_GROUPS = [
-  { micro: 'AGENT', items: ['chat', 'research', 'web'] },
+  { micro: 'AGENT', items: ['chat', 'research', 'web', 'thinking'] },
   { micro: 'MEMORY', items: ['memory'] },
   { micro: 'TOOLS', items: ['doc', 'data', 'voice', 'vision', 'files', 'code'] },
   { micro: 'CHANNELS', items: ['telegram'] },
