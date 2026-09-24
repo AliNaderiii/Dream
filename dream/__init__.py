@@ -7,7 +7,7 @@ from __future__ import annotations
 # bound *before* the submodule imports below on purpose: ``dream.agent`` reads
 # it for the default User-Agent while this package is still initialising, and
 # ``from dream import __version__`` there would otherwise be a circular import.
-__version__ = "5.5.0"
+__version__ = "5.6.0"
 
 from dream.agent import (
     ApprovalPolicy,

@@ -8,6 +8,41 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.6.0] - 2026-09-24
+
+### Added — the runtimes matrix, batch 5 (real engines only)
+
+- **موتورها (Runtimes).** A new RUNTIME view wired to the real provider
+  hubs service — nine new `providerhubs.*` bridge helpers:
+  - the active route (`hosted → aval → ollama → byok → echo`) as resolved
+    deterministically and offline by the router, with the full priority
+    chain and the Persian routing sentence;
+  - the six local runtimes (Ollama, vLLM, SGLang, llama.cpp, LM Studio,
+    generic) with honest detection/health chips, bounded connection
+    probes (latency comes back; secrets are never sent), real model
+    listings from each endpoint, and a persisted per-runtime model
+    selection;
+  - the optional tool gateway: master and per-tool toggles with the
+    keychain status — tokens stay in the OS keychain and are refused
+    over RPC by design;
+  - the provider catalog (local + cloud) with live search.
+- **Zero-simulation verdicts, recorded:** the evals engine defaults to a
+  mock agent runner (`_default_mock_runner`) and stays unwired without
+  a real runner; `space.ask` and `liveloop.role_turn` return templated
+  local briefings and stay unwired; the workroom is real but thin
+  (drafts are never sent by design); GWS is real (owner-authorized
+  read-only Gmail/Calendar/Drive) but needs Google OAuth credentials
+  and `DREAM_ALLOW_NETWORK` — deferred to a later phase with its
+  prerequisites stated. `space.*` itself (durable spaces, instruction
+  docs with injection scanning, cron-parsed automation drafts) and
+  `liveloop.arm_draft` (arming approved drafts onto the real scheduler)
+  are real and are candidates for the next batch.
+
+### Tests
+
+- Browser-honest runtimes-view tests + bridge guards for the nine new
+  helpers; 92 frontend tests total (was 87); Python suite unchanged.
+
 ## [5.5.0] - 2026-09-23
 
 ### Added — thinking workbenches, batch 4 (real engines only)

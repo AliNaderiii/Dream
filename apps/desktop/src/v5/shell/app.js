@@ -1,8 +1,9 @@
 /**
- * App shell: grouped sidebar (agent / memory / tools / channels), topbar,
- * view container, evidence drawer. Dream is a general-purpose agent — the
- * nav says so: chat and research up top, memory its own section, the three
- * document tools are *tools*, and Telegram is one channel of many.
+ * App shell: grouped sidebar (agent / memory / tools / runtime / channels),
+ * topbar, view container, evidence drawer. Dream is a general-purpose agent —
+ * the nav says so: chat and research up top, memory its own section, the
+ * three document tools are *tools*, the runtime matrix runs the models, and
+ * Telegram is one channel of many.
  */
 
 import { h } from '../lib/dom.js';
@@ -23,6 +24,7 @@ import { filesView } from '../views/files.js';
 import { webView } from '../views/web.js';
 import { codeView } from '../views/code.js';
 import { thinkingView } from '../views/thinking.js';
+import { runtimesView } from '../views/runtimes.js';
 import { telegramView } from '../views/telegram.js';
 import { settingsView } from '../views/settings.js';
 import { evidenceDrawer } from './evidence.js';
@@ -51,6 +53,12 @@ const VIEWS = {
     subtitle: 'درخت استدلال و مدل ذهنی — فکرها از شما، ساختار از دریم',
     icon: 'brain',
     render: thinkingView,
+  },
+  runtimes: {
+    title: 'موتورها',
+    subtitle: 'ماتریس اجرای محلی — سلامت، مدل‌ها، مسیر فعال و گیت‌وی ابزار',
+    icon: 'server',
+    render: runtimesView,
   },
   memory: {
     title: 'حافظه',

@@ -182,6 +182,38 @@ export const api = {
   /** dialectic.snapshot — counts, top beliefs, synthesized summary. */
   dialecticSnapshot: () => call('dialectic.snapshot', {}, { timeoutMs: 30_000 }),
 
+  // ---- runtimes (provider hubs) -------------------------------------------
+  /** providerhubs.runtimes — the local runtime matrix (detection/health). */
+  phRuntimes: () => call('providerhubs.runtimes', {}, { timeoutMs: 30_000 }),
+
+  /** providerhubs.catalog — local + cloud providers, filtered by query. */
+  phCatalog: (query = '') => call('providerhubs.catalog', { query }, { timeoutMs: 30_000 }),
+
+  /** providerhubs.test — bounded probe; latency back, secrets never sent. */
+  phTest: (runtimeId) =>
+    call('providerhubs.test', { runtime_id: runtimeId }, { timeoutMs: 30_000 }),
+
+  /** providerhubs.models — real model listing from the runtime endpoint. */
+  phModels: (runtimeId) =>
+    call('providerhubs.models', { runtime_id: runtimeId }, { timeoutMs: 60_000 }),
+
+  /** providerhubs.select_model — persisted per-runtime model choice. */
+  phSelectModel: (runtimeId, model) =>
+    call('providerhubs.select_model', { runtime_id: runtimeId, model }, { timeoutMs: 30_000 }),
+
+  /** providerhubs.diagnose — bilingual firing verdict + fix hints. */
+  phDiagnose: (runtimeId) =>
+    call('providerhubs.diagnose', { runtime_id: runtimeId }, { timeoutMs: 30_000 }),
+
+  /** providerhubs.route — deterministic active route, resolved offline. */
+  phRoute: () => call('providerhubs.route', {}, { timeoutMs: 30_000 }),
+
+  /** providerhubs.gateway — optional tool-gateway snapshot (keychain). */
+  phGateway: () => call('providerhubs.gateway', {}, { timeoutMs: 30_000 }),
+
+  /** providerhubs.gateway_update — toggles only; credentials are refused. */
+  phGatewayUpdate: (params) => call('providerhubs.gateway_update', params, { timeoutMs: 30_000 }),
+
   // ---- web reading (human-in-the-loop) ------------------------------------
   /** browse.propose — queue a URL; nothing is fetched until you approve. */
   browsePropose: (url) => call('browse.propose', { url }, { timeoutMs: 30_000 }),

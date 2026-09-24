@@ -58,6 +58,22 @@ describe('browser environment (no Tauri)', () => {
     await expect(api.dialecticTensions()).rejects.toBeInstanceOf(BridgeUnavailableError);
   });
 
+  it('provider-hubs helpers are wired to the real bridge — honest in the browser', async () => {
+    await expect(api.phRuntimes()).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.phRoute()).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.phTest('ollama')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.phModels('ollama')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.phSelectModel('ollama', 'qwen2.5:7b')).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+    await expect(api.phDiagnose('vllm')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.phGateway()).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.phGatewayUpdate({ enabled: true })).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+    await expect(api.phCatalog('ollama')).rejects.toBeInstanceOf(BridgeUnavailableError);
+  });
+
   it('tts helpers are wired to the real bridge — honest in the browser', async () => {
     await expect(api.ttsEngines()).rejects.toBeInstanceOf(BridgeUnavailableError);
     await expect(api.ttsVoices('piper')).rejects.toBeInstanceOf(BridgeUnavailableError);
