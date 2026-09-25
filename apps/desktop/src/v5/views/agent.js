@@ -1,6 +1,6 @@
 /**
- * Agent mode — three REAL workbenches on the agent-modes service:
- *  - «هدف»: an objective plus YOUR acceptance criteria; the core verifies
+ * Agent mode — four REAL workbenches on the agent-modes service:
+ *  - «هدف»:  an objective plus YOUR acceptance criteria; the core verifies
  *    each criterion with an honest RULE-BASED evaluator (real filenames
  *    under registered workspace roots, listing-cap compliance, impossible
  *    markers refused) and says "unable" out loud when it cannot verify.
@@ -10,6 +10,9 @@
  *    never spawn even if approved.
  *  - «وضعیت»: the live status registry — recent goals and subagent
  *    bookkeeping, with a real stop that cancels through engine tokens.
+ *  - «مراجع و فرمان‌ها»: explicit @file/#conversation//command/!shell
+ *    parsing, safe file preview, conversation references, and the real
+ *    Persian/English command palette — nothing opens or executes itself.
  * Zero simulations: agentmode_plan/agentmode_continue draft three fixed
  * template steps and mark them done without doing any work — they stay
  * unwired (recorded verdict).
@@ -40,7 +43,7 @@ const chip = (label, cls = '') =>
 const when = (stamp) => (stamp ? new Date(Number(stamp) * 1000).toLocaleString('fa-IR') : '—');
 
 export function agentView(root, ctx) {
-  let mode = 'goal'; // 'goal' | 'shell' | 'status'
+  let mode = 'goal'; // 'goal' | 'shell' | 'status' | 'refs'
   let error = null;
   let busy = '';
 
@@ -59,6 +62,7 @@ export function agentView(root, ctx) {
     tabBtn('goal', 'هدف'),
     tabBtn('shell', 'پوسته'),
     tabBtn('status', 'وضعیت زنده'),
+    tabBtn('refs', 'مراجع و فرمان‌ها'),
   );
 
   function tabBtn(id, label) {
@@ -74,6 +78,7 @@ export function agentView(root, ctx) {
           }
           paneHost.replaceChildren(...panes[id].render());
           if (id === 'status') panes.status.refresh();
+          if (id === 'refs') panes.refs.refresh();
         },
       },
       label,
@@ -488,6 +493,216 @@ export function agentView(root, ctx) {
     ];
   }
 
+  // ════════════════ tab 4: references + commands ═════════════════════════
+  let parsedRefs = null;
+  let filePreview = null;
+  let conversationRef = null;
+  let commandPalette = null;
+  const refsInput = h('textarea', {
+    class: 'input',
+    rows: 3,
+    placeholder: '@sales.csv #session-id /goal !ls -la',
+  });
+  const refsPath = h('input', {
+    class: 'input mono',
+    dir: 'ltr',
+    placeholder: 'نسبت به ریشه: sales.csv',
+  });
+  const refsSession = h('input', {
+    class: 'input mono',
+    dir: 'ltr',
+    placeholder: 'شناسهٔ نشست گفتگو',
+  });
+  const commandQuery = h('input', { class: 'input mono', dir: 'ltr', placeholder: '/go یا goal' });
+  const refsRoot = h('select', { class: 'input' });
+
+  function renderRefsRoots() {
+    refsRoot.replaceChildren(
+      h('option', { value: '', text: 'ریشهٔ ثبت‌شده را انتخاب کنید' }),
+      ...roots.map((r) =>
+        h('option', { value: r.root_id || '', text: r.name || r.path || r.root_id }),
+      ),
+    );
+  }
+
+  function renderRefs() {
+    const children = [
+      h(
+        'div',
+        { class: 'section-card card' },
+        h('span', { class: 'micro', text: 'REFERENCE PARSER' }),
+        h('span', {
+          class: 'muted ag-note',
+          text: 'مراجع فقط وقتی دنبال می‌شوند که خودتان صریحاً بنویسید: @فایل، #نشست، /فرمان یا !پوسته.',
+        }),
+        refsInput,
+        h(
+          'button',
+          {
+            class: 'btn btn-primary',
+            onclick: async () => {
+              if (!refsInput.value.trim()) return;
+              busy = 'در حال تجزیهٔ مراجع واقعی…';
+              error = null;
+              renderStatus();
+              try {
+                parsedRefs = await api.refsParse(refsInput.value.trim());
+              } catch (e) {
+                error = msg(e);
+              } finally {
+                busy = '';
+                renderStatus();
+                renderRefsPane();
+              }
+            },
+          },
+          h('span', { html: ic('search') }),
+          'تجزیهٔ مراجع',
+        ),
+        h('span', {
+          class: 'muted ag-note',
+          text: 'تجزیه فقط گزارش می‌دهد؛ هیچ فایل، نشست یا فرمانی خودکار باز یا اجرا نمی‌شود.',
+        }),
+      ),
+      h(
+        'div',
+        { class: 'section-card card' },
+        h('span', { class: 'micro', text: 'FILE REFERENCE' }),
+        refsRoot,
+        refsPath,
+        h(
+          'button',
+          {
+            class: 'btn',
+            onclick: async () => {
+              if (!refsRoot.value || !refsPath.value.trim()) return;
+              busy = 'در حال خواندن پیش‌نمایش فایل از هسته…';
+              error = null;
+              renderStatus();
+              try {
+                filePreview = await api.refsFile(refsRoot.value, refsPath.value.trim());
+              } catch (e) {
+                error = msg(e);
+              } finally {
+                busy = '';
+                renderStatus();
+                renderRefsPane();
+              }
+            },
+          },
+          'پیش‌نمایش فایل',
+        ),
+      ),
+      h(
+        'div',
+        { class: 'section-card card' },
+        h('span', { class: 'micro', text: 'CONVERSATION REFERENCE' }),
+        refsSession,
+        h(
+          'button',
+          {
+            class: 'btn',
+            onclick: async () => {
+              if (!refsSession.value.trim()) return;
+              busy = 'در حال resolve کردن شناسهٔ نشست…';
+              error = null;
+              renderStatus();
+              try {
+                conversationRef = await api.refsConversation(refsSession.value.trim());
+              } catch (e) {
+                error = msg(e);
+              } finally {
+                busy = '';
+                renderStatus();
+                renderRefsPane();
+              }
+            },
+          },
+          'resolve نشست',
+        ),
+      ),
+      h(
+        'div',
+        { class: 'section-card card' },
+        h('span', { class: 'micro', text: 'COMMAND PALETTE' }),
+        commandQuery,
+        h(
+          'button',
+          {
+            class: 'btn',
+            onclick: async () => {
+              busy = 'در حال خواندن فهرست فرمان‌های هسته…';
+              error = null;
+              renderStatus();
+              try {
+                commandPalette = await api.commandsList(commandQuery.value.trim());
+              } catch (e) {
+                error = msg(e);
+              } finally {
+                busy = '';
+                renderStatus();
+                renderRefsPane();
+              }
+            },
+          },
+          'فهرست فرمان‌ها',
+        ),
+      ),
+    ];
+    if (parsedRefs)
+      children.push(
+        h(
+          'div',
+          { class: 'section-card card' },
+          h('span', { class: 'micro', text: 'PARSED' }),
+          h('pre', {
+            class: 'shell-out mono',
+            dir: 'ltr',
+            text: JSON.stringify(parsedRefs, null, 2),
+          }),
+        ),
+      );
+    if (filePreview)
+      children.push(
+        h(
+          'div',
+          { class: 'section-card card' },
+          h('span', { class: 'micro', text: 'FILE PREVIEW' }),
+          h('div', { class: 'result-text', text: filePreview.summary || filePreview.path || '—' }),
+          h('span', {
+            class: 'muted',
+            text: `${filePreview.type || 'file'} · مسیر از هستهٔ فضای کاری`,
+          }),
+        ),
+      );
+    if (conversationRef)
+      children.push(
+        h(
+          'div',
+          { class: 'section-card card' },
+          h('span', { class: 'micro', text: 'CONVERSATION' }),
+          h('div', { class: 'result-text', text: conversationRef.reference || '—' }),
+        ),
+      );
+    if (commandPalette)
+      children.push(
+        h(
+          'div',
+          { class: 'section-card card' },
+          h('span', { class: 'micro', text: 'COMMANDS' }),
+          ...(commandPalette.commands || []).map((c) =>
+            h(
+              'div',
+              { class: 'crit-row' },
+              h('span', { class: 'chip ok' }, h('span', { class: 'dot' }), c.title),
+              h('span', { class: 'crit-text', text: c.summary }),
+            ),
+          ),
+        ),
+      );
+    return children;
+  }
+
   const panes = {
     goal: { render: renderGoal },
     shell: {
@@ -512,6 +727,17 @@ export function agentView(root, ctx) {
         paneHost.replaceChildren(...renderStatusTab());
       },
     },
+    refs: {
+      render: renderRefs,
+      refresh: async () => {
+        try {
+          roots = (await api.wsRootsList())?.roots || [];
+        } catch {
+          roots = [];
+        }
+        renderRefsRoots();
+      },
+    },
   };
 
   function renderGoalPane() {
@@ -519,6 +745,9 @@ export function agentView(root, ctx) {
   }
   function renderShellPane() {
     if (mode === 'shell') paneHost.replaceChildren(...renderShell());
+  }
+  function renderRefsPane() {
+    if (mode === 'refs') paneHost.replaceChildren(...renderRefs());
   }
 
   // ── layout ───────────────────────────────────────────────────────────────

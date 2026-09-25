@@ -122,6 +122,17 @@ describe('browser environment (no Tauri)', () => {
     );
   });
 
+  it('reference and command helpers are wired to the real bridge — honest in the browser', async () => {
+    await expect(api.refsParse('@sales.csv #session /goal !ls')).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+    await expect(api.refsFile('root_x', 'sales.csv')).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+    await expect(api.refsConversation('session_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.commandsList('/go')).rejects.toBeInstanceOf(BridgeUnavailableError);
+  });
+
   it('tts helpers are wired to the real bridge — honest in the browser', async () => {
     await expect(api.ttsEngines()).rejects.toBeInstanceOf(BridgeUnavailableError);
     await expect(api.ttsVoices('piper')).rejects.toBeInstanceOf(BridgeUnavailableError);

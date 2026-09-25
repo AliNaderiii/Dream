@@ -281,6 +281,20 @@ export const api = {
   /** workspace.agentmode_status — live goals + subagent registry. */
   amStatus: () => call('workspace.agentmode_status', {}, { timeoutMs: 30_000 }),
 
+  /** workspace.refs_parse — parse explicit @file, #conversation, /command, !shell references. */
+  refsParse: (text) => call('workspace.refs_parse', { text }, { timeoutMs: 30_000 }),
+
+  /** workspace.refs_file — preview a file inside a registered workspace root. */
+  refsFile: (rootId, path) =>
+    call('workspace.refs_file', { root_id: rootId, path }, { timeoutMs: 60_000 }),
+
+  /** workspace.refs_conversation — resolve an explicit conversation reference. */
+  refsConversation: (sessionId) =>
+    call('workspace.refs_conversation', { session_id: sessionId }, { timeoutMs: 30_000 }),
+
+  /** workspace.commands_list — real command palette from the core registry. */
+  commandsList: (query = '') => call('workspace.commands_list', { query }, { timeoutMs: 30_000 }),
+
   /** workspace.shell_propose — classify a command's risk (no execution). */
   shPropose: (command, cwd) =>
     call('workspace.shell_propose', cwd ? { command, cwd } : { command }, { timeoutMs: 30_000 }),

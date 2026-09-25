@@ -8,6 +8,37 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.11.0] - 2026-09-25
+
+### Added — explicit references and command palette, batch 10
+
+- **مراجع و فرمان‌ها** added as a fourth real Agent Mode workbench.
+  The UI exposes four approval-free, explicit tools:
+  - `workspace.refs_parse`: parses only user-written `@file`,
+    `#conversation`, `/command`, and `!shell` references; it does not
+    open, fetch, or execute anything automatically.
+  - `workspace.refs_file`: previews a relative path through the real
+    registered workspace service; root selection is explicit and the
+    core's safe preview/redaction rules remain in force.
+  - `workspace.refs_conversation`: resolves the explicit session ID
+    into a conversation reference; no conversation is silently loaded.
+  - `workspace.commands_list`: reads the real Persian/English command
+    palette from `agentmodes.refs.COMMAND_PALETTE`.
+- Browser-honest tests cover the fourth tab, each bridge helper, and
+  the no-fake-result/no-auto-open behavior.
+
+### Zero-simulation verdict
+
+- No chat parser, auto-file opening, auto-conversation loading, or shell
+  execution was added. The user must choose every action explicitly.
+- `agentmodes.refs` and the workspace preview service are real and
+  bounded; the UI surfaces their output without inventing content.
+
+### Tests
+
+- 118 frontend tests, 18 files after adding the references workbench;
+  4254 Python tests remain the baseline.
+
 ## [5.10.0] - 2026-09-25
 
 ### Added — honest diagram review, batch 9

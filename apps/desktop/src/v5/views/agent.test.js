@@ -40,6 +40,17 @@ describe('agent view', () => {
     expect(root.textContent).toContain('نه LLM');
   });
 
+  it('renders the references and commands workbench', () => {
+    const { root } = mount();
+    const tab = [...root.querySelectorAll('.voice-tabs .voice-tab')].find((b) =>
+      b.textContent.includes('مراجع و فرمان‌ها'),
+    );
+    expect(tab).toBeTruthy();
+    tab.click();
+    expect(root.textContent).toContain('تجزیهٔ مراجع');
+    expect(root.textContent).toContain('فهرست فرمان‌ها');
+  });
+
   it('states that dangerous shell never spawns, even if approved', () => {
     const { root } = mount();
     const tab = [...root.querySelectorAll('.voice-tabs .voice-tab')].find((b) =>
@@ -47,6 +58,23 @@ describe('agent view', () => {
     );
     tab.click();
     expect(root.textContent).toContain('هرگز');
+  });
+
+  it('is honest in the references workbench — no fake parse result in browser', async () => {
+    const { root } = mount();
+    const tab = [...root.querySelectorAll('.voice-tabs .voice-tab')].find((b) =>
+      b.textContent.includes('مراجع و فرمان‌ها'),
+    );
+    tab.click();
+    const input = root.querySelector('textarea.input');
+    input.value = '@sales.csv #session /goal';
+    const parse = [...root.querySelectorAll('button')].find((b) =>
+      b.textContent.includes('تجزیهٔ مراجع'),
+    );
+    parse.click();
+    await flush();
+    expect(root.textContent).toContain('دسکتاپ');
+    expect(root.querySelectorAll('.crit-row').length).toBe(0);
   });
 
   it('offers starting a goal with acceptance criteria', () => {
