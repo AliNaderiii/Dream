@@ -13,12 +13,25 @@ const msg = (e) => (e instanceof BridgeUnavailableError ? e.message : e?.message
 
 export function visionView(root, ctx) {
   let result = null; // capture_screen OCR result
+  let diagramResult = null; // inspect_diagram structural result
   let pdfResult = null;
   let pdfEvidence = null; // shown on demand — the drawer never opens itself
   let busy = '';
   let error = null;
 
   const stage = h('div', { class: 'vision-stage' });
+  const diagramStage = h('div', { class: 'vision-diagram-stage' });
+  const diagramInput = h('textarea', {
+    class: 'input vision-diagram-input',
+    rows: 7,
+    placeholder: 'Mermaid یا SVG را اینجا وارد کنید…',
+  });
+  const diagramFormat = h(
+    'select',
+    { class: 'input vision-diagram-format', 'aria-label': 'نوع نمودار' },
+    h('option', { value: 'mermaid', text: 'Mermaid' }),
+    h('option', { value: 'svg', text: 'SVG' }),
+  );
 
   function notice(text, cls = 'err') {
     return h('div', { class: `notice ${cls}`, html: ic(cls === 'ok' ? 'check' : 'alert') }, text);
@@ -135,6 +148,89 @@ export function visionView(root, ctx) {
     stage.replaceChildren(...children);
   }
 
+  function renderDiagram() {
+    const children = [
+      h('div', { class: 'micro', text: 'DIAGRAM REVIEW' }),
+      h('div', {
+        class: 'vision-diagram-note',
+        text: 'بازبینی ساختاری واقعی Mermaid/SVG — بدون رندر یا ادعای دیدن تصویر',
+      }),
+      h('div', { class: 'vision-diagram-form' }, diagramInput, diagramFormat),
+      h(
+        'button',
+        { class: 'btn btn-primary', disabled: !!busy, onclick: inspectDiagram },
+        h('span', { html: ic('search') }),
+        'بازبینی نمودار',
+      ),
+    ];
+    if (diagramResult) {
+      const valid = diagramResult.valid;
+      const facts = diagramResult.diagram_type
+        ? `${diagramResult.diagram_type} · ${diagramResult.total_nodes ?? 0} گره · ${diagramResult.total_edges ?? 0} اتصال`
+        : `${diagramResult.total_visual_elements ?? 0} عنصر بصری · ${diagramResult.has_persian_text ? 'متن فارسی دارد' : 'بدون متن فارسی'}`;
+      children.push(
+        h(
+          'div',
+          { class: `result-panel card ${valid ? '' : 'result-panel-warn'}` },
+          h('span', { class: 'micro', text: 'STRUCTURE' }),
+          h('div', {
+            class: 'result-text',
+            text: diagramResult.summary_fa || diagramResult.error || '—',
+          }),
+          h(
+            'span',
+            { class: `chip ${valid ? 'ok' : 'warn'}` },
+            h('span', { class: 'dot' }),
+            valid ? facts : 'ورودی معتبر نیست',
+          ),
+          h(
+            'button',
+            {
+              class: 'btn btn-sm evidence-link',
+              onclick: () =>
+                ctx.openEvidence({
+                  title: 'شواهد بازبینی نمودار',
+                  steps: [
+                    {
+                      name: 'متن انتخابی کاربر',
+                      detail: `${diagramInput.value.length} نویسه`,
+                      meta: diagramFormat.value,
+                    },
+                    {
+                      name: 'vision.inspect_diagram',
+                      detail: diagramResult.summary_fa || diagramResult.error || '—',
+                      meta: 'parser هسته',
+                    },
+                  ],
+                }),
+            },
+            h('span', { html: ic('evidence') }),
+            'شواهد بازبینی',
+          ),
+        ),
+      );
+    }
+    diagramStage.replaceChildren(h('div', { class: 'vision-diagram card' }, ...children));
+  }
+
+  async function inspectDiagram() {
+    const content = diagramInput.value.trim();
+    if (!content) return;
+    busy = 'در حال بازبینی ساختار نمودار…';
+    error = null;
+    renderStage();
+    renderDiagram();
+    try {
+      diagramResult = await api.visionInspectDiagram(content, diagramFormat.value);
+    } catch (e) {
+      error = msg(e);
+    } finally {
+      busy = '';
+      renderStage();
+      renderDiagram();
+    }
+  }
+
   async function capture() {
     busy = 'در حال عکس‌گرفتن از صفحه و استخراج متن…';
     error = null;
@@ -214,8 +310,10 @@ export function visionView(root, ctx) {
         ),
       ),
       stage,
+      diagramStage,
     ),
   );
 
   renderStage();
+  renderDiagram();
 }

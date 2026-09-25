@@ -116,6 +116,12 @@ describe('browser environment (no Tauri)', () => {
     await expect(api.dataChart('s_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
   });
 
+  it('diagram inspection is wired to the real bridge — honest in the browser', async () => {
+    await expect(api.visionInspectDiagram('graph TD\n A --> B', 'mermaid')).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+  });
+
   it('tts helpers are wired to the real bridge — honest in the browser', async () => {
     await expect(api.ttsEngines()).rejects.toBeInstanceOf(BridgeUnavailableError);
     await expect(api.ttsVoices('piper')).rejects.toBeInstanceOf(BridgeUnavailableError);

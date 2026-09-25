@@ -36,6 +36,22 @@ describe('vision view', () => {
     expect(root.querySelector('.result-text')).toBeNull();
   });
 
+  it('offers real Mermaid/SVG structural review without claiming image vision', async () => {
+    const { root } = mount();
+    await flush();
+    expect(root.textContent).toContain('بازبینی نمودار');
+    expect(root.textContent).toContain('بدون رندر یا ادعای دیدن تصویر');
+    const input = root.querySelector('.vision-diagram-input');
+    input.value = 'graph TD\\n A --> B';
+    const button = [...root.querySelectorAll('button')].find((b) =>
+      b.textContent.includes('بازبینی نمودار'),
+    );
+    button.click();
+    await flush();
+    expect(root.textContent).toContain('دسکتاپ');
+    expect(root.querySelector('.vision-diagram-stage .result-text')).toBeNull();
+  });
+
   it('never opens the evidence drawer on its own', async () => {
     const { opened } = mount();
     await flush();

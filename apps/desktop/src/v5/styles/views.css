@@ -1963,3 +1963,36 @@
   display: block;
   margin: 0 auto;
 }
+
+/* ---- vision: honest diagram review ---------------------------------------- */
+.vision-diagram-stage {
+  margin-top: 18px;
+}
+.vision-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vision-diagram-note {
+  color: var(--tx-2);
+  font-size: var(--fs-12);
+  line-height: 1.7;
+}
+.vision-diagram-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.vision-diagram-input {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  direction: ltr;
+  text-align: left;
+  font-family: var(--font-mono);
+  line-height: 1.6;
+}
+.vision-diagram-format {
+  width: max-content;
+  min-width: 120px;
+}

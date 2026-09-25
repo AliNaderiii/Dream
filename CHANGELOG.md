@@ -8,6 +8,29 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.10.0] - 2026-09-25
+
+### Added — honest diagram review, batch 9
+
+- **بازبینی نمودار واقعی در نمای بینایی.** Added `vision.inspect_diagram`
+  to the desktop bridge and a Persian UI workbench accepting user-provided
+  Mermaid or SVG source. The core parser returns actual structural evidence:
+  Mermaid type, node/edge counts, Persian-label detection, or SVG element
+  counts and validity. No image understanding is claimed; the UI says so.
+- Evidence remains user-triggered only: the diagram evidence drawer never
+  opens automatically.
+- **Zero-simulation verdict recorded:** `vision.decompose_video` calls
+  `extract_from_simulated_video` whenever real frames are absent; it stays
+  unwired. `vision.analyze_image` and `vision.ground_ui_elements` consume
+  descriptors rather than decoding pixels; they stay unwired as image
+  perception features. Existing `vision.capture_screen` remains wired because
+  it performs real GDI capture, OCR, and immediate temp-file deletion.
+
+### Tests
+
+- 115 frontend tests after adding honest diagram-review coverage and bridge
+  guards; full Python suite remains unchanged.
+
 ## [5.9.0] - 2026-09-24
 
 ### Added — the complete data studio, batch 8 (real engines only)

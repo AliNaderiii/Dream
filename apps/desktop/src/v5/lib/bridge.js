@@ -389,6 +389,14 @@ export const api = {
   visionCaptureScreen: (documentType = 'general') =>
     call('vision.capture_screen', { document_type: documentType }, { timeoutMs: 120_000 }),
 
+  /** vision.inspect_diagram — real Mermaid/SVG structural inspection. */
+  visionInspectDiagram: (content, diagramFormat = 'mermaid') =>
+    call(
+      'vision.inspect_diagram',
+      { content, diagram_format: diagramFormat },
+      { timeoutMs: 60_000 },
+    ),
+
   // ---- OCR ---------------------------------------------------------------
   /** ocr.extract — document_type: general | invoice | receipt | id_card. */
   ocrExtract: (filePath, documentType = 'general') =>
