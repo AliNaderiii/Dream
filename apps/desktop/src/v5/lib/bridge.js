@@ -403,6 +403,14 @@ export const api = {
   visionCaptureScreen: (documentType = 'general') =>
     call('vision.capture_screen', { document_type: documentType }, { timeoutMs: 120_000 }),
 
+  /** vision.get_backend_contract — fail-closed MIME/quota/network contract. */
+  visionBackendContract: (provider, model) =>
+    call(
+      'vision.get_backend_contract',
+      { provider, model, configured: false },
+      { timeoutMs: 30_000 },
+    ),
+
   /** vision.get_capabilities — truthful readiness matrix; no network probe. */
   visionCapabilities: () => call('vision.get_capabilities', {}, { timeoutMs: 30_000 }),
 

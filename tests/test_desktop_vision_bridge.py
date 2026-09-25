@@ -12,6 +12,7 @@ from dream.bridge.methods_vision import (
     vision_analyze_image,
     vision_decompose_video,
     vision_diff_visual_states,
+    vision_get_backend_contract,
     vision_get_capabilities,
     vision_get_metrics,
     vision_ground_ui_elements,
@@ -38,9 +39,21 @@ def test_vision_bridge_extension_discovery():
     assert "vision.inspect_diagram" in handlers
     assert "vision.diff_visual_states" in handlers
     assert "vision.get_metrics" in handlers
+    assert "vision.get_backend_contract" in handlers
     assert "vision.get_capabilities" in handlers
     assert "vision.inspect_image" in handlers
     assert "vision.reset" in handlers
+
+
+def test_vision_backend_contract_fails_closed():
+    async def _test():
+        result = await vision_get_backend_contract({"provider": "openai", "model": "gpt-4o"})
+        assert result["selection_allowed"] is False
+        assert result["transport_implemented"] is False
+        assert result["image_input"]["max_bytes"] == 20 * 1024 * 1024
+        assert result["privacy"]["network_probe_performed"] is False
+
+    asyncio.run(_test())
 
 
 def test_vision_capabilities_are_truthful():

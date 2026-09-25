@@ -10,6 +10,7 @@ Exposes the Multi-Modal Vision & Video Stream Reasoning Subsystem:
 ``vision.inspect_diagram``        Inspect architectural diagrams and SVG trees
 ``vision.diff_visual_states``     Compute visual differences between screen states
 ``vision.capture_screen``         Capture the real screen and OCR it (v4.5)
+``vision.get_backend_contract``   Fail-closed MIME/quota/network contract
 ``vision.get_capabilities``       Truthful readiness matrix; no network probe
 ``vision.inspect_image``          Bounded metadata intake under a workspace root
 ``vision.get_metrics``            Retrieve operational telemetry for vision subsystem
@@ -28,6 +29,7 @@ from typing import Any
 
 from dream.bridge.errors import invalid_params
 from dream.ocr.tools import ocr_extract_document
+from dream.vision.backend_contract import backend_contract
 from dream.vision.capture import (
     ScreenCaptureError,
     capture_extension,
@@ -227,6 +229,21 @@ async def vision_capture_screen(params: Any = None, **kwargs: Any) -> dict[str, 
         return {"success": False, "error": f"screen capture failed: {exc}"}
 
 
+async def vision_get_backend_contract(params: Any = None, **kwargs: Any) -> dict[str, Any]:
+    """Return the fail-closed multimodal contract; never probes a provider."""
+    data = _params(params, kwargs)
+    provider = data.get("provider")
+    model = data.get("model")
+    configured = data.get("configured", False)
+    if provider is not None and not isinstance(provider, str):
+        raise invalid_params("provider must be a string")
+    if model is not None and not isinstance(model, str):
+        raise invalid_params("model must be a string")
+    if not isinstance(configured, bool):
+        raise invalid_params("configured must be a boolean")
+    return backend_contract(provider, model, configured=configured)
+
+
 async def vision_get_capabilities(params: Any = None, **kwargs: Any) -> dict[str, Any]:
     """Return truthful readiness capabilities; no model or network probe is performed."""
     _params(params, kwargs)
@@ -292,6 +309,7 @@ HANDLERS = {
     "vision.inspect_diagram": vision_inspect_diagram,
     "vision.diff_visual_states": vision_diff_visual_states,
     "vision.capture_screen": vision_capture_screen,
+    "vision.get_backend_contract": vision_get_backend_contract,
     "vision.get_capabilities": vision_get_capabilities,
     "vision.inspect_image": vision_inspect_image,
     "vision.get_metrics": vision_get_metrics,

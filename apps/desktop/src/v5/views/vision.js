@@ -15,6 +15,7 @@ export function visionView(root, ctx) {
   let result = null; // capture_screen OCR result
   let diagramResult = null; // inspect_diagram structural result
   let capabilities = null;
+  let contract = null;
   let imageResult = null;
   let roots = [];
   let pdfResult = null;
@@ -220,6 +221,12 @@ export function visionView(root, ctx) {
           class: 'muted ag-note',
           text: 'image_intake فقط metadata می‌خواند؛ pixels_decoded و inference عمداً false هستند.',
         }),
+        contract
+          ? h('span', {
+              class: 'muted ag-note',
+              text: `قرارداد backend: ${contract.selection_allowed ? 'قابل انتخاب' : 'مسدود تا adapter واقعی'} · MIME: ${contract.image_input.accepted_mime.join(', ')} · سقف: ${contract.image_input.max_bytes} bytes`,
+            })
+          : null,
       ),
     );
   }
@@ -292,6 +299,7 @@ export function visionView(root, ctx) {
   async function loadReadiness() {
     try {
       capabilities = await api.visionCapabilities();
+      contract = await api.visionBackendContract();
     } catch (e) {
       error = msg(e);
     }

@@ -118,6 +118,9 @@ describe('browser environment (no Tauri)', () => {
 
   it('vision readiness and image intake are wired to the real bridge — honest in the browser', async () => {
     await expect(api.visionCapabilities()).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.visionBackendContract('openai', 'gpt-4o')).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
     await expect(api.visionInspectImage('root_x', 'photo.png')).rejects.toBeInstanceOf(
       BridgeUnavailableError,
     );

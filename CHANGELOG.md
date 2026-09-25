@@ -8,6 +8,31 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.14.0] - 2026-09-25
+
+### Added — fail-closed multimodal backend contract, batch 13
+
+- **Explicit backend contract:** `vision.get_backend_contract` returns the
+  accepted image MIME types, 20MB byte limit, 100M-pixel limit, network
+  approval requirement, video status, privacy flags, and selection gate.
+- **Fail-closed selection:** no provider/model is marked image-capable until
+  a real multimodal transport adapter is implemented. The contract returns
+  `transport_implemented: false`, `inference.available: false`, and
+  `selection_allowed: false` without probing the network.
+- **UI visibility:** the Vision readiness panel now surfaces the contract,
+  its MIME/quota boundary, and the exact blocked-until-adapter verdict.
+
+### Zero-simulation verdict
+
+- This release adds no image upload to a provider, no provider probe, no
+  model claim, and no inference fallback. The next adapter must satisfy this
+  contract before the selection gate can open.
+
+### Tests
+
+- 125 frontend tests, 19 files; 13 focused Python contract/intake/vision
+  tests; `ruff`, typecheck, lint, and build green.
+
 ## [5.13.0] - 2026-09-25
 
 ### Added — truthful vision readiness and secure image intake, batch 12
