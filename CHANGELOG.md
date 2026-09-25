@@ -8,6 +8,38 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.12.0] - 2026-09-25
+
+### Added — research publication and episodic memory operations, batch 11
+
+- **پژوهش — ویرایش و انتشار واقعی:**
+  - `research.modify` is now available in the desktop UI while a plan is
+    awaiting approval. The user enters explicit JSON changes (or
+    `{"replan": true}`); no hidden planner mutation occurs.
+  - `research.export` is available after a COMPLETE report and calls the
+    core's real `publish()` checkpoint. The UI does not invent a file path
+    or claim an export artifact the engine did not return.
+- **حافظهٔ اپیزودیک — دو عمل واقعی:**
+  - `episodic.compress_session` turns the selected working session's real
+    turns into a durable Tier-1 `EpisodeRecord`, with domain and bounded
+    working-memory input preserved by the core.
+  - `episodic.consolidate` runs the real Tier-3 persona consolidation over
+    existing episodes and returns the updated persona/mastery result.
+  - Both actions require an explicit button; no automatic compression or
+    consolidation was added.
+- Browser-honest tests cover the new bridge helpers, research actions, and
+  memory operations. Evidence remains user-triggered only.
+
+### Zero-simulation verdict
+
+- All four connected methods use existing real engine state and durable
+  records. No synthetic report, fake episode, fake persona, or pretend file
+  export was added.
+
+### Tests
+
+- 123 frontend tests, 19 files; 4254 Python tests remain the baseline.
+
 ## [5.11.0] - 2026-09-25
 
 ### Added — explicit references and command palette, batch 10

@@ -32,6 +32,11 @@ export function researchView(root, ctx) {
     h('span', { html: ic('search') }),
     'شروع پژوهش',
   );
+  const modifyInput = h('textarea', {
+    class: 'input research-modify-input',
+    rows: 3,
+    placeholder: '{"objective":"..."} یا {"sections":[{"title":"..."}]}',
+  });
   const stage = h('div', { class: 'research-stage' });
   let busy = false;
 
@@ -143,6 +148,17 @@ export function researchView(root, ctx) {
       children.push(
         h(
           'div',
+          { class: 'section-card card research-modify' },
+          h('span', { class: 'micro', text: 'EDIT PLAN — JSON EXPLICIT' }),
+          h('span', {
+            class: 'muted',
+            text: 'ویرایش فقط پس از ورود صریح شما اعمال می‌شود؛ برای برنامه‌ریزی مجدد از {"replan":true} استفاده کنید.',
+          }),
+          modifyInput,
+          h('button', { class: 'btn btn-sm', onclick: modifyPlan }, 'اعمال اصلاح برنامه'),
+        ),
+        h(
+          'div',
           { class: 'doc-actions' },
           h(
             'button',
@@ -185,6 +201,14 @@ export function researchView(root, ctx) {
           { class: 'result-panel card' },
           h('span', { class: 'micro', text: 'REPORT' }),
           h('div', { class: 'result-text', text }),
+          h(
+            'button',
+            { class: 'btn btn-sm', disabled: !!busy, onclick: exportReport },
+            'انتشار گزارش مستند',
+          ),
+          exportResult
+            ? h('span', { class: 'chip ok' }, h('span', { class: 'dot' }), 'گزارش در هسته منتشر شد')
+            : null,
         ),
       );
     }
@@ -244,6 +268,41 @@ export function researchView(root, ctx) {
   }
 
   let runEvidence = null; // shown on demand — the drawer never opens itself
+  let exportResult = null;
+
+  async function modifyPlan() {
+    let changes;
+    try {
+      changes = JSON.parse(modifyInput.value.trim());
+    } catch {
+      renderStage({ error: 'اصلاح برنامه باید JSON معتبر باشد.' });
+      return;
+    }
+    busy = true;
+    renderStage({ busyLabel: 'در حال اعمال اصلاح صریح روی برنامه…' });
+    try {
+      const modified = await api.researchModify(session.session_id, changes);
+      session = { ...session, ...modified };
+      await refresh();
+    } catch (e) {
+      renderStage({ error: msg(e) });
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function exportReport() {
+    busy = true;
+    renderStage({ busyLabel: 'در حال انتشار گزارش کامل در هسته…' });
+    try {
+      exportResult = await api.researchExport(session.session_id);
+      await refresh();
+    } catch (e) {
+      renderStage({ error: msg(e) });
+    } finally {
+      busy = false;
+    }
+  }
 
   async function approve() {
     busy = true;

@@ -478,6 +478,14 @@ export const api = {
   episodicRecord: (sessionId, speaker, text) =>
     call('episodic.record_event', { session_id: sessionId, speaker, text }, { timeoutMs: 30_000 }),
 
+  /** episodic.compress_session — durable Tier-1 episode from working turns. */
+  episodicCompress: (sessionId, domain = 'general') =>
+    call('episodic.compress_session', { session_id: sessionId, domain }, { timeoutMs: 60_000 }),
+
+  /** episodic.consolidate — real Tier-3 persona consolidation. */
+  episodicConsolidate: (minEpisodes = 1) =>
+    call('episodic.consolidate', { min_episodes: minEpisodes }, { timeoutMs: 60_000 }),
+
   // ---- research ----------------------------------------------------------
   /** research.create — {topic, workspace} → session summary. */
   researchCreate: (topic, workspace) =>
@@ -497,4 +505,12 @@ export const api = {
 
   /** research.list — persisted session summaries, newest first. */
   researchList: () => call('research.list', {}, { timeoutMs: 30_000 }),
+
+  /** research.modify — explicit plan edits or {replan: true}. */
+  researchModify: (sessionId, changes) =>
+    call('research.modify', { session_id: sessionId, changes }, { timeoutMs: 120_000 }),
+
+  /** research.export — publish a COMPLETE report through the core artifact store. */
+  researchExport: (sessionId) =>
+    call('research.export', { session_id: sessionId }, { timeoutMs: 120_000 }),
 };

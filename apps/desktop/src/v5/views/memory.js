@@ -21,6 +21,16 @@ export function memoryView(root) {
   const stats = {};
   const tierHost = h('div', { class: 'memory-tiers' });
   const results = h('div', { class: 'memory-results' });
+  const ops = h('div', { class: 'memory-ops' });
+  const episodicSession = h('input', {
+    class: 'input mono',
+    dir: 'ltr',
+    placeholder: 'شناسه نشست برای فشرده‌سازی',
+  });
+  const episodicDomain = h('input', {
+    class: 'input',
+    placeholder: 'حوزه نشست — مثلاً پژوهش',
+  });
   const queryInput = h('input', {
     class: 'input data-question',
     placeholder: 'جست‌وجو در حافظه… مثلاً: درباره پروژه پونیشا چه می‌دانی؟',
@@ -115,6 +125,46 @@ export function memoryView(root) {
     }
   }
 
+  async function compress() {
+    const sessionId = episodicSession.value.trim();
+    if (!sessionId) return;
+    ops.replaceChildren(
+      h('div', { class: 'notice', html: ic('refresh') }, 'در حال فشرده‌سازی واقعی نشست…'),
+    );
+    try {
+      const res = await api.episodicCompress(sessionId, episodicDomain.value.trim() || 'general');
+      ops.replaceChildren(
+        h(
+          'div',
+          { class: 'notice ok', html: ic('check') },
+          `اپیزود واقعی ساخته شد: ${res?.episode?.episode_id || '—'}`,
+        ),
+      );
+      await loadStats();
+    } catch (e) {
+      ops.replaceChildren(h('div', { class: 'notice err', html: ic('alert') }, msg(e)));
+    }
+  }
+
+  async function consolidate() {
+    ops.replaceChildren(
+      h('div', { class: 'notice', html: ic('refresh') }, 'در حال تثبیت واقعی حافظه بلندمدت…'),
+    );
+    try {
+      const res = await api.episodicConsolidate(1);
+      ops.replaceChildren(
+        h(
+          'div',
+          { class: 'notice ok', html: ic('check') },
+          `تثبیت واقعی انجام شد: ${res?.persona?.total_episodes_synthesized ?? 0} اپیزود`,
+        ),
+      );
+      await loadStats();
+    } catch (e) {
+      ops.replaceChildren(h('div', { class: 'notice err', html: ic('alert') }, msg(e)));
+    }
+  }
+
   root.append(
     h(
       'div',
@@ -147,6 +197,23 @@ export function memoryView(root) {
             text: 'هر چیزی که ایجنت یاد می‌گیرد روی سیستم خودتان می‌ماند و قابل بازبینی است.',
           }),
         ),
+      ),
+      h(
+        'div',
+        { class: 'memory-ops-card card' },
+        h('span', { class: 'micro', text: 'MEMORY OPERATIONS' }),
+        h('span', {
+          class: 'muted',
+          text: 'فشرده‌سازی و تثبیت فقط با انتخاب صریح شما انجام می‌شود؛ هسته خروجی واقعی را برمی‌گرداند.',
+        }),
+        h('div', { class: 'data-ask-row' }, episodicSession, episodicDomain),
+        h(
+          'div',
+          { class: 'settings-actions' },
+          h('button', { class: 'btn', onclick: compress }, 'فشرده‌سازی نشست'),
+          h('button', { class: 'btn btn-primary', onclick: consolidate }, 'تثبیت حافظه بلندمدت'),
+        ),
+        ops,
       ),
       tierHost,
       results,

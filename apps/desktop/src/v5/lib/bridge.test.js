@@ -133,6 +133,17 @@ describe('browser environment (no Tauri)', () => {
     await expect(api.commandsList('/go')).rejects.toBeInstanceOf(BridgeUnavailableError);
   });
 
+  it('research and episodic completion helpers are wired to the real bridge — honest in the browser', async () => {
+    await expect(api.researchModify('research_x', { replan: true })).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+    await expect(api.researchExport('research_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.episodicCompress('session_x', 'research')).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+    await expect(api.episodicConsolidate()).rejects.toBeInstanceOf(BridgeUnavailableError);
+  });
+
   it('tts helpers are wired to the real bridge — honest in the browser', async () => {
     await expect(api.ttsEngines()).rejects.toBeInstanceOf(BridgeUnavailableError);
     await expect(api.ttsVoices('piper')).rejects.toBeInstanceOf(BridgeUnavailableError);
