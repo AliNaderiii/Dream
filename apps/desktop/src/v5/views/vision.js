@@ -17,6 +17,7 @@ export function visionView(root, ctx) {
   let capabilities = null;
   let contract = null;
   let imageResult = null;
+  let imageAnalysis = null;
   let roots = [];
   let pdfResult = null;
   let pdfEvidence = null; // shown on demand — the drawer never opens itself
@@ -32,6 +33,10 @@ export function visionView(root, ctx) {
     class: 'input mono',
     dir: 'ltr',
     placeholder: 'مسیر نسبی تصویر در ریشه، مثلاً assets/photo.png',
+  });
+  const imagePrompt = h('input', {
+    class: 'input',
+    placeholder: 'پرسش برای backend تصویری (فقط با adapter آماده)',
   });
   const diagramInput = h('textarea', {
     class: 'input vision-diagram-input',
@@ -252,6 +257,16 @@ export function visionView(root, ctx) {
           },
           'بازبینی metadata تصویر',
         ),
+        imagePrompt,
+        h(
+          'button',
+          {
+            class: 'btn btn-primary',
+            disabled: !contract?.selection_allowed || !!busy,
+            onclick: analyzeRemote,
+          },
+          'تحلیل واقعی با adapter',
+        ),
         imageResult
           ? h(
               'div',
@@ -266,6 +281,15 @@ export function visionView(root, ctx) {
                 class: 'muted',
                 text: 'pixels_decoded=false · inference_available=false · network_sent=false',
               }),
+            )
+          : null,
+        imageAnalysis
+          ? h(
+              'div',
+              { class: 'result-panel card' },
+              h('span', { class: 'micro', text: 'REMOTE ADAPTER RESULT' }),
+              h('div', { class: 'result-text', text: imageAnalysis.answer || '' }),
+              h('pre', { class: 'mono', text: JSON.stringify(imageAnalysis.provenance || {}, null, 2) }),
             )
           : null,
       ),
@@ -287,6 +311,34 @@ export function visionView(root, ctx) {
     renderImage();
     try {
       imageResult = await api.visionInspectImage(imageRoot.value, imagePath.value.trim());
+    } catch (e) {
+      error = msg(e);
+    } finally {
+      busy = '';
+      renderStage();
+      renderImage();
+    }
+  }
+
+  async function analyzeRemote() {
+    if (!imageRoot.value || !imagePath.value.trim() || !imagePrompt.value.trim()) return;
+    if (!contract?.selection_allowed) {
+      error = 'adapter تصویر هنوز پیکربندی نشده است؛ credential و model را در environment تنظیم کنید.';
+      renderStage();
+      renderImage();
+      return;
+    }
+    busy = 'در حال ارسال مورد تأییدشده به adapter تصویری…';
+    error = null;
+    imageAnalysis = null;
+    renderStage();
+    renderImage();
+    try {
+      imageAnalysis = await api.visionAnalyzeImageRemote(
+        imageRoot.value,
+        imagePath.value.trim(),
+        imagePrompt.value.trim(),
+      );
     } catch (e) {
       error = msg(e);
     } finally {

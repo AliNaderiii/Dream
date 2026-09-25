@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 IMAGE_MIME_ALLOWLIST = ("image/png", "image/jpeg", "image/gif", "image/bmp", "image/webp")
@@ -16,15 +17,20 @@ def backend_contract(
     configured: bool = False,
 ) -> dict[str, Any]:
     """Return the contract without probing or claiming an inference adapter."""
-    provider_name = (provider or "").strip() or None
-    model_name = (model or "").strip() or None
+    provider_name = (provider or "openai-compatible").strip() or "openai-compatible"
+    model_name = (model or os.environ.get("DREAM_VISION_MODEL") or "").strip() or None
+    env_ready = bool(
+        os.environ.get("DREAM_VISION_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    ) and bool(model_name)
+    adapter_ready = provider_name == "openai-compatible" and env_ready
     return {
         "provider": provider_name,
         "model": model_name,
-        "protocol": None,
-        "configured": bool(configured),
-        "selection_allowed": False,
-        "transport_implemented": False,
+        "protocol": "openai-compatible" if provider_name == "openai-compatible" else None,
+        "configured": bool(configured or env_ready),
+        "selection_allowed": adapter_ready,
+        "transport_implemented": provider_name == "openai-compatible",
+        "adapter_ready": adapter_ready,
         "image_input": {
             "accepted_mime": list(IMAGE_MIME_ALLOWLIST),
             "max_bytes": MAX_IMAGE_BYTES,
@@ -33,13 +39,21 @@ def backend_contract(
         },
         "video_input": {"available": False, "reason": "no frame transport adapter"},
         "inference": {
-            "available": False,
-            "reason": "no multimodal transport adapter is implemented",
+            "available": adapter_ready,
+            "reason": (
+                "adapter configured and ready for explicit network approval"
+                if adapter_ready
+                else "adapter is not configured with a credential and model"
+            ),
         },
         "privacy": {
             "network_probe_performed": False,
             "image_sent": False,
             "persistent_copy_created": False,
         },
-        "blocked_reason": "انتخاب backend تا زمان اتصال adapter واقعی مجاز نیست.",
+        "blocked_reason": (
+            "backend آماده است؛ ارسال همچنان نیازمند allow_network=true است."
+            if adapter_ready
+            else "credential و model واقعی برای adapter پیکربندی نشده‌اند."
+        ),
     }

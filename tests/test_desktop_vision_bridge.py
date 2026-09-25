@@ -42,6 +42,7 @@ def test_vision_bridge_extension_discovery():
     assert "vision.get_backend_contract" in handlers
     assert "vision.get_capabilities" in handlers
     assert "vision.inspect_image" in handlers
+    assert "vision.analyze_image_remote" in handlers
     assert "vision.reset" in handlers
 
 

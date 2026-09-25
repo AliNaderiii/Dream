@@ -13,6 +13,7 @@ Exposes the Multi-Modal Vision & Video Stream Reasoning Subsystem:
 ``vision.get_backend_contract``   Fail-closed MIME/quota/network contract
 ``vision.get_capabilities``       Truthful readiness matrix; no network probe
 ``vision.inspect_image``          Bounded metadata intake under a workspace root
+``vision.analyze_image_remote``   Explicitly approved OpenAI-compatible inference
 ``vision.get_metrics``            Retrieve operational telemetry for vision subsystem
 ``vision.reset``                  Clear spatial memory and caches
 ================================  ================================================
@@ -37,6 +38,7 @@ from dream.vision.capture import (
 )
 from dream.vision.engine import get_vision_engine
 from dream.vision.image_intake import ImageIntakeError, inspect_image_bytes
+from dream.vision.openai_multimodal import MultimodalAdapterError, analyze_image
 from dream.workspace.errors import WorkspaceError, WorkspaceSecurityError
 from dream.workspace.service import get_service as workspace_service
 
@@ -288,6 +290,42 @@ async def vision_inspect_image(params: Any = None, **kwargs: Any) -> dict[str, A
         raise invalid_params(str(exc)) from None
 
 
+async def vision_analyze_image_remote(params: Any = None, **kwargs: Any) -> dict[str, Any]:
+    """Run the configured OpenAI-compatible adapter after explicit approval."""
+    data = _params(params, kwargs)
+    root_id = data.get("root_id")
+    rel = data.get("path")
+    prompt = data.get("prompt")
+    allow_network = data.get("allow_network", False)
+    if not isinstance(root_id, str) or not root_id.strip():
+        raise invalid_params("root_id must be a non-empty string")
+    if not isinstance(rel, str) or not rel.strip() or len(rel) > 4_096:
+        raise invalid_params("path must be a non-empty relative path")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise invalid_params("prompt must be a non-empty string")
+    if not isinstance(allow_network, bool):
+        raise invalid_params("allow_network must be a boolean")
+    try:
+        payload = await asyncio.to_thread(workspace_service().files_read_bytes, root_id, rel)
+        metadata = await asyncio.to_thread(inspect_image_bytes, payload, rel)
+        return await asyncio.to_thread(
+            analyze_image,
+            payload,
+            metadata["mime"],
+            prompt,
+            model=data.get("model"),
+            endpoint=data.get("endpoint"),
+            allow_network=allow_network,
+        )
+    except (
+        ImageIntakeError,
+        MultimodalAdapterError,
+        WorkspaceError,
+        WorkspaceSecurityError,
+    ) as exc:
+        raise invalid_params(str(exc)) from None
+
+
 async def vision_get_metrics(params: Any = None, **kwargs: Any) -> dict[str, Any]:
     """Retrieve vision telemetry metrics."""
     engine = get_vision_engine()
@@ -312,6 +350,7 @@ HANDLERS = {
     "vision.get_backend_contract": vision_get_backend_contract,
     "vision.get_capabilities": vision_get_capabilities,
     "vision.inspect_image": vision_inspect_image,
+    "vision.analyze_image_remote": vision_analyze_image_remote,
     "vision.get_metrics": vision_get_metrics,
     "vision.reset": vision_reset,
 }

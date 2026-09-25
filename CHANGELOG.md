@@ -8,6 +8,21 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.15.0] - 2026-09-25
+
+### Added — real OpenAI-compatible multimodal adapter
+
+- **Actual image transport:** sends a bounded image as a data URI in an OpenAI-compatible Chat Completions request.
+- **Fail-closed network gate:** image transmission requires explicit `allow_network=true`; readiness never probes the provider.
+- **Credential boundary:** API credentials are read only from `DREAM_VISION_API_KEY` or `OPENAI_API_KEY`, never from RPC/UI parameters or provenance.
+- **Secure endpoint policy:** HTTPS is required for remote endpoints; plain HTTP is limited to localhost.
+- **Truthful UI:** prompt and inference controls stay disabled until a credential and model are configured in the environment.
+- **Provenance:** results expose protocol, model, endpoint host, hashes, bytes sent, latency, and network status without returning the image or credential.
+
+### Tests
+
+- Mock-transport adapter tests plus Python vision tests pass; frontend tests, typecheck, lint, and production build pass.
+
 ## [5.14.0] - 2026-09-25
 
 ### Added — fail-closed multimodal backend contract, batch 13

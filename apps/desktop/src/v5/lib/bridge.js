@@ -418,6 +418,14 @@ export const api = {
   visionInspectImage: (rootId, path, name = path) =>
     call('vision.inspect_image', { root_id: rootId, path, name }, { timeoutMs: 60_000 }),
 
+  /** vision.analyze_image_remote — explicit network-approved adapter call. */
+  visionAnalyzeImageRemote: (rootId, path, prompt, model) =>
+    call(
+      'vision.analyze_image_remote',
+      { root_id: rootId, path, prompt, model, allow_network: true },
+      { timeoutMs: 180_000 },
+    ),
+
   /** vision.inspect_diagram — real Mermaid/SVG structural inspection. */
   visionInspectDiagram: (content, diagramFormat = 'mermaid') =>
     call(
