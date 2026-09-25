@@ -1996,3 +1996,18 @@
   width: max-content;
   min-width: 120px;
 }
+
+/* ---- vision readiness + bounded image intake ------------------------------- */
+.vision-readiness-stage,
+.vision-image-stage {
+  margin-top: 18px;
+}
+.vision-readiness,
+.vision-image {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vision-image .input {
+  width: 100%;
+}

@@ -10,7 +10,7 @@ from typing import Any
 
 from dream.workspace.errors import WorkspaceError, WorkspaceSecurityError
 from dream.workspace.files import LIST_CAP, list_entries, stat_entry
-from dream.workspace.paths import normalize_root
+from dream.workspace.paths import normalize_root, resolve_inside
 from dream.workspace.preview import preview_file
 from dream.workspace.projects import ProjectOverlay
 from dream.workspace.registry import WorkspaceRegistry
@@ -144,6 +144,21 @@ class WorkspaceService:
             "text": preview.get("text") or "",
             "truncated": preview.get("truncated", False),
         }
+
+    def files_read_bytes(
+        self, root_id: str, rel: str, *, max_bytes: int = 20 * 1024 * 1024
+    ) -> bytes:
+        """Read bounded binary bytes from a registered root without exposing an absolute path."""
+        if not isinstance(max_bytes, int) or max_bytes < 1:
+            raise WorkspaceError("max_bytes must be a positive integer")
+        path = resolve_inside(self._root_path(root_id), rel)
+        if path.is_symlink() or not path.is_file():
+            raise WorkspaceSecurityError("binary intake is limited to regular non-symlink files")
+        size = path.stat().st_size
+        if size > max_bytes:
+            raise WorkspaceError(f"file exceeds the {max_bytes} byte intake limit")
+        self._log("read_bytes", root_id=root_id, executed=False)
+        return path.read_bytes()
 
     def project_adopt(self, folder: str, name: str | None = None) -> dict[str, Any]:
         imported = self.import_folder(folder, name=name, adopt_project=True)

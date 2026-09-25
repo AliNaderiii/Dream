@@ -10,6 +10,8 @@ Exposes the Multi-Modal Vision & Video Stream Reasoning Subsystem:
 ``vision.inspect_diagram``        Inspect architectural diagrams and SVG trees
 ``vision.diff_visual_states``     Compute visual differences between screen states
 ``vision.capture_screen``         Capture the real screen and OCR it (v4.5)
+``vision.get_capabilities``       Truthful readiness matrix; no network probe
+``vision.inspect_image``          Bounded metadata intake under a workspace root
 ``vision.get_metrics``            Retrieve operational telemetry for vision subsystem
 ``vision.reset``                  Clear spatial memory and caches
 ================================  ================================================
@@ -32,6 +34,9 @@ from dream.vision.capture import (
     capture_screen_to_file,
 )
 from dream.vision.engine import get_vision_engine
+from dream.vision.image_intake import ImageIntakeError, inspect_image_bytes
+from dream.workspace.errors import WorkspaceError, WorkspaceSecurityError
+from dream.workspace.service import get_service as workspace_service
 
 logger = logging.getLogger("dream.bridge.vision")
 
@@ -222,6 +227,50 @@ async def vision_capture_screen(params: Any = None, **kwargs: Any) -> dict[str, 
         return {"success": False, "error": f"screen capture failed: {exc}"}
 
 
+async def vision_get_capabilities(params: Any = None, **kwargs: Any) -> dict[str, Any]:
+    """Return truthful readiness capabilities; no model or network probe is performed."""
+    _params(params, kwargs)
+    return {
+        "status": "ready_for_backend",
+        "capture_screen": {"available": True, "engine": "native GDI + OCR"},
+        "diagram_parser": {"available": True, "engine": "Mermaid/SVG structural parser"},
+        "image_intake": {
+            "available": True,
+            "engine": "dependency-free header validator",
+            "metadata_only": True,
+            "pixels_decoded": False,
+        },
+        "image_inference": {
+            "available": False,
+            "reason": "no multimodal transport or local inference backend is configured",
+        },
+        "video_inference": {
+            "available": False,
+            "reason": "no real frame decoder/inference backend is configured",
+        },
+        "network_sent_by_readiness_probe": False,
+    }
+
+
+async def vision_inspect_image(params: Any = None, **kwargs: Any) -> dict[str, Any]:
+    """Safely inspect metadata for an image inside a registered workspace root."""
+    data = _params(params, kwargs)
+    root_id = data.get("root_id")
+    rel = data.get("path")
+    name = data.get("name", rel or "image")
+    if not isinstance(root_id, str) or not root_id.strip():
+        raise invalid_params("root_id must be a non-empty string")
+    if not isinstance(rel, str) or not rel.strip() or len(rel) > 4_096:
+        raise invalid_params("path must be a non-empty relative path")
+    if not isinstance(name, str):
+        raise invalid_params("name must be a string")
+    try:
+        payload = await asyncio.to_thread(workspace_service().files_read_bytes, root_id, rel)
+        return await asyncio.to_thread(inspect_image_bytes, payload, name)
+    except (ImageIntakeError, WorkspaceError, WorkspaceSecurityError) as exc:
+        raise invalid_params(str(exc)) from None
+
+
 async def vision_get_metrics(params: Any = None, **kwargs: Any) -> dict[str, Any]:
     """Retrieve vision telemetry metrics."""
     engine = get_vision_engine()
@@ -243,6 +292,8 @@ HANDLERS = {
     "vision.inspect_diagram": vision_inspect_diagram,
     "vision.diff_visual_states": vision_diff_visual_states,
     "vision.capture_screen": vision_capture_screen,
+    "vision.get_capabilities": vision_get_capabilities,
+    "vision.inspect_image": vision_inspect_image,
     "vision.get_metrics": vision_get_metrics,
     "vision.reset": vision_reset,
 }

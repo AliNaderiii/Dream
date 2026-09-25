@@ -8,6 +8,38 @@ Release notes for each tag are rendered from the matching section below.
 
 ## Unreleased
 
+## [5.13.0] - 2026-09-25
+
+### Added — truthful vision readiness and secure image intake, batch 12
+
+- **Vision capability matrix:** `vision.get_capabilities` reports real
+  readiness without probing the network. Native screen capture + OCR,
+  Mermaid/SVG parsing, and metadata intake are available; image/video
+  inference is explicitly unavailable because no multimodal transport or
+  local inference backend is configured.
+- **Secure image intake:** `vision.inspect_image` reads only a relative path
+  inside an explicitly selected registered workspace root, refuses symlinks
+  and path escapes through the workspace service, caps input at 20MB and
+  pixels at 100 million, and validates PNG/JPEG/GIF/BMP/WEBP magic headers.
+  It returns dimensions and MIME metadata only — no pixels are decoded,
+  no copy is persisted, no absolute path is returned, and no network call is
+  made.
+- **Honest UI:** Vision now shows the capability boundary and a secure
+  metadata-only intake workbench. It never labels metadata as image
+  understanding and keeps inference controls disabled until a real backend
+  exists.
+
+### Zero-simulation verdict
+
+- No object detection, UI grounding, video understanding, or multimodal
+  inference was added. The existing descriptor-only and simulated-video
+  paths remain unwired by design.
+
+### Tests
+
+- 125 frontend tests, 19 files; 18 focused Python vision/intake tests;
+  `ruff`, typecheck, lint, and build green.
+
 ## [5.12.0] - 2026-09-25
 
 ### Added — research publication and episodic memory operations, batch 11

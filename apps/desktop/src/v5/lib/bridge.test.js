@@ -116,6 +116,13 @@ describe('browser environment (no Tauri)', () => {
     await expect(api.dataChart('s_x')).rejects.toBeInstanceOf(BridgeUnavailableError);
   });
 
+  it('vision readiness and image intake are wired to the real bridge — honest in the browser', async () => {
+    await expect(api.visionCapabilities()).rejects.toBeInstanceOf(BridgeUnavailableError);
+    await expect(api.visionInspectImage('root_x', 'photo.png')).rejects.toBeInstanceOf(
+      BridgeUnavailableError,
+    );
+  });
+
   it('diagram inspection is wired to the real bridge — honest in the browser', async () => {
     await expect(api.visionInspectDiagram('graph TD\n A --> B', 'mermaid')).rejects.toBeInstanceOf(
       BridgeUnavailableError,

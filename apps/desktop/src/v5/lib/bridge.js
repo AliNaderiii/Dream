@@ -403,6 +403,13 @@ export const api = {
   visionCaptureScreen: (documentType = 'general') =>
     call('vision.capture_screen', { document_type: documentType }, { timeoutMs: 120_000 }),
 
+  /** vision.get_capabilities — truthful readiness matrix; no network probe. */
+  visionCapabilities: () => call('vision.get_capabilities', {}, { timeoutMs: 30_000 }),
+
+  /** vision.inspect_image — bounded metadata intake under a registered root. */
+  visionInspectImage: (rootId, path, name = path) =>
+    call('vision.inspect_image', { root_id: rootId, path, name }, { timeoutMs: 60_000 }),
+
   /** vision.inspect_diagram — real Mermaid/SVG structural inspection. */
   visionInspectDiagram: (content, diagramFormat = 'mermaid') =>
     call(

@@ -12,6 +12,7 @@ from dream.bridge.methods_vision import (
     vision_analyze_image,
     vision_decompose_video,
     vision_diff_visual_states,
+    vision_get_capabilities,
     vision_get_metrics,
     vision_ground_ui_elements,
     vision_inspect_diagram,
@@ -37,7 +38,20 @@ def test_vision_bridge_extension_discovery():
     assert "vision.inspect_diagram" in handlers
     assert "vision.diff_visual_states" in handlers
     assert "vision.get_metrics" in handlers
+    assert "vision.get_capabilities" in handlers
+    assert "vision.inspect_image" in handlers
     assert "vision.reset" in handlers
+
+
+def test_vision_capabilities_are_truthful():
+    async def _test():
+        result = await vision_get_capabilities()
+        assert result["image_intake"]["available"] is True
+        assert result["image_intake"]["metadata_only"] is True
+        assert result["image_inference"]["available"] is False
+        assert result["network_sent_by_readiness_probe"] is False
+
+    asyncio.run(_test())
 
 
 def test_vision_analyze_image_and_spatial_memory():

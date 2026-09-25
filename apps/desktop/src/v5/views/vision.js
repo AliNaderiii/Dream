@@ -14,6 +14,9 @@ const msg = (e) => (e instanceof BridgeUnavailableError ? e.message : e?.message
 export function visionView(root, ctx) {
   let result = null; // capture_screen OCR result
   let diagramResult = null; // inspect_diagram structural result
+  let capabilities = null;
+  let imageResult = null;
+  let roots = [];
   let pdfResult = null;
   let pdfEvidence = null; // shown on demand — the drawer never opens itself
   let busy = '';
@@ -21,6 +24,14 @@ export function visionView(root, ctx) {
 
   const stage = h('div', { class: 'vision-stage' });
   const diagramStage = h('div', { class: 'vision-diagram-stage' });
+  const readinessStage = h('div', { class: 'vision-readiness-stage' });
+  const imageStage = h('div', { class: 'vision-image-stage' });
+  const imageRoot = h('select', { class: 'input', 'aria-label': 'ریشهٔ تصویر' });
+  const imagePath = h('input', {
+    class: 'input mono',
+    dir: 'ltr',
+    placeholder: 'مسیر نسبی تصویر در ریشه، مثلاً assets/photo.png',
+  });
   const diagramInput = h('textarea', {
     class: 'input vision-diagram-input',
     rows: 7,
@@ -42,7 +53,7 @@ export function visionView(root, ctx) {
     if (error) children.push(notice(error));
     if (busy) children.push(h('div', { class: 'notice', html: ic('refresh') }, busy));
 
-    if (!result && !busy && !error) {
+    if (!result && !busy) {
       children.push(
         h(
           'div',
@@ -146,6 +157,153 @@ export function visionView(root, ctx) {
       }
     }
     stage.replaceChildren(...children);
+  }
+
+  function renderReadiness() {
+    if (!capabilities) {
+      readinessStage.replaceChildren(
+        h(
+          'div',
+          { class: 'vision-readiness card' },
+          h('span', { class: 'micro', text: 'VISION READINESS' }),
+          h('span', {
+            class: 'muted',
+            text: 'وضعیت capability از هسته خوانده می‌شود؛ هیچ شبکه‌ای برای probe استفاده نمی‌شود. inference فقط با backend واقعی فعال خواهد شد.',
+          }),
+        ),
+      );
+      return;
+    }
+    const rows = [
+      [
+        'capture_screen',
+        capabilities.capture_screen?.available,
+        capabilities.capture_screen?.engine,
+      ],
+      [
+        'diagram_parser',
+        capabilities.diagram_parser?.available,
+        capabilities.diagram_parser?.engine,
+      ],
+      ['image_intake', capabilities.image_intake?.available, capabilities.image_intake?.engine],
+      [
+        'image_inference',
+        capabilities.image_inference?.available,
+        capabilities.image_inference?.reason,
+      ],
+      [
+        'video_inference',
+        capabilities.video_inference?.available,
+        capabilities.video_inference?.reason,
+      ],
+    ];
+    readinessStage.replaceChildren(
+      h(
+        'div',
+        { class: 'vision-readiness card' },
+        h('span', { class: 'micro', text: 'VISION READINESS' }),
+        ...rows.map(([name, available, detail]) =>
+          h(
+            'div',
+            { class: 'crit-row' },
+            h(
+              'span',
+              { class: `chip ${available ? 'ok' : 'warn'}` },
+              h('span', { class: 'dot' }),
+              available ? 'موجود' : 'غیرفعال',
+            ),
+            h('span', { class: 'crit-text mono', text: name }),
+            h('span', { class: 'muted crit-reason', text: detail || '—' }),
+          ),
+        ),
+        h('span', {
+          class: 'muted ag-note',
+          text: 'image_intake فقط metadata می‌خواند؛ pixels_decoded و inference عمداً false هستند.',
+        }),
+      ),
+    );
+  }
+
+  function renderImage() {
+    imageStage.replaceChildren(
+      h(
+        'div',
+        { class: 'vision-image card' },
+        h('span', { class: 'micro', text: 'SECURE IMAGE INTAKE' }),
+        h('span', {
+          class: 'vision-diagram-note',
+          text: 'فقط فایل داخل ریشهٔ ثبت‌شده، با مسیر نسبی و سقف ۲۰MB؛ شبکه و کپی پایدار انجام نمی‌شود.',
+        }),
+        imageRoot,
+        imagePath,
+        h(
+          'button',
+          {
+            class: 'btn',
+            disabled: !capabilities?.image_intake?.available || !!busy,
+            onclick: inspectImage,
+          },
+          'بازبینی metadata تصویر',
+        ),
+        imageResult
+          ? h(
+              'div',
+              { class: 'result-panel card' },
+              h('span', { class: 'micro', text: 'IMAGE METADATA — NO INFERENCE' }),
+              h('div', {
+                class: 'result-text',
+                text: `${imageResult.format.toUpperCase()} · ${imageResult.width}×${imageResult.height} · ${imageResult.bytes} bytes`,
+              }),
+              h('span', { class: 'chip ok' }, h('span', { class: 'dot' }), 'فایل معتبر و محدودشده'),
+              h('span', {
+                class: 'muted',
+                text: 'pixels_decoded=false · inference_available=false · network_sent=false',
+              }),
+            )
+          : null,
+      ),
+    );
+  }
+
+  function renderImageRoots() {
+    imageRoot.replaceChildren(
+      h('option', { value: '', text: 'ریشهٔ ثبت‌شده را انتخاب کنید' }),
+      ...roots.map((r) => h('option', { value: r.root_id || '', text: r.name || r.root_id })),
+    );
+  }
+
+  async function inspectImage() {
+    if (!imageRoot.value || !imagePath.value.trim()) return;
+    busy = 'در حال بررسی امن metadata تصویر…';
+    error = null;
+    renderStage();
+    renderImage();
+    try {
+      imageResult = await api.visionInspectImage(imageRoot.value, imagePath.value.trim());
+    } catch (e) {
+      error = msg(e);
+    } finally {
+      busy = '';
+      renderStage();
+      renderImage();
+    }
+  }
+
+  async function loadReadiness() {
+    try {
+      capabilities = await api.visionCapabilities();
+    } catch (e) {
+      error = msg(e);
+    }
+    try {
+      roots = (await api.wsRootsList())?.roots || [];
+      renderImageRoots();
+    } catch {
+      roots = [];
+    }
+    renderReadiness();
+    renderImage();
+    renderStage();
   }
 
   function renderDiagram() {
@@ -310,10 +468,16 @@ export function visionView(root, ctx) {
         ),
       ),
       stage,
+      readinessStage,
+      imageStage,
       diagramStage,
     ),
   );
 
   renderStage();
+  renderReadiness();
+  renderImageRoots();
+  renderImage();
   renderDiagram();
+  loadReadiness();
 }

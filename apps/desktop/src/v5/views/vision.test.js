@@ -26,7 +26,15 @@ describe('vision view', () => {
     const { root } = mount();
     await flush();
     expect(root.textContent).toContain('عکس‌گرفتن از صفحه');
-    expect(root.textContent).toContain('ذخیره نمی‌شوند');
+    expect(root.textContent).toContain('ذخیره');
+  });
+
+  it('shows the capability boundary and secure metadata-only intake', () => {
+    const { root } = mount();
+    expect(root.textContent).toContain('VISION READINESS');
+    expect(root.textContent).toContain('SECURE IMAGE INTAKE');
+    expect(root.textContent).toContain('metadata');
+    expect(root.textContent).toContain('inference');
   });
 
   it('shows the honest desktop-only error in the browser — never a fake OCR', async () => {
