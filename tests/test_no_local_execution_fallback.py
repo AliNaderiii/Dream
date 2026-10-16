@@ -55,16 +55,20 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 class _SpawnRecorder:
-    """Record every process creation, and refuse the ones that are not allowed.
+    """Record every process creation, and refuse all of them.
 
-    ``allow_programs`` exists because the container executor legitimately starts
-    the ``docker`` *client*; what must never happen is the payload being handed
-    to a host interpreter. Anything not on the allow-list raises, and every
-    attempt is recorded so a test can assert on the whole set.
+    Every attempt is recorded, and any call that is not explicitly excused
+    raises — so a test can assert not only on what ran but on what was never
+    even tried. ``missing_programs`` is the one excuse: those binaries are
+    simulated as *not installed* (the OS's own ``FileNotFoundError``, which is
+    also what asyncio raises), so a "what if docker is absent?" test says the
+    same thing on a laptop, in CI, and on a machine with a live daemon. CI
+    runners may run a daemon, and a test that assumes otherwise tests the host,
+    not the product.
     """
 
-    def __init__(self, allow_programs: tuple[str, ...] = ()) -> None:
-        self.allow_programs = allow_programs
+    def __init__(self, missing_programs: tuple[str, ...] = ()) -> None:
+        self.missing_programs = missing_programs
         self.calls: list[tuple[str, str]] = []
         self._real: dict[str, object] = {}
 
@@ -116,8 +120,10 @@ class _SpawnRecorder:
     def _check(self, name: str, args: tuple) -> None:
         program = self._argv0(args)
         self.calls.append((name, program))
-        if program and program in self.allow_programs:
-            return
+        if program and program in self.missing_programs:
+            # Exactly what the OS reports for an absent binary, which is also
+            # what asyncio raises from create_subprocess_exec.
+            raise FileNotFoundError(2, "No such file or directory", program)
         raise AssertionError(f"a host process was spawned through {name}: {args[:1]!r}")
 
     @property
@@ -134,9 +140,13 @@ def no_spawn(monkeypatch) -> _SpawnRecorder:
 
 
 @pytest.fixture()
-def docker_only(monkeypatch) -> _SpawnRecorder:
-    """Only the docker client may be started — never a host interpreter."""
-    recorder = _SpawnRecorder(allow_programs=("docker",))
+def docker_missing(monkeypatch) -> _SpawnRecorder:
+    """The docker client is not installed, whatever the host actually has.
+
+    This is the portable way to test the no-runtime path: it does not matter
+    whether the machine running the suite has a daemon.
+    """
+    recorder = _SpawnRecorder(missing_programs=("docker",))
     recorder.install(monkeypatch)
     return recorder
 
@@ -223,13 +233,16 @@ def test_the_env_var_no_longer_selects_a_local_executor(monkeypatch, tmp_path, n
     assert no_spawn.calls == []
 
 
-def test_the_container_executor_reports_unavailable_without_docker(docker_only, tmp_path) -> None:
-    """On a machine with no daemon the result is typed, not a host run.
+def test_the_container_executor_reports_unavailable_without_docker(
+    docker_missing, tmp_path
+) -> None:
+    """With no usable runtime the result is typed, never a local run.
 
-    This test doubles as the regression for the search path: before D1 the
-    runtime answered this exact situation by running the script locally. The
-    only process the container path may start is the ``docker`` client — a
-    missing binary reaches the same refusal.
+    This doubles as the regression for the search path: before D1 the runtime
+    answered this exact situation by running the script with the host
+    interpreter. The docker binary is *simulated* as missing rather than assumed
+    missing — CI runners may have a live daemon, and a test that depends on the
+    host's Docker state proves nothing about the product.
     """
     executor = DataScienceRuntime._default_executor()
     result = executor.run("print('never runs')", Path(tmp_path))
@@ -240,9 +253,11 @@ def test_the_container_executor_reports_unavailable_without_docker(docker_only, 
     assert result.error_code == "docker_unavailable"
     assert result.stdout == ""
     assert "host" in result.stderr
+    # The docker client is the only program the container path is allowed to
+    # start — anything else would have raised inside the run above.
+    assert set(docker_missing.programs) <= {"docker"}
     # The payload was never handed to a host interpreter, and the script the
     # container would have run was cleaned up.
-    assert docker_only.programs in ([], ["docker"])
     assert Path(tmp_path, "_script.py").exists() is False
     assert Path(tmp_path, "script.py").exists() is False
 
