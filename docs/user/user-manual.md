@@ -99,6 +99,27 @@ Every operation runs in the **Docker sandbox**, never in the host process.
 
 - **Docker sandbox** (`Settings → Docker`) runs untrusted code (and all data
   work) in an isolated container with no network and no privileged access.
+
+  The **Code** view uses it directly: press «اجرا» and your program runs in a
+  container with `--network=none`, `--cap-drop=ALL`, a read-only root filesystem,
+  a non-root user, and exactly one writable directory — that run's own
+  workspace. Bounded by a wall-clock deadline, a memory cap, a process cap, and
+  an output cap. «لغو» while a run is in flight terminates the container.
+
+  **Docker is a prerequisite.** Without a reachable daemon the Code view answers
+  «در دسترس نیست» (`unavailable`) and **nothing runs on your machine** — Dream
+  will not execute the program locally to keep the button working. Install and
+  start Docker to use the Code view.
+
+  The sandbox root is `~/.dream/sandbox` (override with `DREAM_SANDBOX_ROOT`).
+  Only the project's own run directory is ever mounted; your home directory,
+  other projects, and the Docker socket are not. `DREAM_SANDBOX_IMAGE` pins the
+  Python image — set it to a digest-pinned image if you need one.
+
+  Note: **the sandbox is the container, not a code analyser.** Dream does not
+  attempt to decide whether your program is "safe"; it puts it somewhere it
+  cannot do harm. That is also why removing Docker does not fall back to running
+  the program locally.
 - **Chrome control** (`Settings → Browser`) lets Dream drive a browser for
   tasks like "open this page and read the results".
 - **Web gateway** (`Settings → Gateway`) serves the same UI to your phone or
@@ -245,9 +266,11 @@ RTL-safe Markdown and Persian-digit-aware data handling.
 
 ### Safety
 
-- Code Dream writes runs in a sandbox with no network, never on your machine
-  directly, and is refused outright if it tries to import `os`, open an
-  absolute path, or write a file.
+- Code Dream writes runs in a container sandbox with no network, never on your
+  machine directly, and is refused outright if it tries to import `os`, open an
+  absolute path, or write a file. The same container runs the code *you* paste
+  into the Code view. If no container runtime is available, neither path runs
+  anything at all.
 - Text *inside* your data is treated as data. A CSV cell saying "ignore all
   previous instructions" is reported as content, never obeyed.
 - Numbers are checked. If a sentence contains a figure that no executed step
@@ -273,5 +296,9 @@ RTL-safe Markdown and Persian-digit-aware data handling.
 | `output_length` | `standard` | `brief`, `standard`, or `detailed` |
 
 Environment: `DREAM_RESEARCH_DIR` (session storage, default `data/research`),
-`DREAM_DATASETS_DIR` (dataset registry), `DREAM_DATA_LOCAL_EXEC=1` (force the
-guarded subprocess when Docker is unavailable).
+`DREAM_DATASETS_DIR` (dataset registry).
+
+**There is no local-execution switch.** Research, data-Q&A and the Code view are
+all container-only: if Docker is not running, the work stops with a clear
+message and nothing is executed on your machine. `DREAM_DATA_LOCAL_EXEC=1` used
+to do the opposite and has been removed — setting it now has no effect.

@@ -32,6 +32,13 @@ CONTEXT_OVERFLOW = -32004
 APPROVAL_REQUIRED = -32005
 TOOL_ERROR = -32006
 RESOURCE_EXHAUSTED = -32007
+#: The isolated runner is missing or unreachable, so nothing was executed.
+#: This is the bridge-level spelling of the Code surface's `unavailable`
+#: status: the same class of failure, reported with the same meaning, instead
+#: of being flattened into "invalid params" or silently degraded to a host
+#: process (MASTER-P0 D1). Values ``-32010``..``-32016`` were already emitted
+#: ad hoc by handlers; this one is now part of the documented taxonomy.
+UNAVAILABLE = -32010
 
 #: The closed set of error codes this protocol may emit.
 ERRORS: dict[int, str] = {
@@ -47,6 +54,7 @@ ERRORS: dict[int, str] = {
     APPROVAL_REQUIRED: "Approval required",
     TOOL_ERROR: "Tool error",
     RESOURCE_EXHAUSTED: "Resource exhausted",
+    UNAVAILABLE: "Unavailable",
 }
 
 #: Reverse lookup, name → code, for handlers that prefer symbolic codes.

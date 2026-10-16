@@ -1,4 +1,4 @@
-"""Slash command handlers for Code Interpreter & Sandbox Execution."""
+"""Slash handlers for the code-interpreter subsystem (fail-closed, MASTER-P0)."""
 
 from __future__ import annotations
 
@@ -30,6 +30,12 @@ def handle_sandbox_slash_command(command_str: str) -> str:
         stdout = r.get("stdout", "").strip()
         stderr = r.get("stderr", "").strip()
         dur = r.get("duration_ms", 0.0)
+
+        if not res.get("available", True):
+            return (
+                "ℹ️ این زیرسیستم کد را روی میزبان اجرا نمی‌کند (fail-closed).\n"
+                f"{stderr}"
+            )
 
         out_parts = [f"⚙️ نتیجه اجرا ({dur:.1f} میلی‌ثانیه):"]
         if stdout:

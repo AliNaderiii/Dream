@@ -1,4 +1,15 @@
-"""LLM Tool bindings for Code Interpreter and Execution Sandbox."""
+"""LLM tool bindings for the code-interpreter subsystem (fail-closed, MASTER-P0).
+
+``sandbox_execute_python`` used to run the model's program on the host through
+the executor's ``eval``/``exec``. It does not run anything now: the executor
+refuses, and this wrapper reports ``available: False`` alongside the refusal so
+a caller cannot read ``success: False`` as "your code had a bug".
+
+The tool was never reachable by the model in the first place — ``REGISTRY`` in
+:mod:`dream.tools.base` never contained ``sandbox_execute_python``, so the
+toolset entry only ever named a function the agent could not call. The real path
+for running code is the container runtime behind ``sandbox.run_code``.
+"""
 
 from __future__ import annotations
 
@@ -27,10 +38,19 @@ def sandbox_execute_python(
     code: str,
     timeout_seconds: float = 15.0,
 ) -> dict[str, Any]:
-    """Execute Python code in the stateful sandbox, capturing output and generated files."""
+    """Refuse to run *code* on the host. Always reports ``available: False``.
+
+    Kept so an existing caller gets a structured, typed refusal rather than an
+    ``AttributeError``; it must never grow an execution backend.
+    """
     engine = get_global_sandbox_engine()
     res = engine.run_code(code, timeout_seconds=timeout_seconds)
-    return {"success": res.status.value == "success", "result": res.to_dict()}
+    return {
+        "success": False,
+        "available": False,
+        "reason": "host_execution_removed",
+        "result": res.to_dict(),
+    }
 
 
 def sandbox_analyze_dataset(

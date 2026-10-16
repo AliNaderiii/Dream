@@ -1,4 +1,12 @@
-"""Isolated Execution Engine: Coordinates Seccomp filtering and WASM virtualization."""
+"""Isolation policy coordinator — static audit plus a fail-closed execution refusal.
+
+MASTER-P0: the execution step is gone. This engine used to ``exec`` the payload
+on the host behind a hand-written builtins dictionary and then report
+"WASM micro-runtime" telemetry (including a hard-coded ``memory_used_mb = 2.5``)
+that described a boundary it did not have. It now runs the static audit — which
+is real, and is *only* a hint — and then reports ``unavailable``. Nothing here
+executes code. Real isolation: :mod:`dream.security.codeexec`.
+"""
 
 from __future__ import annotations
 
@@ -62,29 +70,27 @@ class IsolatedExecutionEngine:
             self._history.append(result)
             return result
 
-        # Step 2: Execute in WASM micro-runtime
-        exit_code, stdout, stderr, exec_ms = self.wasm.execute_pure_computation(
-            code_str,
-            initial_globals=initial_globals,
-        )
-
-        # Step 3: Clamp Output via Watchdog
+        # Step 2: refuse to execute. No host interpreter, no fabricated
+        # telemetry: an unavailable result is the honest answer, and the static
+        # audit above is a hint rather than a sandbox.
+        del initial_globals, isolation_level, policy
+        exit_code, stdout, stderr, _exec_ms = self.wasm.execute_pure_computation(code_str)
         clamped_stdout = self.watchdog.clamp_output(stdout)
         clamped_stderr = self.watchdog.clamp_output(stderr)
         total_duration_ms = (time.time() - start_time) * 1000
 
         result = IsolationExecutionResult(
             execution_id=exec_id,
-            isolation_level=isolation_level,
-            policy=policy,
+            isolation_level=IsolationLevel.PROCESS_SECCOMP,
+            policy=SyscallPolicy.STRICT_READONLY,
             exit_code=exit_code,
             stdout=clamped_stdout,
             stderr=clamped_stderr,
             syscalls_blocked=[],
-            cpu_time_ms=exec_ms,
-            memory_used_mb=2.5,  # Estimated baseline micro-runtime memory footprint
+            cpu_time_ms=0.0,
+            memory_used_mb=0.0,
             security_violations=[],
-            success=(exit_code == 0),
+            success=False,
             duration_ms=total_duration_ms,
         )
         self._history.append(result)
@@ -110,6 +116,10 @@ class IsolatedExecutionEngine:
             "successful_executions": successful,
             "blocked_violations": violations,
             "average_execution_ms": round(avg_ms, 2),
+            # Honesty fields: the caller must not read "0 successful" as an
+            # error rate on a working sandbox.
+            "execution_available": False,
+            "static_audit_only": True,
         }
 
     def format_security_report(self) -> str:
@@ -117,14 +127,16 @@ class IsolatedExecutionEngine:
         stats = self.get_security_stats()
         lines = [
             "## 🛡️ گزارش ایزولاسیون و امنیت سندباکس (Micro-Isolation & Seccomp)",
-            f"- **تعداد کل اجراهای ایزوله:** {stats['total_executions']}",
+            f"- **تعداد کل بازرسی‌های ایزوله:** {stats['total_executions']}",
             f"- **اجراهای موفق و امن:** {stats['successful_executions']}",
             f"- **تلاش‌های مسدودشده (Blocked Violations):** {stats['blocked_violations']}",
-            f"- **میانگین زمان اجرا:** {stats['average_execution_ms']:.2f} ms",
+            f"- **میانگین زمان بازرسی:** {stats['average_execution_ms']:.2f} ms",
             "",
-            "### 🔑 وضعیت فیلتر Syscall:",
-            "- سیس‌کال‌های ممنوع: `ptrace, mount, socket, execve, fork, clone, kill`",
-            "- محیط مجازی: `WASM Memory-Confined Virtual Namespace`",
+            "- **اجرای کد در این زیرسیستم:** غیرفعال (fail-closed)",
+            "- **دامنهٔ واقعی این ماژول:** فقط بازرسی ایستا و کران‌گذاری خروجی — یک",
+            "  مرز امنیتی نیست و به‌عنوان سندباکس جا زده نمی‌شود.",
+            "- **مسیر واقعی اجرا:** `dream.security.codeexec` → `DockerSandbox` (بدون شبکه،",
+            "  `--cap-drop=ALL`، `--read-only`، ماونت فقط‌خواندنی/پوشهٔ اجرا).",
         ]
         return "\n".join(lines)
 

@@ -1,4 +1,14 @@
-"""Micro-Isolation, Syscall Filtering & WASM Virtualization Subsystem."""
+"""Isolation *policy helpers* — analysis and reporting, not execution.
+
+MASTER-P0 removed the host ``exec`` from this subsystem: it was a restricted
+interpreter, not a sandbox, and it is not described as one any more. The static
+:class:`~dream.sandbox.isolation.seccomp_filter.SyscallFilterEngine` audit and
+the :class:`~dream.sandbox.isolation.watchdog.ResourceWatchdog` output clamp
+remain, because they inspect and bound values without running them.
+
+Execution is available only through :mod:`dream.security.codeexec`, which uses a
+container. See ``docs/security/code-execution.md``.
+"""
 
 from __future__ import annotations
 

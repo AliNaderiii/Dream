@@ -1,4 +1,9 @@
-"""CLI and slash command handlers for Sandbox Isolation and WASM Virtualization."""
+"""Slash handlers for the static isolation audit (no execution — MASTER-P0).
+
+The commands still answer, but they say the truth: nothing in this subsystem
+runs code, so a benign payload is ``unavailable`` rather than "successful", and
+only a static-policy hit is reported as ``blocked``.
+"""
 
 from __future__ import annotations
 
@@ -26,16 +31,18 @@ def handle_isolation_slash_command(command_str: str) -> str:
             return "❌ لطفاً کد را برای اجرای ایزوله وارد کنید."
         res = sandbox_isolate_execute(code)
         r = res.get("result", {})
-        if not r.get("success"):
+        if res.get("blocked"):
             v_str = ", ".join(r.get("security_violations", []))
             s_str = ", ".join(r.get("syscalls_blocked", []))
             return (
-                "⛔ اجرا به دلیل نقض سیاست امنیتی مسدود شد:\n"
+                "⛔ بازرسی ایستا نقض سیاست امنیتی را تشخیص داد:\n"
                 f"- موارد نقض: {v_str}\n"
                 f"- سیس‌کال‌ها: {s_str}"
             )
-        dur = r.get("duration_ms", 0.0)
-        return f"🛡️ اجرای ایزوله موفق ({dur:.1f} میلی‌ثانیه):\n```\n{r.get('stdout')}\n```"
+        return (
+            "ℹ️ این زیرسیستم کد اجرا نمی‌کند (fail-closed)؛ فقط بازرسی ایستا انجام شد.\n"
+            "برای اجرای واقعی، از اجراکنندهٔ کانتینری سندباکس استفاده کنید."
+        )
 
     if cmd.startswith("/wasm"):
         expr = cmd[len("/wasm") :].strip()
@@ -43,12 +50,11 @@ def handle_isolation_slash_command(command_str: str) -> str:
             return "❌ لطفاً عبارت یا کد محاسباتی را وارد کنید."
         res = sandbox_wasm_execute(expr)
         r = res.get("result", {})
-        if not r.get("success"):
-            return f"❌ خطا در محاسبه WASM:\n{r.get('stderr')}"
-        dur = r.get("duration_ms", 0.0)
+        if res.get("blocked"):
+            return f"⛔ بازرسی ایستا اجرای این محتوا را ممنوع کرد:\n{r.get('stderr')}"
         return (
-            f"⚡ نتیجه محاسبه در مایکرو‌ران‌تایم WASM ({dur:.2f} میلی‌ثانیه):\n"
-            f"```\n{r.get('stdout')}\n```"
+            "ℹ️ مایکرو‌ران‌تایم WASM غیرفعال است و کدی اجرا نمی‌کند (fail-closed).\n"
+            f"{r.get('stderr')}"
         )
 
     if cmd.startswith("/sandbox_security"):

@@ -6,6 +6,14 @@ local-subprocess fallback (`DREAM_DATA_LOCAL_EXEC=1`) and emitted the loud
 warning it is designed to emit. The Docker path is exercised by the same
 `CodeActExecutor` code and is selected automatically wherever Docker exists.
 
+> **Superseded (MASTER-P0 D1).** The fallback named above no longer exists: the
+> environment variable is inert and `LocalPythonExecutor` was deleted. The
+> numbers below are a genuine capture from *before* that removal and are kept as
+> history; on today's tree the same research runs would stop with
+> `ContainerUnavailableError` on a Docker-less host. Proof:
+> `tests/test_no_local_execution_fallback.py`; see `docs/STATUS.md` for the D1
+> entry.
+
 ## Gate 1 — Lint
 
 ```

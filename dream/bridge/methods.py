@@ -82,6 +82,7 @@ from dream.skills import SKILL_SUFFIX, parse_skill_text
 from dream.skills.data_science import (
     DataScienceError,
     DataScienceRuntime,
+    DataScienceUnavailableError,
 )
 from dream.skills.notebooks import NotebookManager, NotebookUnavailableError
 from dream.subagents import (
@@ -101,6 +102,7 @@ from .errors import (
     INTERNAL_ERROR,
     RESOURCE_EXHAUSTED,
     TOOL_ERROR,
+    UNAVAILABLE,
     BridgeError,
     invalid_params,
 )
@@ -116,10 +118,9 @@ MAX_CANCEL_GRACE_SECONDS = 30.0
 #: Optional infrastructure imports — enabled lazily so the sidecar runs even
 #: when Docker/Playwright/FastAPI are not installed.
 try:  # pragma: no cover - import guard
-    from dream.docker_sandbox import DockerSandbox, ResourceLimits
+    from dream.docker_sandbox import DockerSandbox
 except ImportError:  # pragma: no cover
     DockerSandbox = None  # type: ignore[assignment,misc]
-    ResourceLimits = None  # type: ignore[assignment,misc]
 
 try:  # pragma: no cover - import guard
     from dream.browser_controller import (
@@ -728,6 +729,7 @@ class BridgeMethods:
             # P-08: Docker sandbox.
             "sandbox.status": self.sandbox_status,
             "sandbox.run_code": self.sandbox_run_code,
+            "sandbox.cancel": self.sandbox_cancel,
             "sandbox.run_notebook": self.sandbox_run_notebook,
             "sandbox.install_packages": self.sandbox_install_packages,
             # P-08: Chrome browser control.
@@ -2684,8 +2686,13 @@ class BridgeMethods:
 
     def _require_sandbox(self) -> Any:
         if self.sandbox is None:
-            raise BridgeError(-32010, "Docker sandbox is not available. "
-                                      "Install docker and the dream package with Docker support.")
+            # `UNAVAILABLE` (-32010): the same class of failure the Code surface
+            # reports as `status: "unavailable"`.
+            raise BridgeError(
+                UNAVAILABLE,
+                "Docker sandbox is not available. Install docker and the dream "
+                "package with Docker support.",
+            )
         return self.sandbox
 
     async def sandbox_status(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -2705,51 +2712,59 @@ class BridgeMethods:
             return {"available": False, "error": str(exc)}
 
     async def sandbox_run_code(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Execute code inside a Docker sandbox container."""
-        params = params or {}
-        sb = self._require_sandbox()
-        code = params.get("code")
-        if not isinstance(code, str) or not code.strip():
-            raise invalid_params("code must be a non-empty string")
-        language = params.get("language", "python")
-        if language not in ("python", "r", "bash"):
-            raise invalid_params("language must be one of: python, r, bash")
+        """Execute code inside a container, or fail closed.
 
-        # Build resource limits.
-        limits = ResourceLimits() if ResourceLimits is not None else None
-        if limits is not None and "resource_limits" in params:
-            rl = params["resource_limits"]
-            if isinstance(rl, dict):
-                limits.cpu_count = float(rl.get("cpu_count", 1.0))
-                limits.memory_mb = int(rl.get("memory_mb", 2048))
-                limits.timeout_seconds = int(rl.get("timeout_seconds", 60))
-                limits.network_enabled = bool(rl.get("network_enabled", False))
+        The contract lives in :mod:`dream.security.codeexec`; this handler only
+        adapts JSON-RPC params to it. Two things it deliberately does **not** do:
 
-        workspace_path = None
-        if params.get("workspace_path"):
-            from pathlib import Path
-            workspace_path = Path(str(params["workspace_path"]))
+        * it never runs code on the host — an unavailable or failing container
+          runtime answers ``unavailable`` / ``error``, never a local ``exec``;
+        * it never lets a caller widen the boundary. ``network_enabled``,
+          ``resource_limits``, ``workspace_path``, ``mount_workspace_read_write``
+          and ``env_vars`` are refused by name rather than silently dropped, so a
+          client that thinks it is configuring something learns that it is not.
 
-        mount_rw = bool(params.get("mount_workspace_read_write", False))
-        timeout = params.get("timeout")
-
-        result = await sb.run_code(
-            code=code,
-            language=language,
-            workspace_path=workspace_path,
-            resource_limits=limits,
-            mount_workspace_read_write=mount_rw,
-            timeout=timeout,
+        A malformed request answers with the *same* envelope a run does, carrying
+        ``status: "denied"`` and a bilingual reason — the UI renders one shape.
+        """
+        from dream.security.codeexec import (
+            CodeExecutionDenied,
+            CodeExecutionRequest,
+            CodeExecutionResponse,
+            get_code_execution_runtime,
         )
-        return {
-            "stdout": result.stdout,
-            "stderr": result.stderr,
-            "return_code": result.return_code,
-            "timed_out": result.timed_out,
-            "output_files": result.output_files,
-            "elapsed_seconds": result.elapsed_seconds,
-            "error": result.error,
-        }
+
+        # Mirrors the transport's own rule: params must be an object. Anything
+        # else is a protocol error, not a refused program.
+        if params is not None and not isinstance(params, dict):
+            raise invalid_params("params must be an object")
+
+        runtime = get_code_execution_runtime()
+        try:
+            request = CodeExecutionRequest.from_params(params, sandbox_root=runtime.root)
+        except CodeExecutionDenied as denied:
+            return CodeExecutionResponse.refused(denied.refusal).to_dict()
+        except (TypeError, ValueError) as exc:
+            raise invalid_params(str(exc)) from exc
+
+        response = await runtime.run(request)
+        return response.to_dict()
+
+    async def sandbox_cancel(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Terminate the container running one execution.
+
+        Cancellation has to reach the *container*, not just stop the caller from
+        waiting: a ``docker run`` client that is abandoned leaves the container
+        and every process inside it alive.
+        """
+        from dream.security.codeexec import get_code_execution_runtime
+
+        params = params or {}
+        execution_id = params.get("execution_id")
+        if not isinstance(execution_id, str) or not execution_id.strip():
+            raise invalid_params("execution_id must be a non-empty string")
+        runtime = get_code_execution_runtime()
+        return await runtime.cancel(execution_id.strip())
 
     async def sandbox_run_notebook(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Execute a Jupyter notebook inside the sandbox."""
@@ -3415,6 +3430,11 @@ class BridgeMethods:
         """Run a runtime call in a worker thread, mapping validation errors."""
         try:
             return await asyncio.to_thread(fn, *args)
+        except DataScienceUnavailableError as exc:
+            # No container runtime: a typed, visible refusal. Never a host run.
+            raise BridgeError(
+                UNAVAILABLE, str(exc), data={"code": exc.code, "status": "unavailable"}
+            ) from exc
         except DataScienceError as exc:
             raise invalid_params(str(exc)) from exc
 

@@ -1,5 +1,147 @@
 # Status
 
+## MASTER-P0 — Code-execution surface: correctness, fail-closed isolation, and truth
+
+**What this entry is.** The user-facing **Code** view (paste a program, press
+run) is the one place a model-generated or user-pasted program reaches the
+machine. It was broken in both directions and this entry fixes both.
+
+**Both halves of the bug.**
+
+1. *Disconnected.* Two modules declared `sandbox.run_code`. The extension
+   handler in `dream/bridge/methods_sandbox.py` promised
+   `{status, result: {stdout, …}}`; the built-in handler in `methods.py`
+   returned `{stdout, stderr, return_code, …}`. The view read
+   `response.result.stdout`, found nothing, and rendered a red error chip with
+   **no output** — for programs that had run correctly. The extension only lost
+   dispatch because `Registry.publish` drops extension methods that collide
+   with a built-in, so the surface was one collision-resolution change away from
+   changing behaviour.
+2. *Unsafe by default.* That extension's runner was a **stateful host
+   `eval`/`exec` interpreter** guarded by a seven-regex blocklist. Had the
+   collision been resolved the other way, model-generated code would have
+   executed in the Dream process.
+
+**What changed.**
+
+- `dream/security/codeexec.py` (new) — the single typed contract
+  (`CodeExecutionRequest` / `CodeExecutionResponse`), all bounds, workspace
+  canonicalisation with symlinks resolved under `DREAM_SANDBOX_ROOT`, and
+  `CodeExecutionRuntime`, which delegates to `DockerSandbox` and **refuses when
+  it is unavailable**.
+- `sandbox.run_code` now has exactly **one** definition —
+  `BridgeMethods.sandbox_run_code`. `methods_sandbox.py` states in its module
+  docstring that it must never define it; a regression test fails if a second
+  appears.
+- The host interpreter is gone. `dream/sandbox/executor.py`,
+  `dream/sandbox/tools.py`, `dream/sandbox/slash.py` and
+  `dream/sandbox/isolation/**` record a refusal and report `unavailable` (exit
+  code 126). An AST scan of the whole `dream/` package finds **no** bare
+  `eval()` / `exec()` / `compile()` call site.
+- Boundary-widening parameters — `network_enabled`, `workspace_path`,
+  `mount_workspace_read_write`, `resource_limits`, `env_vars`, `docker_host` —
+  are **refused by name** (`removed_field`) rather than silently ignored, so no
+  request can re-open the network, mount an arbitrary host directory, or inject
+  environment variables. Unknown fields are `unknown_field`.
+- `docker_sandbox.py` hardened: `--cap-drop=ALL`,
+  `--security-opt=no-new-privileges`, `--read-only` + bounded `/tmp` tmpfs,
+  non-root user, `--network=none`, exactly one bind mount, `--userns=remap`
+  opt-in only, and force-removal of the container on timeout **and** on
+  cancellation (`docker rm -f`). `DREAM_SANDBOX_IMAGE` pins the image by tag or
+  digest for the Python language only.
+- `apps/desktop/src/v5/views/code.js` + `lib/bridge.js` rewritten against the
+  envelope: every status the backend can return renders (`success`, `error`,
+  `timeout`, `cancelled`, `denied`, `unavailable`), cancel actually cancels, and
+  the client timeout (180 s) deliberately exceeds the backend ceiling (120 s) so
+  the side that can kill the container is the side that fires first.
+
+**Two real bugs found and fixed.** (a) `sandbox_run_code` referenced
+`CodeExecutionResponse` without importing it, so **every refusal raised
+`NameError`** instead of returning a `denied` envelope. (b)
+`docker_sandbox.py` passed `stdout=` to `subprocess.CalledProcessError` (the
+valid kwarg is `output=`), so every non-zero docker exit raised `TypeError` — a
+program that simply exited 1 was reported as an internal runner failure and its
+stderr was discarded.
+
+**Evidence.** 6 new/rewritten test files:
+`tests/test_code_execution_contract.py` (62 — the validation and adversarial
+matrix, driven through the registered handler),
+`tests/test_docker_sandbox_hardening.py` (28 — the exact `docker run` argv),
+`tests/test_code_execution_route_containment.py` (18 — absence proofs for every
+retired route), `tests/test_code_execution_end_to_end.py` (8 — the real
+`python -m dream.bridge` sidecar over real pipes),
+`tests/test_desktop_sandbox_bridge.py` (13),
+`tests/test_code_sandbox_and_interpreter.py` (9),
+`tests/test_sandbox_isolation_and_seccomp.py` (13), plus
+`apps/desktop/src/v5/views/code.test.js` (16 vitest cases). Commands and
+observed output are in the acceptance record.
+
+**Honest limitation.** No test in this repository has executed a real container
+— CI has no Docker daemon. The argv assertions prove what Dream *requests*, not
+what a kernel enforces; the suite is explicit about that split. On a machine
+without Docker the Code view answers `unavailable` and runs nothing, which is
+asserted end to end over the real transport.
+
+**Docs.** New `docs/security/code-execution.md` (active call chain, contract,
+fail-closed conditions, real argv, verified-vs-unverified split, residual risks,
+rollback); `docs/bridge/protocol.md` §3.18; `docs/security/threat-model.md`
+L9-A′; `docs/user/user-manual.md` §7.
+
+**Not touched (deliberately).** `notebook_execute` / `notebook_run_cell`,
+`sandbox.install_packages`, `sandbox.run_notebook`, `tool.execute`,
+`mcp.call_tool`, `browser.execute_js`, and the `shell=True` call in
+`dream/tools/system_tools.py` remain as they were; they are listed as open
+routes in `docs/security/code-execution.md` §8 rather than implied to be fixed.
+
+## MASTER-P0 D1 — no host-execution fallback for model-generated code
+
+**What this entry is.** Follow-up to the MASTER-P0 entry below, on the user's
+decision: the research/data-Q&A CodeAct paths are now **container-only**.
+
+**Removed.**
+
+- `DREAM_DATA_LOCAL_EXEC=1` — the operator opt-in that made
+  `DataScienceRuntime._default_executor()` return a `python -I` host subprocess.
+  Setting the variable now has no effect at all.
+- The silent `ImportError` fallback in the same method, which selected the host
+  subprocess when `dream.docker_sandbox` could not be imported.
+- `LocalPythonExecutor` itself, from `dream/skills/data_science.py`. The only
+  local runner left is `LocalTestExecutor` in `tests/_data_science_helpers.py`,
+  a test fixture that no product module imports (asserted mechanically).
+
+**Fail-closed behaviour.** `UnavailableCodeExecutor` replaces the fallback:
+`ExecResult` gained `available` / `error_code` / `unavailable`, and an
+unavailable run reports `return_code=126`, `error_code="docker_unavailable"` and
+a bilingual reason — it executes nothing anywhere. The research path raises
+`ContainerUnavailableError` (a `ResearchError`) *before* writing a parameter file
+or reaching a runner, which the session's `start()` turns into a `FAILED`
+transition with a clear message.
+
+**Typed on the wire.** `dream/bridge/errors.py` now registers `UNAVAILABLE`
+(`-32010`, previously an ad-hoc literal in `_require_sandbox`) in the documented
+taxonomy, and `data.*` maps `DataScienceUnavailableError` to it instead of
+flattening a missing runtime into `INVALID_PARAMS (-32602)`. `sandbox.*` already
+reported the same condition as `status: "unavailable"`.
+
+**Honest reporting.** `CodeActExecutor.docker_available()` used to answer `True`
+on any machine where the module merely imported, so a host with no daemon could
+report `sandbox: "docker"`. It now reflects the configured executor's real state,
+`backend` is read from the executor, and `run.start` carries `sandbox_available`
+alongside `sandbox`. `"local-subprocess"` is no longer a value the engine can
+emit.
+
+**Evidence.** `tests/test_no_local_execution_fallback.py` (19 tests) proves both
+removals behaviourally: the environment variable is inert, a blockaded
+`dream.docker_sandbox` import yields a typed refusal, a daemon that dies
+mid-run yields a typed refusal, the bridge answers `UNAVAILABLE`, research
+refuses before I/O, and the code gate still runs first. A process recorder
+raises on any spawn, so "no host execution" is observed rather than asserted
+from the diff. Round-trip tests now inject their executor explicitly instead of
+relying on the removed variable (`tests/_data_science_helpers.py`).
+
+**Not claimed.** No container was executed while making this change — the same
+limitation as the MASTER-P0 entry below.
+
 ## P-16 — Roadmap reconciliation and release-readiness verification — DOCS-ONLY
 
 **What this entry is.** P-16 reconciled `MASTER_CHECKLIST.md` against the

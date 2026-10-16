@@ -621,6 +621,79 @@ Safety and metering:
   `subagent.get`, and `subagent.logs` work on each `subagent_id`, and
   `subagent.list` filters by `pipeline_id`.
 
+### 3.18 `sandbox.*` — code execution through a container (MASTER-P0)
+
+The Code surface in the desktop shell. Full reference:
+[`docs/security/code-execution.md`](../security/code-execution.md).
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `sandbox.run_code` | `{code, language?, timeout_seconds?, memory_mb?, cpu_count?, pids_limit?, max_output_bytes?, workspace?, execution_id?}` | `CodeExecutionResponse` |
+| `sandbox.cancel` | `{execution_id}` | `{status: "cancelled" \| "not_running", container_killed}` |
+| `sandbox.get_status` | `{}` | runner availability, backend, root, counters, limits |
+| `sandbox.list_artifacts` | `{}` | files produced by real runs |
+| `sandbox.reset` | `{}` | clears history + per-run workspaces under the sandbox root |
+| `sandbox.status` | `{}` | Docker daemon probe (bounded 10 s) |
+| `sandbox.analyze_data` | `{data_or_path}` | dataset profile (parses data, executes nothing) |
+
+`code` is required and must be a non-blank string of at most 1 000 000 bytes.
+`language` is `python` only. `workspace`, when given, must resolve inside
+`DREAM_SANDBOX_ROOT` after symlinks are followed.
+
+```jsonc
+// Result — status is repeated at the top level and inside `result`.
+{
+  "status": "success",          // success|error|timeout|cancelled|denied|unavailable
+  "execution_id": "exe-1a2b3c4d5e6f",
+  "result": {
+    "status": "success",
+    "execution_id": "exe-1a2b3c4d5e6f",
+    "stdout": "hello\n",
+    "stderr": "",
+    "stdout_path": "",          // set when stdout was truncated
+    "stderr_path": "",
+    "exit_code": 0,
+    "duration_ms": 42.5,
+    "timed_out": false,
+    "truncated": false,
+    "artifacts": [{"name": "chart.png", "file_path": "…", "mime_type": "image/png", "size_bytes": 2048}],
+    "error": null,              // {code, reason_en, reason_fa, detail} — redacted, no traceback
+    "error_message": "",
+    "variables_updated": [],    // always []: every run is a fresh container
+    "isolation": {"backend": "docker", "network": "none", "rootfs": "read-only", "user": "1001:1001"},
+    "limits": {"timeout_seconds": 15, "memory_mb": 1024, "network_enabled": false}
+  }
+}
+```
+
+**Fail closed.** Code runs only in a container (`--network=none`,
+`--cap-drop=ALL`, `--read-only`, a single non-root bind mount). When no
+container runtime is reachable the result is `unavailable` and **nothing runs on
+the host**. There is no local-execution fallback, and no parameter can request
+one:
+
+- `resource_limits`, `network_enabled`, `workspace_path`,
+  `mount_workspace_read_write`, `env_vars`, and `docker_host` are refused by
+  name (`error.code: "removed_field"`) rather than silently ignored;
+- any other unrecognised field is `denied` with `error.code: "unknown_field"`;
+- malformed input answers with the *same* envelope a run uses, carrying
+  `status: "denied"` — the client renders one shape, never two.
+
+**Bounded.** Per-stream output is capped by `max_output_bytes` (≤ 2 000 000);
+on truncation the untruncated stream is written to `stdout_path`/`stderr_path`
+inside the run's own workspace and `truncated` is set. Output passes
+`dream.security.secrets.redact_text` before it crosses the wire.
+
+**Client timeout.** `api.sandboxRun` uses `timeoutMs: 180_000` while the backend
+ceiling is 120 s on purpose: the side that fires first must be the side that can
+terminate the container. A shorter client timeout would abandon a live container.
+
+**A second definition of `sandbox.run_code` must not exist.** The
+`methods_sandbox` extension used to declare one, backed by a host interpreter; it
+only lost dispatch because `Registry.publish` drops extension methods that
+collide with a built-in. The method now has exactly one definition, and
+`tests/test_code_execution_route_containment.py` fails if that changes.
+
 ---
 
 ## 4. Error taxonomy
@@ -643,6 +716,7 @@ canonical numbers.
 | `-32005` | `APPROVAL_REQUIRED` | A dangerous tool needs human approval before it runs. Carries `approval_id`. |
 | `-32006` | `TOOL_ERROR` | A tool ran but raised an exception (the structured tool error is in `data`). |
 | `-32007` | `RESOURCE_EXHAUSTED` | Backpressure: too many in-flight requests; the client should retry. |
+| `-32010` | `UNAVAILABLE` | The isolated runner is missing or unreachable, so nothing executed. Raised by `sandbox.*` and by the `data.*` pipeline; it is the bridge-level spelling of the Code surface's `status: "unavailable"`, and no handler may answer it by running the work locally. |
 
 Mapping from Python exceptions to codes (see `dream/bridge/errors.py`):
 

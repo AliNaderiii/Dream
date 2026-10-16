@@ -31,8 +31,6 @@ import logging
 import os
 import re
 import shutil
-import subprocess
-import sys
 import tempfile
 import textwrap
 import time
@@ -56,12 +54,14 @@ __all__ = [
     "CHART_TYPES",
     "COLUMN_NAME_RE",
     "DataScienceError",
+    "DataScienceUnavailableError",
     "DataScienceRuntime",
     "DatasetManager",
     "DatasetRecord",
     "ExecResult",
-    "LocalPythonExecutor",
+    "UNAVAILABLE_EXIT_CODE",
     "SandboxCodeExecutor",
+    "UnavailableCodeExecutor",
     "detect_format",
     "register_data_science_tools",
     "resolve_column",
@@ -158,6 +158,21 @@ _HEX_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
 class DataScienceError(ValueError):
     """A validation or execution failure with a user-presentable message."""
+
+
+class DataScienceUnavailableError(DataScienceError):
+    """No isolated runner is available, so nothing executed anywhere.
+
+    Deliberately distinct from a validation failure: the bridge maps it to
+    :data:`dream.bridge.errors.UNAVAILABLE` rather than ``INVALID_PARAMS``, and
+    no caller may answer it by running the script locally (MASTER-P0 D1).
+    """
+
+    #: Stable machine-readable reason.
+    code = "docker_unavailable"
+
+    def __init__(self, message: str | None = None) -> None:
+        super().__init__(message or f"{_UNAVAILABLE_EN}\n{_UNAVAILABLE_FA}")
 
 
 def _check_column(name: Any, *, what: str = "column") -> str:
@@ -630,15 +645,45 @@ def suggest_charts(
 # --------------------------------------------------------------------------- #
 
 
+#: Exit code every fail-closed path reports, so a caller can tell "nothing ran"
+#: apart from "it ran and failed" without parsing prose.
+UNAVAILABLE_EXIT_CODE = 126
+
+_UNAVAILABLE_EN = (
+    "unavailable: no container runtime is reachable, and Dream does not run "
+    "model-generated code on the host"
+)
+_UNAVAILABLE_FA = (
+    "در دسترس نیست: رانتایم کانتینر قابل دسترس نیست و دریم کد تولیدشدهٔ مدل را "
+    "روی میزبان اجرا نمی‌کند"
+)
+
+
 @dataclass(slots=True)
 class ExecResult:
-    """Outcome of one sandboxed script run."""
+    """Outcome of one sandboxed script run.
+
+    ``available`` is the field a caller must branch on (MASTER-P0 D1): when it
+    is ``False`` nothing executed anywhere, ``return_code`` is
+    :data:`UNAVAILABLE_EXIT_CODE`, and ``error_code`` names the reason. That is
+    deliberately different from ``timed_out``/non-zero, which mean "it ran".
+    """
 
     stdout: str = ""
     stderr: str = ""
     return_code: int = -1
     timed_out: bool = False
     elapsed_seconds: float = 0.0
+    #: False when no isolated runner was available, so nothing ran at all.
+    available: bool = True
+    #: Machine-readable reason when ``available`` is False (e.g.
+    #: ``docker_unavailable``). Empty on a real run.
+    error_code: str = ""
+
+    @property
+    def unavailable(self) -> bool:
+        """True when the script never ran because isolation was missing."""
+        return not self.available
 
 
 def _await(coro: Any) -> Any:
@@ -651,88 +696,97 @@ def _await(coro: Any) -> Any:
         return pool.submit(asyncio.run, coro).result()
 
 
-class LocalPythonExecutor:
-    """Run scripts with the host interpreter in an isolated subprocess.
+class UnavailableCodeExecutor:
+    """Fail-closed stand-in for the container executor (MASTER-P0 D1).
 
-    Development/test fallback only: the bridge uses the Docker sandbox by
-    default (G9). The subprocess runs with ``-I`` (isolated mode), a working
-    directory pinned to the dataset workspace, and no inherited environment
-    beyond PATH — but it is *not* a security boundary the way Docker is, so it
-    must be opted into explicitly.
+    Selected only when the Docker sandbox cannot be imported at all. It
+    executes nothing, on any platform, ever: every call returns a typed
+    ``unavailable`` result with exit code :data:`UNAVAILABLE_EXIT_CODE`.
+    A host subprocess is *not* an acceptable answer for model-generated code,
+    so this stub exists to make the refusal explicit and machine-readable
+    rather than to keep a degraded path alive.
     """
 
-    def __init__(self, python: str | None = None) -> None:
-        self.python = python or sys.executable
+    #: Callers branch on this; it is always False here.
+    available = False
+    #: Stable label for status output — never claims Docker.
+    backend = "unavailable"
 
     def run(self, code: str, workspace: Path, timeout: int = 120) -> ExecResult:
-        script = workspace / "_script.py"
-        script.write_text(code, encoding="utf-8")
-        started = time.monotonic()
-        env = {"PATH": os.environ.get("PATH", ""), "MPLBACKEND": "Agg"}
-        if os.environ.get("SYSTEMROOT"):  # Windows needs this for the CRT
-            env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
-        try:
-            proc = subprocess.run(
-                [self.python, "-I", str(script)],
-                cwd=str(workspace),
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                env=env,
-            )
-            return ExecResult(
-                stdout=proc.stdout,
-                stderr=proc.stderr,
-                return_code=proc.returncode,
-                elapsed_seconds=time.monotonic() - started,
-            )
-        except subprocess.TimeoutExpired:
-            return ExecResult(
-                timed_out=True,
-                return_code=-1,
-                stderr=f"execution exceeded {timeout}s",
-                elapsed_seconds=time.monotonic() - started,
-            )
-        finally:
-            script.unlink(missing_ok=True)
+        del code, workspace, timeout
+        return ExecResult(
+            stderr=f"{_UNAVAILABLE_EN}\n{_UNAVAILABLE_FA}",
+            return_code=UNAVAILABLE_EXIT_CODE,
+            available=False,
+            error_code="docker_unavailable",
+        )
 
 
 class SandboxCodeExecutor:
-    """Route script execution through the P-08 Docker sandbox.
+    """Route script execution through the Docker sandbox — the only path.
 
     The dataset directory is mounted read-write; network stays disabled and
-    the container keeps every P-08 hardening flag (cap-drop, seccomp,
+    the container keeps every hardening flag (cap-drop, seccomp,
     no-new-privileges, pids/memory limits).
+
+    There is no host-execution alternative (MASTER-P0 D1). When the container
+    runtime is missing, unreachable, or fails to start, this returns an
+    ``unavailable`` result and nothing runs anywhere.
     """
+
+    #: The container is the isolation boundary; this executor cannot degrade.
+    available = True
+    backend = "docker"
 
     def __init__(self, sandbox: Any, *, memory_mb: int = 2048) -> None:
         self.sandbox = sandbox
         self.memory_mb = memory_mb
 
     def run(self, code: str, workspace: Path, timeout: int = 120) -> ExecResult:
-        from dream.docker_sandbox import ResourceLimits
+        from dream.docker_sandbox import (
+            DockerUnavailableError,
+            ResourceLimits,
+            SandboxExecutionError,
+        )
 
         limits = ResourceLimits(
             memory_mb=self.memory_mb,
             network_enabled=False,
             timeout_seconds=timeout,
         )
-        result = _await(
-            self.sandbox.run_code(
-                code=code,
-                language="python",
-                workspace_path=workspace,
-                resource_limits=limits,
-                mount_workspace_read_write=True,
-                timeout=timeout,
+        try:
+            result = _await(
+                self.sandbox.run_code(
+                    code=code,
+                    language="python",
+                    workspace_path=workspace,
+                    resource_limits=limits,
+                    mount_workspace_read_write=True,
+                    timeout=timeout,
+                )
             )
-        )
+        except (DockerUnavailableError, SandboxExecutionError, OSError) as exc:
+            # The container never started (or died before running the script).
+            # `OSError` covers the missing-`docker`-binary and permission cases
+            # that escape the sandbox class's own wrapping. Report all of them
+            # as unavailable — never as a script result, and never by falling
+            # back to the host.
+            logger.warning("data-science sandbox unavailable: %s", type(exc).__name__)
+            return ExecResult(
+                stderr=f"{_UNAVAILABLE_EN}\n{_UNAVAILABLE_FA}",
+                return_code=UNAVAILABLE_EXIT_CODE,
+                available=False,
+                error_code="docker_unavailable",
+            )
+        available = bool(getattr(result, "available", True))
         return ExecResult(
             stdout=result.stdout,
             stderr=result.stderr,
             return_code=result.return_code,
             timed_out=result.timed_out,
             elapsed_seconds=result.elapsed_seconds,
+            available=available,
+            error_code="" if available else "docker_unavailable",
         )
 
 
@@ -1814,12 +1868,22 @@ class DataScienceRuntime:
 
     @staticmethod
     def _default_executor() -> Any:
-        if os.environ.get("DREAM_DATA_LOCAL_EXEC", "").strip().lower() in {"1", "true", "yes"}:
-            return LocalPythonExecutor()
+        """The container executor, or a fail-closed stub — never a host process.
+
+        MASTER-P0 D1 removed both escape hatches: the ``DREAM_DATA_LOCAL_EXEC``
+        opt-in and the silent ``ImportError`` fallback that selected a host
+        interpreter. Model-generated analysis code runs in a container or it
+        does not run. The stub keeps the refusal visible and typed instead of,
+        say, raising at construction time.
+        """
         try:
             from dream.docker_sandbox import DockerSandbox
         except ImportError:  # pragma: no cover - dream package always present
-            return LocalPythonExecutor()
+            logger.warning(
+                "data-science: DockerSandbox is not importable; the runtime will "
+                "report `unavailable` and nothing will execute (no host fallback)"
+            )
+            return UnavailableCodeExecutor()
         return SandboxCodeExecutor(DockerSandbox())
 
     # -- plumbing --------------------------------------------------------- #
@@ -1849,6 +1913,11 @@ class DataScienceRuntime:
             outcome = self.executor.run(
                 _script(body), workspace, timeout or self.default_timeout
             )
+            if getattr(outcome, "unavailable", False):
+                # Nothing ran. Say so as its own typed condition — not as
+                # "sandbox execution failed", which reads like the script ran
+                # and blew up.
+                raise DataScienceUnavailableError()
             if outcome.timed_out:
                 raise DataScienceError("the operation timed out inside the sandbox")
             if not result_path.exists():
