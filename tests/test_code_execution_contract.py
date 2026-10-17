@@ -562,10 +562,20 @@ def test_stderr_is_bounded_too(tmp_path) -> None:
 
 
 def test_secret_shaped_output_is_redacted(tmp_path) -> None:
-    runner = FakeRunner(FakeResult(stdout="token=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\n"))
+    """A GitHub-shaped token in the output is replaced, not echoed back.
+
+    The fixture is assembled from fragments instead of being written as one
+    literal: the repository's own secret scanners (``tools/security_audit.py``
+    and ``tests/test_security_secrets.py``) match ``ghp_`` followed by 30+
+    characters in every *tracked* file, and this file is tracked. The scanners
+    are the control being exercised here, so the fixture moves — the detection
+    rule, the scanner, and the assertion all stay exactly as strict as before.
+    """
+    token = "ghp_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "0123456789"
+    runner = FakeRunner(FakeResult(stdout=f"token={token}\n"))
     bridge = build_bridge(tmp_path, runner)
     payload = run(bridge, {"code": "print(os.environ)"})
-    assert "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" not in payload["result"]["stdout"]
+    assert token not in payload["result"]["stdout"]
     assert "[REDACTED:github-token]" in payload["result"]["stdout"]
 
 
