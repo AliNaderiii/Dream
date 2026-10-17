@@ -450,7 +450,7 @@ class ResearchSession:
         Fail-closed: any escaping exception lands the session in ``FAILED``
         with a reason, never in a hung ``IN_PROGRESS``.
         """
-        from dream.research.executor import CodeActExecutor
+        from dream.research.executor import CodeActExecutor, ContainerUnavailableError
         from dream.research.iterate import ToolBroker
 
         with self._lock:
@@ -489,9 +489,13 @@ class ResearchSession:
             cancelled=self.cancelled,
             emit=self.emit,
         )
+        # Report what the configured executor actually is, and whether it can
+        # run anything. `local-subprocess` is no longer a possible value: the
+        # host fallback is gone (MASTER-P0 D1).
         self.emit(
             "run.start",
-            sandbox="docker" if CodeActExecutor.docker_available() else "local-subprocess",
+            sandbox=executor.backend,
+            sandbox_available=executor.backend_available,
             autonomous=self.record.config.autonomous,
         )
         try:
@@ -501,6 +505,11 @@ class ResearchSession:
             self._compile(ctx, executor)
         except ResearchCancelled:
             self.cancel()
+            return self.record
+        except ContainerUnavailableError as exc:
+            # No isolated runtime: stop with a clear reason instead of running
+            # model-generated code anywhere else (MASTER-P0 D1).
+            self.fail(str(exc))
             return self.record
         except (ResearchTimeout, ResearchSecurityError) as exc:
             self.fail(str(exc))

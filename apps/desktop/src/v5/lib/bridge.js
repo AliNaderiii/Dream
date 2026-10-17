@@ -368,14 +368,33 @@ export const api = {
   wbClose: () => call('webbrowser.close', {}, { timeoutMs: 30_000 }),
 
   // ---- code sandbox -------------------------------------------------------
-  /** sandbox.run_code — real Python in the stateful core sandbox. */
+  /**
+   * sandbox.run_code — the authoritative contract (dream.security.codeexec).
+   *
+   * Returns `{status, execution_id, result}` where `status` is one of
+   * success | error | timeout | cancelled | denied | unavailable. Code runs only
+   * in a container with the network off; when there is no reachable runtime the
+   * answer is `unavailable` and nothing executes on the host.
+   *
+   * `timeoutMs` stays above the backend's own ceiling (120 s) on purpose: the
+   * backend must always be the one that fires first, because it is the side that
+   * terminates the container. A shorter client timeout would abandon a live
+   * container.
+   */
   sandboxRun: (code, timeoutSeconds = 15) =>
     call('sandbox.run_code', { code, timeout_seconds: timeoutSeconds }, { timeoutMs: 180_000 }),
 
-  /** sandbox.get_status — executions, variables, artifacts. */
+  /** sandbox.cancel — terminate the container tree for a live execution. */
+  sandboxCancel: (executionId) =>
+    call('sandbox.cancel', { execution_id: executionId }, { timeoutMs: 30_000 }),
+
+  /** sandbox.get_status — runner availability, mounts, and enforced limits. */
   sandboxStatus: () => call('sandbox.get_status', {}, { timeoutMs: 30_000 }),
 
-  /** sandbox.reset — clear the stateful namespace. */
+  /** sandbox.status — daemon probe plus backend identity. */
+  sandboxDaemon: () => call('sandbox.status', {}, { timeoutMs: 30_000 }),
+
+  /** sandbox.reset — clear run history and per-run workspaces. */
   sandboxReset: () => call('sandbox.reset', {}, { timeoutMs: 30_000 }),
 
   // ---- workspace files ---------------------------------------------------

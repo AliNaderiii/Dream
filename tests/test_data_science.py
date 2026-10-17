@@ -465,10 +465,11 @@ def test_dataset_manager_survives_corrupt_index(tmp_path):
 
 
 def test_runtime_load_rejects_missing_and_empty_files(tmp_path):
-    from dream.skills.data_science import DataScienceRuntime, LocalPythonExecutor
+    from dream.skills.data_science import DataScienceRuntime
+    from tests._data_science_helpers import test_executor
 
     runtime = DataScienceRuntime(
-        DatasetManager(tmp_path / "datasets"), LocalPythonExecutor()
+        DatasetManager(tmp_path / "datasets"), test_executor()
     )
     with pytest.raises(DataScienceError, match="file not found"):
         runtime.load_data(str(tmp_path / "ghost.csv"))
@@ -483,13 +484,13 @@ def test_runtime_load_rejects_missing_and_empty_files(tmp_path):
 def test_register_data_science_tools_registers_and_is_idempotent(tmp_path):
     from dream.skills.data_science import (
         DataScienceRuntime,
-        LocalPythonExecutor,
         register_data_science_tools,
     )
     from dream.tools import REGISTRY
+    from tests._data_science_helpers import test_executor
 
     runtime = DataScienceRuntime(
-        DatasetManager(tmp_path / "datasets"), LocalPythonExecutor()
+        DatasetManager(tmp_path / "datasets"), test_executor()
     )
     before = dict(REGISTRY)
     try:
@@ -507,10 +508,16 @@ def test_register_data_science_tools_registers_and_is_idempotent(tmp_path):
         REGISTRY.update(before)
 
 
-def test_local_executor_reports_timeout(tmp_path):
-    from dream.skills.data_science import LocalPythonExecutor
+def test_test_executor_reports_timeout(tmp_path):
+    """The injected test executor honours the per-run deadline.
 
-    result = LocalPythonExecutor().run(
+    Renamed from ``test_local_executor_reports_timeout``: the executor under
+    test is now the test-only fixture in ``tests/_data_science_helpers.py``,
+    because the product no longer ships a host interpreter (MASTER-P0 D1).
+    """
+    from tests._data_science_helpers import test_executor
+
+    result = test_executor().run(
         "import time; time.sleep(30)", Path(tmp_path), timeout=1
     )
     assert result.timed_out is True
@@ -613,10 +620,11 @@ def test_ingestion_cap_stays_500_mb_and_chunk_threshold_100_mb():
 def test_load_data_rejects_over_500_mb(tmp_path, monkeypatch):
     path = tmp_path / "huge.csv"
     path.write_text("a,b\n1,2\n", encoding="utf-8")
-    from dream.skills.data_science import DataScienceRuntime, LocalPythonExecutor
+    from dream.skills.data_science import DataScienceRuntime
+    from tests._data_science_helpers import test_executor
 
     runtime = DataScienceRuntime(
-        DatasetManager(tmp_path / "datasets"), LocalPythonExecutor()
+        DatasetManager(tmp_path / "datasets"), test_executor()
     )
     import os
 

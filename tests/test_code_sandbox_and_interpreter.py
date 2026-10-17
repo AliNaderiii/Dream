@@ -1,8 +1,24 @@
-"""Unit and integration tests for Code Interpreter, Dataset Analysis & Sandbox."""
+"""Tests for the code-interpreter subsystem — now a fail-closed shell.
+
+MASTER-P0 rewrote this file. It used to assert that ``SandboxExecutor``
+``eval``/``exec``'d a program on the host: stateful variables between runs, a
+workspace file written by ``open()``, a regex blocklist catching ``rm -rf /``.
+Every one of those assertions described the vulnerability, so they are gone.
+
+What remains true and is asserted here:
+
+* the dataset profiler still works — it parses data, it does not execute it;
+* ``/data`` and ``/sandbox status|reset`` still answer;
+* every ``/code``-shaped entry point now reports ``unavailable`` instead of
+  running anything on the host.
+
+The container path is covered by ``tests/test_code_execution_contract.py``.
+"""
 
 from __future__ import annotations
 
 import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -28,55 +44,58 @@ def cleanup_sandbox_engine() -> None:
 
 
 def test_toolset_includes_sandbox() -> None:
-    """Verify sandbox toolset is registered in BUILTIN_TOOLSETS."""
+    """The toolset entry is metadata; the tool is *not* in the model registry.
+
+    ``filter_tools`` intersects toolset names with ``dream.tools.base.REGISTRY``,
+    so declaring the name here cannot hand a host interpreter to the model.
+    """
     ts = get_toolset("sandbox")
     assert ts is not None
     assert "sandbox_execute_python" in ts.tools
-    assert "sandbox_analyze_dataset" in ts.tools
     assert "sandbox_reset_session" in ts.tools
     assert "sandbox" in BUILTIN_TOOLSETS
 
+    from dream.tools.base import REGISTRY
 
-def test_sandbox_executor_stateful_execution() -> None:
-    """Verify execution of expressions, statements, and stateful namespace across turns."""
+    assert "sandbox_execute_python" not in REGISTRY
+
+
+def test_executor_refuses_host_execution() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         executor = SandboxExecutor(workspace_dir=tmpdir)
+        result = executor.execute_python("x = 50\ny = 25\nz = x + y\nprint(z)")
 
-        # Turn 1: Define variables
-        res1 = executor.execute_python("x = 50\ny = 25\nz = x + y")
-        assert res1.status == ExecutionStatus.SUCCESS
-        assert res1.exit_code == 0
-        assert "z" in res1.variables_updated
-
-        # Turn 2: Reference previously defined variable and evaluate expression
-        res2 = executor.execute_python("z * 2")
-        assert res2.status == ExecutionStatus.SUCCESS
-        assert "150" in res2.stdout.strip()
-
-        # Turn 3: Reset namespace
-        executor.reset_namespace()
-        res3 = executor.execute_python("z")
-        assert res3.status == ExecutionStatus.ERROR
-        assert "NameError" in res3.error_message
+    assert result.status is ExecutionStatus.UNAVAILABLE
+    assert result.exit_code == -1
+    assert result.stdout == ""
+    assert result.variables_updated == []
+    assert "no longer runs code on the host" in result.stderr
 
 
-def test_sandbox_executor_security_blocking() -> None:
-    """Verify interception and blocking of destructive host commands."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        executor = SandboxExecutor(workspace_dir=tmpdir)
+def test_executor_refuses_even_a_benign_expression() -> None:
+    """No payload is privileged: there is no "safe" subset that runs."""
+    executor = SandboxExecutor(workspace_dir="/tmp/dream-p0-refusal")
+    for code in ("2 + 2", "math.sqrt(144)", "print('hello')", "import os"):
+        result = executor.execute_python(code)
+        assert result.status is ExecutionStatus.UNAVAILABLE
+        assert result.stdout == ""
 
-        # Test rm -rf / blocking
-        res_rm = executor.execute_python("import os; os.system('rm -rf /')")
-        assert res_rm.status == ExecutionStatus.BLOCKED
-        assert res_rm.exit_code == 1
 
-        # Test sensitive path blocking
-        res_pass = executor.execute_python("f = open('/etc/passwd')")
-        assert res_pass.status == ExecutionStatus.BLOCKED
+def test_the_old_blocklist_is_only_a_classifier_now() -> None:
+    executor = SandboxExecutor(workspace_dir="/tmp/dream-p0-classify")
+    flagged, pattern = executor.classify("import os; os.system('rm -rf /')")
+    assert flagged is True
+    assert pattern
+
+    clean, _ = executor.classify("total = sum(range(10))")
+    assert clean is False
+
+    # Classification is not execution: nothing ran, and no result is "success".
+    assert executor.execute_python("print('x')").status is ExecutionStatus.UNAVAILABLE
 
 
 def test_data_science_analyzer_tabular_profiling() -> None:
-    """Verify automated statistical profiling and Markdown table generation."""
+    """Parsing data is not executing it — this surface is unchanged."""
     analyzer = DataScienceAnalyzer()
 
     csv_data = """product,sales,quantity,active
@@ -92,66 +111,68 @@ Widget D,,15,true
     assert summary.null_counts["sales"] == 1
     assert summary.column_types["quantity"] == "integer"
     assert summary.numeric_stats["quantity"]["mean"] == 12.5
-    assert summary.numeric_stats["quantity"]["min"] == 5.0
-    assert summary.numeric_stats["quantity"]["max"] == 20.0
 
     md_report = analyzer.format_summary_markdown(summary)
     assert "Dataset Profile" in md_report
-    assert "Widget A" in md_report or "quantity" in md_report
 
 
-def test_sandbox_engine_and_artifact_generation() -> None:
-    """Verify end-to-end sandbox engine and workspace file discovery."""
+def test_engine_records_the_refusal_and_reports_status() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
-        executor = SandboxExecutor(workspace_dir=tmpdir)
-        engine = SandboxEngine(executor=executor)
+        engine = SandboxEngine(executor=SandboxExecutor(workspace_dir=tmpdir))
+        result = engine.run_code("open('results.txt', 'w').write('nope')")
 
-        # Script that writes a local file in workspace using injected workspace_dir
-        code = """
-from pathlib import Path
-out = Path(workspace_dir) / 'results.txt'
-out.write_text('Simulation Complete: 100% accuracy', encoding='utf-8')
-"""
-        res = engine.run_code(code)
-        assert res.status == ExecutionStatus.SUCCESS
-        assert len(res.artifacts) >= 1
-        assert res.artifacts[0].name == "results.txt"
+        assert result.status is ExecutionStatus.UNAVAILABLE
+        # Nothing was written, because nothing ran.
+        assert not (Path(tmpdir) / "results.txt").exists()
 
         status = engine.get_status()
         assert status["total_executions"] == 1
-        assert status["total_artifacts"] == 1
+        assert status["total_artifacts"] == 0
+        assert status["last_execution_status"] == "unavailable"
 
 
-def test_sandbox_tools_and_slash_commands() -> None:
-    """Verify LLM tool wrappers and /code, /data, /sandbox slash commands."""
-    # Tool: execute python
+def test_sandbox_tools_fail_closed_but_analysis_still_works() -> None:
     res_py = sandbox_execute_python("math.sqrt(144)")
-    assert res_py["success"] is True
-    assert "12.0" in res_py["result"]["stdout"]
+    assert res_py["success"] is False
+    assert res_py["available"] is False
+    assert res_py["result"]["status"] == "unavailable"
 
-    # Tool: analyze dataset
+    # Dataset analysis is pure parsing: it still returns a real answer.
     json_data = '[{"name": "Ali", "score": 98}, {"name": "Sara", "score": 92}]'
     res_data = sandbox_analyze_dataset(json_data)
     assert res_data["success"] is True
     assert res_data["summary"]["total_rows"] == 2
 
-    # Tool: get status
     res_st = sandbox_get_status()
     assert res_st["success"] is True
     assert res_st["total_executions"] >= 1
 
-    # Slash: /code
-    slash_code = handle_sandbox_slash_command("/code print('Hello Dream Sandbox')")
-    assert "Hello Dream Sandbox" in slash_code
 
-    # Slash: /data
+def test_slash_commands_report_the_truth() -> None:
+    json_data = '[{"name": "Ali", "score": 98}]'
+
+    slash_code = handle_sandbox_slash_command("/code print('Hello Dream Sandbox')")
+    assert "Hello Dream Sandbox" not in slash_code
+    assert "fail-closed" in slash_code
+
     slash_data = handle_sandbox_slash_command(f"/data {json_data}")
     assert "Dataset Profile" in slash_data
 
-    # Slash: /sandbox status
     slash_status = handle_sandbox_slash_command("/sandbox status")
     assert "وضعیت سندباکس" in slash_status
 
-    # Slash: /sandbox reset
     slash_reset = handle_sandbox_slash_command("/sandbox reset")
     assert "بازنشانی شد" in slash_reset
+
+
+def test_no_execution_primitive_remains_in_the_executor_module() -> None:
+    import ast
+
+    path = Path(__file__).resolve().parent.parent / "dream" / "sandbox" / "executor.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    calls = {
+        getattr(node.func, "id", None)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+    }
+    assert not ({"eval", "exec", "compile"} & calls)

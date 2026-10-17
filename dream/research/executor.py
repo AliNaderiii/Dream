@@ -1,16 +1,17 @@
 """Sandboxed CodeAct execution with a static gate and a no-hang watchdog.
 
-The host process never runs model-authored code. A snippet travels through
+The host process never runs model-authored code, and there is no longer any
+configuration that makes it run such code locally. A snippet travels through
 three gates before it produces a number:
 
 1. :func:`validate_code` — an AST allowlist. Imports outside a tiny science
    allowlist, ``exec``/``eval``/``compile``, ``__import__``, attribute access
    to dunder internals, subprocess/socket/shutil use, and absolute or
    traversing path literals are refused *before* anything is written to disk.
-2. the executor — Docker by default (network off, cap-drop, seccomp, memory
-   and CPU bounds via :mod:`dream.docker_sandbox`), falling back to the
-   guarded ``-I`` subprocess of :mod:`dream.skills.data_science` with a loud
-   warning when Docker is unavailable.
+2. the executor — the Docker sandbox only (network off, cap-drop, seccomp,
+   memory and CPU bounds via :mod:`dream.docker_sandbox`). There is **no host
+   fallback** (MASTER-P0 D1): when the container runtime is missing the
+   executor raises :class:`ContainerUnavailableError` and nothing runs.
 3. the watchdog — a hard wall-clock deadline enforced on a worker thread, so
    a wedged container or a stuck subprocess reports a controlled timeout
    instead of hanging the session. Output is truncated to a fixed budget.
@@ -25,14 +26,13 @@ import ast
 import concurrent.futures
 import json
 import logging
-import os
 import re
 import textwrap
 import time
 from pathlib import Path
 from typing import Any
 
-from dream.research.errors import ResearchSecurityError, ResearchTimeout
+from dream.research.errors import ResearchError, ResearchSecurityError, ResearchTimeout
 from dream.research.schemas import Observation
 
 logger = logging.getLogger("dream.research.executor")
@@ -41,6 +41,7 @@ __all__ = [
     "MAX_CODE_CHARS",
     "MAX_OUTPUT_CHARS",
     "CodeActExecutor",
+    "ContainerUnavailableError",
     "validate_code",
 ]
 
@@ -52,6 +53,17 @@ _ALLOWED_IMPORTS = frozenset(
     {"math", "statistics", "json", "re", "datetime", "itertools", "collections",
      "numpy", "pandas", "np", "pd"}
 )
+
+
+class ContainerUnavailableError(ResearchError):
+    """No isolated container runtime is available, so nothing was executed.
+
+    Deliberately **not** caught by the snippet machinery: a refused snippet is
+    data the loop reflects on, but a missing sandbox is an environment fault
+    the user must see. The session turns it into a controlled ``FAILED``
+    transition.
+    """
+
 
 _FORBIDDEN_NAMES = frozenset(
     {
@@ -207,23 +219,36 @@ class CodeActExecutor:
         self.runtime = runtime
         self.default_timeout = float(default_timeout)
         self.memory_mb = int(memory_mb)
-        self._warned_local = False
 
     # -- introspection ----------------------------------------------------- #
 
     @property
-    def backend_name(self) -> str:
-        return type(getattr(self.runtime, "executor", None)).__name__
+    def backend(self) -> str:
+        """The backend the configured executor really uses.
 
-    def _warn_if_local(self) -> None:
-        if self._warned_local or "Local" not in self.backend_name:
+        Read from the executor's own ``backend`` label, not guessed from a
+        class name and not assumed to be Docker. ``unavailable`` is a truthful
+        answer and is what any status surface will show.
+        """
+        return str(getattr(self.runtime.executor, "backend", "unknown"))
+
+    @property
+    def backend_available(self) -> bool:
+        """False when the configured executor cannot execute in isolation."""
+        return bool(getattr(self.runtime.executor, "available", True))
+
+    def require_backend(self) -> None:
+        """Raise :class:`ContainerUnavailableError` unless isolation is ready.
+
+        Called before anything is written to disk or spawned, so an unready
+        environment fails before the snippet reaches a runner.
+        """
+        if self.backend_available:
             return
-        self._warned_local = True
-        logger.warning(
-            "research CodeAct is running in the guarded local subprocess "
-            "fallback (Docker unavailable): the AST gate and the workspace "
-            "cwd are the only isolation. Install/start Docker for the full "
-            "sandbox."
+        raise ContainerUnavailableError(
+            "unavailable: research code needs an isolated container runtime and "
+            "Dream never runs model-generated code on the host. Install/start "
+            "Docker and retry."
         )
 
     # -- execution --------------------------------------------------------- #
@@ -244,7 +269,8 @@ class CodeActExecutor:
         (:class:`ResearchTimeout`).
         """
         source = validate_code(code)
-        self._warn_if_local()
+        # Fail closed before a byte is written: no container, no run.
+        self.require_backend()
         deadline = float(timeout or self.default_timeout)
         record = self.runtime.datasets.get(dataset_id)
         workspace = self.runtime.datasets.dir_for(record)
@@ -367,15 +393,25 @@ class CodeActExecutor:
     # -- diagnostics ------------------------------------------------------- #
 
     @staticmethod
-    def docker_available() -> bool:
-        """True when the Docker sandbox path is selectable in this process."""
-        if os.environ.get("DREAM_DATA_LOCAL_EXEC", "").strip().lower() in {"1", "true", "yes"}:
+    def docker_available(runtime: Any = None) -> bool:
+        """True when this runtime can execute in an isolated container.
+
+        Reports the *configured executor's* state (MASTER-P0 D1). The previous
+        implementation only checked that the sandbox module imports, so it
+        answered ``True`` on a machine with no Docker daemon and let status
+        output claim a Docker sandbox that did not exist. There is no longer
+        any environment variable that changes this answer.
+        """
+        if runtime is None:
+            try:
+                from dream.docker_sandbox import DockerSandbox  # noqa: F401
+            except ImportError:  # pragma: no cover - dream always ships it
+                return False
+            return True
+        executor = getattr(runtime, "executor", None)
+        if executor is None:
             return False
-        try:
-            from dream.docker_sandbox import DockerSandbox  # noqa: F401
-        except ImportError:  # pragma: no cover - dream always ships it
-            return False
-        return True
+        return bool(getattr(executor, "available", True))
 
     def elapsed_budget(self, started: float, budget: float) -> float:
         """Remaining seconds in a budget, floored at zero (no negative sleeps)."""

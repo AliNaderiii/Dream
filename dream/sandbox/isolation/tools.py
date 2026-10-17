@@ -1,4 +1,10 @@
-"""LLM tool bindings for Kernel Micro-Isolation and WASM Sandbox Engine."""
+"""Tool bindings for the static isolation audit (no execution — MASTER-P0).
+
+Every ``*_execute`` binding here returns ``available: False`` and a bilingual
+refusal. The static :class:`~dream.sandbox.isolation.seccomp_filter.SyscallFilterEngine`
+audit still runs and its verdict is reported, so the tools remain useful as a
+*pre-flight hint*; they are not a sandbox and do not run code.
+"""
 
 from __future__ import annotations
 
@@ -29,7 +35,14 @@ def sandbox_isolate_execute(
     language: str = "python",
     policy: str = "strict_readonly",
 ) -> dict[str, Any]:
-    """Execute code in a micro-isolated sandbox with Seccomp syscall filtering."""
+    """Audit *code* statically. Never executes it.
+
+    ``available`` is always ``False``: this subsystem has no execution backend.
+    ``blocked`` distinguishes a static-policy hit from the plain refusal so a
+    caller can tell "your payload looked dangerous" apart from "nothing here
+    runs code".
+    """
+    del language
     engine = get_global_isolation_engine()
     try:
         p_enum = SyscallPolicy(policy.lower())
@@ -37,20 +50,30 @@ def sandbox_isolate_execute(
         p_enum = SyscallPolicy.STRICT_READONLY
 
     result = engine.execute_isolated(code, policy=p_enum)
-    return {"success": result.success, "result": result.to_dict()}
+    return {
+        "success": False,
+        "available": False,
+        "blocked": bool(result.security_violations),
+        "result": result.to_dict(),
+    }
 
 
 def sandbox_wasm_execute(
     expression_or_code: str,
 ) -> dict[str, Any]:
-    """Execute mathematical expressions or pure algorithms in virtual WASM micro-runtime."""
+    """Audit *expression_or_code* statically. Never executes it."""
     engine = get_global_isolation_engine()
     result = engine.execute_isolated(
         expression_or_code,
         isolation_level=IsolationLevel.WASM_SANDBOX,
         policy=SyscallPolicy.COMPUTE_ONLY,
     )
-    return {"success": result.success, "result": result.to_dict()}
+    return {
+        "success": False,
+        "available": False,
+        "blocked": bool(result.security_violations),
+        "result": result.to_dict(),
+    }
 
 
 def sandbox_get_isolation_status() -> dict[str, Any]:

@@ -18,12 +18,19 @@ class ExecutionLanguage(str, Enum):
 
 
 class ExecutionStatus(str, Enum):
-    """Outcome states of sandbox execution."""
+    """Outcome states of sandbox execution.
+
+    ``UNAVAILABLE`` is the fail-closed state MASTER-P0 added: this subsystem no
+    longer executes anything on the host, so a caller that asks it to run code
+    gets this instead of a result. ``BLOCKED`` is retained for the pattern
+    scanner, which still classifies payloads without running them.
+    """
 
     SUCCESS = "success"
     ERROR = "error"
     TIMEOUT = "timeout"
     BLOCKED = "blocked"
+    UNAVAILABLE = "unavailable"
 
 
 @dataclass(slots=True)

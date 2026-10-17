@@ -27,8 +27,13 @@ Three host-side pieces:
 
 - **`dream/skills/data_science.py`** — the tool suite. Owns the dataset
   registry (`DatasetManager`), request validation, script generation, and the
-  executor seam (`SandboxCodeExecutor` → Docker, `LocalPythonExecutor` →
-  dev/test fallback via `DREAM_DATA_LOCAL_EXEC=1`).
+  executor seam. There is exactly one production executor,
+  `SandboxCodeExecutor` → `DockerSandbox`; when the container runtime is
+  unavailable the runtime returns a typed `ExecResult(available=False,
+  return_code=126, error_code="docker_unavailable")` and **nothing runs on the
+  host** (MASTER-P0 D1 removed both the `DREAM_DATA_LOCAL_EXEC=1` opt-in and the
+  import-failure fallback). Test doubles for the generated scripts live in
+  `tests/_data_science_helpers.py` and are injected explicitly.
 - **`dream/skills/notebooks.py`** — Jupyter integration. nbformat-v4 file IO
   is plain JSON on the host; execution goes through `jupyter_client` with one
   kernel per `dataset_id`; `open_jupyterlab` spawns a token-guarded local

@@ -31,13 +31,16 @@ INJECTION_CSV = (
 
 @pytest.fixture()
 def engine(tmp_path: Path, monkeypatch) -> ResearchEngine:
-    monkeypatch.setenv("DREAM_DATA_LOCAL_EXEC", "1")
     monkeypatch.setenv("DREAM_DATASETS_DIR", str(tmp_path / "datasets"))
     from dream.skills.data_science import DataScienceRuntime
+    from tests._data_science_helpers import test_executor
+
+    # MASTER-P0 D1: the product has no host executor, so the fixture injects
+    # one explicitly instead of relying on the removed env-var escape hatch.
 
     return ResearchEngine(
         store=SessionStore(tmp_path / "research"),
-        runtime=DataScienceRuntime(),
+        runtime=DataScienceRuntime(executor=test_executor()),
         backend=EchoBackend(),
     )
 

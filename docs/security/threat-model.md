@@ -347,10 +347,69 @@ call site**. The Docker-absence refusal is asserted with a sandbox double
 whose `run_code` raises if it is ever reached.
 
 **Residual.** The container is Docker's boundary, not Dream's — a Docker or
-kernel escape is out of Dream's control (accepted, §7). `--userns=remap` and
-the seccomp profile come from `docker_sandbox.py`, which P6 deliberately did
-not rewrite. Bash and R languages remain reachable through the underlying
-sandbox API; the L9-A policy only clears Python, so anything else refuses.
+kernel escape is out of Dream's control (accepted, §7). The seccomp profile in
+`docker_sandbox.py` is a permissive allow-list and is **not** the network
+control; `--network=none` plus `--cap-drop=ALL` is. Bash and R languages remain
+reachable through the underlying sandbox API; the L9-A policy only clears
+Python, so anything else refuses.
+
+#### L9-A′ — the desktop Code surface (MASTER-P0)
+
+**Present.** `dream/security/codeexec.py`, `docs/security/code-execution.md`.
+
+L9-A guarded the *agentic* callers. The desktop Code view — a textarea where a
+user pastes whatever a model produced — had its own RPC, and that RPC's
+implementation was decided by accident. Two modules declared
+`sandbox.run_code`: an extension handler backed by a **stateful host
+`eval`/`exec` interpreter** with a seven-regex blocklist, and the built-in
+container handler. The extension only lost because
+`dream.bridge.extensions.Registry.publish` drops colliding extension methods.
+On top of that the two spoke different shapes — the extension promised
+`{status, result: {stdout, …}}`, the built-in returned
+`{stdout, stderr, return_code, …}` — so the view read `result.result.stdout`,
+found nothing, and rendered a red error chip with **no output** for programs
+that had run correctly. The surface was simultaneously disconnected from its UI
+and one collision-resolution change away from running model code on the host.
+
+MASTER-P0 fixes both halves:
+
+- one typed contract (`CodeExecutionRequest` / `CodeExecutionResponse`) shared by
+  the view, the handler, and the tests; the response shape is the one the view
+  already read, so the display path was repaired rather than re-invented;
+- `sandbox.run_code` has exactly **one** definition, and a regression test fails
+  if a second appears;
+- the host interpreter is gone: `dream/sandbox/executor.py` and
+  `dream/sandbox/isolation/` contain no `eval`/`exec`/`compile` call site and
+  report `unavailable` (exit code 126) instead of running anything;
+- the boundary-widening parameters (`network_enabled`, `workspace_path`,
+  `mount_workspace_read_write`, `resource_limits`, `env_vars`, `docker_host`) are
+  **refused by name** instead of honoured, so no request can re-open the network,
+  mount an arbitrary host directory, or inject environment variables;
+- the workspace is canonicalised with symlinks resolved and must live inside
+  `DREAM_SANDBOX_ROOT`; the container runs as a non-root uid, keeps
+  `--read-only` with a bounded `/tmp` tmpfs, and is force-removed on timeout and
+  on cancellation;
+- `CalledProcessError(stdout=…)` — which raised `TypeError` on every non-zero
+  docker exit, so a program that simply exited 1 was reported as an internal
+  runner failure and its stderr was lost — now passes `output=`, and a test pins
+  the container's own exit code and stderr surviving to the client.
+
+**Threats.** T9.6 (the convenience regression) now covers the desktop surface as
+well as the agentic one. Add T9.14: `T9.14` — a second definition of an execution
+RPC shadowing the safe handler. Add T9.15: `T9.15` — a request parameter that
+re-opens the boundary (network, mount, environment).
+
+**Controls → evidence.** `tests/test_code_execution_contract.py` (the validation
+and adversarial matrix, driven through the registered handler),
+`tests/test_docker_sandbox_hardening.py` (the exact `docker run` argv),
+`tests/test_code_execution_route_containment.py` (absence proofs for every
+retired route), `apps/desktop/src/v5/views/code.test.js` (the frontend renders
+every status the backend can return).
+
+**Residual.** No test in this repository has executed a real container: CI has no
+Docker daemon, so the argv assertions prove what Dream *requests*, not what a
+kernel enforces. `--userns=remap` is opt-in because a stock daemon rejects the
+flag outright. The full list is §9 of `docs/security/code-execution.md`.
 
 #### L9-B — Data-as-data framing for code generation
 

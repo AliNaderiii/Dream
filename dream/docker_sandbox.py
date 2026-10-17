@@ -54,6 +54,17 @@ class ResourceLimits:
     network_enabled: bool = False  # network access (opt-in)
     timeout_seconds: int = 60  # max execution wall time
     pids_limit: int = 100  # max number of processes
+    #: ``docker --userns=remap`` needs ``userns-remap`` configured on the
+    #: daemon. On a stock daemon the flag makes ``docker run`` fail outright,
+    #: which would turn a hardening measure into an availability bug, so it is
+    #: opt-in and recorded per run instead of being assumed.
+    userns_remap: bool = False
+    #: Container uid:gid. ``None`` leaves the image default in place, which is
+    #: recorded honestly rather than claimed as non-root.
+    user: str | None = None
+    #: Size of the writable ``/tmp`` tmpfs. ``--read-only`` otherwise leaves
+    #: programs with nowhere to put scratch state.
+    tmpfs_mb: int = 64
 
 
 @dataclass
@@ -64,9 +75,13 @@ class SandboxResult:
     stderr: str = ""
     return_code: int = -1
     timed_out: bool = False
+    cancelled: bool = False
     output_files: list[str] = field(default_factory=list)
     elapsed_seconds: float = 0.0
     error: str | None = None
+    #: The container this run used, so a caller can terminate the whole
+    #: process tree instead of only abandoning the ``docker run`` client.
+    container_name: str = ""
 
 
 class DockerUnavailableError(RuntimeError):
@@ -110,6 +125,17 @@ class DockerSandbox:
         Language.R: "rocker/r-ver:4.4",
         Language.BASH: "alpine:3.19",
     }
+
+    def _image_for(self, language: Language) -> str:
+        """Resolve the image for *language*, honouring ``DREAM_SANDBOX_IMAGE``.
+
+        The override applies to Python only: it is the language the Code
+        contract exposes, and silently redirecting an R or Bash run to a Python
+        image would produce a confusing failure rather than a refusal.
+        """
+        if language is Language.PYTHON and self._image_override:
+            return self._image_override
+        return self.DEFAULT_IMAGES[language]
 
     #: Extra packages pre-installed for Python images.
     PYTHON_BASE_PACKAGES: list[str] = [
@@ -157,6 +183,11 @@ class DockerSandbox:
         self._auto_pull = auto_pull
         self._pulled_images: set[str] = set()
         self._checked = False
+        #: ``DREAM_SANDBOX_IMAGE`` pins (and can digest-lock) the Python image,
+        #: which is the one the Code surface uses. Air-gapped and
+        #: tamper-sensitive deployments should set a digest, not a tag.
+        override = os.environ.get("DREAM_SANDBOX_IMAGE", "").strip()
+        self._image_override = override or None
 
         # Seccomp profile content (block unnecessary syscalls).
         self._seccomp_profile = self._build_seccomp_profile()
@@ -203,6 +234,7 @@ class DockerSandbox:
         mount_workspace_read_write: bool = False,
         keep_container: bool | None = None,
         timeout: int | None = None,
+        container_name: str | None = None,
     ) -> SandboxResult:
         """Execute ``code`` inside a sandbox container.
 
@@ -217,13 +249,15 @@ class DockerSandbox:
                 read-only) for approved tasks.
             keep_container: Override the instance-wide ``keep_containers``.
             timeout: Override the resource_limits timeout.
+            container_name: Use a caller-chosen container name so the caller can
+                terminate the container tree by name (cancellation, timeout).
 
         Returns:
             :class:`SandboxResult` with captured output and extracted files.
         """
         limits = resource_limits or ResourceLimits()
         lang = Language(language)
-        image = self.DEFAULT_IMAGES[lang]
+        image = self._image_for(lang)
         timeout_s = timeout if timeout is not None else limits.timeout_seconds
         keep = keep_container if keep_container is not None else self._keep_containers
 
@@ -253,6 +287,7 @@ class DockerSandbox:
                 env_vars=env_vars,
                 read_write=mount_workspace_read_write,
                 keep=keep,
+                container_name=container_name,
             )
 
             # Extract output files from the container.
@@ -266,6 +301,18 @@ class DockerSandbox:
         finally:
             if created_temp and not keep:
                 self._cleanup_temp(workspace)
+
+    async def force_remove_container(self, container_name: str) -> bool:
+        """Terminate and remove a container by name (kill + rm).
+
+        Used by the cancellation/timeout paths. ``docker rm -f`` works whether
+        the container is running or already exited, and killing the ``docker
+        run`` client alone would leave the container — and every process inside
+        it — alive.
+        """
+        if not container_name:
+            return False
+        return await self._force_remove(container_name)
 
     async def run_notebook(
         self,
@@ -295,7 +342,7 @@ class DockerSandbox:
 
         limits = resource_limits or ResourceLimits()
         lang = Language.PYTHON if kernel == "python3" else Language.R
-        image = self.DEFAULT_IMAGES[lang]
+        image = self._image_for(lang)
         await self._ensure_image(image)
 
         workspace = nb_path.parent
@@ -450,17 +497,36 @@ class DockerSandbox:
         read_write: bool = False,
         keep: bool = False,
         exec_command: str | None = None,
+        container_name: str | None = None,
     ) -> SandboxResult:
-        """Run code inside a container and capture output."""
-        container_name = f"dream-sandbox-{uuid.uuid4().hex[:12]}"
+        """Run code inside a container and capture output.
+
+        The hardening flags below are the isolation boundary, not decoration.
+        Every one is asserted by ``tests/test_docker_sandbox_hardening.py``
+        against the argv this function builds, so a regression fails a test
+        instead of silently softening the sandbox:
+
+        ``--cap-drop=ALL``  no Linux capability, including the ones that would
+                            rebuild a mount namespace or load a module
+        ``--security-opt=no-new-privileges:true``  setuid binaries cannot raise
+                            privilege inside the container
+        ``--read-only``     the image filesystem cannot be modified
+        ``--tmpfs /tmp``    the ONLY writable location besides the workspace
+        ``--network=none``  no interface, no DNS, no loopback egress
+        ``--user``          the process does not run as root
+        ``--memory``/``--memory-swap=0``/``--pids-limit``/``--cpus``
+                            bounded memory, no swap escape, bounded fork bomb,
+                            bounded CPU
+        """
+        name = container_name or f"dream-sandbox-{uuid.uuid4().hex[:12]}"
         started_at = time.monotonic()
-        result = SandboxResult()
+        result = SandboxResult(container_name=name)
 
         # Build the command.
         cmd = ["run", "--rm"] if not keep else ["run"]
 
         # Container name.
-        cmd.extend(["--name", container_name])
+        cmd.extend(["--name", name])
 
         # Security hardening.
         cmd.extend([
@@ -485,20 +551,38 @@ class DockerSandbox:
         seccomp_path = self._write_seccomp_profile()
         cmd.extend(["--security-opt", f"seccomp={seccomp_path}"])
 
-        # User namespace remapping (root in container != root on host).
-        cmd.append("--userns=remap:default")
+        # Run as a non-root user. A read-only rootfs usually needs a writable
+        # HOME for matplotlib/PIL caches, so HOME points at the tmpfs.
+        container_user = limits.user or self._default_container_user()
+        if container_user:
+            cmd.extend(["--user", container_user])
+        if limits.tmpfs_mb > 0:
+            cmd.extend(["--tmpfs", f"/tmp:rw,nosuid,nodev,size={limits.tmpfs_mb}m"])
+
+        # User namespace remapping is daemon-dependent: opt-in only, so a
+        # missing `userns-remap` config cannot take the sandbox down.
+        if limits.userns_remap:
+            cmd.append("--userns=remap")
 
         # Mount workspace.
         mount_mode = "rw" if read_write else "ro"
         cmd.extend(["-v", f"{workspace.resolve()}:/workspace:{mount_mode}"])
         cmd.extend(["-w", "/workspace"])
 
-        # Environment variables.
+        # No `--privileged`, no host mounts, no `--env-file`, no bare `-e NAME`
+        # (which would forward a host variable by name). Only explicitly valued
+        # variables cross into the container.
         if env_vars:
             for key, value in env_vars.items():
                 cmd.extend(["-e", f"{key}={value}"])
 
-        # Python-specific: set PYTHONUNBUFFERED.
+        # A fixed, minimal environment. Nothing here is a credential, and the
+        # host environment is never inherited because every `-e` carries a
+        # literal value.
+        cmd.extend(["-e", "HOME=/tmp"])
+        cmd.extend(["-e", "TMPDIR=/tmp"])
+        cmd.extend(["-e", "MPLCONFIGDIR=/tmp/mpl"])
+        cmd.extend(["-e", "PYTHONDONTWRITEBYTECODE=1"])
         if language == Language.PYTHON:
             cmd.extend(["-e", "PYTHONUNBUFFERED=1"])
 
@@ -522,28 +606,65 @@ class DockerSandbox:
             result.timed_out = True
             result.stderr = f"Execution timed out after {timeout_s}s"
             result.return_code = -1
-            # Force-kill the container.
-            try:
-                await self._run_docker_cmd("kill", [container_name], timeout=5)
-            except subprocess.SubprocessError:
-                pass
+            # Terminate the whole container tree. Killing the `docker run`
+            # client only abandons it; the container keeps running.
+            await self._force_remove(name)
+        except asyncio.CancelledError:
+            # The caller went away: the container must not outlive the request.
+            result.cancelled = True
+            result.return_code = -1
+            await self._force_remove(name)
+            raise
         except subprocess.CalledProcessError as exc:
             result.stdout = exc.stdout or ""
             result.stderr = exc.stderr or ""
             result.return_code = exc.returncode
         except FileNotFoundError as exc:
             raise DockerUnavailableError("Docker executable not found in PATH") from exc
+        finally:
+            # `--rm` removes a container that exits on its own; this closes the
+            # window where the client died before the container did.
+            if not keep:
+                await self._force_remove(name, ignore_missing=True)
 
         result.elapsed_seconds = round(time.monotonic() - started_at, 3)
 
         # Clean up the container if keep is True and it wasn't --rm.
         if keep:
             try:
-                await self._run_docker_cmd("rm", ["-f", container_name], timeout=10)
+                await self._run_docker_cmd("rm", ["-f", name], timeout=10)
             except subprocess.SubprocessError:
                 pass
 
         return result
+
+    @staticmethod
+    def _default_container_user() -> str | None:
+        """A non-root ``uid:gid`` for the container process.
+
+        When the host app runs unprivileged we reuse its ids so the bind-mounted
+        workspace stays writable; when it runs as root we drop to ``nobody``.
+        On Windows there is no ``os.getuid`` and Docker Desktop owns the mapping,
+        so the answer is ``None`` — recorded in the isolation descriptor rather
+        than claimed.
+        """
+        getuid = getattr(os, "getuid", None)
+        getgid = getattr(os, "getgid", None)
+        if getuid is None or getgid is None:
+            return None
+        uid, gid = getuid(), getgid()
+        return "65534:65534" if uid == 0 else f"{uid}:{gid}"
+
+    async def _force_remove(self, container_name: str, *, ignore_missing: bool = False) -> bool:
+        """Best-effort ``docker rm -f``. Never raises; never masks a result."""
+        try:
+            await self._run_docker_cmd("rm", ["-f", container_name], timeout=10)
+            return True
+        except (subprocess.SubprocessError, OSError):
+            if ignore_missing:
+                return False
+            return False
+
 
     async def _extract_output_files(
         self, workspace: Path, language: str
@@ -709,10 +830,14 @@ class DockerSandbox:
             ) from exc
 
         if proc.returncode != 0:
+            # ``CalledProcessError`` takes ``output``, not ``stdout``: passing
+            # ``stdout=`` raised TypeError instead, so *every* non-zero docker
+            # exit — including a program that simply exited 1 — surfaced as an
+            # internal runner failure and its stderr was lost.
             raise subprocess.CalledProcessError(
                 proc.returncode,
                 cmd=" ".join(docker_cmd),
-                stdout=stdout.decode("utf-8", errors="replace"),
+                output=stdout.decode("utf-8", errors="replace"),
                 stderr=stderr.decode("utf-8", errors="replace"),
             )
 

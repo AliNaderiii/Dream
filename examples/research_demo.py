@@ -83,13 +83,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-iterations", type=int, default=2)
     parser.add_argument("--autonomous", action="store_true",
                         help="skip the approval checkpoint and use the degraded grant set")
-    parser.add_argument("--local-exec", action="store_true",
-                        help="force the guarded local subprocess instead of Docker")
     parser.add_argument("--keep", action="store_true", help="keep the temporary workspace")
     args = parser.parse_args(argv)
-
-    if args.local_exec:
-        os.environ["DREAM_DATA_LOCAL_EXEC"] = "1"
 
     root = Path(tempfile.mkdtemp(prefix="dream-research-demo-"))
     os.environ.setdefault("DREAM_DATASETS_DIR", str(root / "datasets"))
