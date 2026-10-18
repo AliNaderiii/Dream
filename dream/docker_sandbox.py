@@ -15,6 +15,7 @@ import asyncio
 import json
 import os
 import shutil
+import stat
 import subprocess
 import tempfile
 import time
@@ -164,6 +165,8 @@ class DockerSandbox:
         data_dir: str | None = None,
         keep_containers: bool = False,
         auto_pull: bool = True,
+        notebook_root: str | Path | None = None,
+        package_install_approved: bool = False,
     ) -> None:
         """Initialise the sandbox.
 
@@ -176,6 +179,15 @@ class DockerSandbox:
                 execution (useful for debugging).
             auto_pull: If ``True``, pull images automatically on first use.
         """
+        # Operator-only configuration, never populated from RPC parameters.
+        configured_root = notebook_root or os.environ.get("DREAM_NOTEBOOK_ROOT")
+        self._notebook_root = (
+            Path(configured_root).expanduser().resolve(strict=True) if configured_root else None
+        )
+        if self._notebook_root is not None and not self._notebook_root.is_dir():
+            raise ValueError("notebook root must be a directory")
+        self._package_install_approved = package_install_approved is True
+        self.DEFAULT_IMAGES = dict(type(self).DEFAULT_IMAGES)
         self._docker_host = docker_host or os.environ.get("DOCKER_HOST")
         self._data_dir = Path(data_dir or os.path.expanduser("~/.dream/sandbox"))
         self._data_dir.mkdir(parents=True, exist_ok=True)
@@ -324,8 +336,8 @@ class DockerSandbox:
     ) -> SandboxResult:
         """Execute a Jupyter notebook inside the sandbox.
 
-        Uses ``jupyter nbconvert --execute`` for Python kernels or ``Rscript``
-        with ``rmarkdown::render()`` for R.
+        Uses a non-shell ``jupyter nbconvert`` argv for both supported kernels.
+        Only an authorized source file is copied to a fresh staging directory.
 
         Args:
             notebook_path: Path to the ``.ipynb`` file.
@@ -336,48 +348,86 @@ class DockerSandbox:
         Returns:
             :class:`SandboxResult` with the executed notebook and output.
         """
-        nb_path = Path(notebook_path)
-        if not nb_path.exists():
-            raise FileNotFoundError(f"Notebook not found: {nb_path}")
-
-        limits = resource_limits or ResourceLimits()
+        if kernel not in ("python3", "ir"):
+            raise ValueError("unsupported notebook kernel")
+        if isinstance(timeout, bool) or not isinstance(timeout, int) or not 1 <= timeout <= 600:
+            raise ValueError("timeout must be an integer in 1..600")
+        if self._notebook_root is None:
+            raise PermissionError("notebook root is not configured")
+        raw = str(notebook_path)
+        if not raw or any(ord(c) < 32 or ord(c) == 127 for c in raw):
+            raise ValueError("malformed notebook filename")
+        path = Path(raw)
+        if ".." in path.parts or "\\" in raw:
+            raise ValueError("non-canonical notebook path")
+        nb_path = path if path.is_absolute() else self._notebook_root / path
+        try:
+            resolved = nb_path.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise PermissionError("notebook path is not authorized") from exc
+        if (resolved != nb_path or not resolved.is_relative_to(self._notebook_root)
+                or not resolved.is_file() or resolved.suffix != ".ipynb"):
+            raise PermissionError("notebook path is not authorized")
+        # Walk from a pinned root fd: no component may become an escaping
+        # symlink between validation and read. Fail closed without dir_fd support.
+        if os.open not in os.supports_dir_fd or not hasattr(os, "O_NOFOLLOW"):
+            raise OSError("safe notebook opening is unavailable on this platform")
+        directory_fd = os.open(self._notebook_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            parts = resolved.relative_to(self._notebook_root).parts
+            for component in parts[:-1]:
+                child_fd = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                   dir_fd=directory_fd)
+                os.close(directory_fd)
+                directory_fd = child_fd
+            fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                         dir_fd=directory_fd)
+            with os.fdopen(fd, "rb") as source:
+                if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                    raise PermissionError("notebook must be a regular file")
+                content = source.read(10_000_001)
+        finally:
+            os.close(directory_fd)
+        if len(content) > 10_000_000:
+            raise ValueError("notebook exceeds size limit")
+        notebook = json.loads(content)
+        if not isinstance(notebook, dict) or notebook.get("nbformat") != 4:
+            raise ValueError("only nbformat 4 notebooks are supported")
+        limits = resource_limits or ResourceLimits(timeout_seconds=timeout)
+        limits.network_enabled = False
         lang = Language.PYTHON if kernel == "python3" else Language.R
         image = self._image_for(lang)
         await self._ensure_image(image)
-
-        workspace = nb_path.parent
-        code_filename = nb_path.name
-
-        if kernel == "python3":
-            # Execute via nbconvert.
-            exec_cmd = (
-                f"jupyter nbconvert --to notebook --execute "
-                f"--ExecutePreprocessor.timeout={timeout} "
-                f"--ExecutePreprocessor.kernel_name={kernel} "
-                f"{code_filename} --output {code_filename}.executed"
+        # Never mount the source parent. The filename is deliberately fixed too.
+        staging = self._data_dir.resolve() / "notebook-runs"
+        if staging.is_symlink() or staging.resolve() != staging:
+            raise PermissionError("invalid notebook staging root")
+        staging.mkdir(mode=0o700, exist_ok=True)
+        if staging.is_symlink() or staging.resolve() != staging:
+            raise PermissionError("invalid notebook staging root")
+        workspace = Path(tempfile.mkdtemp(prefix="nb-", dir=staging))
+        os.chmod(workspace, 0o700)
+        (workspace / "input.ipynb").write_bytes(content)
+        exec_cmd = [
+            "jupyter", "nbconvert", "--to", "notebook", "--execute",
+            f"--ExecutePreprocessor.timeout={timeout}",
+            f"--ExecutePreprocessor.kernel_name={kernel}",
+            "--output", "executed.ipynb", "input.ipynb",
+        ]
+        try:
+            result = await self._exec_in_container(
+                image=image, language=lang, code_filename="input.ipynb",
+                workspace=workspace, limits=limits, timeout_s=timeout,
+                exec_command=exec_cmd, read_write=True,
             )
-        else:
-            # R kernel: use rmarkdown.
-            exec_cmd = (
-                "Rscript -e "
-                f"\"rmarkdown::render('{code_filename}', "
-                f"output_file='{code_filename}.executed.html')\""
-            )
-
-        result = await self._exec_in_container(
-            image=image,
-            language=lang,
-            code_filename=code_filename,
-            workspace=workspace,
-            limits=limits,
-            timeout_s=timeout,
-            exec_command=exec_cmd,
-        )
-
-        if result.return_code == 0:
-            result.output_files = await self._extract_output_files(workspace, language=lang)
-
-        return result
+            # Retain outputs only in this run's staging directory, never copy back.
+            result.output_files = [str(p) for p in workspace.iterdir()
+                                   if p.name != "input.ipynb" and not p.is_symlink()
+                                   and p.is_file() and p.resolve().parent == workspace]
+            return result
+        except BaseException:
+            shutil.rmtree(workspace, ignore_errors=True)
+            raise
 
     async def install_packages(
         self,
@@ -388,7 +438,9 @@ class DockerSandbox:
     ) -> bool:
         """Install packages into the base image (creates a new layer).
 
-        This builds a new image tagged ``dream-sandbox-{language}:custom``.
+        Requires operator-only ``package_install_approved=True``. This permits
+        network access and creates a uniquely tagged image; only this instance
+        switches to that tag after a successful build. RPC cannot enable it.
 
         Args:
             packages: Package names to install.
@@ -401,33 +453,37 @@ class DockerSandbox:
         Raises:
             SandboxExecutionError: If package installation fails.
         """
+        from dream.security.package_specs import validate_packages
+
+        packages = validate_packages(packages, language)
+        if not self._package_install_approved:
+            raise PermissionError(
+                "operator approval required for network access and image mutation"
+            )
         limits = resource_limits or ResourceLimits(timeout_seconds=300)
         lang = Language(language)
         base_image = self.DEFAULT_IMAGES[lang]
-        tag = f"dream-sandbox-{language}:custom"
-
-        # Build a Dockerfile.
+        tag = f"dream-sandbox-{language}:custom-{uuid.uuid4().hex}"
         if lang == Language.PYTHON:
-            pip_args = " ".join(packages)
-            dockerfile = (
-                f"FROM {base_image}\n"
-                f"RUN pip install --no-cache-dir {pip_args}\n"
-            )
+            argv = [
+                "python", "-m", "pip", "--isolated", "install", "--no-cache-dir", "--", *packages
+            ]
         else:
-            r_args = " ".join(f"'{p}'" for p in packages)
-            dockerfile = (
-                f"FROM {base_image}\n"
-                f"RUN Rscript -e \"install.packages(c({r_args}), repos='https://cloud.r-project.org/')\"\n"
-            )
+            # R names have a stricter grammar: quotes/backslashes cannot occur.
+            names = ",".join(f"'{p}'" for p in packages)
+            argv = ["Rscript", "--vanilla", "-e",
+                    f"install.packages(c({names}), repos='https://cloud.r-project.org/')"]
+        dockerfile = f"FROM {base_image}\nRUN {json.dumps(argv)}\n"
 
         # Write to a temp dir and build.
         build_dir = self._data_dir / "builds" / f"{language}-{uuid.uuid4().hex[:12]}"
         build_dir.mkdir(parents=True, exist_ok=True)
         try:
             (build_dir / "Dockerfile").write_text(dockerfile, encoding="utf-8")
-            cmd = ["build", "-t", tag, "-f", "Dockerfile", "."]
+            cmd = ["build", "--network=default", "-t", tag, "-f", "Dockerfile", "."]
             stdout, stderr = await self._run_docker_cmd_with_output(
-                cmd, cwd=str(build_dir), timeout=limits.timeout_seconds
+                cmd, cwd=str(build_dir), timeout=limits.timeout_seconds,
+                env={"PATH": os.defpath, "HOME": str(build_dir)}
             )
             # Update the default image for this language.
             self.DEFAULT_IMAGES[lang] = tag
@@ -496,7 +552,7 @@ class DockerSandbox:
         env_vars: dict[str, str] | None = None,
         read_write: bool = False,
         keep: bool = False,
-        exec_command: str | None = None,
+        exec_command: list[str] | None = None,
         container_name: str | None = None,
     ) -> SandboxResult:
         """Run code inside a container and capture output.
@@ -591,7 +647,7 @@ class DockerSandbox:
 
         # Execution command.
         if exec_command:
-            cmd.extend(["/bin/sh", "-c", exec_command])
+            cmd.extend(exec_command)
         else:
             cmd.extend(self._run_command(language, code_filename))
 
@@ -803,7 +859,8 @@ class DockerSandbox:
         return stdout
 
     async def _run_docker_cmd_with_output(
-        self, cmd: list[str], timeout: int = 60, cwd: str | None = None
+        self, cmd: list[str], timeout: int = 60, cwd: str | None = None,
+        env: dict[str, str] | None = None
     ) -> tuple[str, str]:
         """Run docker with the given arguments and return (stdout, stderr)."""
         docker_cmd = ["docker"]
@@ -816,6 +873,7 @@ class DockerSandbox:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,
+            env=env,
         )
 
         try:

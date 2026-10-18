@@ -2768,22 +2768,28 @@ class BridgeMethods:
 
     async def sandbox_run_notebook(self, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Execute a Jupyter notebook inside the sandbox."""
+        if params is not None and not isinstance(params, dict):
+            raise invalid_params("params must be an object")
         params = params or {}
+        if set(params) - {"notebook_path", "kernel", "timeout"}:
+            raise invalid_params("unsupported notebook argument")
         sb = self._require_sandbox()
         notebook_path = params.get("notebook_path")
         if not isinstance(notebook_path, str) or not notebook_path:
             raise invalid_params("notebook_path must be a non-empty string")
-        kernel = params.get("kernel", "python3")
-        if kernel not in ("python3", "ir"):
-            raise invalid_params("kernel must be one of: python3, ir")
-        timeout = int(params.get("timeout", 300))
+        try:
+            result = await sb.run_notebook(
+                notebook_path=notebook_path,
+                kernel=params.get("kernel", "python3"),
+                timeout=params.get("timeout", 300),
+            )
+        except (ValueError, PermissionError) as exc:
+            raise BridgeError(-32602, "Notebook request denied",
+                              data={"status": "denied", "code": type(exc).__name__}) from exc
+        except (OSError, RuntimeError) as exc:
+            raise BridgeError(-32010, "Notebook runner unavailable",
+                              data={"status": "unavailable"}) from exc
 
-        from pathlib import Path
-        result = await sb.run_notebook(
-            notebook_path=Path(notebook_path),
-            kernel=kernel,
-            timeout=timeout,
-        )
         return {
             "stdout": result.stdout,
             "stderr": result.stderr,
@@ -2798,15 +2804,27 @@ class BridgeMethods:
         self, params: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """Install packages in the sandbox image."""
+        from dream.security.package_specs import validate_packages
+
+        if params is not None and not isinstance(params, dict):
+            raise invalid_params("params must be an object")
         params = params or {}
-        sb = self._require_sandbox()
-        packages = params.get("packages")
-        if not isinstance(packages, list) or not packages:
-            raise invalid_params("packages must be a non-empty list of strings")
+        if set(params) - {"packages", "language"}:
+            raise invalid_params("unsupported installation argument")
         language = params.get("language", "python")
-        if language not in ("python", "r"):
-            raise invalid_params("language must be one of: python, r")
-        success = await sb.install_packages(packages, language=language)
+        try:
+            packages = validate_packages(params.get("packages"), language)
+        except ValueError as exc:
+            raise invalid_params(str(exc)) from exc
+        sb = self._require_sandbox()
+        try:
+            success = await sb.install_packages(packages, language=language)
+        except PermissionError as exc:
+            raise BridgeError(-32005, "Operator approval required for network and image mutation",
+                              data={"status": "denied"}) from exc
+        except (OSError, RuntimeError) as exc:
+            raise BridgeError(-32010, "Package build unavailable or failed",
+                              data={"status": "unavailable"}) from exc
         return {"success": success, "packages": packages, "language": language}
 
     # ------------------------------------------------------------------ #
