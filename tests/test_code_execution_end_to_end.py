@@ -244,7 +244,7 @@ def test_requested_workspace_outside_the_sandbox_root_is_denied_over_the_wire(tm
     )
     result = _result_for(messages, 1)
     assert result["status"] == "denied"
-    assert result["result"]["error"]["code"] == "workspace_outside_root"
+    assert result["result"]["error"]["code"] == "removed_field"
 
 
 def test_status_reset_and_cancel_over_the_wire() -> None:

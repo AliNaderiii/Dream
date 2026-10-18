@@ -6,8 +6,7 @@ previous situation, in which three modules each described a different execution
 story.
 
 **Scope note.** Everything below describes the *container* path. The research and
-data-Q&A pipelines have their own AST gate and their own documented dev escape
-hatch; see [Other execution surfaces](#8-other-execution-surfaces).
+data-Q&A pipelines have their own AST gate and are container-only; see [Other execution surfaces](#8-other-execution-surfaces).
 
 ---
 
@@ -81,8 +80,7 @@ The desktop view, the bridge handler, and the tests all use it.
 | `cpu_count` | number | `1.0` | `0.1` … `8` |
 | `pids_limit` | integer | `64` | `1` … `512` |
 | `max_output_bytes` | integer | `200000` | `1000` … `2000000` (per stream) |
-| `workspace` | string \| null | `null` | must resolve **inside** the sandbox root |
-| `execution_id` | string \| null | generated | `[A-Za-z0-9._-]{1,64}` |
+| `workspace`, `execution_id` | forbidden | server allocated | rejected with `removed_field`, including null |
 
 Validation is on the backend. The frontend sends only `code` and
 `timeout_seconds`, and the view's own checks are display conveniences.
@@ -99,6 +97,7 @@ out that it is not.
 | `resource_limits` | let a request set `network_enabled: true` and pick its own memory/timeout |
 | `network_enabled` | the sandbox network is fixed off; there is no switch |
 | `workspace_path` | mounted an **arbitrary host directory** into the container |
+| `workspace`, `execution_id` | could select root, parents or another execution; now server-only |
 | `mount_workspace_read_write` | combined with the above, a host-filesystem write primitive |
 | `env_vars` | injected caller-chosen environment variables into the code process |
 | `docker_host` | let a caller point the runner at another daemon socket |
@@ -111,10 +110,10 @@ The schema is closed.
 ```json
 {
   "status": "success | error | timeout | cancelled | denied | unavailable",
-  "execution_id": "exe-1a2b3c4d5e6f",
+  "execution_id": "exe-1a2b3c4d5e6f00112233445566778899",
   "result": {
     "status": "success",
-    "execution_id": "exe-1a2b3c4d5e6f",
+    "execution_id": "exe-1a2b3c4d5e6f00112233445566778899",
     "stdout": "…",
     "stderr": "…",
     "stdout_path": "…/stdout.txt",
@@ -172,7 +171,7 @@ fresh container, so there is no persistent namespace.
 | `sandbox.cancel` | `{execution_id}` → `{status: "cancelled" \| "not_running", container_killed}`. Terminates the container tree. |
 | `sandbox.get_status` | Runner availability, backend identity, sandbox root, run/artifact counters, enforced limits. `available` is the honest field. |
 | `sandbox.list_artifacts` | Files produced by real runs. Read-only; executes nothing. |
-| `sandbox.reset` | Clears run history and per-run workspaces **under the sandbox root only**; refuses to follow a symlink out of it. |
+| `sandbox.reset` | Returns `busy` while any run is active; otherwise clears run history and per-run workspaces **under the sandbox root only**; refuses to follow a symlink out of it. |
 | `sandbox.status` | Docker daemon probe (`docker info`) with a bounded 10 s wait. |
 | `sandbox.analyze_data` | Dataset profiling. Parses data; executes nothing. |
 
@@ -415,3 +414,119 @@ live under `DREAM_SANDBOX_ROOT`, which is safe to delete.
 - `apps/desktop/src/v5/views/code.test.js` — the frontend contract tests.
 - `docs/STATUS.md` — the MASTER-P0 entry.
 - `docs/bridge/protocol.md` §3.18 — the wire specification.
+
+
+## 11. P0.2: workspace and sibling RPC boundaries
+
+### F1: allocation, not caller-selected paths
+
+`CodeExecutionRequest.from_params` mints `exe-` + a full UUID4 hex string;
+there is no ID override argument. Public `workspace` and `execution_id` are
+refused even when null. Each runtime prepares only `root/runs/<id>` with an
+exclusive directory creation (0700). Existing directories and symlinks are
+never adopted. Root and `runs` canonicality are checked before creation and
+again afterward. Reuse by another request object and replay of a run are
+refused. Artifacts are limited to regular, non-symlink files directly within
+that run; overflow files use exclusive creation and cannot overwrite symlinks.
+Reset refuses to traverse a symlinked `runs` and never follows child symlinks
+out of root. Reset returns `busy` without clearing authority while runs are live.
+
+This is a per-execution boundary, not a multi-user authentication mechanism.
+Sandbox/config directories and their ancestors must be controlled by the
+operator. A hostile process with the same host UID (or root), able to rename
+ancestors while Docker resolves mount paths, is outside this guarantee; the
+path rechecks reduce races but are not a kernel-level filesystem transaction.
+
+### F3: authorized notebook sources, isolated staging
+
+Active route: `BridgeMethods.handlers['sandbox.run_notebook']` →
+`BridgeMethods.sandbox_run_notebook` → `DockerSandbox.run_notebook` →
+`_exec_in_container` → Docker argv runner.
+
+The operator configures an existing directory with `DREAM_NOTEBOOK_ROOT` or the
+trusted `DockerSandbox(notebook_root=...)` constructor. Without it, requests
+are denied. RPC cannot set this root, data directory, resource limits or mounts.
+Paths can be absolute under this canonical root or relative to it. Traversal,
+noncanonical symlink aliases (including aliases within the root), outside-root
+files, non-regular files, wrong extensions and control-character filenames
+are denied. Files are opened relative to a pinned root directory fd using
+`O_NOFOLLOW` for each component; platforms lacking safe dir-fd opening fail
+closed. Only nbformat 4 JSON, at most 10 MB, is accepted.
+
+Spaces, quotes, semicolons, `$()` and backticks are **literal filename data**,
+not commands. The authorized source is copied as `input.ipynb` to a unique
+`data_dir/notebook-runs/nb-*` directory. Only this fresh directory is mounted,
+read-write; the source directory is never mounted or written back. Results
+remain in staging and output enumeration excludes symlinks. Failed setup/runner
+exceptions remove staging; successful runs retain their directory for outputs
+(operator-managed retention, not part of Code reset).
+
+Both `python3` and `ir` use a non-shell `jupyter nbconvert` argv, with explicit
+kernel selection; the configured language image must contain Jupyter, nbconvert
+and the selected kernel. Default minimal images may not have these tools.
+`timeout` must be an integer 1..600 (not bool); other kernels/arguments are denied.
+Bridge errors have structured `data.status=denied` or `unavailable`; a container
+program's nonzero exit remains a `SandboxResult` with its return code/stderr.
+Missing tooling is not silently installed and no host interpreter fallback exists.
+
+### F5: bounded package grammar and operator approval
+
+Active route: `BridgeMethods.handlers['sandbox.install_packages']` →
+`BridgeMethods.sandbox_install_packages` → `validate_packages` →
+`DockerSandbox.install_packages` (validates again) → JSON-form Dockerfile `RUN`
+→ `_run_docker_cmd_with_output` → `docker build`.
+
+Supported specs (ASCII only, full match, no whitespace):
+
+- Python distribution name: alphanumeric start/end, internal alphanumerics,
+  `.`, `_`, `-`; optional `==version`.
+- Version subset: numeric release components separated by dots, optional
+  `aN`/`bN`/`rcN`, optional `.postN`, optional `.devN`, optional local suffix
+  `+component[.component...]` (local separators may also be `_` or `-`).
+  Examples: `requests`, `requests==2.32.3`, `numpy==2.0.0rc1`.
+- R: ASCII letter followed by letters, digits or dots, e.g. `ggplot2`.
+- 1..64 specs, each 1..128 characters. No extras, ranges, markers, wildcard
+  pins, direct URLs, requirements files, options, flags, controls or shell syntax.
+
+This intentionally restricted grammar uses only the standard library; it is
+not a claim to implement all PEP 508/440. No runtime dependency was added.
+
+Installation is **disabled by default**. Only trusted operator code can create
+`DockerSandbox(package_install_approved=True)`. This grants network access and
+image mutation for installations on that instance; do not grant it to an
+untrusted integration. No RPC `approved` flag or environment toggle opens the
+gate. The stock bridge has no interactive package-install approval UI and thus
+keeps installation closed. Enabling it is an explicit operator deployment
+choice, not proof of user consent inferred from untrusted RPC text.
+
+Python uses JSON exec-form `RUN ["python", "-m", "pip", "--isolated", ...,
+"--", ...specs]`; R uses JSON exec-form Rscript argv, with names constrained
+before forming the R expression. There is no shell-form untrusted `RUN`.
+Build networking is explicitly `--network=default`. Docker client environment
+is only `PATH=os.defpath` and a fresh build-directory `HOME`: no credentials,
+proxy arguments, SSH/secrets, host Docker config or unrelated variables are
+forwarded. Nonstandard Docker credential/context setups may consequently fail.
+Each build has a fresh tag and context containing only its Dockerfile. Only a
+successful build updates this instance's image mapping, never the class/global
+mapping; failed/denied builds leave the active mapping unchanged. Invalid
+specs are rejected before sandbox lookup/probe/build directory creation/build.
+
+Approval does not make packages trustworthy: build executes package-provided
+code with network in the builder. Use a dedicated daemon for that trust boundary.
+Build cancellation may leave daemon-side build/cache state; no global image
+cleanup or build isolation redesign is claimed here. Image digest enforcement
+and live-container CI remain D3; MCP stdio host-process trust remains F6.
+
+### Verification limits
+
+`tests/test_sandbox_rpc_boundaries.py` exercises the real registered handlers
+with deterministic fake Docker/build IO, including the actual Docker argv
+builder for notebooks. Run without optional test dependencies using:
+
+```bash
+python -m unittest tests.test_sandbox_rpc_boundaries -v
+```
+
+These tests prove validation/command construction, **not live mount or kernel
+isolation**. See `docs/security/P0.2-SANDBOX-RPC-REPORT.fa.md` for this checkout's
+commands, blockers and acceptance matrix.
