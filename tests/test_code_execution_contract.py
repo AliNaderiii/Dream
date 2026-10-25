@@ -241,7 +241,7 @@ def test_nonzero_exit_is_an_error_status(tmp_path) -> None:
         ({"code": "print(1)", "pids_limit": 0}, "invalid_limit"),
         ({"code": "print(1)", "cpu_count": 0}, "invalid_limit"),
         ({"code": "print(1)", "max_output_bytes": 1}, "invalid_limit"),
-        ({"code": "print(1)", "execution_id": "bad id!"}, "invalid_execution_id"),
+        ({"code": "print(1)", "execution_id": "bad id!"}, "removed_field"),
         ({"code": "print(1)", "surprise": True}, "unknown_field"),
     ],
 )
@@ -352,7 +352,7 @@ def test_absolute_workspace_outside_the_root_is_denied(tmp_path) -> None:
     bridge = build_bridge(tmp_path, FakeRunner())
     payload = run(bridge, {"code": "print(1)", "workspace": "/etc"})
     assert payload["status"] == "denied"
-    assert payload["result"]["error"]["code"] == "workspace_outside_root"
+    assert payload["result"]["error"]["code"] == "removed_field"
 
 
 def test_dotdot_traversal_is_denied(tmp_path) -> None:
@@ -361,7 +361,7 @@ def test_dotdot_traversal_is_denied(tmp_path) -> None:
     escape = root / "runs" / ".." / ".." / ".." / ".." / "etc"
     payload = run(bridge, {"code": "print(1)", "workspace": str(escape)})
     assert payload["status"] == "denied"
-    assert payload["result"]["error"]["code"] == "workspace_outside_root"
+    assert payload["result"]["error"]["code"] == "removed_field"
 
 
 def test_symlink_escape_is_denied(tmp_path) -> None:
@@ -379,7 +379,7 @@ def test_symlink_escape_is_denied(tmp_path) -> None:
     payload = run(bridge, {"code": "print(1)", "workspace": str(link)})
 
     assert payload["status"] == "denied"
-    assert payload["result"]["error"]["code"] == "workspace_outside_root"
+    assert payload["result"]["error"]["code"] == "removed_field"
 
 
 def test_symlinked_parent_escape_is_denied(tmp_path) -> None:
@@ -408,15 +408,16 @@ def test_default_workspace_is_a_fresh_directory_under_the_root(tmp_path) -> None
     assert payload["execution_id"] in str(workspace)
 
 
-def test_a_requested_workspace_inside_the_root_is_honoured(tmp_path) -> None:
+def test_a_requested_workspace_inside_the_root_is_denied(tmp_path) -> None:
     root = sandbox_root(tmp_path)
     target = root / "runs" / "chosen"
     target.mkdir(parents=True)
     runner = FakeRunner()
     bridge = build_bridge(tmp_path, runner)
     payload = run(bridge, {"code": "print(1)", "workspace": str(target)})
-    assert payload["status"] == "success"
-    assert Path(runner.calls[0]["workspace_path"]).resolve() == target.resolve()
+    assert payload["status"] == "denied"
+    assert payload["result"]["error"]["code"] == "removed_field"
+    assert runner.calls == []
 
 
 def test_artifacts_never_escape_the_root(tmp_path) -> None:
@@ -506,15 +507,15 @@ def test_cancellation_terminates_the_container(tmp_path) -> None:
         runtime = CodeExecutionRuntime(runner, root=sandbox_root(tmp_path))
         codeexec.reset_code_execution_runtime(runtime)
         request = CodeExecutionRequest.from_params(
-            {"code": "while True: pass", "execution_id": "exe-cancel-me"},
+            {"code": "while True: pass"},
             sandbox_root=runtime.root,
         )
         task = asyncio.create_task(runtime.run(request))
         for _ in range(200):
             await asyncio.sleep(0.01)
-            if "exe-cancel-me" in runtime._live:
+            if request.execution_id in runtime._live:
                 break
-        result = await runtime.cancel("exe-cancel-me")
+        result = await runtime.cancel(request.execution_id)
         task.cancel()
         try:
             await task

@@ -104,6 +104,8 @@ _CONTAINER_TMP = "/tmp"
 #: Params the contract deliberately REFUSES rather than silently ignores. Each
 #: one used to be a way to widen the boundary through the bridge.
 _REFUSED_PARAMS: dict[str, str] = {
+    "workspace": "workspaces are allocated by the server only",
+    "execution_id": "execution IDs are allocated by the server only",
     "resource_limits": (
         "resource_limits was removed: network and mount settings cannot be set "
         "per request, so the isolation profile is fixed by the core"
@@ -114,9 +116,8 @@ _REFUSED_PARAMS: dict[str, str] = {
         "\nدسترسی شبکه قابل درخواست نیست: شبکهٔ جعبه‌شن همیشه خاموش است"
     ),
     "workspace_path": (
-        "workspace_path was removed: pass `workspace` and it must resolve "
-        "inside the sandbox root"
-        "\nworkspace_path حذف شد: از `workspace` استفاده کنید و باید داخل ریشهٔ جعبه‌شن باشد"
+        "workspace_path was removed: workspaces are server allocated"
+        "\nworkspace_path حذف شد: پوشهٔ اجرا فقط توسط سرور ساخته می‌شود"
     ),
     "mount_workspace_read_write": (
         "mount_workspace_read_write was removed: the executable workspace is "
@@ -143,8 +144,6 @@ _ALLOWED_PARAMS = frozenset(
         "cpu_count",
         "pids_limit",
         "max_output_bytes",
-        "workspace",
-        "execution_id",
     }
 )
 
@@ -325,8 +324,7 @@ class CodeExecutionRequest:
     language: str
     limits: CodeExecutionLimits
     workspace: Path
-    #: True when the caller named the workspace (and it was confined) rather
-    #: than the runtime minting a fresh per-run directory.
+    #: Legacy internal guard: must remain False; callers cannot select a workspace.
     workspace_explicit: bool
     execution_id: str
     runtime_root: Path
@@ -337,7 +335,6 @@ class CodeExecutionRequest:
         params: Mapping[str, Any] | None,
         *,
         sandbox_root: Path | str | None = None,
-        execution_id: str | None = None,
     ) -> CodeExecutionRequest:
         """Validate *params* into a request, or raise :class:`CodeExecutionDenied`."""
         raw: Mapping[str, Any] = params or {}
@@ -370,29 +367,9 @@ class CodeExecutionRequest:
         root = Path(sandbox_root).expanduser() if sandbox_root else default_sandbox_root()
         root = root.resolve()
 
-        requested = raw.get("workspace")
-        if requested is None or (isinstance(requested, str) and not requested.strip()):
-            workspace = root / "runs" / "pending"
-            workspace_explicit = False
-        else:
-            if not isinstance(requested, str):
-                raise _deny("workspace_outside_root", "workspace must be a string")
-            workspace = _canonical(requested)
-            if not _is_relative_to(workspace, root):
-                raise _deny(
-                    "workspace_outside_root", f"{requested!r} is not under the sandbox root"
-                )
-            if not workspace.is_dir():
-                raise _deny("workspace_not_directory", str(workspace))
-            workspace_explicit = True
-
-        ident = execution_id
-        if ident is None:
-            ident = raw.get("execution_id")
-        if ident is None:
-            ident = f"exe-{uuid.uuid4().hex[:12]}"
-        if not isinstance(ident, str) or not _EXECUTION_ID_RE.match(ident):
-            raise _deny("invalid_execution_id", repr(ident)[:80])
+        ident = f"exe-{uuid.uuid4().hex}"
+        workspace = root / "runs" / ident
+        workspace_explicit = False
 
         return cls(
             code=code,
@@ -624,6 +601,8 @@ class CodeExecutionRuntime:
         self._live: dict[str, dict[str, Any]] = {}
         self._cancelled: set[str] = set()
         self._lock = asyncio.Lock()
+        self._workspaces: dict[str, tuple[CodeExecutionRequest, Path]] = {}
+        self._used_ids: set[str] = set()
 
     # -- runner plumbing --------------------------------------------------- #
 
@@ -661,22 +640,40 @@ class CodeExecutionRuntime:
             pass
         return self.root
 
+    def _check_runs(self) -> Path:
+        runs = self.root / "runs"
+        if self.root.resolve() != self.root or runs.is_symlink() or runs.resolve() != runs:
+            raise _deny("workspace_outside_root")
+        return runs
+
     def workspace_for(self, request: CodeExecutionRequest) -> Path:
-        """The directory this run may write to, and the only one it may see."""
-        if request.workspace_explicit:
-            workspace = request.workspace
+        """Only a request object allocated by this runtime may reuse its directory."""
+        runs = self._check_runs()
+        entry = self._workspaces.get(request.execution_id)
+        if entry is not None:
+            owner, workspace = entry
+            if owner is not request:
+                raise _deny("invalid_execution_id")
         else:
-            workspace = self.root / "runs" / request.execution_id
-        workspace.mkdir(parents=True, exist_ok=True)
-        try:
-            os.chmod(workspace, 0o700)
-        except OSError:  # pragma: no cover
-            pass
-        # Re-check after mkdir: a symlinked parent could have moved it.
-        resolved = workspace.resolve()
-        if not _is_relative_to(resolved, self.root):
-            raise _deny("workspace_outside_root", str(resolved))
-        return resolved
+            if (request.workspace_explicit or request.runtime_root != self.root
+                    or not re.fullmatch(r"exe-[0-9a-f]{32}", request.execution_id)
+                    or request.workspace != runs / request.execution_id):
+                raise _deny("workspace_outside_root")
+            self.ensure_root()
+            self._check_runs()
+            runs.mkdir(mode=0o700, exist_ok=True)
+            self._check_runs()
+            workspace = runs / request.execution_id
+            # Never adopt an existing directory, even if its name is valid.
+            if workspace.is_symlink() or workspace.exists():
+                raise _deny("workspace_outside_root")
+            workspace.mkdir(mode=0o700)
+            self._workspaces[request.execution_id] = (request, workspace)
+        if (workspace.is_symlink() or workspace.resolve() != workspace
+                or workspace.parent != runs or not workspace.is_dir()):
+            raise _deny("workspace_outside_root")
+        self._check_runs()
+        return workspace
 
     # -- status / artifacts / reset --------------------------------------- #
 
@@ -707,9 +704,11 @@ class CodeExecutionRuntime:
 
     def reset(self) -> dict[str, Any]:
         """Drop history and delete only directories under the sandbox root."""
+        if self._live:
+            return {"status": "busy", "removed": 0, "message": "cancel active runs first"}
         removed = 0
         runs = self.root / "runs"
-        if runs.is_dir():
+        if not runs.is_symlink() and runs.resolve() == runs and runs.is_dir():
             for child in sorted(runs.iterdir()):
                 resolved = child.resolve()
                 if not _is_relative_to(resolved, self.root) or resolved == self.root:
@@ -723,6 +722,7 @@ class CodeExecutionRuntime:
                 except OSError:  # pragma: no cover - permissions / locking
                     continue
         self._history.clear()
+        self._workspaces.clear()
         return {
             "status": "reset",
             "message": (
@@ -780,6 +780,14 @@ class CodeExecutionRuntime:
         # refusal carries it too: the client must be able to show what the
         # sandbox *is* even when nothing ran.
         isolation = isolation_descriptor(request.limits, user=self._container_user())
+
+        if request.execution_id in self._used_ids:
+            return self._fail(
+                request, CodeExecutionStatus.DENIED,
+                _refusal("replayed_execution", "execution already used", "اجرا تکراری است"),
+                limits_dict, started, isolation=isolation,
+            )
+        self._used_ids.add(request.execution_id)
 
         runner = self._resolve_runner()
         if runner is None:
@@ -1031,6 +1039,8 @@ class CodeExecutionRuntime:
 
     def _artifacts_for(self, request: CodeExecutionRequest) -> list[dict[str, Any]]:
         """Enumerate what the run wrote, inside its own workspace only."""
+        if request.execution_id not in self._workspaces:
+            return []
         try:
             workspace = self.workspace_for(request)
         except (CodeExecutionDenied, OSError):
@@ -1042,7 +1052,7 @@ class CodeExecutionRuntime:
                 continue
             try:
                 resolved = path.resolve()
-                if not _is_relative_to(resolved, self.root) or path.is_symlink():
+                if not _is_relative_to(resolved, workspace) or path.is_symlink():
                     continue
                 if not path.is_file():
                     continue
@@ -1063,6 +1073,8 @@ class CodeExecutionRuntime:
         self, request: CodeExecutionRequest, stdout: str, stderr: str
     ) -> tuple[str, str]:
         """Keep the full stream for the operator; hand back only a safe reference."""
+        if request.execution_id not in self._workspaces:
+            return "", ""
         try:
             directory = self.workspace_for(request)
         except (CodeExecutionDenied, OSError):
@@ -1071,7 +1083,9 @@ class CodeExecutionRuntime:
         for name, text in (("stdout.txt", stdout), ("stderr.txt", stderr)):
             target = directory / name
             try:
-                target.write_text(text, encoding="utf-8", errors="replace")
+                fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8", errors="replace") as stream:
+                    stream.write(text)
                 written.append(str(target.resolve()))
             except OSError:  # pragma: no cover
                 written.append("")

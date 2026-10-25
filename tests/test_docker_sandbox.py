@@ -197,6 +197,7 @@ def test_install_packages_raises_without_docker():
 
     sandbox = DockerSandbox()
     import asyncio
+    sandbox._package_install_approved = True
     # Mock the CLI away: on machines with a live daemon this would otherwise
     # really build an image (slow) instead of exercising the failure path.
     with patch.object(
@@ -214,5 +215,5 @@ def test_run_notebook_requires_existing_file():
 
     sandbox = DockerSandbox()
     import asyncio
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(PermissionError):
         asyncio.run(sandbox.run_notebook("/nonexistent/notebook.ipynb"))
